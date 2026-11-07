@@ -244,7 +244,13 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     state.installed = [...present.map(item => {
       const { manifest, declaration, payloadRoot, present: includedPresent, ...display } = item;
       return { ...display, status: item.ready ? "ready" : item.error ? "damaged-bundled" : "unsupported-host" };
-    }), ...state.installed.filter(row => !versions.has(row.version))];
+    }), ...state.installed.filter(row => !versions.has(row.version)).map(row => {
+      if (row.ready === false || !validateManifest) return row;
+      const selected = resolveSelection(null, {}, options.userDataDir, { version: row.version, verification: 'status' });
+      return selected.ready ? row : { ...row, ready: false, status: 'incompatible', error: selected.reason };
+    })];
+    for (const row of state.installed) if (row.ready === false && state.catalog.versionRequirements[row.version])
+      state.catalog.versionRequirements[row.version].available = false;
     state.catalog.includedVersions = [...versions];
     const saved = core.normalizeSettings(options.settings).defaultVersion;
     state.defaultVersion = saved || managerDefaultVersion({

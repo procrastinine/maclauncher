@@ -13,7 +13,7 @@ function scratch(t) {
   return root;
 }
 // A small package in the published bridge format, delivered through local transport callbacks.
-function bridgePackage(root, version = '1.0.0') {
+function bridgePackage(root, version = '1.0.0', managed = true) {
   const payload = path.join(root, 'payload-' + version), names = { 'x86_64-unix/lsteamclient.so': 'native x86_64', 'aarch64-unix/lsteamclient.so': 'native arm64',
     'i386-windows/lsteamclient.dll': 'builtin i386', 'x86_64-windows/lsteamclient.dll': 'builtin x86_64', 'i386-windows/mlsteam-bootstrap.dll': 'bootstrap i386',
     'x86_64-windows/mlsteam-bootstrap.dll': 'bootstrap x86_64', 'i386-windows/steam.exe': 'helper i386', 'steam.exe': 'helper x86_64' };
@@ -21,7 +21,7 @@ function bridgePackage(root, version = '1.0.0') {
     const file = path.join(payload, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); fs.chmodSync(file, 0o755);
     return { path: relative, mode: 0o755, size: Buffer.byteLength(text), sha256: sha(Buffer.from(text)) };
   });
-  const manifest = Buffer.from(JSON.stringify({ steamBridge: { clientEnvironment: { i386: 'MACLAUNCHER_STEAM_CLIENT32', x86_64: 'MACLAUNCHER_STEAM_CLIENT64' },
+  const manifest = Buffer.from(JSON.stringify({ steamBridge: { clientEnvironment: managed ? { i386: 'MACLAUNCHER_STEAM_CLIENT32', x86_64: 'MACLAUNCHER_STEAM_CLIENT64' } : undefined,
     native: { x86_64: 'x86_64-unix/lsteamclient.so', aarch64: 'aarch64-unix/lsteamclient.so' },
     windows: { i386: { builtin: 'i386-windows/lsteamclient.dll', bootstrap: 'i386-windows/mlsteam-bootstrap.dll', helper: 'i386-windows/steam.exe' },
       x86_64: { builtin: 'x86_64-windows/lsteamclient.dll', bootstrap: 'x86_64-windows/mlsteam-bootstrap.dll', helper: 'steam.exe' } } },
@@ -48,8 +48,8 @@ function valveArchive(root) {
   const filename = 'bins_misc_ubuntu12.zip.' + crypto.createHash('sha1').update(fs.readFileSync(zip)).digest('hex');
   return { zip, resolved: { filename, url: 'https://client-update.akamai.steamstatic.com/' + filename } };
 }
-function offlineBridge(root, options = {}) {
-  const item = bridgePackage(root), valve = valveArchive(root), requests = [];
+function offlineBridge(root, { version, ...options } = {}) {
+  const item = bridgePackage(root, version), valve = valveArchive(root), requests = [];
   const bridge = Bridge.create({ identifyGame: () => ({ appId: '480' }), discoverClient: () => '/Applications/Steam.app/Contents/MacOS', isRunning: () => false, ...options, dependencies: {
     systemVersionSync: () => '26.0',
     fetchUrlBuffer: async url => { requests.push(url); return { status: 200, body: Buffer.from(JSON.stringify({ schemaVersion: 2, projectId: id, updatePolicy: 'manual', packages: [item.record] })) }; },
@@ -226,4 +226,51 @@ test('Play sizes use only an earlier complete Valve total without a metadata req
     }
     assert.equal(requests.length, 1, 'only the explicit Refresh used the local metadata transport');
   }
+});
+
+test('an incompatible installed bridge is marked unusable and consent replaces it before resuming Play', async t => {
+  const root = scratch(t), userDataDir = path.join(root, 'data');
+  const { bridge, install, item, requests } = offlineBridge(root, { version: '9.7.0' });
+  const older = bridgePackage(path.join(root, 'older'), '1.0.0', false);
+  const retained = path.join(userDataDir, 'runtimes', id, 'universal', older.record.version);
+  fs.mkdirSync(retained, { recursive: true }); fs.cpSync(older.payload, path.join(retained, 'payload'), { recursive: true });
+  fs.writeFileSync(path.join(retained, 'project-package.json'), JSON.stringify(older.wrapper));
+  fs.writeFileSync(path.join(retained, 'runtime.json'), JSON.stringify({ version: older.record.version, architecture: 'universal',
+    upstreamRevision: older.record.asset.sha256, archiveSha256: older.record.asset.sha256,
+    binarySha256: sha(fs.readFileSync(path.join(older.payload, 'steam.exe'))), executableRelative: 'payload/steam.exe',
+    source: 'download', catalogEntry: { version: older.record.version, upstreamRevision: older.record.asset.sha256,
+      architecture: 'universal', hostArchitectures: ['arm64', 'x64'], localBuild: false, projectPackage: older.record, asset: older.record.asset } }));
+  const protectedBytes = fs.readFileSync(path.join(retained, 'payload/manifest.json'));
+  await bridge.refreshCatalog({ userDataDir, force: true });
+  const row = bridge.getState({ userDataDir }).sections[0].installed.find(row => row.version === '1.0.0');
+  assert.equal(row.ready, false); assert.equal(row.status, 'incompatible');
+  assert.match(row.error, /managed loader paths.*needs replacement/);
+  const [plan] = await bridge.requirements({ name: 'Fixture' }, { userDataDir });
+  assert.equal(plan.version, item.record.version); assert.equal(plan.silentFallback, undefined);
+  assert.match(plan.detail, /Installed bridge 1\.0\.0 cannot be used:.*needs replacement/);
+  const accepted = await play({ bridge, userDataDir, installBridge: version => install(userDataDir, version) });
+  assert.equal(accepted.result, true);
+  assert.deepEqual(accepted.installs, [[id, '9.7.0']]); assert.deepEqual(accepted.launches, ['Fixture']);
+  assert.equal(bridge.resolveSelection(null, {}, userDataDir, { version: '9.7.0' }).ready, true);
+  assert.equal(requests.length, 2, 'one explicit catalog read and the consented package acquisition');
+  assert.deepEqual(await bridge.requirements({ name: 'Fixture' }, { userDataDir }), []);
+  assert.deepEqual(fs.readFileSync(path.join(retained, 'payload/manifest.json')), protectedBytes);
+});
+
+test('consented bridge failures surface their actual error without launching or saving a refusal', async t => {
+  const root = scratch(t), userDataDir = path.join(root, 'data'), { bridge } = offlineBridge(root);
+  await bridge.refreshCatalog({ userDataDir, force: true });
+  const failure = new Error('Valve archive HTTP 503');
+  await assert.rejects(play({ bridge, userDataDir, installBridge: async () => { throw failure; } }), error => error === failure);
+  assert.equal(fs.existsSync(path.join(userDataDir, 'runtimes/steam-bridge-skipped.json')), false);
+  assert.equal((await bridge.requirements({ name: 'Fixture' }, { userDataDir })).length, 1, 'a failed download can be tried again');
+  const Catalog = require('../src/modules/shared/runtime/maclauncher-builds');
+  const unavailable = Bridge.create({ identifyGame: () => ({ appId: '480' }), discoverClient: () => '/client',
+    dependencies: { systemVersionSync: () => '26.0', fetchUrlBuffer: async () => ({ status: 404, body: Buffer.from('404: Not Found') }) } });
+  await assert.rejects(play({ bridge: unavailable, userDataDir: path.join(root, 'unavailable') }), error => {
+    assert.equal(error.statusCode, 404);
+    assert.equal(error.url, Catalog.catalogUrl({ projectId: id, repository: 'procrastinine/maclauncher-builds' }));
+    assert.match(error.message, /HTTP 404.*catalogs\/maclauncher-steam-bridge\.json/);
+    return true;
+  });
 });

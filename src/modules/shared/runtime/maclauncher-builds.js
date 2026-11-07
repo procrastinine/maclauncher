@@ -97,8 +97,11 @@ async function fetchProjectCatalog(options = {}, dependencies = {}) {
   }
   const response = await pending;
   throwIfAborted(options.signal);
-  if (response?.status !== 200 || !Buffer.isBuffer(response.body) || response.body.length > MAX_CATALOG_BYTES)
-    throw new Error("The runtime catalog could not be downloaded.");
+  if (response?.status !== 200)
+    throw Object.assign(new Error(`The runtime catalog could not be downloaded (${response?.status ? `HTTP ${response.status}` : 'no HTTP response'}): ${url}`),
+      { statusCode: response?.status, url });
+  if (!Buffer.isBuffer(response.body) || response.body.length > MAX_CATALOG_BYTES)
+    throw new Error(`The runtime catalog response is invalid or too large: ${url}`);
   let catalog;
   try { catalog = JSON.parse(response.body.toString("utf8")); }
   catch { throw new Error("The runtime catalog is not valid JSON."); }

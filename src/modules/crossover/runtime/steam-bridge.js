@@ -45,7 +45,7 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     manifestRelative: 'manifest.json', executableRelative: 'steam.exe', dataOnly: true, supportsDefault: false,
     validateManifest(manifest) {
       if (manifest.managerId !== id || !manifest.steamBridge?.native || !manifest.steamBridge?.windows || !manifest.steamBridge?.clientEnvironment)
-        throw new Error('The Steam bridge package has no compatible loader declaration.');
+        throw new Error('The Steam bridge package lacks the managed loader paths required by this launcher and needs replacement.');
     }, async verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); }, dependencies });
   // CrossOver and Sikarugir share one managed row under Compatibility. Play
   // uses only managed versions, so the row offers no custom registration.
@@ -66,6 +66,8 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
   const installRuntime = manager.installRuntime;
   manager.installRuntime = async function(options = {}) {
     const result = await installRuntime.call(this, options);
+    const selected = base.resolveSelection(null, {}, options.userDataDir, { version: result.version, verification: 'status' });
+    if (!selected.ready) throw new Error(selected.reason);
     // The Valve files take only the install context. A local archive in
     // `options` is the bridge package's own archive.
     await Components.install({ userDataDir: options.userDataDir, signal: options.signal, onProgress: options.onProgress });
@@ -107,9 +109,9 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     const game = identifyGame(entry);
     if (!game || !discoverClient() || skipped(context.userDataDir).includes(String(game.appId)) || installed(context.userDataDir) && Components.current(context.userDataDir)) return [];
     const local = installed(context.userDataDir);
-    const pin = base.core.listDiscoveredCatalog({ userDataDir: context.userDataDir })
+    const unusable = base.getState({ userDataDir: context.userDataDir }).installed.filter(row => row.ready === false);
+    const pin = base.core.listDiscoveredCatalog({ userDataDir: context.userDataDir }).filter(pin => !pin.installReason && !unusable.some(row => row.version === pin.version))
       .sort((a, b) => compareRuntimeVersions(a.version, b.version))[0];
-    if (!pin && !local && base.getState({ userDataDir: context.userDataDir }).catalog?.status === 'success') return [];
     // One question per game: Play with Steam downloads what is missing and
     // starts Steam for that Play. Sizes appear when the catalog or an earlier
     // Valve download recorded them.
@@ -121,11 +123,12 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     const downloads = label => local ? valve : `${label}${size(bytes)} and ${valve}`;
     const starts = isRunning() === false && ClientStart.clientStartEnabled(entry, context.settings) ? ', then starts Steam' : '';
     const until = 'until the bridge is installed in Runtimes.';
+    const replacement = !local && unusable.length ? ` Installed bridge ${unusable[0].version} cannot be used: ${unusable[0].error}` : '';
     return [{ managerId: id, version, requiresDownload: true, ...(!pin && !local ? { discoveryRequired: true } : {}), appId: String(game.appId),
-      optional: true, silentFallback: true, companion: true, label: manager.label, ...(bytes ? { bytes } : {}), grants: ['steam-client-start'],
+      optional: true, companion: true, label: manager.label, ...(bytes ? { bytes } : {}), grants: ['steam-client-start'],
       message: 'Play with Steam?', confirmLabel: 'Play with Steam', cancelLabel: 'Play Without Steam', companionCheckbox: 'Also connect to Steam',
-      detail: `Connects ${name} to the Steam client for Mac. Downloads ${downloads('the Steam client bridge')}${starts}.\n\nWithout Steam, ${name} runs without the Steam client ${until}`,
-      companionDetail: `Connecting to Steam also downloads ${downloads(`the Steam client bridge${version ? ` ${version}` : ''}`)}${starts}. Without it, ${name} runs without Steam ${until}` }];
+      detail: `Connects ${name} to the Steam client for Mac. Downloads ${downloads('the Steam client bridge')}${starts}.${replacement}\n\nWithout Steam, ${name} runs without the Steam client ${until}`,
+      companionDetail: `Connecting to Steam also downloads ${downloads(`the Steam client bridge${version ? ` ${version}` : ''}`)}${starts}.${replacement} Without it, ${name} runs without Steam ${until}` }];
   }
   async function prepare(entry, context, { installation, prefixPath, architecture, environment } = {}) {
     const game = identifyGame(entry), native = discoverClient();

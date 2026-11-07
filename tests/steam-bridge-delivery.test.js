@@ -41,7 +41,7 @@ test('declined optional bridge stays quiet until an installation permits a new o
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   const bridge = Bridge.create({ identifyGame: () => ({ appId: '123' }), discoverClient: () => '/discovered/client' });
   const context = { userDataDir }, [plan] = await bridge.requirements({}, context);
-  assert.equal(plan.optional, true); assert.equal(plan.silentFallback, true);
+  assert.equal(plan.optional, true); assert.equal(plan.silentFallback, undefined);
   bridge.skipOptional(plan, context);
   assert.deepEqual(await bridge.requirements({}, context), []);
   bridge.clearSkipped(userDataDir);
