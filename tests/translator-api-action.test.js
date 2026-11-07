@@ -341,6 +341,40 @@ test('resolved vkd3d-proton replaces stock DXGI in the actual private loader inp
   }
 });
 
+test('standalone D3DMetal and DXMT API12 choices resolve and place their matching libraries on both routes', async t => {
+  const f = fixture(t), templateRoot = path.join(f.root, 'paired-template');
+  const { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/graphics/closure');
+  const roots = { d3dmetal: path.join(f.root, 'wine/lib64/apple_gptk'), dxmt: path.join(f.root, 'wine/lib/dxmt') };
+  for (const [engine, root] of Object.entries(roots)) {
+    for (const name of ['d3d10core', 'd3d11', 'dxgi', 'd3d12', 'd3d12core'])
+      f.put(path.relative(f.root, path.join(root, 'x86_64-windows', name + '.dll')), dll({ metalImport: name.startsWith('d3d') }));
+    f.put(path.relative(f.root, path.join(root, 'x86_64-windows/winemetal.dll')), dll({ metalExport: true }));
+    f.put(path.relative(f.root, path.join(root, 'x86_64-unix/winemetal.so')), image({ cpu: X64, symbols: ['wine_metal_entry'] }));
+    const target = path.join(templateRoot, RELATIVE_PATHS.renderers, engine);
+    fs.mkdirSync(path.dirname(target), { recursive: true }); fs.cpSync(root, target, { recursive: true });
+  }
+  for (const runtime of ['crossover', 'sikarugir']) for (const engine of ['d3dmetal', 'dxmt']) {
+    const selected = engine === 'd3dmetal' ? 'included:d3d12:d3dmetal' : 'included:d3d-renderer:dxmt';
+    const settings = { environmentReference: 'private', translatorD3D12: selected }, before = { ...settings };
+    const context = { ...f.context(settings), runtimeId: runtime }, install = { ...f.install, templateRoot };
+    const plan = await Translators.resolve(install, runtime, context, { host: f.host, executableArchitecture: 'x86_64', managers: [] });
+    assert.deepEqual(settings, before); assert.equal(settings.translatorRenderer, undefined);
+    assert.equal(plan.components.d3d12.selected.id, selected); assert.equal(plan.components.d3d12.used.id, selected);
+    assert.equal(plan.components.d3d12.fallback, false); assert.equal(plan.apiMode, true);
+    assert.equal(plan.components.d3d10.used.engine, engine); assert.equal(plan.components.d3d11.used.engine, engine);
+    const expected = runtime === 'crossover' ? roots[engine] : path.join(templateRoot, RELATIVE_PATHS.renderers, engine);
+    assert.equal(plan.dxgiBinding.description.root, expected);
+    assert.equal(Translators.settingsForPlan(settings, plan).graphicsBackend, 'wined3d');
+    const view = await Files.prepareTranslatorFiles(plan, { userDataDir: context.userDataDir, layout: plan.layout });
+    for (const name of ['dxgi', 'd3d10core', 'd3d11', 'd3d12', 'd3d12core']) {
+      assert.ok(view.dllOverrides.includes(name + '=b'));
+      assert.equal(fs.realpathSync(view.links[`lib/wine/x86_64-windows/${name}.dll`]), path.join(expected, `x86_64-windows/${name}.dll`));
+    }
+    assert.equal(fs.realpathSync(view.links['lib/wine/x86_64-unix/winemetal.so']), path.join(expected, 'x86_64-unix/winemetal.so'));
+    assert.equal(view.env.CX_GRAPHICS_BACKEND, runtime === 'crossover' ? 'wined3d' : undefined);
+  }
+});
+
 test('source-owned stock WineD3D API11 includes its DXGI binding while Wine vkd3d stays distinct', t => {
   const f = fixture(t), windows = 'wine/lib/wine/x86_64-windows';
   const d3d11 = f.put(windows + '/d3d11.dll', dll()), dxgi = f.put(windows + '/dxgi.dll', dll());

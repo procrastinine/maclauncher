@@ -109,14 +109,16 @@ test('per-API D3D9 DXVK and D3D11 DXMT separate unused DXGI and Unix thunk compa
   assert.equal(plan.placements.find(item => path.basename(item.file.path) === 'winemetal.so').description.id, dxmt.id);
 });
 
-test('per-API shared DXGI conflicts retain selected intent and a coherent supplied composition without overwrite', t => {
+test('a D3DMetal API12 choice owns DXGI and explains an incompatible explicit API11 choice', t => {
   const f = fixture(t), base = component(f, 'base-dxvk', 'dxvk', { d3d11: ['dxgi.dll'], dxgi: [] });
-  const metal = component(f, 'metal', 'd3dmetal', { d3d12: ['dxgi.dll'], dxgi: [] }, [], { component: 'd3d12' });
+  const metal = component(f, 'metal', 'd3dmetal', { d3d10core: ['dxgi.dll'], d3d11: ['dxgi.dll'], d3d12: ['dxgi.dll'], dxgi: [] }, [], { component: 'd3d12' });
   const plan = legacy(base);
   Plan.resolveApiRoles(plan, { selections: { d3d11: base.id, d3d12: metal.id }, choices: [metal], included: [base], compatibility: compatibility([base, metal]) });
-  assert.equal(plan.components.d3d12.selected.id, metal.id); assert.equal(plan.components.d3d12.used, null);
-  assert.equal(plan.components.d3d12.fallback, true); assert.match(plan.components.d3d12.reason, /physical binding conflict.*dxgi/);
-  assert.equal(plan.components.d3d11.used.id, base.id); assert.equal(plan.apiMode, false); assert.deepEqual(plan.placements, []);
+  assert.equal(plan.components.d3d12.selected.id, metal.id); assert.equal(plan.components.d3d12.used.id, metal.id);
+  assert.equal(plan.components.d3d12.fallback, false); assert.equal(plan.components.d3d11.selected.id, base.id);
+  assert.equal(plan.components.d3d11.used.id, metal.id); assert.equal(plan.components.d3d11.reasonCode, 'dxgi-pairing');
+  assert.match(plan.components.d3d11.reason, /requires D3DMetal DXGI/); assert.equal(plan.apiMode, true);
+  assert.equal(plan.placements.find(item => path.basename(item.file.path) === 'dxgi.dll').description.id, metal.id);
 });
 
 test('per-API actual missing files use same-engine included fallback and missing opaque choices keep their reason', t => {
@@ -272,6 +274,33 @@ test('Direct3D 12 and DXGI stay ABI paired on both Wine routes, including incomp
     assert.deepEqual(missingDxvk.requiredTranslators, ['dxvk']);
     await assert.rejects(Files.prepareTranslatorFiles(missingDxvk, { userDataDir: path.join(f.root, 'blocked'), layout }), /requires DXVK DXGI/);
     assert.equal(fs.existsSync(path.join(f.root, 'blocked')), false);
+  }
+});
+
+test('D3D12 engines select their own package DXGI with automatic rows and incompatible saved versions', t => {
+  const f = fixture(t);
+  for (const engine of ['d3dmetal', 'dxmt']) {
+    const modules = { d3d10core: ['dxgi.dll'], d3d11: ['dxgi.dll'], d3d12: ['d3d12core.dll', 'dxgi.dll'], d3d12core: ['dxgi.dll'], dxgi: [] };
+    const selected = component(f, `${engine}-selected`, engine, modules);
+    const other = component(f, `${engine}-other`, engine, modules);
+    const checked = compatibility([selected, other]);
+    for (const runtime of ['crossover', 'sikarugir']) {
+      const resolve = selections => Plan.resolveApiRoles(Plan.resolvePlan({ runtime, choices: [other, selected] }),
+        { selections, choices: [other, selected], compatibility: checked });
+      const plan = resolve({ d3d12: selected.id });
+      assert.equal(plan.components['d3d-renderer'].used, null);
+      assert.equal(plan.apiMode, true); assert.equal(plan.pairingError, undefined);
+      for (const role of ['d3d10', 'd3d11', 'd3d12']) assert.equal(plan.components[role].used.id, selected.id);
+      assert.equal(plan.dxgiBinding.description.id, selected.id);
+      assert.ok(plan.placements.every(item => item.description.root === selected.root));
+      const explicit = resolve({ d3d12: selected.id, d3d11: other.id });
+      assert.equal(explicit.components.d3d11.selected.id, other.id);
+      assert.equal(explicit.components.d3d11.used.id, selected.id);
+      assert.equal(explicit.components.d3d11.reasonCode, 'dxgi-pairing');
+      assert.match(explicit.components.d3d11.reason, /matching provider/);
+      assert.equal(explicit.components.d3d12.fallback, false);
+      assert.equal(explicit.dxgiBinding.description.id, selected.id);
+    }
   }
 });
 

@@ -1,5 +1,6 @@
 const path = require('node:path');
 const Roles = require('./translator-roles');
+const { label } = require('./translator-description');
 
 const isDxgi = file => file.format === 'pe' && path.basename(file.path).toLowerCase() === 'dxgi.dll';
 const explicit = row => row?.selected && !['automatic', 'inherit'].includes(row.value);
@@ -35,13 +36,18 @@ function resolvePairing(plan, { choices = [], included = [], compatibility = {},
     if (!proton) return missing('vkd3d-proton', 'DXVK DXGI requires vkd3d-proton for Direct3D 12. Play installs the matching translator after confirmation.');
     d3d12 = rows.d3d12.used = described(proton, 'd3d12');
   }
-  if (!['vkd3d-proton', 'vkd3d'].includes(d3d12?.engine)) return false;
-  const family = d3d12.engine === 'vkd3d-proton' ? 'dxvk' : 'wined3d';
+  if (!d3d12) return false;
+  const family = { 'vkd3d-proton': 'dxvk', vkd3d: 'wined3d' }[d3d12.engine] || d3d12.engine;
+  const familyLabel = family === 'wined3d' ? "Wine's" : label({ engine: family });
   const machines = new Set(d3d12.files.filter(file => file.format === 'pe').map(file => file.machine));
-  const ordered = [rows.d3d11?.used, rows.d3d10?.used, rows['d3d-renderer'].used, ...candidates];
+  // Engines that supply their own DXGI keep the selected package's closure.
+  // The full description still has API10/11 files after API12 was scoped.
+  const ownDxgi = family === d3d12.engine;
+  const ordered = ownDxgi ? [...candidates.filter(item => item.id === d3d12.id || item.root && item.root === d3d12.root), d3d12] :
+    [rows.d3d11?.used, rows.d3d10?.used, rows['d3d-renderer'].used, ...candidates];
   const partner = ordered.find(item => item?.engine === family && usable(item, 'd3d11') &&
     [...machines].every(machine => dxgiFiles(described(item, 'd3d11')).some(file => isDxgi(file) && file.machine === machine)));
-  if (!partner) return missing(family, `${d3d12.engine} requires ${family === 'dxvk' ? 'DXVK' : "Wine's"} DXGI. Play installs the matching translator after confirmation.`);
+  if (!partner) return missing(family, `${d3d12.engine} requires ${familyLabel} DXGI. Play installs the matching translator after confirmation.`);
   const selected = described(partner, 'd3d11'), binding = dxgiFiles(selected);
   if (![...machines].every(machine => binding.some(file => isDxgi(file) && file.machine === machine)))
     return missing(family, 'The Direct3D 12 translator and its DXGI provider need matching Windows CPU architectures.');
@@ -57,7 +63,7 @@ function resolvePairing(plan, { choices = [], included = [], compatibility = {},
     row.used = replacement;
     if (!implicit) {
       row.fallback = true; row.reasonCode = 'dxgi-pairing';
-      row.reason = `${d3d12.engine} Direct3D 12 requires ${family === 'dxvk' ? 'DXVK' : "Wine's"} DXGI. This API uses the matching provider instead of its incompatible saved choice.`;
+      row.reason = `${d3d12.engine} Direct3D 12 requires ${familyLabel} DXGI. This API uses the matching provider instead of its incompatible saved choice.`;
     }
   }
   return true;

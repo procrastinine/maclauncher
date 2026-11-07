@@ -170,7 +170,7 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
   // backend is WineD3D, so an API without a placed library uses this renderer.
   if (plan.runtime === 'crossover') plan.builtinRenderer = included.find(item => item.component === 'd3d-renderer' && item.engine === 'wined3d') || null;
   const original = Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, { ...plan.components[role.id] }]));
-  const pairingRequested = ['vkd3d-proton', 'vkd3d'].includes(plan.components.d3d12.used?.engine) ||
+  const pairingRequested = Boolean(plan.components.d3d12.used) ||
     included.some(item => item.engine === 'vkd3d') && plan.components['d3d-renderer'].used?.engine === 'dxvk';
   const requested = pairingRequested || Roles.DIRECT3D_ROLES.some(role => selections[role.id]);
   if (!requested) { plan.groups = apiGroups(plan); return plan; }
