@@ -91,6 +91,8 @@ Each module directory is named after its module ID. The [module inventory](MODUL
 
 [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds) provides the binary builds, version history and patches of the downloadable runtimes and tools, built from exact upstream commits, and [MacLauncher Android](https://github.com/procrastinine/maclauncher-android) contains the Android runtime implementation. [Releases](RELEASING.md) describes how the three repositories release.
 
+Graphics and Vulkan native source lives in `src/modules/shared/reshade/` and `src/modules/shared/vulkan/native/`. MacLauncher Builds materializes these modules from an exact MacLauncher source commit and supplies the package recipes, manifests and licence inputs.
+
 ## Documentation map
 
 ### Using MacLauncher

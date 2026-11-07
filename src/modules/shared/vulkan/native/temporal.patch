@@ -1,0 +1,160 @@
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.h
+@@ -118,6 +118,7 @@
+ 
+ 	/** Adds the specified execution command at the end of this command buffer. */
+ 	void addCommand(MVKCommand* command);
++    bool _hasTemporalFrame = false;
+ 
+ 	/** Returns the number of commands currently in this command buffer. */
+ 	uint32_t getCommandCount() { return _commandCount; }
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandBuffer.mm
+@@ -217,6 +217,7 @@
+ }
+ 
+ VkResult MVKCommandBuffer::reset(VkCommandBufferResetFlags flags) {
++    _hasTemporalFrame = false;
+     flushImmediateCmdEncoder();
+ 	clearPrefilledMTLCommandBuffer();
+ 	releaseRecordedCommands();
+@@ -387,6 +388,7 @@
+ 	for (MVKCommandBuffer* cmdBuff : secondaryCommandBuffers) {
+ 		if (cmdBuff->_needsVisibilityResultMTLBuffer) { _needsVisibilityResultMTLBuffer = true; }
+ 		if (cmdBuff->_hasStageCounterTimestampCommand) { _hasStageCounterTimestampCommand = true; }
++        _hasTemporalFrame |= cmdBuff->_hasTemporalFrame;
+ 	}
+ }
+ 
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKQueue.h
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKQueue.h
+@@ -273,6 +273,7 @@
+ 	MVKFence* _fence = nullptr;
+ 	id<MTLCommandBuffer> _activeMTLCommandBuffer = nil;
+ 	MVKCommandUse _commandUse = kMVKCommandUseNone;
++	bool _needsRetainedReferences = false;
+ 	bool _emulatedWaitDone = false;		//Used to track if we've already waited for emulated semaphores.
+ };
+ 
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKQueue.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKQueue.mm
+@@ -485,7 +485,7 @@
+ // Returns the active MTLCommandBuffer, lazily retrieving it from the queue if needed.
+ id<MTLCommandBuffer> MVKQueueCommandBufferSubmission::getActiveMTLCommandBuffer() {
+ 	if ( !_activeMTLCommandBuffer ) {
+-		bool needsRetain = false;
++		bool needsRetain = _needsRetainedReferences;
+ 		if (!_device->hasResidencySet() && (getEnabledDescriptorIndexingFeatures().descriptorBindingPartiallyBound || getMVKConfig().liveCheckAllResources)) {
+ 			// Partially bound descriptors will get bound by us even if they're not used at runtime by the shader.
+ 			// The application is free to destroy them even if they're not used at runtime even if we bound them.
+@@ -684,6 +684,7 @@
+ 		for (uint32_t i = 0; i < cbCnt; i++) {
+ 			_cmdBuffers.emplace_back(pSubmit->pCommandBufferInfos[i]);
+ 			setConfigurationResult(_cmdBuffers.back().commandBuffer->getConfigurationResult());
++            _needsRetainedReferences |= _cmdBuffers.back().commandBuffer->_hasTemporalFrame;
+ 		}
+ 	}
+ }
+@@ -701,6 +702,7 @@
+ 		for (uint32_t i = 0; i < cbCnt; i++) {
+ 			_cmdBuffers.emplace_back(pSubmit->pCommandBuffers[i]);
+ 			setConfigurationResult(_cmdBuffers.back().commandBuffer->getConfigurationResult());
++            _needsRetainedReferences |= _cmdBuffers.back().commandBuffer->_hasTemporalFrame;
+ 		}
+ 	}
+ }
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandPool.h
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandPool.h
+@@ -29,6 +29,7 @@
+ #include "MVKCmdTransfer.h"
+ #include "MVKCmdQueries.h"
+ #include "MVKCmdDebug.h"
++#include "temporal-command.hpp"
+ #include "MVKMTLBufferAllocation.h"
+ #include <unordered_set>
+ 
+@@ -65,6 +66,8 @@
+ #	include "MVKCommandTypePools.def"
+ 
+ 
++MVKCommandTypePool<MVKCmdTemporalFrame> _cmdTemporalFramePool;
++
+ #pragma mark Command resources
+ 
+ 	/** Allocates command buffers from this pool. */
+--- a/MoltenVK/MoltenVK/Commands/MVKCommandPool.mm
++++ b/MoltenVK/MoltenVK/Commands/MVKCommandPool.mm
+@@ -83,6 +83,7 @@
+ 
+ // Clear the command type pool member variables.
+ void MVKCommandPool::trim() {
++    _cmdTemporalFramePool.clear();
+ #	define MVK_CMD_TYPE_POOL(cmdType)  _cmd ##cmdType ##Pool.clear();
+ #	include "MVKCommandTypePools.def"
+ }
+@@ -100,6 +101,7 @@
+ #	define MVK_CMD_TYPE_POOL(cmdType)  MVK_CMD_TYPE_POOL_LAST(cmdType),
+ #	include "MVKCommandTypePools.def"
+ 	,
++	_cmdTemporalFramePool(usePooling),
+ 	_commandBufferPool(device, usePooling),
+ 	_commandEncodingPool(this),
+ 	_queueFamilyIndex(pCreateInfo->queueFamilyIndex)
+@@ -123,3 +125,5 @@
+ #include "MVKCommandTypePools.def"
+ 
+ 
++
++#include "temporal-command.inc"
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.h
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.h
+@@ -36,6 +36,7 @@
+ #import <QuartzCore/CAMetalLayer.h>
+ 
+ class MVKInstance;
++struct MVKTemporalState;
+ class MVKDevice;
+ class MVKQueue;
+ class MVKQueueFamily;
+@@ -652,6 +653,8 @@
+ 
+ /** Represents a Vulkan logical GPU device, associated with a physical device. */
+ class MVKDevice : public MVKDispatchableVulkanAPIObject {
++public:
++    MVKTemporalState* _temporal = nullptr;
+ 
+ public:
+ 
+--- a/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
++++ b/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+@@ -834,6 +834,7 @@
+ 	supportedProps12.driverID = VK_DRIVER_ID_MOLTENVK;
+ 	strcpy(supportedProps12.driverName, kMVKMoltenVKDriverLayerName);
+ 	strcpy(supportedProps12.driverInfo, MVK_VERSION_STRING);
++    strlcat(supportedProps12.driverInfo, mvkTemporalDriverInfo(_mtlDevice), sizeof(supportedProps12.driverInfo));
+ 	supportedProps12.conformanceVersion = testedCTSVer;
+ 	supportedProps12.denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE;
+ 	supportedProps12.roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE;
+@@ -5532,6 +5533,7 @@
+ }
+ 
+ MVKDevice::~MVKDevice() {
++    mvkTemporalFinish(this);
+ 	if (_isPerformanceTracking) {
+ 		auto perfLogStyle = getMVKConfig().activityPerformanceLoggingStyle;
+ 		if (perfLogStyle == MVK_CONFIG_ACTIVITY_PERFORMANCE_LOGGING_STYLE_DEVICE_LIFETIME) {
+--- a/MoltenVK/MoltenVK/Vulkan/vulkan.mm
++++ b/MoltenVK/MoltenVK/Vulkan/vulkan.mm
+@@ -2616,6 +2616,12 @@
+ 	MVKTraceVulkanCallStart();
+ 	uint32_t barrierCount = pDependencyInfo->memoryBarrierCount + pDependencyInfo->bufferMemoryBarrierCount + pDependencyInfo->imageMemoryBarrierCount;
+ 	MVKAddCmdFrom2Thresholds(PipelineBarrier, barrierCount, 1, 4, commandBuffer, pDependencyInfo);
++    for (auto node=(const VkBaseInStructure*)pDependencyInfo->pNext; node; node=node->pNext) {
++        if ((uint32_t)node->sType == (uint32_t)VK_STRUCTURE_TYPE_TEMPORAL_FRAME_INFO_MVK) {
++            MVKAddCmd(TemporalFrame, commandBuffer, (const VkTemporalFrameInfoMVK*)node);
++            break;
++        }
++    }
+ 	MVKTraceVulkanCallEnd();
+ }
+ 
