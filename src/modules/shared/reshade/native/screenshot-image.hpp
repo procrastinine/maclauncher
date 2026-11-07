@@ -11,8 +11,8 @@
 namespace macfx {
 // The image frame capture reads for one output: an 8-bit output itself,
 // otherwise the output converted once to 8-bit sRGB at its reference white
-// with Automatic mapping. The shared presenter and in-place processing each
-// own one. A failed conversion returns the output, which leaves the capture
+// with Automatic mapping. Presenters, in-place processing and capture
+// reservations own their converters. A failed conversion returns the output, which leaves the capture
 // request pending, as an unreadable image does.
 class ScreenshotImage {
     std::shared_ptr<ColorEncoder>encoder;id<MTLTexture>image;

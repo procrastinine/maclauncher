@@ -687,7 +687,7 @@ struct Runtime {
                 const auto description=colorDescription?*colorDescription:prefix->imageColor();
                 const auto selected=plan->prepareSceneContinuation(context,inputs?&*inputs:nullptr,macfx::imageColorLabel(description),description,prefix->sceneSuffixSnapshot(),prefix->sceneOutputIdentity());
                 if(selected.holdPrevious||selected.preparing&&!selected.execution)throw SpatialBusy(selected.error);
-                auto capture=macfx::FrameCapture::begin(buffer,source,frames+1,captureFlipY);
+                auto capture=macfx::FrameCapture::begin(buffer,source,frames+1,captureFlipY,&description);
                 if(selected.execution){selected.execution->setStatusContext(statusContext);macfx::ImageContentStamp stamp{scene.frameId,1,context.frameId,0,scene.synthetic,scene.displayMapped,aligned};const auto result=selected.execution->encodeContentImage(context,stamp,false,false);if(!result.encoded){if(result.busy)throw SpatialBusy(result.reason);throw std::runtime_error(result.reason);}}
                 else if(source!=target){if(source.width!=target.width||source.height!=target.height||source.pixelFormat!=target.pixelFormat)throw SpatialBusy("Preparing the final MetalFX image fit");auto copy=[buffer blitCommandEncoder];if(!copy)throw std::runtime_error("Cannot retain the complete MetalFX image");[copy copyFromTexture:source sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0)sourceSize:MTLSizeMake(source.width,source.height,1)toTexture:target destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[copy endEncoding];}
                 if(capture)capture->finish(buffer,screenshot.prepare(buffer,target,description,context.frameId),captureFlipY);if(receipt){receipt->advanced=true;receipt->planRevision=prefix->revision();}observePlanFrame(context,prefix->revision());lastFrame=now;if(captureTime>0)lastHostTime=captureTime;++frames;return;
@@ -695,7 +695,7 @@ struct Runtime {
             if(scene.execution) {
                 scene.execution->setStatusContext(statusContext);
                 context.frameId=scene.frameId;context.depth=scene.depth.texture?&scene.depth:nullptr;
-                auto capture=scene.capture?scene.capture:macfx::FrameCapture::begin(buffer,source,frames+1,captureFlipY);
+                auto capture=scene.capture?scene.capture:macfx::FrameCapture::begin(buffer,source,frames+1,captureFlipY,colorDescription?colorDescription:&scene.execution->imageColor());
                 const auto result=scene.execution->encodeAfterScene(context,false,false,scene.displayMapped);
                 if(!result.encoded){if(result.busy)throw SpatialBusy(result.reason);throw std::runtime_error(result.reason);}
                 if(capture)capture->finish(buffer,screenshot.prepare(buffer,target,colorDescription?*colorDescription:scene.execution->imageColor(),context.frameId),captureFlipY);
@@ -707,7 +707,7 @@ struct Runtime {
             if(selected.holdPrevious||(selected.preparing&&!selected.execution))throw SpatialBusy(selected.error);
             if(selected.active) {
                 if(!selected.execution)throw std::runtime_error(selected.error.empty()?"The ordered effect plan is unavailable":selected.error);
-                auto capture=macfx::FrameCapture::begin(buffer,source,frames+1,captureFlipY);
+                auto capture=macfx::FrameCapture::begin(buffer,source,frames+1,captureFlipY,colorDescription?colorDescription:&selected.execution->imageColor());
                 const auto result=selected.execution->encode(context);
                 if(!result.encoded){if(result.busy)throw SpatialBusy(result.reason);throw std::runtime_error(result.reason);}
                 if(capture)capture->finish(buffer,screenshot.prepare(buffer,target,colorDescription?*colorDescription:selected.execution->imageColor(),context.frameId),captureFlipY);
@@ -804,7 +804,7 @@ struct Runtime {
         }
         if(stage)bindSceneInputs(macfx::shaderSceneInputs(*stage));
         const auto &values=effect.uniforms;
-        auto capture=stage?std::shared_ptr<macfx::FrameCapture>{}:macfx::FrameCapture::begin(buffer,this->color(0),frames+1,captureFlipY);
+        auto capture=stage?std::shared_ptr<macfx::FrameCapture>{}:macfx::FrameCapture::begin(buffer,this->color(0),frames+1,captureFlipY,colorDescription);
         bool stencilCleared=false;
         if(hook) {
             macfx::ShaderParameters parameters;
@@ -1132,7 +1132,9 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
         if(captureFrame) {
             id<MTLTexture> source=framebuffer?framebuffer->raw:metal.texture;
             @try {try {
-                if(auto capture=macfx::FrameCapture::begin(buffer,source,captureFrame))capture->finish(buffer,source);
+                const auto space=macfx::imageColorSpace(metal.layer.colorspace,metal.layer.wantsExtendedDynamicRangeContent);
+                auto description=macfx::describeImageColor(space);description.alpha=metal.layer.opaque?macfx::ColorAlpha::Opaque:macfx::ColorAlpha::Straight;
+                if(auto capture=macfx::FrameCapture::begin(buffer,source,captureFrame,false,&description))capture->finish(buffer,source);
             }catch(const std::exception &error){log("Metal frame capture failed: "+std::string(error.what()));}}
             @catch(NSException *error){log("Metal frame capture failed: "+std::string(error.reason.UTF8String?:"Capture failed"));}
         }

@@ -67,6 +67,15 @@ technique Grayscale { pass { VertexShader=VS; PixelShader=PS; } }
         for(unsigned attempt=0;attempt<200&&(!macfx::FrameCapture::pending(0)||std::filesystem::exists(trigger));++attempt)std::this_thread::sleep_for(std::chrono::milliseconds(10));
         require(macfx::FrameCapture::pending(0)&&!std::filesystem::exists(trigger),"The capture request was not admitted");
     }
+    void captured(){
+        for(unsigned attempt=0;attempt<200&&(macfx::FrameCapture::pending(0)||!std::filesystem::exists(capture+"-after.rgba"));++attempt)std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        require(!macfx::FrameCapture::pending(0),"Converted capture did not publish");
+        for(const auto &suffix:{"-before.rgba","-after.rgba"}){
+            const auto path=capture+suffix;std::ifstream input(path,std::ios::binary);std::array<char,8>magic{};input.read(magic.data(),magic.size());
+            require(input.good()&&std::string(magic.data(),magic.size())=="MCLCAP01","Converted capture was not an 8-bit image");
+            std::filesystem::remove(path);
+        }
+    }
     ~Files(){std::error_code ignored;if(owned)std::filesystem::remove_all(directory,ignored);}
 };
 using Pixel=std::array<_Float16,4>;
@@ -327,14 +336,15 @@ int main(int argc,char **argv){@autoreleasepool{try{
     const auto unsupported=srgb->prepare(frame);require(!unsupported.encoded&&unsupported.reason.find("sRGB")!=std::string::npos,"FP16 hardware sRGB requirement was silently changed");
     require(commands.status<MTLCommandBufferStatusCommitted,"Rejected shader submitted commands");
 
-    // Ordered capture already declines FP16. Exercise the actual legacy path
-    // too: width35 requires280 bytes/row, exceeding its old256-byte buffer row.
-    files.requestCapture();require(!macfx::FrameCapture::begin(commands,input,1),"raw capture accepted FP16 byte storage");
-    require(macfx::FrameCapture::pending(0)&&!std::filesystem::exists(files.trigger),"Unsupported capture lost its pending request");
+    // Capture normalizes FP16 instead of treating eight-byte pixels as RGBA8.
+    // Abandoning its first converted source still leaves the request pending.
+    files.requestCapture();auto abandonedCapture=macfx::FrameCapture::begin(commands,input,1);
+    require(bool(abandonedCapture),"FP16 source capture was not converted");abandonedCapture.reset();
+    require(macfx::FrameCapture::pending(0)&&!std::filesystem::exists(files.trigger),"Abandoned converted capture lost its pending request");
     files.requestCapture();int owner=0;commands=[queue commandBuffer];
     const auto encoded=macfx::processFrameWithDepth(&owner,commands,{input,output,1,macfx::SpatialColor::Linear,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,false);
     require(encoded.encoded&&encoded.effects&&!encoded.scaled,encoded.reason.c_str());complete(commands);verify(input,output,source);
-    require(macfx::FrameCapture::pending(0)&&!std::filesystem::exists(files.trigger)&&!std::filesystem::exists(files.capture+"-before.rgba")&&!std::filesystem::exists(files.capture+"-after.rgba"),"Unsupported FP16 raw capture lost its request or published a false byte image");
+    files.captured();
 
     for(auto format:{MTLPixelFormatRGB10A2Unorm,MTLPixelFormatBGR10A2Unorm}){
         const bool bgr=format==MTLPixelFormatBGR10A2Unorm;
@@ -342,7 +352,7 @@ int main(int argc,char **argv){@autoreleasepool{try{
         files.requestCapture();commands=[queue commandBuffer];
         const auto ten=macfx::processFrameWithDepth(&owner,commands,{packed,filtered,2,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,false);
         require(ten.encoded&&ten.effects&&!ten.scaled,ten.reason.c_str());complete(commands);verifyTenBit(packed,filtered,pixels,bgr);
-        require(macfx::FrameCapture::pending(0)&&!std::filesystem::exists(files.trigger)&&!std::filesystem::exists(files.capture+"-before.rgba")&&!std::filesystem::exists(files.capture+"-after.rgba"),"Packed10-bit capture lost its request or was misread as RGBA8 bytes");
+        files.captured();
     }
 
     // The same owner may later receive ordinary 8-bit content. Keep its actual
@@ -364,5 +374,5 @@ int main(int argc,char **argv){@autoreleasepool{try{
     require(source8==bytes,"8-bit format switch modified source");
     for(const auto &p:actual8)require(std::abs(int(p[0])-87)<=1&&p[0]==p[1]&&p[1]==p[2]&&p[3]==82,"8-bit format switch changed shader output or alpha");
     macfx::releaseFrameOwner(&owner);
-    puts("FP16 and normalized10-bit FX: grayscale, range, channel order, alpha, source, resize, caller submission and supported8-bit capture preserved; unsupported sRGB/raw capture rejected safely");return 0;
+    puts("FP16 and normalized10-bit FX: grayscale, range, channel order, alpha, source, resize, caller submission and supported8-bit capture preserved; unsupported sRGB shader rejected safely; FP16/10-bit captures converted to 8-bit");return 0;
 }catch(const std::exception &error){fprintf(stderr,"%s\n",error.what());return 1;}}}

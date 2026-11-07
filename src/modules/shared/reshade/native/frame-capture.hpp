@@ -3,7 +3,7 @@
 #import <Metal/Metal.h>
 #include "log.hpp"
 #include "native-config.hpp"
-#include "screenshot-color.hpp"
+#include "screenshot-image.hpp"
 #include "capture-file.hpp"
 #include <atomic>
 #include <chrono>
@@ -26,15 +26,18 @@ class FrameCapture {
         return texture&&captureWritesFormat(texture.pixelFormat);
     }
     static bool readable(id<MTLCommandBuffer> commands,id<MTLTexture> texture) {
-        return commands&&supported(texture)&&commands.status<MTLCommandBufferStatusCommitted&&commands.device==texture.device&&texture.sampleCount==1&&!texture.framebufferOnly;
+        return commands&&texture&&commands.status<MTLCommandBufferStatusCommitted&&commands.device==texture.device&&texture.sampleCount==1&&!texture.framebufferOnly;
     }
     static void unsupported(id<MTLTexture> texture) {
         static std::atomic<bool>warned{false};if(!warned.exchange(true))nativeLog("Frame capture needs an 8-bit RGB image; format="+std::to_string(texture?texture.pixelFormat:MTLPixelFormatInvalid)+"; request remains pending");
     }
     struct State : std::enable_shared_from_this<State> {
         std::mutex mutex;uint64_t ticket;std::string prefix;Image before,after;bool beforeFlip=false,afterFlip=false,sourceDone=false,finalDone=false,writing=false;
+        // Both diagnostic sources and passive drawable outputs enter this
+        // boundary. Keep each conversion with the exact capture reservation.
+        ScreenshotImage sourceImage,outputImage;ImageColorDescription color;uint64_t frameId;
         const int64_t capturedAt=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        State(uint64_t value,std::string path,bool flip):ticket(value),prefix(std::move(path)),beforeFlip(flip){}
+        State(uint64_t value,std::string path,bool flip,ImageColorDescription description,uint64_t frame):ticket(value),prefix(std::move(path)),beforeFlip(flip),color(description),frameId(frame){}
         ~State(){abandon();}
         void abandon(){std::lock_guard guard(mutex);if(writing)return;if(ticket){finishCaptureFrame(ticket,false);ticket=0;}before={};after={};}
         void completed(bool source,bool success){
@@ -84,11 +87,15 @@ class FrameCapture {
     };
     std::shared_ptr<State>state;std::atomic<bool>finished{false};
     explicit FrameCapture(std::shared_ptr<State>value):state(std::move(value)){}
-    static bool read(const std::shared_ptr<State>&state,id<MTLCommandBuffer>commands,id<MTLTexture>texture,bool source,bool flip) {
+    static bool read(const std::shared_ptr<State>&state,id<MTLCommandBuffer>commands,id<MTLTexture>texture,bool source,bool flip,const ImageColorDescription *color=nullptr) {
         if(!readable(commands,texture))return false;
         if(texture.width>captureMaximumDimension||texture.height>captureMaximumDimension)return false;
         const unsigned width=texture.width,height=texture.height,stride=(width*4+255)&~255u;
         if(!captureLayout(width,height,stride))return false;
+        // Preparation is lazy and 8-bit images pass through unchanged. A
+        // failed conversion keeps the request pending through abandon().
+        texture=(source?state->sourceImage:state->outputImage).prepare(commands,texture,color?*color:state->color,state->frameId);
+        if(!supported(texture)){unsupported(texture);return false;}
         auto bytes=[commands.device newBufferWithLength:size_t(stride)*height options:MTLResourceStorageModeShared];if(!bytes)return false;
         Image image{bytes,texture,width,height,stride,texture.pixelFormat==MTLPixelFormatBGRA8Unorm||texture.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB};
         auto completion=std::make_shared<Completion>(state,image,source);
@@ -107,22 +114,22 @@ public:
     // captures only frames that are already processed.
     static bool forcesAttachment(){const auto&capture=nativeConfig().capture;return capture.configured()&&!capture.finalOnly;}
     static bool pending(uint64_t frame){const auto&capture=nativeConfig().capture;if(!capture.configured())return false;return capture.trigger?captureTriggerPending():frame==capture.frame;}
-    static std::shared_ptr<FrameCapture>begin(id<MTLCommandBuffer>commands,id<MTLTexture>source,uint64_t frame,bool flip=false){
+    static std::shared_ptr<FrameCapture>begin(id<MTLCommandBuffer>commands,id<MTLTexture>source,uint64_t frame,bool flip=false,const ImageColorDescription *color=nullptr){
         if(!pending(frame))return {};
         const bool finalOnly=nativeConfig().capture.finalOnly;
-        if(!finalOnly){if(!supported(source)){unsupported(source);return {};}if(!readable(commands,source))return {};}
+        if(!finalOnly&&!readable(commands,source))return {};
         const auto ticket=claimCaptureFrame(frame);if(!ticket)return {};
         struct Reservation{uint64_t ticket;~Reservation(){if(ticket)finishCaptureFrame(ticket,false);}}reservation{ticket};
         std::shared_ptr<State>state;
-        @try{try{state=std::make_shared<State>(ticket,nativeConfig().capture.prefix,flip);reservation.ticket=0;
+        @try{try{state=std::make_shared<State>(ticket,nativeConfig().capture.prefix,flip,color?*color:describeImageColor(ImageColorSpace::LegacySDR),frame);reservation.ticket=0;
             if(finalOnly){std::lock_guard guard(state->mutex);state->sourceDone=true;}
             else if(!read(state,commands,source,true,flip)){state->abandon();return {};}
             return std::shared_ptr<FrameCapture>(new FrameCapture(state));
         }catch(...){if(state)state->abandon();}}@catch(NSException*error){(void)error;if(state)state->abandon();}return {};
     }
-    void finish(id<MTLCommandBuffer>commands,id<MTLTexture>output,bool flip=false){
+    void finish(id<MTLCommandBuffer>commands,id<MTLTexture>output,bool flip=false,const ImageColorDescription *color=nullptr){
         if(finished.exchange(true,std::memory_order_acq_rel))return;
-        @try{try{if(!supported(output))unsupported(output);if(!read(state,commands,output,false,flip))state->abandon();}catch(...){state->abandon();}}
+        @try{try{if(!read(state,commands,output,false,flip,color))state->abandon();}catch(...){state->abandon();}}
         @catch(NSException*error){(void)error;state->abandon();}
     }
 };

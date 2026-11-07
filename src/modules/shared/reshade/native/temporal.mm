@@ -527,7 +527,7 @@ static int processSelectedTemporalFrame(const RSTemporalFrame*f,const RSImageCol
                 [copy copyFromTexture:color sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(f->colorX,f->colorY,0) sourceSize:MTLSizeMake(f->renderWidth,f->renderHeight,1) toTexture:output destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[copy endEncoding];
             }else{const auto code=processTemporalProviderFrame(f,explicitColor,&original);if(code!=RS_TEMPORAL_OK||!original.encoded){*r=original;return code;}}
         }
-        auto capture=macfx::FrameCapture::begin(commands,selected.execution->replacesTemporal()?color:output,f->frameId);bool displayMapped=early&&early->displayMapped();
+        auto capture=macfx::FrameCapture::begin(commands,selected.execution->replacesTemporal()?color:output,f->frameId,false,&description);bool displayMapped=early&&early->displayMapped();
         const auto encoded=originalRetained?selected.execution->encodeRecordedScene(frame,*f,&displayMapped,&guide):selected.execution->encodeScene(frame,*f,&displayMapped,&guide,displayMapped);if(!encoded.encoded)return answer(r,encoded.busy?RS_TEMPORAL_BUSY:RS_TEMPORAL_FAILED,encoded.reason.c_str());
         if(destination)macfx::publishTemporalSceneContinuation(commands,*destination,*f,selected.execution,displayMapped);else macfx::publishTemporalOutputWithDepth(commands,output,f->frameId,selected.execution,std::move(capture),&guide,displayMapped,f);
         acceptEncodedScene(statusContext,*selected.execution,f->frameId);owner->statusReported.store(true,std::memory_order_release);r->encoded=1;r->reset=bool(f->flags&RS_TEMPORAL_RESET);return answer(r,RS_TEMPORAL_OK,"");
@@ -688,7 +688,7 @@ void encodeDenoisedTemporal(id scaler,SEL selector,id<MTLCommandBuffer>commands,
     const auto selected=state->plan->prepareWithColorDescription(context,true,&frame,macfx::imageColorLabel(color),color);if(selected.holdPrevious||selected.preparing&&!selected.execution||!selected.execution||!selected.execution->hasTemporal()){fallback(selected.error.empty()?"the ordered scene is preparing":selected.error);return;}
     bool originalEncoded=false;if(!selected.execution->replacesTemporal()){invokeOriginal(scaler,selector,commands,original,state->originalReset);originalEncoded=true;}
     if(source.fence){auto wait=[commands computeCommandEncoder];[wait waitForFence:source.fence];[wait endEncoding];}
-    auto capture=macfx::FrameCapture::begin(commands,selected.execution->replacesTemporal()?source.colorTexture:source.outputTexture,frame.frameId);bool mapped=false;const auto encoded=selected.execution->encodeScene(context,frame,&mapped,&depth);
+    auto capture=macfx::FrameCapture::begin(commands,selected.execution->replacesTemporal()?source.colorTexture:source.outputTexture,frame.frameId,false,&color);bool mapped=false;const auto encoded=selected.execution->encodeScene(context,frame,&mapped,&depth);
     if(!encoded.encoded){if(!originalEncoded)fallback(encoded.reason);else state->originalReset=false;return;}if(source.fence){auto update=[commands computeCommandEncoder];[update updateFence:source.fence];[update endEncoding];}
     if(destination)macfx::publishTemporalSceneContinuation(commands,*destination,frame,selected.execution,mapped);else macfx::publishTemporalOutputWithDepth(commands,source.outputTexture,frame.frameId,selected.execution,std::move(capture),&depth,mapped,&frame);state->reset=false;
     acceptEncodedScene(reinterpret_cast<uintptr_t>((__bridge void*)state),*selected.execution,frame.frameId);state->statusReported.store(true,std::memory_order_release);state->originalReset=true;state->reported=false;return;
@@ -802,7 +802,7 @@ void encodeTemporal(id scaler,SEL selector,id commands){
                         // scaler. It does not force a reconstruction choice.
                         if(!selected.execution->replacesTemporal()){invokeOriginal(scaler,selector,commands,original,state->originalReset);originalEncoded=true;}
                         if(s.fence){auto wait=[(id<MTLCommandBuffer>)commands computeCommandEncoder];[wait waitForFence:s.fence];[wait endEncoding];}
-                        auto capture=macfx::FrameCapture::begin(commands,selected.execution->replacesTemporal()?s.colorTexture:s.outputTexture,f.frameId);
+                        auto capture=macfx::FrameCapture::begin(commands,selected.execution->replacesTemporal()?s.colorTexture:s.outputTexture,f.frameId,false,&actualColor);
                         bool displayMapped=early&&early->displayMapped();const auto encoded=selected.execution->encodeScene(context,f,&displayMapped,&depth,displayMapped);
                         if(encoded.encoded) {
                             if(s.fence){auto update=[(id<MTLCommandBuffer>)commands computeCommandEncoder];[update updateFence:s.fence];[update endEncoding];}

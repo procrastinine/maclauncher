@@ -14,9 +14,19 @@ struct ColorConversion {
     unsigned outputX=0,outputY=0,outputWidth=0,outputHeight=0;
     bool flipY=false;
 };
+// Nonretaining producer buffers still need these exact resources until their
+// encoded conversion completes or the unsubmitted buffer is destroyed. The
+// lease never owns its command buffer, so an abandoned capture cannot cycle.
+inline void retainColorConversion(id<MTLCommandBuffer>commands,std::shared_ptr<void>owner,id<MTLTexture>input,id<MTLTexture>output,id<MTLTexture>alpha,id<MTLRenderPipelineState>pipeline){
+    if(commands.retainedReferences)return;
+    struct Flight {std::shared_ptr<void>owner;id<MTLTexture>input,output,alpha;id<MTLRenderPipelineState>pipeline;};
+    auto flight=std::make_shared<Flight>(Flight{std::move(owner),input,output,alpha,pipeline});
+    [commands addCompletedHandler:^(id<MTLCommandBuffer>){(void)flight;}];
+}
 // One GPU pass performs transfer/range/primaries conversion, optional tone
-// mapping, alpha handling and final quantization dither. The caller owns all
-// textures, submission and completion. Preparation never advances history.
+// mapping, alpha handling and final quantization dither. The caller owns
+// submission and completion; nonretaining commands get a finite resource
+// lease. Preparation never advances history.
 class ColorEncoder {
     struct Impl;std::shared_ptr<Impl> impl;
 public:

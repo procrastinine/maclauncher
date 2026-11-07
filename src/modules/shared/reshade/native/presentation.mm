@@ -937,7 +937,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   auto copy=[commands blitCommandEncoder];if(!copy)throw std::runtime_error("Cannot retain an independent neural source frame");
   [copy copyFromTexture:source sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(source.width,source.height,1) toTexture:batch->sourceSnapshot destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[copy endEncoding];
   captureComparison(commands,source,batch,true);
-  batch->capture=FrameCapture::begin(commands,source,frameId,config.origin==FrameOrigin::BottomLeft);
+  batch->capture=FrameCapture::begin(commands,source,frameId,config.origin==FrameOrigin::BottomLeft,&sourceColor);
   std::weak_ptr<Impl>weak=shared_from_this();
   auto lease=std::make_shared<CompletionLease>([weak,batch](bool success){if(auto self=weak.lock()){std::lock_guard<std::mutex>lock(self->mutex);if(self->inFlight)--self->inFlight;if(self->status.pending)--self->status.pending;if(!success)++self->status.dropped;}});
   {std::lock_guard<std::mutex>lock(mutex);++inFlight;++status.pending;status.maxPending=std::max(status.maxPending,status.pending);++status.encoded;}
@@ -1026,7 +1026,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   batch->capture.reset();
   batch->opaqueDisplay=opaque;publicationFor(batch,source);captureComparison(commands,source,batch);
   if(batch->execution){
-   batch->scene=std::move(sceneInputs);batch->sceneCompletion=std::move(receiptCompletion);if(sceneContinuation){const auto producer=std::move(sceneContinuation);batch->sceneCompletion=[producer]{return producer->completion();};}batch->capture=sceneCapture?std::move(sceneCapture):FrameCapture::begin(commands,source,frameId,config.origin==FrameOrigin::BottomLeft);
+   batch->scene=std::move(sceneInputs);batch->sceneCompletion=std::move(receiptCompletion);if(sceneContinuation){const auto producer=std::move(sceneContinuation);batch->sceneCompletion=[producer]{return producer->completion();};}batch->capture=sceneCapture?std::move(sceneCapture):FrameCapture::begin(commands,source,frameId,config.origin==FrameOrigin::BottomLeft,&sourceColor);
    id<MTLTexture>prefixTarget=batch->real;
    if(!redraw&&(batch->execution->generationStages().size()>1||(contentTimed&&generator&&generationEnabled&&!batch->execution->generationStages().empty()))){const auto w=batch->execution->generationWidth(),h=batch->execution->generationHeight();if(!batch->generationSource||batch->generationSource.width!=w||batch->generationSource.height!=h)batch->generationSource=makeTexture(layer.device,w,h,graphFormat);prefixTarget=batch->generationSource;}
    const ShaderFrame context{commands,source,prefixTarget,content?content->contentId:effectFrameId,contentTimeMs,float(redraw?0:(batch->contentStamped?batch->contentPeriod:batch->sourcePeriod)*1000),config.origin,spatialColorForDescription(batch->color),effectDepth,opaque};
