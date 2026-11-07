@@ -32,7 +32,29 @@ extern "C" __declspec(dllexport) int __cdecl MacLauncherSetStreamlineResourcesV2
 }
 extern "C" __declspec(dllexport) void __cdecl MacLauncherClearStreamlineResourcesV2() { mlStreamline={};mlStreamlineSnapshots={}; }
 extern "C" __declspec(dllexport) uint32_t __cdecl MacLauncherStreamlineTagSnapshotsAPI() { return 1; }`);
-  replace('src/nvngx/nvngx.cpp', '    pCtxExt->TemporalUpscale(&desc);', `    RSTemporalCamera camera = mlCamera;
+  replace('src/nvngx/nvngx.cpp', '    pCtxExt->TemporalUpscale(&desc);', `    // DLSS's bias-current-color mask is the scaler's reactive mask: 1 relies on the current frame. DXMT reads every
+    // input at the origin, so a mask at another offset or smaller than the input, or a device without reactive
+    // scaling, leaves it out.
+    MLTemporalAux mlAux{};
+    {
+      ID3D11Resource *bias = nullptr;
+      unsigned biasX = 0, biasY = 0;
+      parameters->Get("DLSS.Input.Bias.Current.Color.Subrect.Base.X", &biasX);
+      parameters->Get("DLSS.Input.Bias.Current.Color.Subrect.Base.Y", &biasY);
+      Com<IMTLD3D11ContextExt1> mlExt1;
+      Com<ID3D11Texture2D> biasTexture;
+      D3D11_TEXTURE2D_DESC biasDesc{};
+      BOOL reactiveSupported = FALSE;
+      if (parameters->Get("DLSS.Input.Bias.Current.Color.Mask", &bias) == NVNGX_RESULT_OK && bias && !biasX && !biasY &&
+          SUCCEEDED(bias->QueryInterface(IID_PPV_ARGS(&biasTexture))) && (biasTexture->GetDesc(&biasDesc), true) &&
+          biasDesc.Width >= desc.InputContentWidth && biasDesc.Height >= desc.InputContentHeight &&
+          SUCCEEDED(context->QueryInterface(IID_PPV_ARGS(&mlExt1))) &&
+          SUCCEEDED(mlExt1->CheckFeatureSupport(MTL_FEATURE(MLTemporalReactiveFeature), &reactiveSupported,
+                                                sizeof(reactiveSupported))) && reactiveSupported)
+        mlAux.reactiveMask = bias;
+    }
+    MLScopedContextAux mlAuxScope(context, mlAux);
+    RSTemporalCamera camera = mlCamera;
     if (camera.size) {
       camera.flags &= ~(RS_TEMPORAL_HDR | RS_TEMPORAL_DEPTH_REVERSED |
           RS_TEMPORAL_JITTERED_MOTION | RS_TEMPORAL_OUTPUT_MOTION);
