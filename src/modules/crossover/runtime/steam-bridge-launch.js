@@ -59,4 +59,11 @@ function resolve(executablePath, architecture) {
   // a launcher whose subsequent child would have no Steam loader installed.
   return { executablePath: target, arguments: windowsArguments(string(202)) };
 }
-module.exports = { resolve, windowsArguments };
+// The program a bootstrap declares, relative to the game folder, or null.
+// Metadata errors are left to resolve(), which runs only for bridged launches.
+function declaredProgram(executablePath, gameRoot, architecture) {
+  let target;
+  try { target = resolve(executablePath, architecture).executablePath; } catch { return null; }
+  return target === executablePath ? null : path.relative(gameRoot, target).split(path.sep).join('/');
+}
+module.exports = { resolve, declaredProgram, windowsArguments };

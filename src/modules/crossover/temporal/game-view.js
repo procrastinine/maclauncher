@@ -98,8 +98,12 @@ async function project(directory, base, executable, names, kind, signal) {
   catch (error) {try {fs.rmSync(root, {recursive: true, force: true});} catch {}throw error;}
   return {gameRoot: root, executablePath: path.join(root, executable), binding: {schema: 1, kind, id: record.id, generation: true}, record, file, directory};
 }
+// plan.programs names further executables that load the camera libraries,
+// such as the program an Unreal bootstrap declares; they are copied like the
+// selected executable.
 function camera(directory, gameRoot, executablePath, plan, _recovery, signal) {
-  return project(directory, gameRoot, path.relative(gameRoot, executablePath), (plan.libraries || []).map(row => row.relativePath), "camera", signal);
+  return project(directory, gameRoot, path.relative(gameRoot, executablePath),
+    [...(plan.libraries || []).map(row => row.relativePath), ...(plan.programs || [])], "camera", signal);
 }
 function prepared(view, plan) {
   view.record.adapters = (plan.libraries || []).map(row => {

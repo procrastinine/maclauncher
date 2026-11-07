@@ -316,7 +316,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     if (!loader) { cameraBridge = null;sceneClosure = null; }
     else try {
       const plans = [...(cameraBridge ? [{ kind: "camera", plan: cameraBridge }] : []), ...(sceneClosure ? [{ kind: "scene", plan: scenePlan }] : [])];
-      cameraView = await GameView.camera(directory, originalRoot, executable, { libraries: plans.flatMap(item => item.plan.libraries) }, recovery, context.signal);
+      const program = require('./steam-bridge-launch').declaredProgram(executable, originalRoot, selectedExecutable.executableArchitecture);
+      cameraView = await GameView.camera(directory, originalRoot, executable, { libraries: plans.flatMap(item => item.plan.libraries), programs: program ? [program] : [] }, recovery, context.signal);
       const preparedLibraries = [];
       for (const item of plans) {
         let ready = false;

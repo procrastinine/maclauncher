@@ -305,7 +305,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   let gameRoot = originalRoot, executablePath = match.windowsExecutablePath, cameraView;
   if (cameraBridge) {
     try {
-      cameraView = await GameView.camera(directory, originalRoot, match.windowsExecutablePath, cameraBridge, recovery, context.signal);
+      const program = require('../runtime/steam-bridge-launch').declaredProgram(match.windowsExecutablePath, originalRoot, match.executableArchitecture);
+      cameraView = await GameView.camera(directory, originalRoot, match.windowsExecutablePath, { ...cameraBridge, programs: program ? [program] : [] }, recovery, context.signal);
       if (!Temporal.prepareGame(cameraBridge, cameraView.gameRoot, context.signal)) cameraBridge = null;
       else {GameView.prepared(cameraView, cameraBridge);GameView.remember(entry, context, "sikarugir", cameraView, recovery);gameRoot = cameraView.gameRoot;executablePath = cameraView.executablePath;}
     }
