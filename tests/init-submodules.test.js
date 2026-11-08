@@ -191,7 +191,8 @@ test('mirror pin drift refuses origin rewriting', async t => {
 test('production checkout metadata matches every top-level source pin without initializing references', async () => {
   const development = await readPlan(), metadata = require('../build/source-dependencies.json');
   assert.deepEqual(development.modules.map(item => item.path).sort(), [...metadata.submodules, ...metadata.testSubmodules].sort());
-  assert.ok(development.modules.every(item => !item.recursive), 'Ordinary setup does not fetch producer dependency trees');
+  assert.deepEqual(development.modules.filter(item => item.recursive).map(item => item.path).sort(),
+    [...(metadata.recursiveSubmodules || [])].sort(), 'Only declared shared source owners initialize nested dependencies');
   const plan = await readPlan({ all: true });
   assert.deepEqual(plan.modules.map(item => item.path).sort(), [...metadata.submodules, ...metadata.testSubmodules].sort());
   assert.deepEqual(plan.skipped, []);
