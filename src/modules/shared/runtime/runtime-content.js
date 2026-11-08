@@ -9,6 +9,8 @@ const testDirectories = ['test', 'tests', 'testsuite', 'testsuites', 'spec', 'sp
 const generatedDirectories = ['.build', '.swiftpm', 'CMakeFiles', '.pytest_cache', '.mypy_cache', '.ruff_cache', 'test-results', 'playwright-report'];
 const generatedFiles = new Set(['CMakeCache.txt', 'CTestTestfile.cmake', 'build.ninja', '.ninja_log', '.ninja_deps', 'compile_commands.json']);
 const instructionFiles = ['AGENTS.md'];
+// Git repository metadata describes a checkout, not runtime content.
+const repositoryFiles = new Set(['.gitmodules', '.gitattributes', '.gitignore']);
 // A gem "spec" is a runtime package specification, and e.g. Ruby's
 // rdoc/markup/to_test.rb is a production converter. Use test-source naming
 // conventions, not arbitrary words or substring matches in vendor assets.
@@ -24,7 +26,7 @@ const excludedGlobs = Object.freeze([
   '**/_ctypes_test.cpython-*-darwin.so',
   `**/${testNames}{,[-_.]*}`, `**/*[-_]${testNames}`, `**/*[-_]${testNames}.${extensions}{,.*}`,
   `**/*.{${['test', 'spec'].map(insensitive).join(',')}}.${extensions}{,.*}`,
-  ...generatedFiles.values(), ...instructionFiles.map(insensitive)
+  ...generatedFiles.values(), ...repositoryFiles.values(), ...instructionFiles.map(insensitive)
 ].map(pattern => '!' + (pattern.includes('/') ? pattern : '**/' + pattern)));
 
 function excludedReason(file) {
@@ -37,6 +39,7 @@ function excludedReason(file) {
   if (parts.some(part => instructionFiles.some(name => name.toLowerCase() === part.toLowerCase()))) return 'process instruction file';
   if (executableParts.some(part => testDirectories.some(name => name.toLowerCase() === part.toLowerCase()) || /\.xctest$/i.test(part))) return 'test directory or fixture';
   if (parts.some(part => generatedDirectories.includes(part) || /\.dSYM$/.test(part)) || generatedFiles.has(parts.at(-1))) return 'generated build or test output';
+  if (repositoryFiles.has(parts.at(-1))) return 'repository metadata';
   if (pythonTestExtension.test(parts.at(-1))) return 'Python test extension';
   if (executableParts.some(part => namedTest.test(part))) return 'test source or runner filename';
   return null;

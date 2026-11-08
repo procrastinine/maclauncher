@@ -129,7 +129,7 @@ Packaging runs `scripts/after-pack.js`, which sets the document associations and
 
 Most module resources stay inside `app.asar`, which makes signing faster, and bundled executable app resources are unpacked. A new executable resource needs an entry in `build.asarUnpack` in `package.json`. Packaged builds include only the external subpaths listed in `build.extraResources`, which also declares module-owned external resources.
 
-The runtime-content rules filter the application files and every resource mapping. Production helpers are kept according to their actual runtime use. Native test executables require an explicit CMake configuration with `-DBUILD_TESTING=ON`, and ordinary builds use `BUILD_TESTING=OFF`.
+The runtime-content rules filter the application files and every resource mapping. Production helpers are kept according to their actual runtime use. Git repository metadata files (`.gitmodules`, `.gitattributes` and `.gitignore`) are excluded along with `.git` directories. Native test executables require an explicit CMake configuration with `-DBUILD_TESTING=ON`, and ordinary builds use `BUILD_TESTING=OFF`.
 
 Packaging exclusions keep their precedence after electron-builder merges the file mappings. When an npm package runs its compiled JavaScript entry points, its unused documentation and separate TypeScript sources are left out, while runtime files and license notices stay. Source maps in npm packages are left out as well, and so are browser-only bundles and protocol schema sources that the Node.js entry points never load. An upstream resource that exists in several layouts ships once, from the layout its consumer reads first and without its editor type declarations.
 
