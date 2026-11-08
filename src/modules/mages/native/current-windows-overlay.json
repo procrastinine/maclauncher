@@ -1,11 +1,10 @@
 {
-  "upstreamRevision": "914fae7cbb9583f8aa231569a03aab27d8c042f8",
   "patchSha256": "e85514d395e6bf28c5663fe49193a23834726864c328e00c940420edc29cc5d6",
   "files": [
     {
       "path": "CMakeLists.txt",
-      "originalSha256": "32f8f66e2a72f24932236cc5a8e6448ef66812da2f3b1e713a754fe09364cbeb",
-      "adaptedSha256": "72594978ed08fe20c2baa495d531fcd9854f4ebfd581de3315e9af0e70c35500"
+      "originalSha256": "a3807ed118b70d10a2d0e1fd8852db0874ec59c8e66c61b30fafaef877441820",
+      "adaptedSha256": "6840c7d6ee923a18315b86b77371d9ab0306561bce417cf2b4907ec627e61acc"
     },
     {
       "path": "src/games/cclcc/tipssystem.cpp",
@@ -199,8 +198,8 @@
     },
     {
       "path": "src/vm/interface/input.cpp",
-      "originalSha256": "1dd947fbe79ff6057f67dddfdf2881631e9f7f94e8101f1827b196182976a79e",
-      "adaptedSha256": "f304d43442a3062d9ccc2cd8e21b585f8567f4c830d217d0936b7cbc355a5915"
+      "originalSha256": "d8fa0483807752b626ebf1f231331ec10aeef908927f0451548ec6d775f530cb",
+      "adaptedSha256": "556295c6473ddfc39de0f1b4f56ca61cd6580e4f1de1e8eb81687cd2c49577c4"
     },
     {
       "path": "src/vm/thread.cpp",

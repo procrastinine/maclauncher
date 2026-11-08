@@ -3,9 +3,6 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const Inspect = require("../inspect");
 const Archive = require("../archive");
-const NativeBuild = require("../../shared/runtime/pinned-native-build");
-const overlay = require("./impacto-overlay.json");
-const SourcePatches = require("./source-patches");
 
 const SOURCES = Object.freeze({
   impacto: { repository: "https://github.com/CommitteeOfZero/impacto", revision: Inspect.IMPACTO.revision },
@@ -63,27 +60,6 @@ function writeOwnedFile(file, data) {
   requireOwnedFile(file);
   const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | (fs.constants.O_NOFOLLOW || 0), 0o600);
   try { fs.writeFileSync(fd, data); } finally { fs.closeSync(fd); }
-}
-
-async function applyImpactoOverlay(stagedSource, { logPath, signal } = {}) {
-  const patch = path.join(__dirname, "impacto.patch");
-  if (hash(patch) !== overlay.overlaySha256) throw new Error("Impacto overlay hash differs from its pinned record.");
-  // This hook accepts a copy owned by the build, never a Git checkout.
-  if (fs.existsSync(path.join(stagedSource, ".git"))) throw new Error("Apply native overlays only to an owned staged source copy.");
-  for (const file of overlay.files) {
-    const target = path.join(stagedSource, file.path);
-    if (file.originalSha256 === null ? fs.existsSync(target) : hash(target) !== file.originalSha256) {
-      throw new Error(`Pinned Impacto source file differs: ${file.path}.`);
-    }
-  }
-  const command = NativeBuild.findBuildTool("git");
-  const options = { cwd: stagedSource, logPath, signal, env: SourcePatches.patchEnvironment(stagedSource) };
-  await NativeBuild.runBuildCommand(command, ["apply", "--check", patch], options);
-  await NativeBuild.runBuildCommand(command, ["apply", patch], options);
-  for (const file of overlay.files) {
-    if (hash(path.join(stagedSource, file.path)) !== file.adaptedSha256) throw new Error(`Impacto overlay result differs: ${file.path}.`);
-  }
-  return { upstreamRevision: overlay.upstreamRevision, overlaySha256: overlay.overlaySha256, files: overlay.files };
 }
 
 function validateWindowsData(gamePath) {
@@ -151,4 +127,4 @@ function prepareWindowsSession({ gamePath, runtimeRoot, sessionDir, diagnosticFr
     qualification: "Windows HD beta; story and save compatibility varies." };
 }
 
-module.exports = { SOURCES, hash, futureRealPath, separateStorage, luaString, requireOwnedFile, writeOwnedFile, applyImpactoOverlay, validateWindowsData, prepareWindowsSession };
+module.exports = { SOURCES, hash, futureRealPath, separateStorage, luaString, requireOwnedFile, writeOwnedFile, validateWindowsData, prepareWindowsSession };
