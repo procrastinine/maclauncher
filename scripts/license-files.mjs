@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 // the text each component uses. Texts compare by a fingerprint of their bytes without whitespace, so the same
 // licence in another layout is not stored again. A missing or unreadable source is skipped with a warning.
 const fingerprint=bytes=>crypto.createHash('sha256').update(bytes.filter(byte=>byte>32)).digest('hex'),stored=new Map();
+const warning=(...values)=>{try{console.log("::warning::",...values);}catch{}};
 export function addLicense(root,component,source,licence=component){
  try{
   const dir=path.join(root,'licenses'),index=path.join(dir,'components.txt'),text=fs.readFileSync(source),key=fingerprint(text);
@@ -21,7 +22,7 @@ export function addLicense(root,component,source,licence=component){
    fs.writeFileSync(path.join(dir,file),text);texts.set(key,file);
   }
   fs.appendFileSync(index,`${component}: ${file}\n`);
- }catch(error){console.log(`::warning::No licence text for ${component}: ${error.message}`);}
+ }catch(error){warning("No licence text for",component,error);}
 }
 
 /** Merge a producer's component index through the same package-level operation. */
