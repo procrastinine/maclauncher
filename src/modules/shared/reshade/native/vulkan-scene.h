@@ -78,6 +78,16 @@ typedef struct RSVulkanSceneCallbacksV1 {
     void (*completed)(void* storage, uint64_t frameId, uint32_t completion,
                       const RSTemporalResult*);
 } RSVulkanSceneCallbacksV1;
+// Explicit submission-aware callback extension. Operation API3 negotiates
+// this table; API1/API2 tables and EncodingV2 remain byte-identical. Encode
+// still receives EncodingV2. Accepted submission carries the actual producer
+// queue's event/value, never a guessed future commit or completed frame.
+typedef struct RSVulkanSceneCallbacksV3 {
+    RSVulkanSceneCallbacksV1 base;
+    void (*submitted)(void* storage,uint64_t frameId,const RSTemporalResult*,
+                      uint32_t accepted,void* metalSharedEvent,uint64_t value);
+} RSVulkanSceneCallbacksV3;
+int rsCreateVulkanSceneBoundary3(const RSVulkanSceneCallbacksV3*,RSVulkanSceneCallbacksV3*);
 // Returns one owned reference in output. The caller releases it through the
 // returned callback table. The adapter retains consumer until its last owner
 // retires. Creation prepares no device resources and advances no frame state.
