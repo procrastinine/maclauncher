@@ -105,8 +105,15 @@ function stagePinnedFiles(sourceDir, files, destination) {
   });
 }
 
-function findBuildTool(name) {
-  const directories = [...new Set(["/opt/homebrew/bin", "/usr/local/bin", ...String(process.env.PATH || "").split(path.delimiter)].filter(Boolean))];
+// A build lists its declared Homebrew formula prefixes in CMAKE_PREFIX_PATH.
+function declaredToolDirectories(env = process.env) {
+  return String(env.CMAKE_PREFIX_PATH || "").split(path.delimiter).filter(Boolean)
+    .flatMap(prefix => [path.join(prefix, "bin"), path.join(prefix, "sbin")]).filter(directory => fs.existsSync(directory));
+}
+
+// Declared formulae come before PATH, where the Xcode compiler directory also carries older flex and bison.
+function findBuildTool(name, env = process.env) {
+  const directories = [...new Set([...declaredToolDirectories(env), "/opt/homebrew/bin", "/usr/local/bin", ...String(env.PATH || "").split(path.delimiter)].filter(Boolean))];
   for (const directory of directories) {
     const file = path.join(directory, name);
     try { if (fs.statSync(file).isFile()) { fs.accessSync(file, fs.constants.X_OK); return file; } } catch {}
@@ -242,4 +249,4 @@ async function buildPinnedRuntime({ manager, version, sourceDir, userDataDir, cm
   }
 }
 
-module.exports = { buildPinnedRuntime, validateSourceScope, validatePinnedSource, hashPinnedFiles, stagePinnedFiles, runBuildCommand, findBuildTool };
+module.exports = { buildPinnedRuntime, validateSourceScope, validatePinnedSource, hashPinnedFiles, stagePinnedFiles, runBuildCommand, findBuildTool, declaredToolDirectories };
