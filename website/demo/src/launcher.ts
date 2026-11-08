@@ -3,7 +3,7 @@
 // against it.
 import { demoData } from "./data";
 import type { LauncherState } from "../../../src/renderer/src/ui/types";
-import { createLauncherApi, type DemoComponents, type DemoGameActions, type DemoGraphics, type DemoSettingsActions } from "./mock/api";
+import { createLauncherApi, type DemoComponents, type DemoGameActions, type DemoGraphics, type DemoPicker, type DemoSettingsActions } from "./mock/api";
 import { followNavigation } from "./mock/navigation";
 import { createStore, type DemoHost, type DemoStore } from "./mock/store";
 
@@ -13,7 +13,7 @@ declare global {
 
 const data = demoData as unknown as {
   state: LauncherState; graphics: DemoGraphics; settingsActions: DemoSettingsActions; gameActions: DemoGameActions;
-  components: DemoComponents;
+  components: DemoComponents; picker: DemoPicker;
 };
 
 function sharedStore(): DemoStore {
@@ -53,6 +53,6 @@ window.confirm = () => true;
 window.prompt = () => null;
 
 const store = sharedStore();
-window.MacLauncher = { launcher: createLauncherApi(store, data.graphics, data.settingsActions, data.gameActions, data.components) };
+window.MacLauncher = { launcher: createLauncherApi(store, data.graphics, data.settingsActions, data.gameActions, data.components, data.picker) };
 followNavigation(store, new URLSearchParams(window.location.search).get("view") || "");
 await import("../../../src/renderer/src/main");

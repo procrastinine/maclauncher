@@ -14,10 +14,13 @@ html, body { margin: 0; height: 100%; background: var(--demo-bg); color: var(--d
 .demoBar p { margin: 0; color: var(--demo-muted); font-size: 14px; }
 .demoHome { color: var(--demo-text); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .demo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 30%); height: calc(100% - 49px); }
-.launcherPane { position: relative; min-width: 0; border-right: 1px solid var(--demo-line); }
+.launcherPane { position: relative; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--demo-line); }
+.demoMenu { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 8px; border-bottom: 1px solid var(--demo-line); background: var(--demo-panel); }
+.demoMenu button { border: 0; border-radius: 5px; background: none; color: var(--demo-text); font: inherit; font-size: 13px; padding: 3px 9px; cursor: pointer; }
+.demoMenu button:hover, .demoMenu button:focus-visible { background: var(--demo-line); outline: none; }
 .launcherPane iframe, .articlePreview { border: 0; width: 100%; background: var(--demo-bg); }
-.libraryFrame { height: 100%; }
-.utilityWindow { position: absolute; inset: 24px; display: flex; flex-direction: column; border: 1px solid var(--demo-line);
+.libraryFrame { flex: 1; min-height: 0; }
+.utilityWindow { position: absolute; inset: 52px 24px 24px; display: flex; flex-direction: column; border: 1px solid var(--demo-line);
   border-radius: 10px; overflow: hidden; background: var(--demo-panel); box-shadow: 0 18px 60px rgb(0 0 0 / 55%); }
 .utilityWindow[hidden] { display: none; }
 .utilityBar { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px 6px 16px;
@@ -27,10 +30,19 @@ html, body { margin: 0; height: 100%; background: var(--demo-bg); color: var(--d
 .utilityFrame { flex: 1; }
 .articlePane { display: flex; flex-direction: column; min-width: 0; padding: 16px 16px 0; background: var(--demo-bg); color: var(--demo-text); }
 /* The article column follows the site's theme; the launcher stays dark. */
-[data-site-theme="light"] .articlePane { --demo-bg: #f6f7f9; --demo-line: #d5d9e0; --demo-text: #23262f; --demo-muted: #545861;
-  --demo-accent: #187e83; color-scheme: light; }
+[data-site-theme="light"] .articlePane { --demo-bg: #f6f7f9; --demo-panel: #ffffff; --demo-line: #d5d9e0; --demo-text: #23262f;
+  --demo-muted: #545861; --demo-accent: #187e83; color-scheme: light; }
 .articlePane h2 { margin: 0 0 6px; font-size: 16px; }
 .articleLead { margin: 0 0 10px; color: var(--demo-muted); font-size: 14px; }
+.needs { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--demo-line); border-left: 3px solid var(--demo-accent);
+  border-radius: 6px; background: var(--demo-panel); }
+.needs[hidden] { display: none; }
+.needs h3 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--demo-muted); }
+.needsList { margin: 0; padding: 0; list-style: none; font-size: 13.5px; line-height: 1.4; max-height: 30vh; overflow-y: auto; }
+.needsList li { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 8px; padding: 3px 0; }
+.needsList li + li { border-top: 1px solid var(--demo-line); }
+.needsList li.needNone { display: block; color: var(--demo-muted); }
+.needKind { color: var(--demo-muted); font-size: 12px; font-weight: 600; padding-top: 1px; }
 .articleList { margin: 0 0 12px; padding-left: 20px; }
 .articleList a { color: var(--demo-accent); text-decoration: none; }
 .articleList li.current a { color: var(--demo-text); font-weight: 600; }
@@ -41,7 +53,11 @@ html, body { margin: 0; height: 100%; background: var(--demo-bg); color: var(--d
 .embedded .demo { height: 100%; grid-template-columns: minmax(0, 1fr) minmax(260px, 28%); }
 @media (max-width: 1100px) {
   html:not(.embedded) .demo { grid-template-columns: 1fr; grid-template-rows: minmax(560px, 70vh) auto; height: auto; }
+  html:not(.embedded) .needsList { max-height: none; }
   html:not(.embedded) .launcherPane { border-right: 0; border-bottom: 1px solid var(--demo-line); }
   html:not(.embedded) .articlePreview { min-height: 60vh; }
 }
-@media (max-width: 640px) { .demoBar p { display: none; } }
+@media (max-width: 640px) {
+  .demoBar p { display: none; }
+  .utilityWindow { inset: 76px 8px 8px; }
+}

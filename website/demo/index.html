@@ -13,6 +13,7 @@
     </header>
     <main class="demo">
       <section class="launcherPane" aria-label="Launcher">
+        <nav class="demoMenu" aria-label="Launcher menu"></nav>
         <iframe class="libraryFrame" title="MacLauncher library"></iframe>
         <div class="utilityWindow" hidden>
           <div class="utilityBar">
@@ -25,6 +26,10 @@
       <aside class="articlePane" aria-label="Related articles">
         <h2>Read more</h2>
         <p class="articleLead"></p>
+        <section class="needs" aria-labelledby="needs-title" hidden>
+          <h3 id="needs-title">What this needs</h3>
+          <ul class="needsList"></ul>
+        </section>
         <ol class="articleList"></ol>
         <a class="articleOpen" target="_blank">Open this article</a>
         <iframe class="articlePreview" title="Article preview"></iframe>

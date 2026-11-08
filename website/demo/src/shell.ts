@@ -1,11 +1,13 @@
-// The demo page: the launcher's library on the left, its windows as panels
-// over it, and the articles for the latest action on the right. Every
-// launcher view on the page shares one in-memory state.
+// The demo page: the launcher's menu and library on the left, its windows as
+// panels over it, and on the right what the latest action needs and the
+// articles about it. Every launcher view on the page shares one in-memory
+// state.
 import "./shell.css";
 import { demoData } from "./data";
 import type { LauncherState } from "../../../src/renderer/src/ui/types";
 import { ARTICLES, articlesFor, type Article } from "./articles";
 import { createStore, type DemoTopic, type DemoWindow } from "./mock/store";
+import { NEED_LABELS, NOTHING_EXTRA, needsFor } from "./needs";
 
 const siteRoot = new URL("../", window.location.href);
 const element = <T extends Element>(selector: string) => document.querySelector(selector) as T;
@@ -17,6 +19,9 @@ const lead = element<HTMLParagraphElement>(".articleLead");
 const list = element<HTMLOListElement>(".articleList");
 const preview = element<HTMLIFrameElement>(".articlePreview");
 const open = element<HTMLAnchorElement>(".articleOpen");
+const needs = element<HTMLElement>(".needs");
+const needsList = element<HTMLUListElement>(".needsList");
+const menu = element<HTMLElement>(".demoMenu");
 
 // Embedded in the site's home page, the demo drops its own bar, and articles
 // open in the page around it.
@@ -89,7 +94,19 @@ const LEADS: Record<string, string> = {
   "action:revealInFinder": "In MacLauncher, this shows the file in Finder.",
   "action:setLibrarySort": "In MacLauncher, the library keeps this order between launches.",
   "action:forgetGames": "In MacLauncher, this asks once, then removes the selected games from the library. Their files stay where they are.",
-  "action:deleteGames": "In MacLauncher, this asks once, then moves the selected games to the Trash."
+  "action:deleteGames": "In MacLauncher, this asks once, then moves the selected games to the Trash.",
+  "window:appAction": "In MacLauncher, File → Apply Graphics… lists the displays and the windows of other apps. Choosing one starts graphics on it and adds a running entry to the library, where its effects are edited like a game's.",
+  "action:chooseAppActionTarget": "In MacLauncher, the chosen window now shows through its effect chain. Its entry stays in the library until the session stops.",
+  "action:openAppActionPickerLink": "In MacLauncher, this opens Privacy & Security in System Settings, where Screen & System Audio Recording can be allowed.",
+  "action:stopSession": "In MacLauncher, stopping a window graphics session returns the window to normal and removes its entry from the library.",
+  "action:removeSessionTarget": "In MacLauncher, this window leaves the session. Removing the last one stops the session.",
+  "action:stopGame": "In MacLauncher, this stops the running game.",
+  "action:saveEffectsPreset": "In MacLauncher, the effect chain is saved as a preset. Presets are listed in Settings → Graphics and can be applied to any game.",
+  "action:deleteEffectsPreset": "In MacLauncher, the preset is deleted. Games that used it keep their own copy of the chain.",
+  "action:setGameSteamClientStart": "In MacLauncher, this decides whether Play starts the Steam client for Mac first when it isn't running: ask each time, start it automatically or leave it closed.",
+  "settings:startSteamClient": "In MacLauncher, this is the default for every Windows game that uses the Steam client bridge. Each game can override it.",
+  "settings:translatorEnvironment": "In MacLauncher, these environment variables would apply to every game that uses this translator.",
+  "effect:output": "In MacLauncher, this output setting would apply to the running game straight away."
 };
 
 function articleUrl(article: Article) {
@@ -132,7 +149,23 @@ function show(articles: Article[], text: string) {
   if (articles.length) select(0);
 }
 
+// The requirements of what the action touches: its game, runtime, package,
+// effect, store or tool. Actions with no subject of their own hide the list.
+function showNeeds(value: DemoTopic) {
+  const items = needsFor(value, store.state);
+  needs.hidden = !items;
+  if (!items) return;
+  needsList.replaceChildren(...(items.length ? items.map(need => {
+    const item = document.createElement("li"), label = document.createElement("span");
+    label.className = "needKind";
+    label.textContent = NEED_LABELS[need.kind];
+    item.append(label, need.text);
+    return item;
+  }) : [Object.assign(document.createElement("li"), { className: "needNone", textContent: NOTHING_EXTRA })]));
+}
+
 function topic(value: DemoTopic) {
+  showNeeds(value);
   show(articlesFor(value), LEADS[`${value.kind}:${value.id}`] || LEADS[value.kind] || "This is part of the full launcher.");
 }
 
@@ -143,13 +176,39 @@ function openWindow({ title, search }: DemoWindow) {
   utility.hidden = false;
 }
 
-element<HTMLButtonElement>(".utilityClose").addEventListener("click", () => {
+function closeWindow() {
   utility.hidden = true;
   utilityFrame.removeAttribute("src");
-});
+}
+element<HTMLButtonElement>(".utilityClose").addEventListener("click", closeWindow);
 
-const store = createStore((demoData as unknown as { state: LauncherState }).state, { topic, openWindow });
-window.MacLauncherDemo = { store, host: { topic, openWindow } };
+// The launcher's own menu commands: File → Open… and Apply Graphics…, the
+// app menu's Settings…, Credits and Check for Updates…, and the Window menu's
+// Runtimes and External. Their topics go through the store, as the launcher's
+// own do, so the store's record of the latest topic stays current.
+const utilityWindow = (view: string, title: string, search: Record<string, string> = {}) => () => {
+  store.topic({ kind: "window", id: view, ...(search.moduleId ? { moduleId: search.moduleId } : {}) });
+  openWindow({ title, search: { view, ...search } });
+};
+const MENU: Array<[string, () => void]> = [
+  ["Open…", () => store.topic({ kind: "add", id: "dialog" })],
+  ["Apply Graphics…", utilityWindow("appAction", "Apply Graphics", { moduleId: "window", actionId: "applyGraphics" })],
+  ["Settings…", utilityWindow("settings", "Settings")],
+  ["Runtimes", utilityWindow("runtimes", "Runtimes")],
+  ["External", utilityWindow("external", "External")],
+  ["Credits", utilityWindow("credits", "Credits")],
+  ["Check for Updates…", () => store.topic({ kind: "action", id: "appUpdate" })]
+];
+menu.append(...MENU.map(([label, run]) => {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.addEventListener("click", run);
+  return button;
+}));
+
+const store = createStore((demoData as unknown as { state: LauncherState }).state, { topic, openWindow, closeWindow });
+window.MacLauncherDemo = { store, host: { topic, openWindow, closeWindow } };
 library.src = "launcher.html";
 show([ARTICLES.intro, ARTICLES.howGamesRun, ARTICLES.graphics],
-  "Try selecting a game, changing its runtime, picking an effect in Graphics, or opening Runtimes and External.");
+  "Try selecting a game, changing its runtime, picking an effect in Graphics, or opening Apply Graphics, Runtimes and External from the menu.");

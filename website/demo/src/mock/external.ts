@@ -30,10 +30,13 @@ const storeLibraries: Record<ExternalStore, ExternalLibraryGame[]> = {
   gog: [example("witcher-3", "The Witcher 3: Wild Hunt", ["windows"]), example("disco-elysium", "Disco Elysium", ["windows", "macos"])],
   epic: [example("control", "Control", ["windows"]), example("alan-wake-2", "Alan Wake 2", ["windows"])],
   itch: [example("a-short-hike", "A Short Hike", ["windows", "macos", "linux"]), example("baba-is-you", "Baba Is You", ["windows", "macos", "linux"])],
-  "google-play": []
+  "google-play": [example("android:stardew", "Stardew Valley", ["android"]), example("android:monument", "Monument Valley", ["android"])]
 };
-const androidCatalog = [example("android:stardew", "Stardew Valley", ["android"]), example("android:monument", "Monument Valley", ["android"]),
-  example("android:altos-odyssey", "Alto's Odyssey", ["android"])];
+// Search covers Google Play and the F-Droid repository, whose apps need no
+// Google sign-in.
+const androidCatalog = [...storeLibraries["google-play"], example("android:altos-odyssey", "Alto's Odyssey", ["android"]),
+  { ...example("fdroid:io.anuke.mindustry", "Mindustry", ["android"]), owned: false },
+  { ...example("fdroid:com.shatteredpixel.shatteredpixeldungeon", "Shattered Pixel Dungeon", ["android"]), owned: false }];
 
 export function createExternalStores() {
   let steam: SteamSnapshot = { connection: { status: "disconnected" }, library: [], libraryLoading: false, downloads: [],

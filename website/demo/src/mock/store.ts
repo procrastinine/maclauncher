@@ -14,11 +14,13 @@ export type DemoStore = {
   subscribe(callback: (state: LauncherState) => void): () => void;
   topic(topic: DemoTopic): void;
   openWindow(window: DemoWindow): void;
+  closeWindow(): void;
 };
 
 export type DemoHost = {
   topic(topic: DemoTopic): void;
   openWindow(window: DemoWindow): void;
+  closeWindow(): void;
 };
 
 export function createStore(initial: LauncherState, host: DemoHost | null): DemoStore {
@@ -45,6 +47,7 @@ export function createStore(initial: LauncherState, host: DemoHost | null): Demo
       lastTopic = key;
       host?.topic(topic);
     },
-    openWindow: window => host?.openWindow(window)
+    openWindow: window => host?.openWindow(window),
+    closeWindow: () => host?.closeWindow()
   };
 }

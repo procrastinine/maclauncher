@@ -4,9 +4,10 @@
 // topic that the page shows an article for. Nothing touches files, processes
 // or the network.
 import type {
-  EffectsChainTemplate, GameEffectsInfo, GameEffectsPlan, GraphicsOwnerStatus, GraphicsStatusEvent, LauncherApi,
+  EffectsChainTemplate, EffectsPreset, GameEffectsInfo, GameEffectsPlan, GraphicsOwnerStatus, GraphicsStatusEvent, LauncherApi,
   LauncherState, ReShadeState, RecentGame, RuntimeManagerState
 } from "../../../../src/renderer/src/ui/types";
+import type { AppActionPickerModel } from "../../../../src/renderer/src/ui/components/AppActionPicker";
 import { normalizeUtilityWindowRequest, utilityWindowDefinition } from "../../../../src/core/utility-window-model.mjs";
 import { ACTIONS as SHORTCUT_ACTIONS } from "../../../../src/modules/shared/graphics-shortcuts.mjs";
 import { normalizeValues, withValues } from "../../../../src/modules/shared/runtime/translator-environment.mjs";
@@ -25,6 +26,8 @@ export type DemoSettingsActions = Record<string, Answer>;
 export type DemoGameActions = Record<string, Record<string, Answer>>;
 /** Runtimes → Tools → Downloaded files as the launcher's component listing returned it for the demo profile. */
 export type DemoComponents = { components: Array<{ id: string; items: Array<{ id: string }> } & Record<string, unknown>>; gameRunning: boolean };
+/** The Apply Graphics window's targets, and the library entry each one starts. */
+export type DemoPicker = { model: AppActionPickerModel; entries: Record<string, RecentGame> };
 
 type Handlers = { [K in keyof LauncherApi]?: LauncherApi[K] };
 type Section = Record<string, any>;
@@ -88,7 +91,7 @@ const sameBuild = (row: Section, build: Section) => row.version === build.versio
   (!row.architecture || !build.architecture || row.architecture === build.architecture);
 
 export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, settingsActions: DemoSettingsActions,
-  gameActions: DemoGameActions, components: DemoComponents): LauncherApi {
+  gameActions: DemoGameActions, components: DemoComponents, picker: DemoPicker): LauncherApi {
   let downloaded = components;
   const external = createExternalStores();
   const answered = (answer: Answer | undefined) =>
@@ -128,6 +131,29 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
     return { ...state, runtimeManagers: { ...state.runtimeManagers, [managerId]: next } };
   });
 
+  // The first setting that differs from its saved or default value names the
+  // topic, with the section of its field, such as a WINE runtime's Display.
+  const settingChange = (moduleId: string | undefined, runtimeId: string, before: Section | null | undefined, after: Section | null) => {
+    const schema = store.state.modules.find(item => item.id === moduleId)?.runtime?.entries?.[runtimeId]?.settings as
+      { defaults?: Section; fields?: Array<{ key: string; section?: string }> } | undefined;
+    const previous: Section = { ...schema?.defaults, ...before }, next: Section = { ...schema?.defaults, ...after };
+    const fields = schema?.fields || [];
+    const key = [...new Set([...fields.map(field => field.key), ...Object.keys(next), ...Object.keys(previous)])]
+      .find(name => JSON.stringify(previous[name]) !== JSON.stringify(next[name]));
+    const section = fields.find(field => field.key === key)?.section;
+    return key ? { key, value: next[key], ...(section ? { section } : {}) } : undefined;
+  };
+  // A session entry, such as window graphics, leaves the library when its
+  // session ends.
+  const endSession = (gamePath: string) => store.update(state => {
+    const { [gamePath]: _ended, ...running } = state.running;
+    return { ...state, running, recents: state.recents.filter(entry => entry.gamePath !== gamePath) };
+  });
+  // Saved graphics presets, kept for the page's visit.
+  let presets: EffectsPreset[] = [];
+  const presetListeners = new Set<(presets: EffectsPreset[]) => void>();
+  const setPresets = (next: EffectsPreset[]) => { presets = next; for (const listener of [...presetListeners]) listener(presets); return presets; };
+
   const hostKey = (entry: RecentGame | undefined) => {
     const info = store.state.modules.find(item => item.id === entry?.moduleId);
     return String(info?.runtime?.entries?.[entry?.runtimeId || ""]?.graphicsHost ?? "none");
@@ -144,9 +170,9 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
   // The first difference from the saved plan names the topic: the whole chain
   // switched on or off, the game's own resolution, a row's effect, a row
   // switched, removed or moved, then an output setting.
-  function effectTopic(before: GameEffectsPlan | null | undefined, after: GameEffectsPlan) {
+  function effectTopic(before: GameEffectsPlan | null | undefined, after: GameEffectsPlan, moduleId?: string) {
     type Node = GameEffectsPlan["video"][number];
-    const effect = (id: string, detail?: string) => store.topic({ kind: "effect", id, detail });
+    const effect = (id: string, detail?: string) => store.topic({ kind: "effect", id, detail, moduleId });
     const effectKey = (node: Node) => String(("method" in node ? node.method : node.shader?.preset ?? node.shader?.effectPath) ?? "");
     const previous = before?.video || [], rows = new Map(previous.map(node => [node.id, node]));
     if ((before?.enabled ?? true) !== (after.enabled ?? true)) return effect("master");
@@ -173,7 +199,6 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
     onActivity: unsubscribe,
     onGameImported: unsubscribe,
     onGameFailed: unsubscribe,
-    onEffectsPresetsChanged: unsubscribe,
     onGraphicsCatalog: unsubscribe,
     onGraphicsStatus: callback => {
       graphicsListeners.add(callback);
@@ -235,8 +260,9 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
       return resolved(true);
     },
     setGameRuntimeSettings: (gamePath, runtimeId, settings) => {
+      const moduleId = moduleOf(gamePath), detail = settingChange(moduleId, runtimeId, game(gamePath)?.runtimeSettings?.[runtimeId], settings);
       updateGame(gamePath, entry => ({ runtimeSettings: { ...entry.runtimeSettings, [runtimeId]: settings } }));
-      store.topic({ kind: "runtime-settings", id: runtimeId, moduleId: moduleOf(gamePath) });
+      store.topic({ kind: "runtime-settings", id: runtimeId, moduleId, ...(detail ? { detail } : {}) });
       return resolved(true);
     },
     setGameTranslatorEnvironment: (gamePath, translatorId, values) => {
@@ -255,7 +281,43 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
     setGameModuleData: (gamePath, patch) => { updateGame(gamePath, entry => ({ moduleData: { ...entry.moduleData, ...patch } })); return resolved(true); },
     launchGame: gamePath => { store.topic({ kind: "play", id: game(gamePath)?.runtimeId || "", moduleId: moduleOf(gamePath) }); return resolved(true); },
     launchGameWithRuntime: (gamePath, runtime) => { store.topic({ kind: "play", id: runtime, moduleId: moduleOf(gamePath) }); return resolved(true); },
-    stopGame: () => resolved(true),
+    stopGame: gamePath => {
+      if (!game(gamePath)?.ephemeral) return resolved(true);
+      endSession(gamePath);
+      store.topic({ kind: "action", id: "stopSession" });
+      return resolved(true);
+    },
+    removeSessionTarget: (gamePath, id) => {
+      const targets = (game(gamePath)?.sessionTargets || []).filter(target => target.id !== id);
+      if (targets.length) updateGame(gamePath, () => ({ sessionTargets: targets }));
+      else endSession(gamePath);
+      store.topic({ kind: "action", id: "removeSessionTarget" });
+      return resolved(true);
+    },
+    // File → Apply Graphics…: the windows and displays to choose from, marked
+    // when a running session already serves them. Choosing one closes the
+    // window and starts its session, whose entry joins the library.
+    appActionPickerState: () => {
+      const served = new Set(Object.entries(picker.entries).filter(([, entry]) => store.state.running[entry.gamePath]).map(([id]) => id));
+      return resolved({ ...picker.model, sections: picker.model.sections.map(section => ({ ...section, targets: section.targets.map(target =>
+        served.has(target.id) ? { ...target, detail: [target.detail, "Has window graphics"].filter(Boolean).join(" · ") } : target) })) });
+    },
+    onAppActionPicker: unsubscribe,
+    chooseAppActionTarget: targetId => {
+      const entry = picker.entries[targetId];
+      if (!entry) return resolved(false);
+      if (!store.state.running[entry.gamePath]) store.update(state => ({ ...state, running: { ...state.running, [entry.gamePath]: 1 },
+        recents: [...state.recents.filter(item => item.gamePath !== entry.gamePath), { ...entry, order: state.recents.length }] }));
+      store.topic({ kind: "action", id: "chooseAppActionTarget" });
+      store.closeWindow();
+      return resolved(true);
+    },
+    openAppActionPickerLink: () => { store.topic({ kind: "action", id: "openAppActionPickerLink" }); return resolved(true); },
+    setGameSteamClientStart: (gamePath, value) => {
+      updateGame(gamePath, () => ({ startSteamClient: value || undefined }));
+      store.topic({ kind: "action", id: "setGameSteamClientStart" });
+      return resolved(true);
+    },
     createGameCommand: gamePath => { store.topic({ kind: "action", id: "createGameCommand" }); return resolved(`${gamePath}.command`); },
     forgetGame: gamePath => {
       store.update(state => ({ ...state, recents: state.recents.filter(entry => entry.gamePath !== gamePath) }));
@@ -297,15 +359,26 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
     },
     getGameEffectParameters: (_gamePath, nodeId) => resolved({ key: nodeId, parameters: [] }),
     setGameEffects: (gamePath, plan) => {
-      effectTopic(game(gamePath)?.effects, plan);
+      effectTopic(game(gamePath)?.effects, plan, moduleOf(gamePath));
       updateGame(gamePath, () => ({ effects: plan }));
       graphicsRevision += 1;
       const event: GraphicsStatusEvent = { gamePath, status: graphicsStatus(gamePath), plan };
       for (const listener of [...graphicsListeners]) listener(event);
       return resolved(true);
     },
-    resetGameEffects: gamePath => { updateGame(gamePath, () => ({ effects: null })); store.topic({ kind: "effect", id: "clear" }); return resolved(true); },
-    listEffectsPresets: () => resolved([]),
+    resetGameEffects: gamePath => { updateGame(gamePath, () => ({ effects: null })); store.topic({ kind: "effect", id: "clear", moduleId: moduleOf(gamePath) }); return resolved(true); },
+    listEffectsPresets: () => resolved(presets),
+    onEffectsPresetsChanged: callback => {
+      presetListeners.add(callback);
+      return () => { presetListeners.delete(callback); };
+    },
+    saveEffectsPreset: value => {
+      const saved: EffectsPreset = { id: value.id || `demo-preset-${Date.now()}`, name: value.name, updatedAt: Date.now(), plan: value.plan };
+      setPresets([...presets.filter(item => item.id !== saved.id), saved]);
+      store.topic({ kind: "action", id: "saveEffectsPreset" });
+      return resolved(saved);
+    },
+    deleteEffectsPreset: id => { store.topic({ kind: "action", id: "deleteEffectsPreset" }); return resolved(setPresets(presets.filter(item => item.id !== id))); },
     // Settings → Graphics → Presets edits a chain for the window host, as the launcher does.
     getEffectsPresetEditor: plan => resolved({ ...graphics.hosts.window.info, plan: plan || graphics.hosts.window.info.plan }),
     getEffectsPresetParameters: nodeId => resolved({ key: nodeId, parameters: [] }),
@@ -378,7 +451,16 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
       store.topic({ kind: "runtime-settings", id: "module", moduleId });
       return resolved(true);
     },
-    setModuleRuntimeSettings: (moduleId, runtimeId) => { store.topic({ kind: "runtime-settings", id: runtimeId, moduleId }); return resolved(true); },
+    // Settings for every game of a type are saved as the runtime's defaults.
+    setModuleRuntimeSettings: (moduleId, runtimeId, settings) => {
+      const detail = settingChange(moduleId, runtimeId, store.state.runtimeDefaults[runtimeId], settings);
+      store.update(state => {
+        const { [runtimeId]: _previous, ...others } = state.runtimeDefaults;
+        return { ...state, runtimeDefaults: settings ? { ...others, [runtimeId]: settings } : others };
+      });
+      store.topic({ kind: "runtime-settings", id: runtimeId, moduleId, ...(detail ? { detail } : {}) });
+      return resolved(true);
+    },
     // Settings → Environment variables and a game's Runtime Settings store
     // values the way the launcher does.
     setTranslatorEnvironment: (translatorId, values) => {
@@ -413,35 +495,35 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
     // External stores.
     steamState: () => resolved(external.steamState()),
     onSteamState: callback => external.onSteamState(callback),
-    steamScan: () => { store.topic({ kind: "store", id: "scan" }); return resolved(external.scan()); },
+    steamScan: () => { store.topic({ kind: "store", id: "scan", detail: "installed" }); return resolved(external.scan()); },
     externalDownloaded: () => resolved([]),
-    steamConnect: () => { store.topic({ kind: "store", id: "account" }); return resolved(external.connect()); },
+    steamConnect: () => { store.topic({ kind: "store", id: "account", detail: "steam" }); return resolved(external.connect()); },
     steamDisconnect: () => resolved(external.disconnect()),
     steamLibrary: () => resolved(external.steamState()),
-    steamVersions: appId => { store.topic({ kind: "store", id: "versions" }); return resolved(external.versions(appId)); },
+    steamVersions: appId => { store.topic({ kind: "store", id: "versions", detail: "steam" }); return resolved(external.versions(appId)); },
     steamPreviousVersions: () => resolved({ history: [], sourceUrl: "", sources: [], fetchedAt: new Date(0).toISOString() }),
-    steamDownload: selection => { store.topic({ kind: "store", id: "download" }); return resolved(external.download(selection)); },
+    steamDownload: selection => { store.topic({ kind: "store", id: "download", detail: "steam" }); return resolved(external.download(selection)); },
     steamImport: () => { store.topic({ kind: "store", id: "import" }); return resolved(true); },
-    steamAuth: () => { store.topic({ kind: "store", id: "account" }); return resolved(external.connect()); },
+    steamAuth: () => { store.topic({ kind: "store", id: "account", detail: "steam" }); return resolved(external.connect()); },
     steamSelectAccount: () => resolved(external.steamState()),
     steamRemoveAccount: () => resolved(external.disconnect()),
     steamImportDownload: () => { store.topic({ kind: "store", id: "import" }); return resolved(true); },
     steamCancel: () => resolved(true),
     externalState: storeId => resolved(external.storeState(storeId)),
     onExternalState: callback => external.onStoreState(callback),
-    externalConnect: storeId => { store.topic({ kind: "store", id: "account" }); return resolved(external.connectStore(storeId)); },
-    externalAuth: storeId => { store.topic({ kind: "store", id: "account" }); return resolved(external.connectStore(storeId)); },
-    externalOpenLogin: storeId => { store.topic({ kind: "store", id: "account" }); return resolved(external.storeState(storeId)); },
+    externalConnect: storeId => { store.topic({ kind: "store", id: "account", detail: storeId }); return resolved(external.connectStore(storeId)); },
+    externalAuth: storeId => { store.topic({ kind: "store", id: "account", detail: storeId }); return resolved(external.connectStore(storeId)); },
+    externalOpenLogin: storeId => { store.topic({ kind: "store", id: "account", detail: storeId }); return resolved(external.storeState(storeId)); },
     externalDisconnect: storeId => resolved(external.disconnectStore(storeId)),
     externalForget: storeId => resolved(external.disconnectStore(storeId)),
     externalAccounts: () => resolved({ accounts: [] }),
     externalOpenAccounts: () => { store.topic({ kind: "store", id: "account" }); return resolved(true); },
     externalLibrary: storeId => resolved(external.storeState(storeId)),
-    externalSearch: (storeId, query) => { store.topic({ kind: "store", id: "search" }); return resolved(external.search(storeId, query)); },
-    externalAddGame: storeId => { store.topic({ kind: "store", id: "account" }); return resolved(external.storeState(storeId)); },
+    externalSearch: (storeId, query) => { store.topic({ kind: "store", id: "search", detail: storeId }); return resolved(external.search(storeId, query)); },
+    externalAddGame: storeId => { store.topic({ kind: "store", id: "account", detail: storeId }); return resolved(external.storeState(storeId)); },
     externalAddToLibrary: storeId => resolved(external.storeState(storeId)),
-    externalVersions: (storeId, appId) => { store.topic({ kind: "store", id: "versions" }); return resolved(external.storeVersions(storeId, appId)); },
-    externalDownload: (storeId, selection) => { store.topic({ kind: "store", id: "download" }); return resolved(external.storeDownload(storeId, selection)); },
+    externalVersions: (storeId, appId) => { store.topic({ kind: "store", id: "versions", detail: storeId }); return resolved(external.storeVersions(storeId, appId)); },
+    externalDownload: (storeId, selection) => { store.topic({ kind: "store", id: "download", detail: storeId }); return resolved(external.storeDownload(storeId, selection)); },
     externalCancel: () => resolved(true),
     externalImportDownload: () => { store.topic({ kind: "store", id: "import" }); return resolved(true); },
     externalImportCopies: () => { store.topic({ kind: "store", id: "import" }); return resolved(true); },
