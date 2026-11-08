@@ -43,7 +43,8 @@ function thinStagedMachO(target, payloadRoot, architecture, tool = run) {
   const stat = fs.lstatSync(file);
   if (!stat.isFile() || !fs.realpathSync(file).startsWith(root + path.sep)) throw new Error("Native thinning requires a contained regular staging copy.");
   const architectures = macho(file);
-  if (architectures?.length === 1) return null;
+  if (!architectures?.includes(architecture)) throw new Error("Native staging input has no selected CPU.");
+  if (architectures.length === 1) return null;
   const beforeSha256 = Native.hashFile(file), temporary = path.join(path.dirname(file), `.thin-${crypto.randomUUID()}`);
   try {
     tool("/usr/bin/lipo", [file, "-thin", architecture, "-output", temporary]);
