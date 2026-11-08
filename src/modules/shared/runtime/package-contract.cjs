@@ -156,9 +156,9 @@ function laterArchitecture(value) {
 // Facts that modules read to match a game and runtime. Each module checks the
 // values it reads; this contract only bounds the shape and size.
 function capabilities(value) {
-  const plain = (item, depth) => item === null || ["string", "number", "boolean"].includes(typeof item) || depth < 3 &&
+  const plain = (item, depth) => item === null || ["string", "number", "boolean"].includes(typeof item) || depth < Guards.limit(3) &&
     (Array.isArray(item) ? item.every(entry => plain(entry, depth + 1)) : object(item) && Object.values(item).every(entry => plain(entry, depth + 1)));
-  if (!object(value) || Object.keys(value).length > 64 || Object.keys(value).some(key => !CAPABILITY_NAME.test(key)) ||
+  if (!object(value) || Object.keys(value).length > Guards.limit(64) || Object.keys(value).some(key => !CAPABILITY_NAME.test(key)) ||
       !plain(value, 0) || JSON.stringify(value).length > Guards.limit(8192))
     throw new Error("The runtime catalog contains invalid capabilities.");
   return Object.freeze(JSON.parse(JSON.stringify(value)));
