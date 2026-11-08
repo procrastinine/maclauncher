@@ -42,8 +42,7 @@ function build(jdkBin, output) {
       for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
         const file = path.join(directory, item.name);
         if (item.isDirectory()) walk(file);
-        else if (item.isFile() && item.name.endsWith(".class")) entries.push([path.relative(classes, file).split(path.sep).join("/"), fs.readFileSync(file)]);
-        else throw new Error("Unexpected Java compiler output.");
+        else if (item.isFile()) entries.push([path.relative(classes, file).split(path.sep).join("/"), fs.readFileSync(file)]);
       }
     }
     walk(classes); const bytes = jar(entries);
