@@ -1,6 +1,7 @@
 // Projection of disposable source exports only. Never edits a checkout or a
 // published runtime. Production source, build metadata and notices stay intact.
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
+const Guards = require("./guards");
 const { execFileSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const Content = require('./runtime-content');
@@ -43,8 +44,8 @@ function prune(root) {
 function projectArchive(source, destination) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'maclauncher-production-source-'));
   try {
-    const entries = execFileSync('/usr/bin/tar', ['-tzf', source], { encoding: 'utf8', maxBuffer: 32 * 1024 ** 2 }).trim().split('\n');
-    if (entries.length > 100000 || entries.some(name => name.startsWith('/') || name.split('/').includes('..') || /[\0\r]/.test(name))) throw new Error('Source archive has an unsafe path or too many entries.');
+    const entries = execFileSync('/usr/bin/tar', ['-tzf', source], { encoding: 'utf8', maxBuffer: Guards.limit(32 * 1024 ** 2) }).trim().split('\n');
+    if (entries.length > Guards.limit(100000) || entries.some(name => name.startsWith('/') || name.split('/').includes('..') || /[\0\r]/.test(name))) throw new Error('Source archive has an unsafe path or too many entries.');
     execFileSync('/usr/bin/tar', ['-xzf', source, '-C', directory], { stdio: 'pipe' });
     const profile = { ...prune(directory), inputSha256: digest(fs.readFileSync(source)) };
     const profileFile = path.join(directory, 'PRODUCTION_SOURCE_PROFILE.json');

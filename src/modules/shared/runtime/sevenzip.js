@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const Guards = require("./guards");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 
@@ -69,7 +70,7 @@ function listArchiveEntriesSync(archivePath, binaryPath = null) {
   const sevenZip = binaryPath || resolveSevenZipBinary();
   if (!sevenZip) return null;
   const res = spawnSync(sevenZip, ["l", "-ba", "-slt", archivePath], {
-    encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 * 1024
+    encoding: "utf8", timeout: 10_000, maxBuffer: Guards.limit(16 * 1024 * 1024)
   });
   if (res.status !== 0) return null;
   return parseSevenZipList(res.stdout, archivePath);

@@ -1,4 +1,5 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const Guards = require("./guards");
 const B=require('./bundled-native'),C=require('./package-contract.cjs'),Catalog=require('./maclauncher-builds');
 const {acquireFileLock}=require('../file-lock');
 const {cloneOnlySync}=require('../copy-file');
@@ -129,7 +130,7 @@ function relocateInstallation(staging,destination,userDataDir){
 function hash(file){const h=crypto.createHash('sha256'),fd=fs.openSync(file,'r');try{const data=Buffer.alloc(1024*1024);let n;while((n=fs.readSync(fd,data)))h.update(data.subarray(0,n));return h.digest('hex');}finally{fs.closeSync(fd);}}
 async function installOne(dep,options,seen){
  const key=dep.project+'/'+dep.release+'/'+dep.sha256;
- if(seen.has(key)||seen.size>128)throw new Error('Cyclic or excessive package dependencies.');
+ if(seen.has(key)||seen.size>Guards.limit(128))throw new Error('Cyclic or excessive package dependencies.');
  const next=new Set(seen);next.add(key);
  const target=directory(options.userDataDir,dep);B.realDirectory(path.dirname(target),{create:true});
  if(fs.existsSync(target)){

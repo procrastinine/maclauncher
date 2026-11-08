@@ -1,5 +1,6 @@
 // Shared public contracts for the launcher and native package producer.
 const B = require("./bundled-native");
+const Guards = require("./guards");
 const SHA256 = /^[a-f0-9]{64}$/;
 const SHA = SHA256, FLOOR = /^\d{1,2}\.\d{1,2}(?:\.\d{1,2})?$/;
 const ARCHITECTURES = new Set(["arm64", "x64", "universal"]);
@@ -32,13 +33,13 @@ function version(value) {
 }
 
 function relativeFile(value) {
-  return typeof value === "string" && value.length <= 1024 && value.split("/").every(part =>
+  return typeof value === "string" && value.length <= Guards.limit(1024) && value.split("/").every(part =>
     part !== "." && part !== ".." && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(part));
 }
 
 function packageDependencies(value, { managed = false } = {}) {
   if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > 128) throw new Error("Invalid package dependencies.");
+  if (!Array.isArray(value) || value.length > Guards.limit(128)) throw new Error("Invalid package dependencies.");
   const projects = new Set();
   return value.map(item => {
     if (!object(item) || !managed && Object.keys(item).sort().join(',') !== 'project,release,sha256' ||
@@ -158,7 +159,7 @@ function capabilities(value) {
   const plain = (item, depth) => item === null || ["string", "number", "boolean"].includes(typeof item) || depth < 3 &&
     (Array.isArray(item) ? item.every(entry => plain(entry, depth + 1)) : object(item) && Object.values(item).every(entry => plain(entry, depth + 1)));
   if (!object(value) || Object.keys(value).length > 64 || Object.keys(value).some(key => !CAPABILITY_NAME.test(key)) ||
-      !plain(value, 0) || JSON.stringify(value).length > 8192)
+      !plain(value, 0) || JSON.stringify(value).length > Guards.limit(8192))
     throw new Error("The runtime catalog contains invalid capabilities.");
   return Object.freeze(JSON.parse(JSON.stringify(value)));
 }
@@ -213,7 +214,7 @@ function packageRecord(record, { projectId, repository, launcherContract = 1, pu
     const filename = record.asset.filename || decodeURIComponent(url.pathname.split('/').pop());
     B.relativeFile(filename);
     if (record.manifestRelative !== undefined) B.relativeFile(record.manifestRelative);
-    if (record.asset.bytes !== undefined && (!Number.isSafeInteger(record.asset.bytes) || record.asset.bytes < 1 || record.asset.bytes > MAX_ARCHIVE_BYTES))
+    if (record.asset.bytes !== undefined && (!Number.isSafeInteger(record.asset.bytes) || record.asset.bytes < 1 || record.asset.bytes > Guards.limit(MAX_ARCHIVE_BYTES)))
       throw new Error("The runtime download exceeds its size limit.");
     const normalize = require('./architecture').normalizeArchitecture;
     const arch = normalize(record.arch) || record.arch;
@@ -253,7 +254,7 @@ function packageRecord(record, { projectId, repository, launcherContract = 1, pu
     throw new Error("The runtime download URL does not match its project, version, architecture or repository.");
   if (record.asset.filename !== filename ||
       !checksum(record.asset.sha256) || !Number.isSafeInteger(record.asset.bytes) ||
-      record.asset.bytes < 1 || record.asset.bytes > MAX_ARCHIVE_BYTES)
+      record.asset.bytes < 1 || record.asset.bytes > Guards.limit(MAX_ARCHIVE_BYTES))
     throw new Error("The runtime download does not match its project, version, architecture or repository.");
 
   let sourceAsset;
@@ -261,7 +262,7 @@ function packageRecord(record, { projectId, repository, launcherContract = 1, pu
     const source = record.sourceAsset;
     if (!object(source) || source.filename !== `${record.version}-source.tar.gz` ||
         !source.filename.endsWith("-source.tar.gz") || !checksum(source.sha256) ||
-        !Number.isSafeInteger(source.bytes) || source.bytes < 1 || source.bytes > MAX_ARCHIVE_BYTES ||
+        !Number.isSafeInteger(source.bytes) || source.bytes < 1 || source.bytes > Guards.limit(MAX_ARCHIVE_BYTES) ||
         source.url !== `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${source.filename}`)
       throw new Error("The runtime source download does not match its release.");
     sourceAsset = Object.freeze({ filename: source.filename, url: source.url, sha256: source.sha256, bytes: source.bytes });

@@ -139,6 +139,8 @@ Packaging copies `src/resources` through an explicit allowlist: artwork, the pre
 
 The build recipes, patches and exact upstream sources of these packages are in the source tree of each MacLauncher Builds tag. Runtime release packages contain the binaries, the required data and notices and the metadata they consume directly, without source archives.
 
+MacLauncher Builds reads the shared modules of this repository at the exact commit its source tree records, rather than keeping copies of them. Its package builds set `MACLAUNCHER_PACKAGE_PRODUCER=1`, which lifts the size, count and output-buffer guards in [`guards.js`](../../src/modules/shared/runtime/guards.js) that these modules apply in the app. Path safety, digests and tool failures are still checked.
+
 ### Signing and notarization
 
 - Signing uses `CSC_LINK`, or `CSC_NAME` together with `CSC_KEY_PASSWORD`, when they are set.

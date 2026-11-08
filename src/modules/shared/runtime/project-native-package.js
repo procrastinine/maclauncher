@@ -1,9 +1,10 @@
 const fs = require("node:fs"), path = require("node:path");
+const Guards = require("./guards");
 const execute = require("node:util").promisify(require("node:child_process").execFile);
 const Catalog = require("./maclauncher-builds"), Bundled = require("./bundled-native");
 
 async function extractArchive(archive, destination, signal) {
-    const options = { ...(signal ? {signal} : {}), timeout: 120000, maxBuffer: 8 * 1024 * 1024 };
+    const options = { ...(signal ? {signal} : {}), timeout: 120000, maxBuffer: Guards.limit(8 * 1024 * 1024) };
     const listed = await execute("/usr/bin/tar", ["-tf", archive], options), names = new Set();
     for (const original of listed.stdout.split("\n").filter(Boolean)) {
       const name = original.replace(/^\.\//, "").replace(/\/$/, "");

@@ -1,4 +1,5 @@
 const path = require("node:path");
+const Guards = require("./guards");
 const fs = require("node:fs");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
@@ -108,7 +109,7 @@ async function focusOwnedNativeGame(child, { executablePath, launchedAt = Date.n
   try {
     const script = activationScript({ pid: child.pid, executablePath, launchedAt });
     const result = await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", script],
-      { signal: controller.signal, timeout: 8000, maxBuffer: 4096 });
+      { signal: controller.signal, timeout: 8000, maxBuffer: Guards.limit(4096) });
     const reason = result.stdout.trim();
     logActivation(() => logger?.debug?.("[runtime] native window activation", { pid: child.pid, reason }));
     return { activated: reason === "activated" || reason === "already-frontmost", reason };
@@ -124,7 +125,7 @@ async function focusOwnedProcess(pid, { launchedAt, yieldFrom = null, signal, lo
   if (platform !== "darwin" || signal?.aborted) return { activated: false, reason: "not-running" };
   try {
     const script = activationScript({ pid, executablePath: null, launchedAt, yieldFrom });
-    const result = await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", script], { signal, timeout: 8000, maxBuffer: 4096 });
+    const result = await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", script], { signal, timeout: 8000, maxBuffer: Guards.limit(4096) });
     const reason = result.stdout.trim();
     logActivation(() => logger?.debug?.("[runtime] window activation", { pid, reason }));
     return { activated: reason === "activated" || reason === "already-frontmost", reason };

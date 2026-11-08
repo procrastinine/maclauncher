@@ -1,6 +1,7 @@
 const fs = require("node:fs"), path = require("node:path");
+const Guards = require("./guards");
 
-const LIMITS = Object.freeze({ sections: 96, exportNames: 8192, exportBytes: 1024 * 1024,
+const LIMITS = Guards.limits({ sections: 96, exportNames: 8192, exportBytes: 1024 * 1024,
   readBytes: 2 * 1024 * 1024, nameBytes: 512 });
 const ARCHITECTURES = new Map([[0x14c, "x86"], [0x8664, "x86_64"], [0xaa64, "arm64"]]);
 
@@ -34,12 +35,12 @@ function readPeExports(file, { detection, headersOnly = false, imports = false }
     const dos = read(0, 64);
     if (dos.readUInt16LE(0) !== 0x5a4d) return null;
     const peOffset = dos.readUInt32LE(60);
-    if (peOffset < 64 || peOffset > 1024 * 1024) return null;
+    if (peOffset < 64 || peOffset > Guards.limit(1024 * 1024)) return null;
     const coff = read(peOffset, 24);
     if (coff.readUInt32LE(0) !== 0x4550) return null;
     const architecture = ARCHITECTURES.get(coff.readUInt16LE(4));
     const count = coff.readUInt16LE(6), optionalBytes = coff.readUInt16LE(20);
-    if (!architecture || !(coff.readUInt16LE(22) & 2) || !count || count > LIMITS.sections || optionalBytes < 104 || optionalBytes > 4096) return null;
+    if (!architecture || !(coff.readUInt16LE(22) & 2) || !count || count > LIMITS.sections || optionalBytes < 104 || optionalBytes > Guards.limit(4096)) return null;
     const optional = read(peOffset + 24, optionalBytes), magic = optional.readUInt16LE(0);
     const directories = magic === 0x10b ? 96 : magic === 0x20b ? 112 : null;
     if (!directories || (architecture === "x86") !== (magic === 0x10b) || directories + 8 > optional.length) return null;

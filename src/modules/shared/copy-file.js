@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const Guards = require("./runtime/guards");
 const ChildProcess = require("node:child_process");
 
 // The one copy path for game files, imports and runtime payloads. An APFS clone
@@ -431,7 +432,7 @@ function cloneOnlySync(rows) {
     } catch (error) {
       if (error.code !== "ENOSYS" || !native()) throw error;
       const result = ChildProcess.spawnSync("/usr/bin/osascript", ["-l", "JavaScript", "-e", CLONE_SCRIPT],
-        { input: JSON.stringify(rows.slice(index)), encoding: "utf8", timeout: 30000, maxBuffer: 65536 });
+        { input: JSON.stringify(rows.slice(index)), encoding: "utf8", timeout: 30000, maxBuffer: Guards.limit(65536) });
       if (result.error) throw result.error;
       if (result.status !== 0) throw Error("This volume cannot clone the application or game files.");
       return;

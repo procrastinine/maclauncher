@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const zlib = require("node:zlib");
+const Guards = require("./guards");
 
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_DIR_SIGNATURE = 0x02014b50;
@@ -233,6 +234,7 @@ function findZipEntry(entries, entryName) {
 }
 
 function inflateZipEntry(buffer, compressionMethod, maxOutputBytes) {
+  maxOutputBytes = Guards.optional(maxOutputBytes);
   if (compressionMethod === 0) {
     if (maxOutputBytes !== undefined && buffer.length > maxOutputBytes) throw new Error("ZIP entry exceeds its expanded size limit.");
     return buffer;
@@ -252,6 +254,7 @@ function readZipEntryBuffer(filePath, entryName) {
 // Read an exact central-directory record without another name lookup. This
 // preserves distinct case-sensitive names and avoids rescanning large archives.
 function readZipEntry(filePath, entry, {maxOutputBytes} = {}) {
+  maxOutputBytes = Guards.optional(maxOutputBytes);
   if (!entry || typeof entry.name !== "string") return null;
   if (maxOutputBytes !== undefined && (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 0)) throw new Error("Invalid ZIP entry size limit.");
   const declared = entry.uncompressedSize;
@@ -286,7 +289,9 @@ function readZipEntry(filePath, entry, {maxOutputBytes} = {}) {
 // so large model resources never need a whole-file Buffer allocation.
 async function extractZipEntry(filePath, entry, destination, {maxOutputBytes, signal, onProgress} = {}) {
   signal?.throwIfAborted();
-  if (!entry || !Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 0 ||
+  if (Guards.producing()) maxOutputBytes = Infinity;
+  else if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 0) throw new Error("The ZIP entry is unsafe or exceeds its size limit.");
+  if (!entry ||
       !Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0 || entry.uncompressedSize > maxOutputBytes ||
       !Number.isSafeInteger(entry.compressedSize) || entry.compressedSize < 0 || entry.flags & 1 ||
       ![0, 0o100000].includes(entry.externalAttributes >>> 16 & 0o170000))

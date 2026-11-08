@@ -1,4 +1,5 @@
 const { execFile } = require("node:child_process");
+const Guards = require("./guards");
 const { promisify } = require("node:util");
 const run = promisify(execFile);
 
@@ -12,7 +13,7 @@ function requirement(teamIdentifier) {
 async function verifyDeveloperId(file, teamIdentifier, { execute = run, signal } = {}) {
   const args = ["--verify", "--strict", `-R=${requirement(teamIdentifier)}`, file];
   try {
-    await execute("/usr/bin/codesign", args, { timeout: 30000, maxBuffer: 1024 * 1024, ...(signal ? { signal } : {}) });
+    await execute("/usr/bin/codesign", args, { timeout: 30000, maxBuffer: Guards.limit(1024 * 1024), ...(signal ? { signal } : {}) });
   } catch (error) {
     signal?.throwIfAborted();
     throw new Error(`The downloaded code is not validly signed by Developer ID team ${teamIdentifier}.`, { cause: error });

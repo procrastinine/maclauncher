@@ -1,18 +1,19 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const Guards = require("./guards");
 
-const LIMITS = Object.freeze({ bytes: 256 * 1024, reads: 64, sections: 96, directoryEntries: 256, versionBytes: 65535 });
+const LIMITS = Guards.limits({ bytes: 256 * 1024, reads: 64, sections: 96, directoryEntries: 256, versionBytes: 65535 });
 const align4 = value => (value + 3) & ~3;
 const versionString = (high, low) => [high >>> 16, high & 0xffff, low >>> 16, low & 0xffff].join(".");
 
 function parseVersionResource(bytes) {
   let nodes = 0;
   function block(start, limit, depth = 0) {
-    if (depth > 5 || ++nodes > 256 || start + 6 > limit) throw new Error("Invalid version block.");
+    if (depth > Guards.limit(5) || ++nodes > Guards.limit(256) || start + 6 > limit) throw new Error("Invalid version block.");
     const length = bytes.readUInt16LE(start), valueLength = bytes.readUInt16LE(start + 2), type = bytes.readUInt16LE(start + 4), end = start + length;
     if (length < 8 || end > limit || type > 1) throw new Error("Invalid version range.");
     let cursor = start + 6;
-    while (cursor + 2 <= end && cursor - start <= 1024 && bytes.readUInt16LE(cursor)) cursor += 2;
+    while (cursor + 2 <= end && cursor - start <= Guards.limit(1024) && bytes.readUInt16LE(cursor)) cursor += 2;
     if (cursor + 2 > end || bytes.readUInt16LE(cursor)) throw new Error("Unterminated version key.");
     const key = bytes.toString("utf16le", start + 6, cursor);
     cursor = align4(cursor + 2);
@@ -37,7 +38,7 @@ function parseVersionResource(bytes) {
       for (const table of info.children) {
         if (!/^[a-f0-9]{8}$/i.test(table.key)) continue;
         for (const node of table.children) {
-          if (node.type !== 1 || node.value.length > 4096 || !["CompanyName", "FileDescription", "FileVersion", "ProductName", "ProductVersion", "OriginalFilename"].includes(node.key)) continue;
+          if (node.type !== 1 || node.value.length > Guards.limit(4096) || !["CompanyName", "FileDescription", "FileVersion", "ProductName", "ProductVersion", "OriginalFilename"].includes(node.key)) continue;
           const value = node.value.toString("utf16le").replace(/\0+$/, "").trim();
           if (value && !Object.hasOwn(strings, node.key)) strings[node.key] = value;
         }
@@ -72,16 +73,16 @@ function readPeVersion(file, { detection } = {}) {
     const dos = read(0, 64);
     if (dos.readUInt16LE(0) !== 0x5a4d) return null;
     const peOffset = dos.readUInt32LE(60);
-    if (peOffset < 64 || peOffset > 1024 * 1024) return null;
+    if (peOffset < 64 || peOffset > Guards.limit(1024 * 1024)) return null;
     const pe = read(peOffset, 24);
     if (pe.readUInt32LE(0) !== 0x00004550) return null;
     const count = pe.readUInt16LE(6), optionalLength = pe.readUInt16LE(20);
-    if (!count || count > LIMITS.sections || optionalLength < 96 || optionalLength > 4096) return null;
+    if (!count || count > LIMITS.sections || optionalLength < 96 || optionalLength > Guards.limit(4096)) return null;
     const optional = read(peOffset + 24, optionalLength), magic = optional.readUInt16LE(0);
     const directories = magic === 0x10b ? 96 : magic === 0x20b ? 112 : null;
     if (!directories || directories + 24 > optional.length || optional.readUInt32LE(directories - 4) < 3) return null;
     const resourceRva = optional.readUInt32LE(directories + 16), resourceSize = optional.readUInt32LE(directories + 20);
-    if (!resourceRva || resourceSize < 16 || resourceSize > 64 * 1024 * 1024) return null;
+    if (!resourceRva || resourceSize < 16 || resourceSize > Guards.limit(64 * 1024 * 1024)) return null;
     const table = read(peOffset + 24 + optionalLength, count * 40), sections = [];
     for (let i = 0; i < count; i++) sections.push({ rva: table.readUInt32LE(i * 40 + 12), size: table.readUInt32LE(i * 40 + 16), offset: table.readUInt32LE(i * 40 + 20) });
     function offsetFor(rva, size) {

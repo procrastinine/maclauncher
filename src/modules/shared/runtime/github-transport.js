@@ -4,6 +4,7 @@ const execute = promisify(require("node:child_process").execFile);
 const CLI = require("./github-cli");
 const { createAbortError, throwIfAborted, attachAbortSignal } = require("./download-utils");
 const { createWebFallback } = require("./github-web");
+const Guards = require("./guards");
 const HOSTS = new Set(["api.github.com", "github.com", "raw.githubusercontent.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "codeload.github.com"]);
 const LIMIT = 32 * 1024 * 1024;
 function officialUrl(value) {
@@ -16,7 +17,8 @@ function redirectHeaders(headers, before, after) {
 }
 function requestOfficial(value, { headers = {}, signal, maxBytes = LIMIT, method = "GET", redirectDepth = 0, httpsRequest = https.request } = {}) {
   const url = officialUrl(value); throwIfAborted(signal);
-  if (!["GET", "HEAD"].includes(method) || !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > LIMIT || redirectDepth > 5) return Promise.reject(new Error("GitHub request exceeds its method or response limits."));
+  if (!["GET", "HEAD"].includes(method) || !Guards.producing() && (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > LIMIT) || redirectDepth > 5) return Promise.reject(new Error("GitHub request exceeds its method or response limits."));
+  if (Guards.producing()) maxBytes = Infinity;
   return new Promise((resolve, reject) => {
     const request = httpsRequest(url, { headers, method }, async response => {
       const status = Number(response.statusCode || 0);
@@ -75,7 +77,7 @@ function createGithubTransport({ request = requestOfficial, runCommand = execute
       const fromEnvironment = env.GH_TOKEN || env.GITHUB_TOKEN;
       if (fromEnvironment && /^[A-Za-z0-9_.-]{10,4096}$/.test(fromEnvironment)) { auth.authenticated = true; return fromEnvironment; }
       try {
-        const result = await runCommand(executable, ["auth", "token", "--hostname", "github.com"], { timeout: 10000, maxBuffer: 8192, encoding: "utf8", windowsHide: true });
+        const result = await runCommand(executable, ["auth", "token", "--hostname", "github.com"], { timeout: 10000, maxBuffer: Guards.limit(8192), encoding: "utf8", windowsHide: true });
         auth.available = true; const token = String(result.stdout || "").trim();
         if (/^[A-Za-z0-9_.-]{10,4096}$/.test(token)) { auth.authenticated = true; return token; }
       } catch (error) { auth.available = error.code !== "ENOENT"; }
@@ -126,8 +128,8 @@ function createGithubTransport({ request = requestOfficial, runCommand = execute
     return fallback || result || { status: 403, headers: { "x-ratelimit-remaining": "0" }, body: Buffer.from('{"message":"GitHub API rate limit reached; authentication is required for this endpoint."}') };
   }
   function cached(value, options = {}) {
-    const url = officialUrl(value).href, method = options.method || "GET", maxBytes = options.maxBytes ?? LIMIT;
-    if (!["GET", "HEAD"].includes(method) || !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > LIMIT)
+    const url = officialUrl(value).href, method = options.method || "GET", maxBytes = Guards.producing() ? Infinity : options.maxBytes ?? LIMIT;
+    if (!["GET", "HEAD"].includes(method) || !Guards.producing() && (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > LIMIT))
       return Promise.reject(new Error("GitHub request exceeds its method or response limits."));
     const identity = /^sha256:[a-f0-9]{64}$/i.test(options.assetDigest || "") ? options.assetDigest.toLowerCase() : "";
     const representation = Object.entries(options.headers || {}).filter(([name]) => /^(?:accept|x-github-api-version|git-protocol)$/i.test(name))

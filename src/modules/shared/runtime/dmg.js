@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const Guards = require("./guards");
 const path = require("node:path");
 const os = require("node:os");
 const { execFile } = require("node:child_process");
@@ -48,7 +49,7 @@ async function withMountedDmg(archivePath, signal, { run = execute } = {}, use) 
       tool = name;
       try {
         const [command, args] = TOOLS[name].attach(archivePath, mount);
-        await run(command, args, { signal, timeout: 60000, maxBuffer: 64 * 1024 });
+        await run(command, args, { signal, timeout: 60000, maxBuffer: Guards.limit(64 * 1024) });
         break;
       } catch (error) {
         if (name === "hdiutil" || signal?.aborted) throw error;
@@ -67,7 +68,7 @@ async function withMountedDmg(archivePath, signal, { run = execute } = {}, use) 
     if (tool) {
       try {
         const [command, args] = TOOLS[tool].detach(mount);
-        await run(command, args, { timeout: 30000, maxBuffer: 64 * 1024 });
+        await run(command, args, { timeout: 30000, maxBuffer: Guards.limit(64 * 1024) });
         detached = true;
       } catch (error) { if (attached) throw error; }
     }
@@ -81,7 +82,7 @@ async function withMountedDmg(archivePath, signal, { run = execute } = {}, use) 
 async function copyVolume(volume, destination, signal, { run = execute } = {}) {
   for (const item of fs.readdirSync(volume, { withFileTypes: true })) {
     if (item.name.startsWith(".") || item.isSymbolicLink()) continue;
-    await run("/usr/bin/ditto", [path.join(volume, item.name), path.join(destination, item.name)], { signal, timeout: 600000, maxBuffer: 64 * 1024 });
+    await run("/usr/bin/ditto", [path.join(volume, item.name), path.join(destination, item.name)], { signal, timeout: 600000, maxBuffer: Guards.limit(64 * 1024) });
   }
 }
 

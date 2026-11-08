@@ -1,8 +1,9 @@
 const fs = require("node:fs");
+const Guards = require("./guards");
 
 // Select exact PE resource branches. Large icons and unrelated payloads never
 // enter memory; callers receive only the requested type/name/language values.
-const LIMITS = Object.freeze({ bytes: 512 * 1024, reads: 1024, sections: 96, entries: 256,
+const LIMITS = Guards.limits({ bytes: 512 * 1024, reads: 1024, sections: 96, entries: 256,
   resourceBytes: 64 * 1024, names: 128, selectors: 8, languages: 8 });
 
 function readPeResources(file, selectors, { detection } = {}) {
@@ -29,14 +30,14 @@ function readPeResources(file, selectors, { detection } = {}) {
       return bytes;
     }
     const dos = read(0, 64), peOffset = dos.readUInt32LE(60);
-    if (dos.readUInt16LE(0) !== 0x5a4d || peOffset < 64 || peOffset > 1024 * 1024) return [];
+    if (dos.readUInt16LE(0) !== 0x5a4d || peOffset < 64 || peOffset > Guards.limit(1024 * 1024)) return [];
     const pe = read(peOffset, 24), count = pe.readUInt16LE(6), optionalSize = pe.readUInt16LE(20);
-    if (pe.readUInt32LE(0) !== 0x4550 || !count || count > LIMITS.sections || optionalSize < 96 || optionalSize > 4096) return [];
+    if (pe.readUInt32LE(0) !== 0x4550 || !count || count > LIMITS.sections || optionalSize < 96 || optionalSize > Guards.limit(4096)) return [];
     const optional = read(peOffset + 24, optionalSize), magic = optional.readUInt16LE(0);
     const directories = magic === 0x10b ? 96 : magic === 0x20b ? 112 : null;
     if (!directories || directories + 24 > optionalSize || optional.readUInt32LE(directories - 4) < 3) return [];
     const rva = optional.readUInt32LE(directories + 16), size = optional.readUInt32LE(directories + 20);
-    if (!rva || size < 16 || size > 64 * 1024 * 1024) return [];
+    if (!rva || size < 16 || size > Guards.limit(64 * 1024 * 1024)) return [];
     const sectionBytes = read(peOffset + 24 + optionalSize, count * 40), sections = [];
     for (let at = 0; at < sectionBytes.length; at += 40) sections.push({ rva: sectionBytes.readUInt32LE(at + 12),
       size: sectionBytes.readUInt32LE(at + 16), offset: sectionBytes.readUInt32LE(at + 20) });

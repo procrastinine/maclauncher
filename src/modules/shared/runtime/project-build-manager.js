@@ -1,6 +1,7 @@
 const fs = require("node:fs"), path = require("node:path");
 const { promisify } = require("node:util"), execute = promisify(require("node:child_process").execFile);
 const Catalog = require("./maclauncher-builds"), Bundled = require("./bundled-native");
+const Guards = require("./guards");
 const { createPinnedNativeManager, compareRuntimeVersions } = require("./pinned-native-manager");
 const { selectRuntimeVersion, installedRuntimeVersion, managerDefaultVersion } = require("./version-choices");
 const Custom = require("./custom-runtime");
@@ -114,7 +115,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
         { userDataDir: context.userDataDir, verification: 'status', metadataOnly: true }), installed, context, dependencies.rosettaLoad) : undefined,
     dependencies: { ...dependencies, extractArchive: async (archive, unpacked, signal) => {
       const extracted = path.join(unpacked, ".package"); fs.mkdirSync(extracted);
-      const options = { signal, timeout: 120000, maxBuffer: 8 * 1024 * 1024 };
+      const options = { signal, timeout: 120000, maxBuffer: Guards.limit(8 * 1024 * 1024) };
       if (dependencies.extractArchive) await dependencies.extractArchive(archive, extracted, signal);
       else {
         const list = await execute("/usr/bin/tar", ["-tf", archive], options);

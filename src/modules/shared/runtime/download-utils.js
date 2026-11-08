@@ -1,15 +1,17 @@
 const zlib = require("node:zlib");
+const Guards = require("./guards");
 const MAX_BUFFER_BYTES = 32 * 1024 * 1024;
 
 function decodeResponseBody(body, headers, { maxBytes = MAX_BUFFER_BYTES } = {}) {
-  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error("Buffered download limit must be a positive byte count.");
+  maxBytes = Guards.optional(maxBytes);
+  if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 1)) throw new Error("Buffered download limit must be a positive byte count.");
   const tooLarge = () => new Error(`Download response exceeds the ${maxBytes} byte limit.`);
-  if (body.length > maxBytes) throw tooLarge();
+  if (maxBytes !== undefined && body.length > maxBytes) throw tooLarge();
   const encoding = String(headers?.["content-encoding"] || "").toLowerCase();
   const decode = encoding.includes("gzip") ? zlib.gunzipSync
     : encoding.includes("deflate") ? zlib.inflateSync : encoding.includes("br") ? zlib.brotliDecompressSync : null;
   if (decode) {
-    try { return decode(body, { maxOutputLength: maxBytes }); }
+    try { return decode(body, maxBytes === undefined ? {} : { maxOutputLength: maxBytes }); }
     catch (error) { if (error.code === "ERR_BUFFER_TOO_LARGE") throw tooLarge(); }
   }
   return body;

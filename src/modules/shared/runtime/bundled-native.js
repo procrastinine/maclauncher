@@ -8,9 +8,10 @@ const { hasFineChangeTime } = require("../file-time");
 const { fileDigest } = require("./verified-identity");
 const PE = require("./pe-exports");
 const { versionAtLeast } = require("./host-capabilities");
+const Guards = require("./guards");
 const run = promisify(execFile);
 
-const LIMITS = Object.freeze({ manifestBytes: 8 * 1024 * 1024, files: 20000, fileBytes: 256 * 1024 * 1024, bytes: 1024 * 1024 * 1024 });
+const LIMITS = Guards.limits({ manifestBytes: 8 * 1024 * 1024, files: 20000, fileBytes: 256 * 1024 * 1024, bytes: 1024 * 1024 * 1024 });
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 const SHA = /^[a-f0-9]{64}$/;
 const appBundleContext = new (require('node:async_hooks').AsyncLocalStorage)();
@@ -70,8 +71,8 @@ function appAlias(file) {
 
 function fileIdentity(file, { maximum = LIMITS.fileBytes } = {}) {
   if (!realDirectory(path.dirname(file))) throw new Error("Bundled runtime directory is missing.");
-  const stat = fs.lstatSync(appAlias(file) || file, { bigint: true });
-  if (!stat.isFile() || stat.size > BigInt(maximum)) throw new Error("Bundled runtime file is not regular or exceeds its limit.");
+  const stat = fs.lstatSync(appAlias(file) || file, { bigint: true }), bound = Guards.optional(maximum);
+  if (!stat.isFile() || bound !== undefined && stat.size > BigInt(bound)) throw new Error("Bundled runtime file is not regular or exceeds its limit.");
   const identity = [stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeNs, stat.ctimeNs].join(":");
   // Coarse change times cannot authorize byte-verification cache reuse.
   return hasFineChangeTime(stat) ? identity : identity + ":" + readRegular(file, maximum).sha256;
@@ -137,6 +138,7 @@ function realDirectory(directory, { create = false, verifiedDirectories } = {}) 
 }
 
 function readRegular(file, maximum, { digestOnly = false, directories } = {}) {
+  maximum = Guards.optional(maximum);
   if (!realDirectory(path.dirname(file), { verifiedDirectories: directories })) throw new Error("Bundled runtime directory is missing.");
   const target = appAlias(file) || file;
   if (digestOnly) {
@@ -237,7 +239,7 @@ function validateRuntimeManifest(manifest, options = {}) {
 function fileInventory(root, { allowedAliases = new Set(), directories } = {}) {
   const files = [];
   function walk(relative, depth) {
-    if (depth > 32) throw new Error("Bundled runtime directory nesting exceeds its limit.");
+    if (depth > Guards.limit(32)) throw new Error("Bundled runtime directory nesting exceeds its limit.");
     for (const entry of fs.readdirSync(path.join(root, relative), { withFileTypes: true })) {
       const name = relativeFile(path.posix.join(relative, entry.name));
       if (entry.isSymbolicLink()) {
@@ -398,13 +400,13 @@ function nativeFiles(root, manifest) {
 }
 async function verifySignatures(root, manifest, { signal, execute = run } = {}) {
   for (const file of nativeFiles(root,manifest)) {
-    await execute("/usr/bin/codesign", ["--verify", "--strict", path.join(root, file.path)], { ...(signal ? { signal } : {}), timeout: 30000, maxBuffer: 1024 * 1024 });
+    await execute("/usr/bin/codesign", ["--verify", "--strict", path.join(root, file.path)], { ...(signal ? { signal } : {}), timeout: 30000, maxBuffer: Guards.limit(1024 * 1024) });
   }
 }
 
 function verifySignaturesSync(root, manifest) {
   for (const file of nativeFiles(root,manifest)) {
-    execFileSync("/usr/bin/codesign", ["--verify", "--strict", path.join(root, file.path)], { timeout: 30000, stdio: "pipe", maxBuffer: 1024 * 1024 });
+    execFileSync("/usr/bin/codesign", ["--verify", "--strict", path.join(root, file.path)], { timeout: 30000, stdio: "pipe", maxBuffer: Guards.limit(1024 * 1024) });
   }
 }
 

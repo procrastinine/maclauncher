@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const Guards = require("./guards");
 const { cloneOrCopySync } = require("../copy-file");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
@@ -72,7 +73,7 @@ function readPlistFile(infoPath, { detection } = {}) {
 
   try {
     const result = spawnSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", "--", "-"], {
-      input: raw, encoding: "utf8", timeout: 1000, maxBuffer: 2 * MAX_PLIST_BYTES
+      input: raw, encoding: "utf8", timeout: 1000, maxBuffer: Guards.limit(2 * MAX_PLIST_BYTES)
     });
     if (result.status === 0 && result.stdout) {
       const parsed = JSON.parse(result.stdout);

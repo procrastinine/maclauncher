@@ -5,6 +5,7 @@ const { randomUUID } = require("node:crypto");
 const { Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { MAX_BUFFER_BYTES, attachAbortSignal, createAbortError, isAbortError, throwIfAborted } = require("./download-utils");
+const Guards = require("./guards");
 const IDLE_TIMEOUT_MS = 30000, RETRY_DELAYS = [1000, 2000, 4000];
 
 // The network side of run-time downloads. Only the shared upstream layer
@@ -91,7 +92,8 @@ async function fetchUrlBufferOnce(
   url,
   { headers = {}, redirectDepth = 0, maxRedirects = 5, signal, maxBytes = MAX_BUFFER_BYTES, idleTimeoutMs, method = "GET", body } = {}
 ) {
-  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error("Buffered download limit must be a positive byte count.");
+  if (Guards.producing()) maxBytes = Infinity;
+  else if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error("Buffered download limit must be a positive byte count.");
   if (redirectDepth > maxRedirects) throw new Error("Too many redirects while fetching data");
   throwIfAborted(signal);
 

@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const Guards = require("./guards");
 const path = require("node:path");
 const { TextDecoder } = require("node:util");
 
@@ -8,7 +9,7 @@ const CPUS = new Map([[0x0100000c, "arm64"], [0x01000007, "x86_64"], [7, "i386"]
   [12, "arm"], [18, "ppc"], [0x01000012, "ppc64"]]);
 const CPU_NAMES = new Map([...CPUS].map(([cpu, name]) => [name, cpu]));
 CPU_NAMES.set("x64", 0x01000007); CPU_NAMES.set("ia32", 7);
-const LIMITS = Object.freeze({ slices: 32, commands: 8192, commandBytes: 4 * 1024 * 1024,
+const LIMITS = Guards.limits({ slices: 32, commands: 8192, commandBytes: 4 * 1024 * 1024,
   readBytes: 16 * 1024 * 1024, pathBytes: 4096, buildTools: 128 });
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 const DYLIBS = new Map([[0xc, "load"], [0x80000018, "weak"], [0x8000001f, "reexport"],
