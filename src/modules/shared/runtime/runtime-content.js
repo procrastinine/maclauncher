@@ -28,6 +28,20 @@ const excludedGlobs = Object.freeze([
   `**/*.{${['test', 'spec'].map(insensitive).join(',')}}.${extensions}{,.*}`,
   ...generatedFiles.values(), ...repositoryFiles.values(), ...instructionFiles.map(insensitive)
 ].map(pattern => '!' + (pattern.includes('/') ? pattern : '**/' + pattern)));
+// Files for editors, type checkers, debuggers and readers of a checkout.
+// Development serves and imports them (the renderer is TypeScript), so they
+// are packaging exclusions only. They apply to the application files and to
+// every resource mapping except the native resources, whose package payloads
+// their manifests seal. Licence and notice documents stay.
+const notices = ['licen?e', 'notice', 'copying', 'third?party', 'authors'].map(name => `*${insensitive(name)}*`).join('|');
+const developmentGlobs = Object.freeze([
+  '**/*.{js,cjs,mjs,css}.map', '**/*.{ts,tsx,mts,cts}',
+  '**/tsconfig*.json', '**/{vite,rollup,webpack,jest,babel}.config.*',
+  '**/.{eslintrc,prettierrc,babelrc}{,.*}', '**/.{eslintignore,prettierignore,npmignore,editorconfig}',
+  `**/!(${notices}).{${['md', 'markdown', 'rst'].map(insensitive).join(',')}}`,
+  `**/${insensitive('readme')}{,.*}`,
+  '**/node_modules/**/{bench,benchmark,benchmarks}/**'
+].map(pattern => '!' + pattern));
 
 function excludedReason(file) {
   const parts = String(file).replaceAll('\\', '/').split('/').filter(Boolean);
@@ -61,10 +75,12 @@ function applyBuildPolicy(build) {
   // Bare exclusions beside those FileSets create a separate default matcher
   // which Builder expands to **/*, bypassing the original source allowlist.
   const patterns = files.filter(rule => typeof rule === 'string');
-  const mappings = files.filter(rule => typeof rule !== 'string').map(rule => ({ ...rule, filter: withExclusions(rule.filter) }));
+  const mappings = files.filter(rule => typeof rule !== 'string').map(rule => ({ ...rule, filter: [...withExclusions(rule.filter), ...developmentGlobs] }));
+  const sealed = rule => rule.from === 'src/resources' && (rule.to === '.' || rule.to === undefined);
   return { ...build,
-    files: patterns.length || !mappings.length ? [...withExclusions(patterns), ...mappings] : mappings,
-    extraResources: (build.extraResources || []).map(rule => typeof rule === 'string' ? rule : { ...rule, filter: withExclusions(rule.filter) })
+    files: patterns.length || !mappings.length ? [...withExclusions(patterns), ...developmentGlobs, ...mappings] : mappings,
+    extraResources: (build.extraResources || []).map(rule => typeof rule === 'string' ? rule
+      : { ...rule, filter: [...withExclusions(rule.filter), ...(sealed(rule) ? [] : developmentGlobs)] })
   };
 }
 function ownedPath(root, file) {
@@ -90,5 +106,5 @@ function assertOwnedImport(root, file) {
   assertOwnedContent(root, file);
 }
 
-module.exports = { privateDirectories, testDirectories, generatedDirectories, excludedGlobs, excludedReason,
+module.exports = { privateDirectories, testDirectories, generatedDirectories, excludedGlobs, developmentGlobs, excludedReason,
   assertRuntimePath, withExclusions, applyBuildPolicy, ownedPath, assertOwnedContent, assertOwnedImport };
