@@ -3,7 +3,7 @@ import Supplementals from "./native-supplementals.cjs";
 // Third-party presets carry their complete source and notice in the effect file.
 // Their identities are independent of the unchanged native compiler sources.
 export function validateEffectSources(sources, files) {
-  if (!Array.isArray(sources) || sources.length > 64) throw new Error("Invalid ReShade effect sources.");
+  if (!Array.isArray(sources)) throw new Error("Invalid ReShade effect sources.");
   const paths = new Set();
   const keys = ["name", "path", "sourceUrl", "revision", "sourceSha256", "sha256", "adaptation"];
   for (const source of sources) {

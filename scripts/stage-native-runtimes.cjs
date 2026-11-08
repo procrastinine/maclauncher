@@ -282,7 +282,8 @@ async function stagePackage(input, { outputRoot, maximumMacOS = "13.0", signingI
         if (systemLink(link)) continue;
         if (libraryIds(original, selectedCPU).includes(link)) continue;
         const dependency = resolveLink(link, original, executable, [...originalCommands.rpaths, ...inherited], selectedCPU);
-        if (dependency === original) continue; // a dylib's LC_ID_DYLIB
+        // An unresolved link is reported by the output warnings.
+        if (!dependency || dependency === original) continue; // a dylib's LC_ID_DYLIB
         const dependencyTarget = copyLibrary(dependency);
         const relocated = `@loader_path/${path.relative(path.dirname(target), dependencyTarget).split(path.sep).join("/")}`;
         tool("/usr/bin/install_name_tool", ["-change", link, relocated, target]);

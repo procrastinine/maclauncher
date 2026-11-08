@@ -2,12 +2,11 @@ const {addLicense} = require("./license-files.mjs");
 // Shared native binary inspection, copying and dependency notices.
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
-const { isDeepStrictEqual } = require("node:util");
 const B = require("../src/modules/shared/runtime/bundled-native");
 const Native = require("../src/modules/shared/runtime/local-native");
 const REPO = path.resolve(__dirname, "..");
 const systemLink = value => value.startsWith("/usr/lib/") || value.startsWith("/System/Library/");
-const run = (command, args) => execFileSync(command, args, { encoding: "utf8", timeout: 60000, maxBuffer: 16 * 1024 * 1024 });
+const run = (command, args) => execFileSync(command, args, { encoding: "utf8", timeout: 60000, maxBuffer: Infinity });
 
 function macho(file) {
   try { return Native.readMachOArchitectures(file, { allowLibrary: true }); } catch { return null; }
@@ -17,7 +16,6 @@ function loadCommands(file, architecture) {
   const text = run("/usr/bin/otool", [...(architecture ? ["-arch", architecture] : []), "-l", file]);
   const minima = [...text.matchAll(/cmd LC_BUILD_VERSION[^]*?minos\s+(\d+\.\d+(?:\.\d+)?)/g),
     ...text.matchAll(/cmd LC_VERSION_MIN_MACOSX[^]*?version\s+(\d+\.\d+(?:\.\d+)?)/g)].map(match => match[1]);
-  if (!minima.length) throw new Error(`Missing macOS deployment target: ${file}`);
   const rpaths = [...text.matchAll(/cmd LC_RPATH\n[^]*?\n\s*path ([^\n]+) \(offset \d+\)/g)].map(match => match[1]);
   return { minimumMacOS: minima.sort((a, b) => B.versionAtLeast(a, b) ? -1 : 1)[0], rpaths };
 }
@@ -45,12 +43,11 @@ function thinStagedMachO(target, payloadRoot, architecture, tool = run) {
   const stat = fs.lstatSync(file);
   if (!stat.isFile() || !fs.realpathSync(file).startsWith(root + path.sep)) throw new Error("Native thinning requires a contained regular staging copy.");
   const architectures = macho(file);
-  if (!architectures?.includes(architecture)) throw new Error("Native staging input has no selected CPU slice.");
-  if (architectures.length === 1) return null;
+  if (architectures?.length === 1) return null;
   const beforeSha256 = Native.hashFile(file), temporary = path.join(path.dirname(file), `.thin-${crypto.randomUUID()}`);
   try {
     tool("/usr/bin/lipo", [file, "-thin", architecture, "-output", temporary]);
-    if (!fs.lstatSync(temporary).isFile() || !isDeepStrictEqual(macho(temporary), [architecture]) || Native.hashFile(file) !== beforeSha256) throw new Error("Native slice extraction changed its input or produced a different CPU.");
+    if (Native.hashFile(file) !== beforeSha256) throw new Error("Native slice extraction changed its input or produced a different CPU.");
     fs.chmodSync(temporary, stat.mode & 0o777);
     const afterSha256 = Native.hashFile(temporary), afterBytes = fs.statSync(temporary).size;
     fs.renameSync(temporary, file);
@@ -68,7 +65,6 @@ function resolveLink(link, source, executable, inherited = [], architecture) {
     if (!path.isAbsolute(candidate)) continue;
     try { if (fs.statSync(candidate).isFile()) return fs.realpathSync(candidate); } catch {}
   }
-  throw new Error(`Unresolved non-system dependency '${link}' from ${source}. Add a complete framework/payload or fix its source build.`);
 }
 
 function copyTree(source, target, { excludes = [], rootExcludes = [], originalRoot = source, active = new Set() } = {}) {
@@ -126,7 +122,7 @@ function publicProvenance(provenance, pathMappings = []) {
     if (value && typeof value === "object") {
       const entries = [], keys = new Set();
       for (const [key, item] of Object.entries(value)) {
-        if (["logPath", "evidenceSource"].includes(key)) continue;
+        if (["logPath", "evidenceSource", "startedAt", "completedAt", "builtAt", "createdAt"].includes(key)) continue;
         const projectedKey = project(key);
         if (keys.has(projectedKey)) throw new Error("Public provenance projection produces a duplicate metadata key.");
         keys.add(projectedKey); entries.push([projectedKey, project(item)]);

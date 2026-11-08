@@ -63,11 +63,11 @@ export function stageReShadeEffects({
     inputs.set(file.path, { bytes: read.bytes, record: { ...file } });
   }
   const effectNames = fs.readdirSync(effectsDirectory).sort();
-  if (!effectNames.length || effectNames.length > 64 || effectNames.some(name => !/^[A-Za-z0-9_-]+\.fxh?$/.test(name))) {
-    throw new Error("ReShade effects must be bounded .fx or .fxh files.");
+  if (!effectNames.length || effectNames.some(name => !/^[A-Za-z0-9_-]+\.fxh?$/.test(name))) {
+    throw new Error("ReShade effects must be .fx or .fxh files.");
   }
   for (const name of effectNames) {
-    const { bytes } = Bundled.readRegular(path.join(effectsDirectory, name), 1024 * 1024);
+    const { bytes } = Bundled.readRegular(path.join(effectsDirectory, name));
     const relative = `effects/${name}`;
     if (!bytes.length) throw new Error("ReShade effect files must not be empty.");
     inputs.set(relative, { bytes, record: { path: relative, size: bytes.length, mode: 0o644, sha256: digest(bytes) } });

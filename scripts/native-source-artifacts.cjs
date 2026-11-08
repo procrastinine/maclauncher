@@ -8,7 +8,7 @@ const S = require('./native-supplementals.cjs');
 function validate(item) {
   if (!item || Object.keys(item).some(key => !['managerId', 'version', 'directoryRelative', 'sha256', 'bytes'].includes(key)) ||
       !/^[a-z0-9-]+$/.test(item.managerId || '') || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(item.version || '') ||
-      !/^[a-f0-9]{64}$/.test(item.sha256 || '') || !Number.isSafeInteger(item.bytes) || item.bytes < 1 || item.bytes > B.LIMITS.fileBytes ||
+      !/^[a-f0-9]{64}$/.test(item.sha256 || '') || !Number.isSafeInteger(item.bytes) || item.bytes < 1 ||
       B.relativeFile(item.directoryRelative) !== item.directoryRelative || !item.directoryRelative.endsWith('-source.tar.gz') ||
       item.directoryRelative !== `${item.managerId}/${item.version}-source.tar.gz`) {
     throw new Error('Invalid corresponding-source archive identity.');

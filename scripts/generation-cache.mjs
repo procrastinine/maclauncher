@@ -28,7 +28,7 @@ export function processAlive(pid){
 }
 export function generationProcesses(){
  // Failure disables pruning; a running app is never guessed to be absent.
- try{return execFileSync('/bin/ps',['-axo','command='],{encoding:'utf8',timeout:5000,maxBuffer:16*1024*1024});}catch{return null;}
+ try{return execFileSync('/bin/ps',['-axo','command='],{encoding:'utf8',timeout:5000,maxBuffer: Infinity});}catch{return null;}
 }
 // Darwin's O_EXLOCK is defined by sys/fcntl.h but omitted from Node constants.
 // The descriptor is a kernel lifetime owner, independent of PID reuse. Node

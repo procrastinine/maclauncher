@@ -159,7 +159,7 @@ Small integration helpers ship inside the app with fixed versions. Their sources
 | Steam encrypted-ticket loader | `node src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs /absolute/new-output` |
 | Java steamworks4j bridges | `node src/modules/java/runtime/steamworks/stage-bridge.cjs <publisher-archives> <jdk-bin> <empty-resource-directory>`, with the publisher archives from the catalog and the `bin` directory of a JDK 17 |
 | LÖVE LuaSteam bridge | [`luasteam-build.js`](../../src/modules/love/runtime/luasteam-build.js) with the inputs listed in [LÖVE](../game-types/LOVE.md#bridge-source); [`luasteam-package.js`](../../src/modules/love/runtime/luasteam-package.js) stages the packaged bridge profile |
-| MKXP-Z configuration helper | `node scripts/stage-mkxpz-config-helper.cjs --output /path/to/empty-staging` |
+| MKXP-Z configuration helper | [MKXP-Z configuration helper recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/scripts/stage-mkxpz-config-helper.cjs) in MacLauncher Builds |
 | CatSystem2 KIF cipher | `node src/modules/catsystem2/runtime/stage-crypto.cjs <empty-resource-directory>` |
 | iOS PlayTools storage adapter | `node scripts/stage-ios-helper.mjs` |
 | Android account control | [Android launcher recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/android-launcher/build.mjs) in MacLauncher Builds, shipped in an attested included package |
