@@ -158,21 +158,9 @@ function requirements(context, dependencies = {}) {
     // An installed driver keeps Play offline. Only a first Intel-program launch
     // offers the managed Intel KosmicKrisp build before MoltenVK.
     if (request === "auto" && architecture === "x64" && dependencies.preferredBackend === "kosmickrisp") {
-      const host = dependencies.hostCapabilities || Host.getHostCapabilities();
       const fallback = () => requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, vulkanRuntime: "moltenvk:auto" } }, dependencies);
-      if (Requirements.requirementSupport(Requirements.METAL4, host).supported === true && host.physicalAppleGPU !== false) {
-        let preferred;
-        try {
-          preferred = requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, vulkanRuntime: managed.selectionId } }, dependencies)[0];
-        } catch (error) { context.logger?.warn?.("[runtimes] The Intel KosmicKrisp package is unavailable; using MoltenVK.", error.message); }
-        // A refreshed catalog that already lists no Intel build offers MoltenVK alone.
-        const listedNone = preferred?.discoveryRequired && catalogListsNoBuild(dependencies.adaptedManager ||
-          managed.providers.find(item => item.selectionId === managed.selectionId).manager, context, architecture);
-        if (preferred && !listedNone) return [{ ...preferred, optional: true, cancelLabel: "Use MoltenVK",
-          label: offerLabel("KosmicKrisp", dependencies),
-          detail: "Intel programs on Apple Silicon. Skipping uses MoltenVK.", fallback: fallback()[0] }];
-      }
-      return fallback();
+      const offer = kosmicKrispOffer(context, dependencies);
+      return offer ? [{ ...offer, fallback: fallback()[0] }] : fallback();
     }
     const ordered = [...(dependencies.managers || managers)].sort((a, b) => Number(b.backend === dependencies.preferredBackend) - Number(a.backend === dependencies.preferredBackend));
     for (const manager of ordered) {
@@ -220,6 +208,23 @@ function requirements(context, dependencies = {}) {
   }
   return [{ managerId: manager.id, version: selection.version, requiresDownload: true, installOptions }];
 }
+// The download of the managed KosmicKrisp build for a consumer CPU, offered
+// before MoltenVK on an Apple Silicon Mac with Metal 4. An installed build,
+// another Mac, or a refreshed catalog that lists no build for that CPU offers
+// nothing.
+function kosmicKrispOffer(context, dependencies = {}) {
+  const host = dependencies.hostCapabilities || Host.getHostCapabilities();
+  if (Requirements.requirementSupport(Requirements.METAL4, host).supported !== true || host.physicalAppleGPU === false) return null;
+  let preferred;
+  try {
+    preferred = requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, vulkanRuntime: managed.selectionId } }, dependencies)[0];
+  } catch (error) { context.logger?.warn?.("[runtimes] The Intel KosmicKrisp package is unavailable; using MoltenVK.", error.message); }
+  // A refreshed catalog that already lists no build for this CPU offers MoltenVK alone.
+  const listedNone = preferred?.discoveryRequired && catalogListsNoBuild(dependencies.adaptedManager ||
+    managed.providers.find(item => item.selectionId === managed.selectionId).manager, context, dependencies.architecture || Architecture.selectedArchitecture());
+  return preferred && !listedNone ? { ...preferred, optional: true, cancelLabel: "Use MoltenVK",
+    label: offerLabel("KosmicKrisp", dependencies), detail: "Intel programs on Apple Silicon. Skipping uses MoltenVK." } : null;
+}
 function environment(selection, directory) {
   if (!selection) return {};
   const env = { KL_MVK_DYLIB: selection.library };
@@ -244,4 +249,4 @@ function driverEnvironment({ driver, icd, backend }, directory) {
     require('../writable-input').atomicWrite(file, text, { root: directory });
   return { VK_DRIVER_FILES: file, VK_ICD_FILENAMES: file };
 }
-module.exports = { installed, choices, resolve, requirements, environment, driverEnvironment };
+module.exports = { installed, choices, resolve, requirements, kosmicKrispOffer, environment, driverEnvironment };

@@ -73,11 +73,13 @@ function carrierDriver(plan, hasCarrier = file => {
 // through DXVK or vkd3d-proton, with DXVK's own DXGI placed and an explicitly
 // selected carrier driver, always forwards its DLSS frames. The runtime's own
 // driver has no carrier, and DXVK-NVAPI reaches the device through DXVK's DXGI.
-function requested(plan, architecture, hasCarrier) {
+function routeForwards(plan, architecture) {
   if (architecture !== 'x86_64') return false;
   if (!['d3d11', 'd3d12'].some(api => ['dxvk', 'vkd3d-proton'].includes(usedForApi(plan, api)?.engine))) return false;
-  if (!(plan.placements || []).some(item => item.description.engine === 'dxvk' && path.basename(item.file.path).toLowerCase() === 'dxgi.dll' && item.file.machine === 0x8664)) return false;
-  return Boolean(carrierDriver(plan, hasCarrier));
+  return (plan?.placements || []).some(item => item.description.engine === 'dxvk' && path.basename(item.file.path).toLowerCase() === 'dxgi.dll' && item.file.machine === 0x8664);
+}
+function requested(plan, architecture, hasCarrier) {
+  return routeForwards(plan, architecture) && Boolean(carrierDriver(plan, hasCarrier));
 }
 function selection(manager, entry, context) { return manager.resolveSelection(entry, context.settings, context.userDataDir, { verification: 'status' }); }
 async function requirements(entry, context, { translatorPlan = context.translatorPlan, architecture, runtimeManagers = managers, hasCarrier } = {}) {
@@ -93,7 +95,9 @@ async function requirements(entry, context, { translatorPlan = context.translato
       translatorPlan=await translators.resolve(environment.wineEnvironment?.install || selected.install,runtimeId,context,{entry,executableArchitecture:architecture});
     }
   }
-  if (!requested(translatorPlan, architecture, hasCarrier)) return [];
+  // A carrier driver that this Play downloads (wine-translators.js
+  // driverRequirements) forwards once installed, so its libraries come with it.
+  if (!requested(translatorPlan, architecture, hasCarrier) && !(translatorPlan?.vulkanPending && routeForwards(translatorPlan, architecture))) return [];
   return runtimeManagers.flatMap(manager => {
     const selected = selection(manager, entry, context);
     return selected.ready ? [] : [{ managerId: manager.id, version: selected.version || null, requiresDownload: true,
@@ -104,7 +108,7 @@ async function requirements(entry, context, { translatorPlan = context.translato
 async function prepare(entry, context, settings, plan, architecture, view, { runtimeManagers = managers, hasCarrier, inspect = readPeExports } = {}) {
   if (!requested(plan, architecture, hasCarrier)) return { view, enabled: false };
   const selected = runtimeManagers.map(manager => ({ manager, value: selection(manager, entry, context) }));
-  if (selected.some(item => !item.value.ready)) throw Error('Install the requested Vulkan DLSS forwarding packages before Play.');
+  if (selected.some(item => !item.value.ready)) return { view, enabled: false };
   const nvapi = selected[0].value.install.executablePath, core = selected[1].value.install.executablePath;
   for (const [file, names] of [[nvapi, ['nvapi_QueryInterface']], [core, ['NVSDK_NGX_D3D11_EvaluateFeature', 'NVSDK_NGX_D3D12_EvaluateFeature']]]) {
     const pe = inspect(file);
@@ -125,4 +129,4 @@ function environment(enabled, values = {}) {
   return { DXVK_ENABLE_NVAPI: '1', DXVK_NVAPI_ALLOW_OTHER_DRIVERS: '1', DXVK_NVAPI_GPU_ARCH: 'TU100',
     DXVK_CONFIG: [config, 'dxgi.customVendorId = 10de', 'dxgi.customDeviceId = 1e07', 'dxgi.hideNvidiaGpu = False'].filter(Boolean).join('; ') };
 }
-module.exports = { managers, createManagers, findLibrary, carrierDriver, requested, requirements, prepare, environment };
+module.exports = { managers, createManagers, findLibrary, carrierDriver, routeForwards, requested, requirements, prepare, environment };

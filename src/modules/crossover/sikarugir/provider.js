@@ -66,6 +66,7 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       if (existing) context.wineEnvironment = existing;
       const manager = existing ? { resolveSelection: () => ({ ready: true, install: existing.install, version: existing.path }) } : runtimeManager();
       return [...await require("../temporal").requirements(entry, { ...context, runtimeId: "sikarugir" }, { manager }),
+        ...await Translators.driverRequirements(context),
         ...await require("../temporal/vulkan-dlss").requirements(entry, context),
         ...await require("../runtime/steam-bridge").requirements(entry, { ...context, runtimeId: "sikarugir" })];
     },

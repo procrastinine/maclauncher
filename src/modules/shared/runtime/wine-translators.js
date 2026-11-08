@@ -6,6 +6,8 @@ const { systemVersionSync } = require('./bundled-native');
 const warn = require('../graphics-warning');
 const Architecture = require('./architecture');
 const Roles = require('./translator-roles');
+const Requirements = require('./feature-requirements');
+const { compareRuntimeVersions } = require('./pinned-native-manager');
 const SETTINGS = Object.freeze({ 'd3d-renderer': 'translatorRenderer', 'vulkan-driver': 'translatorVulkan', d3d12: 'translatorD3D12', video: 'translatorVideo' });
 
 function includedTranslators(install, runtime, { engine: requestedEngine, describe } = {}) {
@@ -320,6 +322,48 @@ function requirement(plan, context, { managers = runtimeManagers() } = {}) {
   return { managerId: manager.id, version: selected.version || null, requiresDownload: true, installOptions,
     ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), detail: plan.pairingError };
 }
+// An installed managed Vulkan driver of one package that this Wine process can
+// load, preferring the package's default version.
+function managedDriver(input, compatibility, context, managerId) {
+  const rows = input.choices.filter(item => item.component === 'vulkan-driver' && item.managerId === managerId && compatibility[item.id]?.compatible !== false);
+  const preferred = require('./custom-runtime').defaultVersion(context.settings, managerId);
+  return rows.find(item => item.runtimeVersion === preferred) || rows.sort((a, b) => compareRuntimeVersions(a.runtimeVersion, b.runtimeVersion))[0] || null;
+}
+// KosmicKrisp needs Metal 4 and a physical Apple GPU. Its x64 build serves an
+// x86_64 Wine process under Rosetta.
+async function kosmicKrispHost(host = {}, context = {}) {
+  const capabilities = { ...require('./host-capabilities').getHostCapabilities(), ...host };
+  if (Requirements.requirementSupport(Requirements.METAL4, capabilities).supported !== true) return null;
+  const hardware = await require('./graphics-hardware').graphicsHardware(capabilities, { signal: context.signal });
+  return hardware.physicalAppleGPU === true ? { ...capabilities, physicalAppleGPU: true } : null;
+}
+// MacLauncher's own DXVK and vkd3d-proton builds, as opposed to a runtime's.
+const ownVulkanTranslator = item => !item.included && !item.reference && Boolean(item.managerId) && ['dxvk', 'vkd3d-proton'].includes(item.engine);
+// The downloads of the current plan's paired Vulkan driver (resolve): the
+// MacLauncher KosmicKrisp build, and MacLauncher's MoltenVK scene build where
+// KosmicKrisp cannot run or, for DXVK alone, when its download is declined.
+async function driverRequirements(context, { host = {} } = {}) {
+  const pending = context.translatorPlan?.vulkanPending;
+  if (!pending) return [];
+  const Managed = require('../vulkan/managed');
+  let carrier = null;
+  if (pending.carrier) {
+    const selected = Managed.sceneManager.resolveSelection(null, context.settings, context.userDataDir, { verification: 'status' });
+    if (!selected.ready && (selected.version || selected.discoveryRequired)) carrier = { managerId: Managed.sceneProjectId, version: selected.version || null,
+      ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: true, installOptions: { sectionId: 'default' },
+      detail: 'Installs the MoltenVK build that forwards DLSS frames from MacLauncher\'s DXVK and vkd3d-proton.' };
+  }
+  const capabilities = pending.kosmicKrisp && pending.architecture && await kosmicKrispHost(host, context);
+  const offer = capabilities && require('../vulkan').kosmicKrispOffer(context, { architecture: pending.architecture, managers: [], hostCapabilities: capabilities });
+  if (!offer) return carrier ? [carrier] : [];
+  // vkd3d-proton does not start on MoltenVK, so its pairing needs KosmicKrisp.
+  if (pending.vkd3d) {
+    const { optional, cancelLabel, ...required } = offer;
+    return [{ ...required, detail: 'MacLauncher\'s vkd3d-proton runs on KosmicKrisp, which also forwards DLSS frames.' }];
+  }
+  return [{ ...offer, detail: 'MacLauncher\'s DXVK runs on KosmicKrisp, which also forwards DLSS frames. Skipping uses MacLauncher\'s MoltenVK build.',
+    ...(carrier ? { fallback: carrier } : {}) }];
+}
 function environmentContext(context, install) {
   const value = context.runtimeSettings?.environmentReference;
   if (value === undefined) return context;
@@ -356,6 +400,8 @@ async function resolve(install, runtime, context, { executableArchitecture, host
         { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() })];
     }))])) : {};
   const plan = { ...Plan.resolvePlan({ ...input, compatibility }), layout: input.layout, compatibility, record };
+  const vulkan = plan.components['vulkan-driver'];
+  const automaticVulkan = !vulkan.inherited && (vulkan.value === Plan.AUTOMATIC || vulkan.fallback && !vulkan.used);
   const videoRow = plan.components.video, selectedVideo = videoRow.selected || videoRow.used;
   if (selectedVideo && fs.existsSync(selectedVideo.root) && !(videoRow.inherited && !videoRow.fallback)) {
     // Only an actual video preparation needs the extra host-native closure.
@@ -376,7 +422,6 @@ async function resolve(install, runtime, context, { executableArchitecture, host
     let hardware = host;
     if (automatic(plan.components['vulkan-driver']) && host.physicalAppleGPU == null && choose('vulkan-driver', 'kosmickrisp'))
       hardware = await require('./graphics-hardware').graphicsHardware(host, { signal: context.signal });
-    const vulkan = plan.components['vulkan-driver'];
     if (automatic(vulkan)) vulkan.used = hardware.physicalAppleGPU === true ? choose('vulkan-driver', 'kosmickrisp') || choose('vulkan-driver', 'moltenvk') : choose('vulkan-driver', 'moltenvk');
     const renderer = plan.components['d3d-renderer'];
     automaticRenderer = choose('d3d-renderer', 'dxmt') || choose('d3d-renderer', 'wined3d');
@@ -398,10 +443,11 @@ async function resolve(install, runtime, context, { executableArchitecture, host
       plan.additional = [...(plan.additional || []), { ...directDraw, inherited: context.runtimeSettings?.cncDdraw === Plan.INHERIT }];
     }
   }
-  for (const row of Object.values(plan.components)) if (row.used && compatibility[row.used.id]?.files) {
-    const files = compatibility[row.used.id].files;
-    row.used = { ...row.used, files, form: files.find(file => file.format === 'pe')?.form || row.used.form };
-  }
+  const actualFiles = item => {
+    const files = compatibility[item.id]?.files;
+    return files ? { ...item, files, form: files.find(file => file.format === 'pe')?.form || item.form } : item;
+  };
+  for (const row of Object.values(plan.components)) if (row.used) row.used = actualFiles(row.used);
   const automatic = Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id,
     role.id === 'd3d12' ? null : [...automaticAdditional, ...(automaticRenderer ? [automaticRenderer] : [])].find(item =>
       !item.apis?.length || item.apis.some(api => role.apis.includes(api))) ||
@@ -411,6 +457,32 @@ async function resolve(install, runtime, context, { executableArchitecture, host
     environment: context.wineEnvironment ? Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id,
       role.id === 'd3d12' ? null : [input.environment?.selections?.['d3d-renderer']].find(item => item &&
         (!item.apis?.length || item.apis.some(api => role.apis.includes(api)))) || null])) : null });
+  // MacLauncher's DXVK or vkd3d-proton pairs an automatic Vulkan driver with
+  // MacLauncher KosmicKrisp, or with MacLauncher's MoltenVK scene build where
+  // KosmicKrisp cannot run; both forward DLSS frames. A launch with the
+  // runtime's own translators keeps the runtime's driver, and a selected or
+  // inherited driver stays.
+  const own = automaticVulkan ? Roles.usedRenderers(plan).filter(ownVulkanTranslator) : [];
+  plan.vulkanPending = null;
+  if (own.length) {
+    const Managed = require('../vulkan/managed'), vkd3d = own.some(item => item.engine === 'vkd3d-proton');
+    const names = `MacLauncher's ${[...new Set(own.map(item => item.engine === 'vkd3d-proton' ? 'vkd3d-proton' : 'DXVK'))].join(' and ')}`;
+    const capable = await kosmicKrispHost(host, context);
+    const kosmicKrisp = capable && managedDriver(input, compatibility, context, Managed.projectId);
+    const scene = !kosmicKrisp && managedDriver(input, compatibility, context, Managed.sceneProjectId);
+    let reason;
+    if (kosmicKrisp) { vulkan.used = actualFiles(kosmicKrisp); reason = `${names} uses MacLauncher KosmicKrisp.`; }
+    else {
+      if (scene) vulkan.used = actualFiles(scene);
+      reason = capable ? `${names} uses MacLauncher KosmicKrisp, which Play installs after consent.`
+        : `KosmicKrisp needs Metal 4 and a physical Apple GPU, so ${names} uses MacLauncher's MoltenVK build.${vkd3d ? ' vkd3d-proton may not start on MoltenVK.' : ''}`;
+      if (capable || !scene) plan.vulkanPending = { architecture: Architecture.targetArchitecture(input.layout?.architecture) || 'x64',
+        kosmicKrisp: Boolean(capable), vkd3d: Boolean(capable) && vkd3d, carrier: !scene };
+    }
+    if (!vulkan.fallback) Object.assign(vulkan, { reasonCode: 'vulkan-pairing', reason });
+  } else if (vulkan.selected && !vulkan.inherited && !vulkan.fallback && require('../../crossover/temporal/vulkan-dlss').routeForwards(plan, executableArchitecture) &&
+      !require('../../crossover/temporal/vulkan-dlss').carrierDriver(plan))
+    Object.assign(vulkan, { reasonCode: 'dlss-forwarding', reason: 'This Vulkan driver does not forward DLSS frames.' });
   plan.warnings = Plan.fallbackWarnings(plan);
   plan.warnings.push(...(plan.components.video.used?.videoPreparation?.warnings || []));
   if (plan.components.d3d12.used?.engine === 'vkd3d-proton' && plan.components['vulkan-driver'].used?.engine !== 'kosmickrisp')
@@ -531,4 +603,4 @@ function inspectorRows(plan, { host } = {}) {
       ...(row.conflictRoles?.length ? { conflictRoles: row.conflictRoles } : {}) };
   }));
 }
-module.exports = { SETTINGS, includedTranslators, includedSummary, describedIncluded, managedTranslators, inventory, optionsInventory, optionsPlan, requirement, resolve, engines, environmentIds, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, planInputs, samePlanInputs, environmentContext };
+module.exports = { SETTINGS, includedTranslators, includedSummary, describedIncluded, managedTranslators, inventory, optionsInventory, optionsPlan, requirement, driverRequirements, resolve, engines, environmentIds, settingsForPlan, wineRoot, withSettings, optionLists, inspectorRows, presentInspectorRows, planInputs, samePlanInputs, environmentContext };

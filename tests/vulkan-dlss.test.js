@@ -27,6 +27,15 @@ test('an explicit carrier route offers both ordinary consented managed dependenc
  const rows=await DLSS.requirements({},{...f.context,runtimeSettings:{dlss:false}},{translatorPlan:f.plan,architecture:'x86_64',runtimeManagers,hasCarrier:()=>true});
  assert.deepEqual(rows.map(r=>r.managerId),['dxvk-nvapi','vkd3d-proton']);assert.ok(rows.every(r=>r.requiresDownload&&r.discoveryRequired&&!r.version));
 });
+test('a carrier driver downloaded in the same Play brings its forwarding libraries, and missing libraries never block Play',async t=>{
+ const f=fixture(t);const runtimeManagers=f.managers.map(m=>({...m,resolveSelection:()=>({ready:false,discoveryRequired:true})}));
+ const pending={...f.plan,components:{...f.plan.components,'vulkan-driver':{used:null}},vulkanPending:{architecture:'x64',kosmicKrisp:true,vkd3d:false,carrier:true}};
+ const rows=await DLSS.requirements({},f.context,{translatorPlan:pending,architecture:'x86_64',runtimeManagers,hasCarrier:()=>false});
+ assert.deepEqual(rows.map(r=>r.managerId),['dxvk-nvapi','vkd3d-proton']);
+ assert.deepEqual(await DLSS.requirements({},f.context,{translatorPlan:{...pending,placements:[]},architecture:'x86_64',runtimeManagers,hasCarrier:()=>false}),[]);
+ const result=await DLSS.prepare({},f.context,{},f.plan,'x86_64',f.view,{...f.opts,runtimeManagers});
+ assert.equal(result.enabled,false);assert.equal(result.view,f.view);assert.deepEqual(f.seen,[]);
+});
 test('both Vulkan drivers stage actual NVAPI and carrier NGX without changing translators',async t=>{
  const f=fixture(t),before=structuredClone(f.plan);
  const result=await DLSS.prepare({},f.context,{},f.plan,'x86_64',f.view,f.opts);

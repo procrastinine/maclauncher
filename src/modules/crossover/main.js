@@ -140,6 +140,7 @@ const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.en
     supportsEntry, canLaunchRuntime, ensureRuntime, launchRuntime, resolveSaveLocations,
     getRuntimeRequirements: async (entry, context) => [
       ...await require("./temporal").requirements(entry, { ...context, runtimeId: "crossover" }),
+      ...await Translators.driverRequirements(context),
       ...await require("./temporal/vulkan-dlss").requirements(entry, context),
       ...await require('./runtime/winemac').requirements(entry, { ...context, runtimeId: 'crossover' }),
       ...await require('./runtime/steam-bridge').requirements(entry, { ...context, runtimeId: 'crossover' })
@@ -177,6 +178,7 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
   resolveGraphicsInputs, warmBackendLane,
   getRuntimeRequirements: async (entry, context) => [
     ...await require("./temporal").requirements(entry, context),
+    ...await Translators.driverRequirements(context),
     ...await require("./temporal/vulkan-dlss").requirements(entry, context),
     ...await require('./runtime/winemac').requirements(entry, context),
     ...await require('./runtime/steam-bridge').requirements(entry, context)

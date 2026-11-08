@@ -759,7 +759,7 @@ export const GameDetails = memo(function GameDetails({
             <div className="detailRow" key={`translator:${row.id || index}`}>
               <div className="detailLabel">{row.label}</div>
               <div className="detailValue">{row.selected} → {row.used}
-                {row.selected !== row.used && row.reason && (!row.fallback || row.reasonCode) && <div className="detailMeta">{row.reason}</div>}
+                {(row.selected !== row.used || row.reasonCode === 'dlss-forwarding') && row.reason && (!row.fallback || row.reasonCode) && <div className="detailMeta">{row.reason}</div>}
               </div>
             </div>
           ))}
