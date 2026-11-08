@@ -158,11 +158,12 @@ macfx::LsfgResult macfx::LsfgEncoder::encode(id<MTLCommandBuffer>cb,id<MTLTextur
  if(graph&&graph->busy.load()&&graph->activeCommands!=cb){result.busy=true;result.reason="The preceding frame-generation buffer is still in flight";return result;}
  try{@try{
   if(impl->preparedResources&&(!graph||graph->failed.load()||graph->ctx.sourceExtent.width!=source.width||graph->ctx.sourceExtent.height!=source.height)){result.busy=true;result.reason="LSFG resources require preparation";return result;}
-  if(impl->preparedResources&&graph->frames&&frameId>graph->lastFrame+1){graph->frames=0;graph->lastFrame=0;}
-  if(!graph||graph->failed.load()||(graph->frames && frameId>graph->lastFrame+1)||graph->ctx.sourceExtent.width!=source.width||graph->ctx.sourceExtent.height!=source.height){graph=std::make_shared<Graph>(impl->model,impl->config,source.width,source.height);impl->graph=graph;++impl->graphBuilds;}
+  // A gap or a restarted sequence is a history cut; only a repeated frame ID is rejected.
+  if(impl->preparedResources&&graph->frames&&(frameId>graph->lastFrame+1||frameId<graph->lastFrame)){graph->frames=0;graph->lastFrame=0;}
+  if(!graph||graph->failed.load()||(graph->frames&&(frameId>graph->lastFrame+1||frameId<graph->lastFrame))||graph->ctx.sourceExtent.width!=source.width||graph->ctx.sourceExtent.height!=source.height){graph=std::make_shared<Graph>(impl->model,impl->config,source.width,source.height);impl->graph=graph;++impl->graphBuilds;}
   if(!graph->pool->ready()){result.busy=!graph->pool->failed();result.reason=graph->pool->failed()?graph->pool->failure():"Initializing LSFG image storage";return result;}
   result.graphBuilds=impl->graphBuilds;
-  if(graph->frames&&frameId<=graph->lastFrame){result.reason="Frame IDs must increase for temporal history";return result;}
+  if(graph->frames&&frameId==graph->lastFrame){result.reason="Frame IDs must increase for temporal history";return result;}
   graph->busy.store(true);graph->activeCommands=cb;auto lease=std::make_shared<CompletionLease>([graph](bool success){if(!success)graph->failed.store(true);graph->busy.store(false);});
   [cb addCompletedHandler:^(id<MTLCommandBuffer>completed){lease->finish(completed.status==MTLCommandBufferStatusCompleted);}];
   result.dispatches=graph->encode(cb,source,outputs,plan);result.encoded=true;result.ready=graph->frames>=2;result.generated=result.ready?outputs.size():0;result.historyFrames=++graph->frames;graph->lastFrame=frameId;

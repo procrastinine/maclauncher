@@ -1466,7 +1466,7 @@ EffectExecutionSelection EffectPlanExecutor::buildSnapshot(const ShaderFrame &in
                 released(node.id);
                 if(!generator){const auto pending=impl->pendingGenerations.find(node.id);if(pending!=impl->pendingGenerations.end()&&pending->second.algorithmIdentity==algorithmIdentity){
                     const bool sameContract=pending->second.identity==pendingIdentity&&(!generationRequiresScene(node.method)||pending->second.guideKey==impl->guideKey);
-                    if(!pending->second.acceptedResource||sameContract){const auto status=pending->second.encoder->preparationStatus();if(status.busy)throw ScenePreparing(status.reason,[encoder=pending->second.encoder]{return encoder->preparationStatus();});generator=pending->second.encoder;acceptedGenerator=pending->second.acceptedResource;reusedGenerator=acceptedGenerator;if(sameContract)stageState=pending->second.state;}
+                    if(!pending->second.acceptedResource||sameContract){const auto status=pending->second.encoder->preparationStatus();if(status.busy)throw ScenePreparing(status.reason,[encoder=pending->second.encoder]{return encoder->preparationStatus();});generator=pending->second.encoder;acceptedGenerator=pending->second.acceptedResource;reusedGenerator=acceptedGenerator;if(sameContract)stageState=pending->second.state;else historySource=pending->second.state;}
                 }}
                 if(!generator){
                     generator=makeGenerationEncoder(next->device,node.method,*config.generation);
