@@ -40,12 +40,13 @@ function installation(directory) {
   fs.writeFileSync(executablePath, "immutable wine"); fs.writeFileSync(serverPath, "immutable server");
   return { installDir, wineRoot, executablePath, serverPath, needsRosetta: false, capabilities: { msync: true, esync: false } };
 }
-function adapters(install) {
+function adapters(install, { included = true } = {}) {
   let version = "WS12WineSikarugir11.0_1";
   const calls = [], graphicsCalls = [];
   return { calls, graphicsCalls, setVersion: value => { version = value; },
     resolveTranslators: async (_install, runtime, context) => {
-      const selected = { id: "fixture-dxmt", engine: "dxmt", component: "d3d-renderer", form: "builtin", root: install.wineRoot, files: [], source: "synthetic Template" };
+      const selected = { id: "fixture-dxmt", engine: "dxmt", component: "d3d-renderer", form: "builtin", root: install.wineRoot, files: [], source: "synthetic Template",
+        ...(included ? { included: true } : { managerId: "dxmt", runtimeVersion: "fixture" }) };
       const plan = require("../src/modules/shared/runtime/translator-plan").resolvePlan({ runtime, choices: [selected], selections: { "d3d-renderer": selected.id } });
       plan.layout = require("../src/modules/shared/runtime/wine-layout").wineLayout(install);
       context.translatorPlan = plan; return plan;
@@ -373,6 +374,15 @@ test("Advanced-only temporal selection reaches the Wine launch camera bridge", a
   assert.equal(dependencies.graphicsCalls[0].settings.dlss, true);
 });
 
+test("an explicitly selected DXMT version enables game integration without the setting", async t => {
+  const directory = fixture(t), entry = game(directory);
+  for (const [included, enabled] of [[true, false], [false, true]]) {
+    const dependencies = adapters(installation(directory), { included });
+    await Launch.prepareLaunch(entry, { userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: { dlss: false } }, dependencies);
+    assert.equal(dependencies.graphicsCalls[0].settings.dlss, enabled, included ? "the Template's own DXMT follows the setting" : "a DXMT version from Runtimes forwards");
+    assert.equal(dependencies.graphicsCalls[0].settings.dlssOptional === true, enabled);
+  }
+});
 test("inactive shared graphics still inspect automatic XeSS compatibility without enabling Streamline", async t => {
   const directory = fixture(t), entry = game(directory), dependencies = adapters(installation(directory));
   entry.graphics = {temporalMethod: "off"};
