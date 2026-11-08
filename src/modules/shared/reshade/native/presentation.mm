@@ -88,7 +88,7 @@ std::string legacyInputIdentity(const macfx::LivePacket&packet){
 }
 }
 struct macfx::FramePresenter::Impl:std::enable_shared_from_this<Impl>{
- CAMetalLayer*layer;void*owner;PresenterConfig config;ImageColorSpace colorSpace=ImageColorSpace::LegacySDR;ImageRetry frameRetry;id<MTLCommandQueue>queue;id<MTLRenderPipelineState>flipPipeline,motionPipeline;dispatch_queue_t worker;dispatch_source_t wakeup=nullptr;CVDisplayLinkRef link=nullptr;
+ CAMetalLayer*layer;void*owner;PresenterConfig config;ImageColorSpace colorSpace=ImageColorSpace::LegacySDR;ImageRetry frameRetry;id<MTLCommandQueue>queue,displayQueue;id<MTLRenderPipelineState>flipPipeline,motionPipeline;dispatch_queue_t worker;dispatch_source_t wakeup=nullptr;CVDisplayLinkRef link=nullptr;
  std::unique_ptr<PresentationDisplayLink>metalLink;std::atomic<bool>metalTiming{false};bool metalTimingUnavailable=false;std::atomic<uint64_t>timingEpoch{0};
  std::mutex displayDrawableMutex;id<CAMetalDrawable>displayDrawable=nil;
  ImageColorDescription sourceColor,outputColor;MTLPixelFormat graphFormat=MTLPixelFormatInvalid;std::shared_ptr<ColorEncoder>colorEncoder;std::atomic<float>displayHeadroom{1};
@@ -212,6 +212,17 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
    if(!queue)privateQueueUnavailable.store(true);
   }return queue;
  }
+ // Display copies run on their own queue. Image-pair plans process their rows
+ // on the private queue, so a display copy queued there would wait behind the
+ // next source frame's processing, and every image of a generated interval
+ // would reach the display in one refresh. A batch is delivered only after its
+ // processing completed, so these copies read finished images.
+ id<MTLCommandQueue> displayCommandsQueue(){
+  CAMetalLayer *layer=layerSnapshot();
+  std::lock_guard lock(privateQueueMutex);if(stopping.load())return nil;
+  if(!displayQueue&&queue)displayQueue=[layer.device newCommandQueue];
+  return displayQueue?:queue;
+ }
  void retryPrivateQueue(){std::lock_guard lock(privateQueueMutex);privateQueueUnavailable.store(false);generationUnavailable=false;}
  void displayUpdate(uint64_t epoch,id<CAMetalDrawable> drawable,double target,unsigned rate){
   if(stopping.load()||epoch!=timingEpoch||!metalTiming.load())return;
@@ -295,7 +306,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
  }for(auto&value:cancelled)value->cancel();
   // Already-submitted batches retain their exact images/execution. The failed
   // identity remains cheap metadata; stopped owners keep no queue/model graph.
-  {std::lock_guard lock(privateQueueMutex);queue=nil;}planTarget=nil;generator.reset();generationAdmission.reset();execution.reset();plans.reset();
+  {std::lock_guard lock(privateQueueMutex);queue=nil;displayQueue=nil;}planTarget=nil;generator.reset();generationAdmission.reset();execution.reset();plans.reset();
  }
  void schedule(bool visibilityChange=false){if(stopping.load()||!visibilityChange&&!outputVisible.load(std::memory_order_acquire)||pumpQueued.exchange(true))return;auto self=shared_from_this();dispatch_async(worker,^{@autoreleasepool{self->pump();}});}
  void failWithoutLock(const std::string&reason){if(status.reason!=reason)nativeLog("Graphics presentation: "+reason);status.reason=reason;}
@@ -402,7 +413,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   {std::lock_guard lock(mutex);if(inFlight||holdActive){result.busy=true;result.reason="The previous graphics commands are retiring";return false;}
    retireDelivery();pool.clear();generator.reset();pacing.reset();generationAdmission.reset();admittedGenerator=nullptr;admittedGenerationSequence=0;generationRetry.reset();generationBudgetOwner=nullptr;frameRetry.reset();
    historyReady=false;generationEnabled=false;++generationSequence;publication.reset();failedPublication.reset();status.reason.clear();}
-  {std::lock_guard lock(privateQueueMutex);queue=nil;privateQueueUnavailable.store(false);generationUnavailable=false;}
+  {std::lock_guard lock(privateQueueMutex);queue=nil;displayQueue=nil;privateQueueUnavailable.store(false);generationUnavailable=false;}
   // The output layer keeps its completed image. New resources/history are
   // prepared against the changed request without changing source IDs or time.
   resetPlans();execution.reset();planTarget=nil;appliedControls=~uint64_t(0);legacyInput.clear();
@@ -820,7 +831,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   auto self=shared_from_this();dispatch_async(worker,^{@autoreleasepool{
    bool committed=false;
    @try{try{std::shared_ptr<Batch>image;{std::lock_guard<std::mutex>lock(self->mutex);if(!self->stopping.load()&&self->replayEnabled)image=self->completedReplay;}
-    if(image){CAMetalLayer *layer=self->layerSnapshot();auto drawable=self->outputDrawable(layer);if(drawable){auto commands=[self->privateCommandsQueue() commandBuffer];if(commands){ownPresentationBuffer(commands);
+    if(image){CAMetalLayer *layer=self->layerSnapshot();auto drawable=self->outputDrawable(layer);if(drawable){auto commands=[self->displayCommandsQueue() commandBuffer];if(commands){ownPresentationBuffer(commands);
      // A replay uses the original ID/time and already finished image. Its
      // real display callback remains the only positive visibility evidence.
      self->encodeFinal(commands,drawable,{image,-1,CACurrentMediaTime(),true},false);
@@ -862,7 +873,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
    {std::lock_guard<std::mutex>lock(mutex);if(holdActive&&!holdResuming)display.reset();}
    if(display&&display->batch->id==lastQueuedFrame&&display->generated==lastQueuedGenerated&&display->subframe==lastQueuedSubframe&&display->due<=lastQueuedTime)display.reset();
    if(display){if(display->generated<0&&!display->batch->output.active())undeliveredReal=display->batch;auto drawable=outputDrawable(layer);if(!drawable){std::lock_guard<std::mutex>lock(mutex);++status.dropped;}else{const auto image=display->generated<0?display->batch->real:display->batch->generated.at(display->generated);if(drawable.texture.width!=display->batch->outputWidth||drawable.texture.height!=display->batch->outputHeight){std::lock_guard<std::mutex>lock(mutex);++status.dropped;}else if(drawable.texture.pixelFormat!=layer.pixelFormat){fail("Presentation pixel format changed before the frame completed");}else{
-     auto commands=[privateCommandsQueue() commandBuffer];if(!commands)throw std::runtime_error("Independent presentation commands are unavailable");ownPresentationBuffer(commands);const bool presented=encodeFinal(commands,drawable,*display,false);[commands commit];if(presented){lastQueuedFrame=display->batch->id;lastQueuedGenerated=display->generated;lastQueuedSubframe=display->subframe;lastQueuedTime=display->due;undeliveredReal.reset();}
+     auto commands=[displayCommandsQueue() commandBuffer];if(!commands)throw std::runtime_error("Independent presentation commands are unavailable");ownPresentationBuffer(commands);const bool presented=encodeFinal(commands,drawable,*display,false);[commands commit];if(presented){lastQueuedFrame=display->batch->id;lastQueuedGenerated=display->generated;lastQueuedSubframe=display->subframe;lastQueuedTime=display->due;undeliveredReal.reset();}
    }}}
   }catch(const std::exception&e){fail(e.what());}}@catch(NSException*e){fail(e.reason.UTF8String?:"Presentation failed");}
   if(undeliveredReal){std::lock_guard<std::mutex>lock(mutex);retireBatch(undeliveredReal);}
