@@ -88,4 +88,4 @@ KosmicKrisp and MacLauncher KosmicKrisp live in **Runtimes → Graphics → Vulk
 
 To pick a driver yourself, use the **Vulkan driver** control in a WINE game's Runtime Settings, or **Vulkan implementation** for Android games. [Choosing a translator](/maclauncher/windows/choosing-a-translator/) walks through which driver suits which kind of game.
 
-Further reading: the [KosmicKrisp reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md), with exact versions, every added feature and the Direct3D feature level rules, and [Graphics translators](/maclauncher/windows/graphics-translators/).
+Further reading: the [KosmicKrisp reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md), with exact versions, every added feature and the Direct3D feature level rules, the [MacLauncher KosmicKrisp source](https://github.com/procrastinine/maclauncher-kosmickrisp), where the adaptations and their build guide live, and [Graphics translators](/maclauncher/windows/graphics-translators/).

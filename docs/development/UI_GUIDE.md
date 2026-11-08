@@ -13,6 +13,8 @@ The main window, called the library window, lists the games and shows the detail
 
 Settings, Runtimes, External and Credits open in separate windows. Save editing, runtime settings and live-variable editing also have their own dedicated windows, while cheat controls open in a modal.
 
+When CrossOver or Sikarugir requests activation during launch, MacLauncher cooperatively yields to a window belonging to that launch's Wine process tree. This initial handoff runs only while the launcher is active and ends if the foreground application changes. It waits at most two minutes for the window and stops when activation is confirmed or the launch ends.
+
 By default the window is up to 1440 × 900, fitted to the usable desktop, and it has a minimum size of 900 × 560. At first the library uses the full width. Selecting a game opens a wide inspector on the right, and switching games keeps row heights stable. When the inspector is closed, or Details is turned off in the toolbar, its space goes back to the library; closing the inspector also returns keyboard focus to the selected row. Each pane scrolls on its own.
 
 In a window 1080 CSS pixels wide or narrower, the library stacks above the inspector, and a short window can scroll the whole layout so that every control stays reachable. Dividers separate the rows and the inspector fields, without nested rounded cards.
