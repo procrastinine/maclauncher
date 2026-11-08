@@ -126,7 +126,7 @@ test("native raw capture serialization omits row padding and never invokes an im
   const capture = fs.readFileSync(path.join(__dirname, "../src/modules/shared/reshade/native/frame-capture.hpp"), "utf8");
   assert.match(capture, /dispatch_async\(captureWriterQueue\(\)/);
 });
-test("float, 10-bit, PQ and HLG outputs are converted to 8-bit sRGB for capture", {skip: !compiler || compiler.status !== 0 ? "clang++ is unavailable" : false}, t => {
+test("SDR float and 10-bit outputs capture as 8-bit sRGB; PQ, HLG and extended outputs as BT.2020 PQ", {skip: !compiler || compiler.status !== 0 ? "clang++ is unavailable" : false}, t => {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-screenshot-color-"));t.after(() => fs.rmSync(work, {recursive: true, force: true}));
   const source = path.join(__dirname, "../src/modules/shared/reshade/native/test/screenshot-color.mm"), binary = path.join(work, "screenshot-color");
   const build = spawnSync("xcrun", ["clang++", "-x", "objective-c++", "-std=c++20", "-fobjc-arc", "-Wall", "-Werror", source, "-o", binary,
