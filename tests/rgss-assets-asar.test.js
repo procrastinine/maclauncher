@@ -14,7 +14,7 @@ async function fixture(t, unpacked, heldStats) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-rgss-asar-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const source = path.join(root, "source"), moduleRoot = path.join(source, "src", "modules", "rgss");
-  for (const relative of ["assets.js", "rgss-utils.js", "overlays/kawariki/patches-extra.rb", "../shared/copy-file.js", "../shared/file-time.js"]) {
+  for (const relative of ["assets.js", "rgss-utils.js", "overlays/kawariki/patches-extra.rb", "../shared/runtime/guards.js", "../shared/copy-file.js", "../shared/file-time.js"]) {
     const destination = path.join(moduleRoot, relative); fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.copyFileSync(path.join(__dirname, "../src/modules/rgss", relative), destination);
   }

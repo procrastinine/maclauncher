@@ -120,7 +120,7 @@ test('ART packages omit external images and Cargo products, materialize in-tree 
   packageArtAdapter({...options,commonDeclaration,output:explicitOutput});
   const mismatch = {...commonDeclaration,manifestSha256:'a'.repeat(64),
     files:inventory.map(row => row.path === 'runtime.json' ? {...row,sha256:'a'.repeat(64)} : row)};
-  assert.throws(() => packageArtAdapter({...options,commonDeclaration:mismatch,output:path.join(root,'wrong-notices')}), /notice metadata differs/);
+  assert.throws(() => packageArtAdapter({...options,commonDeclaration:mismatch,output:path.join(root,'wrong-notices')}), /common runtime differs from its producer manifest/);
   fs.writeFileSync(path.join(commonRoot,'runtime.json'), originalCommon);
 
   const secret = write('outside/private-data', 'Outside the immutable supplier');

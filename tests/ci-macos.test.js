@@ -31,7 +31,8 @@ test('packaging and repository tests initialize their own declared sources at Gi
   t.after(() => fs.rmSync(repoRoot, { recursive: true, force: true }));
   const declaration = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../build/source-dependencies.json'), 'utf8'));
   const android = 'src/external/maclauncher-android';
-  assert.equal(declaration.submodules.length, 6);
+  assert.equal(declaration.submodules.length, 7);
+  assert.ok(declaration.submodules.includes('src/external/maclauncher-kosmickrisp'), 'Shared driver headers are app source inputs');
   assert.equal(declaration.submodules.includes(android), false, 'Android producer source is not an app packaging input');
   const legacy = 'src/modules/renpy/resources/unren/third_party/unrpyc-legacy';
   assert.deepEqual(declaration.testSubmodules, [android, legacy]);
@@ -42,7 +43,7 @@ test('packaging and repository tests initialize their own declared sources at Gi
   const metadata = path.join(repoRoot, 'build/source-dependencies.json');
   fs.writeFileSync(metadata, JSON.stringify(declaration));
   const calls = [], tool = (...args) => calls.push(args);
-  assert.deepEqual(await main(['sources'], { repoRoot, tool }), { submodules: 6 });
+  assert.deepEqual(await main(['sources'], { repoRoot, tool }), { submodules: declaration.submodules.length });
   assert.deepEqual(await main(['test-sources'], { repoRoot, tool }), { submodules: declaration.submodules.length + declaration.testSubmodules.length });
   const prefix = ['-c', 'submodule.recurse=false', 'submodule', 'update', '--init', '--checkout', '--'];
   assert.deepEqual(calls, [
