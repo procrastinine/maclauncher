@@ -150,3 +150,9 @@ test("a superseded edit aborts managed-host consent before install or config pub
   await assert.rejects(Xess.prepare({...f,xessBinding:binding,signal:controller.signal,confirmRuntimeInstall:async()=>{controller.abort();return true;}}),{name:"AbortError"});
   assert.equal(installs,0);assert.equal(fs.existsSync(binding.config),false);
 });
+test("an installed XeSS provider is identified by its SDK bytes, not by a recorded commit",t=>{
+  const f=fixture(t);f.descriptor.sdk.commit="different";fs.writeFileSync(path.join(f.payloadDirectory,"provider.json"),JSON.stringify(f.descriptor));
+  assert.ok(Xess.resolve(f.root,f));
+  f.descriptor.sdk.sha256="0".repeat(64);fs.writeFileSync(path.join(f.payloadDirectory,"provider.json"),JSON.stringify(f.descriptor));
+  assert.equal(Xess.resolve(f.root,f),null);
+});

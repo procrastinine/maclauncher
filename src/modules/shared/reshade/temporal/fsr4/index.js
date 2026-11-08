@@ -15,8 +15,6 @@ function inspect(root) {
     const legacy =
         SOURCE.legacyPayloads.find(value => value.commit === metadata.commit &&
                                             value.model === metadata.model);
-    if (metadata.commit !== SOURCE.commit && !legacy)
-      return null;
     let profiles;
     if (legacy) {
       if (metadata.profile !== 'exact-fast')
@@ -32,11 +30,7 @@ function inspect(root) {
           JSON.stringify(metadata.profiles) !== JSON.stringify(SOURCE.profiles))
         return null;
       profiles = [...metadata.supportedProfiles ];
-      if (metadata.lite2?.sha256 !== SOURCE.lite2.sha256 ||
-          metadata.lite2?.commit !== SOURCE.lite2.commit ||
-          !fs.statSync(
-                 path.join(directory, 'third_party/fsr411/LICENSE.Lite2.txt'))
-               .isFile())
+      if (metadata.lite2?.sha256 !== SOURCE.lite2.sha256)
         return null;
     }
     const library = path.join(directory, metadata.library),

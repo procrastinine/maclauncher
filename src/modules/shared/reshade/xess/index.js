@@ -9,7 +9,7 @@ function resolve(root,options={}){
     const directory=fs.realpathSync(path.join(root,"xess")),file=path.join(directory,"provider.json"),stat=fs.statSync(file);
     if(!stat.isFile()||stat.size>65536)return null;
     const descriptor=JSON.parse(fs.readFileSync(file,"utf8"));
-    if(descriptor.schema!==1||descriptor.providerABI!==1||descriptor.backend!=="d3d12"||descriptor.architecture!=="x86_64"||descriptor.sdk?.commit!==Source.commit||descriptor.sdk?.sha256!==Source.sha256||descriptor.sdk?.bytes!==Source.bytes||!Array.isArray(descriptor.files)||descriptor.files.length>64)return null;
+    if(descriptor.schema!==1||descriptor.providerABI!==1||descriptor.backend!=="d3d12"||descriptor.architecture!=="x86_64"||descriptor.sdk?.sha256!==Source.sha256||descriptor.sdk?.bytes!==Source.bytes||!Array.isArray(descriptor.files)||descriptor.files.length>64)return null;
     const backends=descriptor.backends||[descriptor.backend],paths=descriptor.hostPaths||{d3d12:descriptor.hostPath};
     if(!Array.isArray(backends)||!backends.length||new Set(backends).size!==backends.length||backends.some(key=>!["d3d12","vulkan"].includes(key)||!relative(paths[key]))||!relative(descriptor.hostPath)||!relative(descriptor.bridge?.windows)||!relative(descriptor.bridge?.unix)||!/^[a-z][a-z0-9-]{1,63}$/.test(descriptor.bridge?.name||""))return null;
     const inventory=new Map();

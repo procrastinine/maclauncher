@@ -11,6 +11,11 @@ guard let path = ProcessInfo.processInfo.environment["MACLAUNCHER_MLX_DLSS_SOURC
   fatalError("Use native/build.sh to prepare the synchronized MLX-DLSS source before building this provider.")
 }
 let upstream = Package.Dependency.package(name: "MLXDLSS", path: path)
+// Producer source trees carry the provider without its tests.
+let tests: [Target] = FileManager.default.fileExists(atPath: Context.packageDirectory + "/Tests/MacLauncherNeuralTests")
+  ? [.testTarget(name: "MacLauncherNeuralTests", dependencies: ["CNeural", "MacLauncherNeural",
+      .product(name: "DLSSMLX", package: "MLXDLSS")])]
+  : []
 
 let package = Package(
   name: "MacLauncherNeural",
@@ -28,7 +33,5 @@ let package = Package(
         .linkedFramework("Metal")]),
     .executableTarget(name: "MacLauncherNeuralVideo", dependencies: [
       .product(name: "DLSSMedia", package: "MLXDLSS")]),
-    .testTarget(name: "MacLauncherNeuralTests", dependencies: ["CNeural", "MacLauncherNeural",
-      .product(name: "DLSSMLX", package: "MLXDLSS")]),
-  ]
+  ] + tests
 )

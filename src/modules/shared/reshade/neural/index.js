@@ -66,7 +66,7 @@ function resolve(root, { platform = process.platform, macOSVersion, graphicsArch
   if (!hostSupported({platform, macOSVersion, hostArchitecture: physicalHost}) || !["arm64","x64","x86_64"].includes(graphicsArchitecture)) return null;
   try {
     const directory = fs.realpathSync(path.join(root, "neural")), descriptor = JSON.parse(fs.readFileSync(path.join(directory, "provider.json"), "utf8"));
-    if (descriptor.providerABI !== Source.providerABI || descriptor.commit !== Source.commit || descriptor.library !== Source.library ||
+    if (descriptor.providerABI !== Source.providerABI || descriptor.library !== Source.library ||
         descriptor.minimumMacOS !== Source.minimumMacOS || descriptor.architectures?.join() !== "arm64" || !Array.isArray(descriptor.files)) return null;
     if(descriptor.operations!=null&&(!Array.isArray(descriptor.operations)||descriptor.operations.some(method=>!Object.hasOwn(OPERATIONS,method)&&!Object.hasOwn(ATTACHMENTS,method))))return null;
     if(descriptor.operations?.some(method=>Object.hasOwn(ATTACHMENTS,method))&&descriptor.estimatedDepthAPI!==1)return null;
