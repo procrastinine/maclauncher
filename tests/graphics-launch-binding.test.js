@@ -112,7 +112,9 @@ function mainFixture(t, {running = true} = {}) {
 }
 function gate() {
   let enter, release;const started = new Promise(resolve => {enter = resolve;}), resumed = new Promise(resolve => {release = resolve;});
-  return {started, release, wait: async () => {enter();await resumed;}};
+  // An operation that fails or finishes before reaching the gate ends the wait with that outcome.
+  const reached = pending => Promise.race([started, Promise.resolve(pending).then(() => assert.fail("The operation finished before reaching its launcher action"))]);
+  return {started, reached, release, wait: async () => {enter();await resumed;}};
 }
 test("main current predicate rejects stop intent, replacement session objects and changed launch identities", async t => {
   const f = mainFixture(t), options = await f.context.gameEffectsOptions(f.entry), bytes = fs.readFileSync(f.file);
@@ -128,7 +130,7 @@ test("main current predicate rejects stop intent, replacement session objects an
 test("main initially stopped inspection cannot adopt a session created during its first await", async t => {
   const f = mainFixture(t, {running: false}), pause = gate();
   f.context.launcherService.runAction = async () => {await pause.wait();return {runtimeId: "native", graphicsInputs: null};};
-  const pending = f.context.gameEffectsOptions(f.entry);await pause.started;f.replace();pause.release();
+  const pending = f.context.gameEffectsOptions(f.entry);await pause.reached(pending);f.replace();pause.release();
   const options = await pending;
   assert.equal(options.running, false);assert.deepEqual([...options.runningPids], []);assert.equal(options.isCurrent(), false);
   assert.notEqual(options.launchBinding.launchId, "replacement");
@@ -140,7 +142,7 @@ for (const boundary of ["active-session-stops", "stopped-session-starts", "stopp
   const plan = {schema: 2, mode: "advanced", enabled: true, video: []};
   const pending = f.handlers.get("launcher:setGameEffects")(null, f.entry.gamePath, plan);
   if (boundary !== "stopped-unchanged") {
-    await pause.started;
+    await pause.reached(Promise.all(f.pendingEdits));
     if (boundary === "active-session-stops") {f.session.stopRequested = true;f.sessions.clear();} else f.replace();
     pause.release();
   }
