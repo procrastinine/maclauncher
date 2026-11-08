@@ -24,4 +24,4 @@ Requests and responses are limited to 1 MiB, source lists to 1024 APKs and encod
 
 `dependencies.mjs --aim-source ... --archives ... --rustc ... --output ...` compiles those two original AIM libraries and emits the dependency JSON. Its archive input supplies checksum-pinned `libc`, `serde_json`, `crc32fast`, `flate2` and `sha2` archives plus their dependency search directories. Both producers remap source paths and retain source checksums.
 
-`source.mjs` creates the corresponding-source archive and notices from the pinned AIM tree, its resolved Cargo lockfile, the supplied crate source cache and Rust distribution notices. These are developer build inputs; ordinary imports execute the included helper directly.
+`source.mjs` creates the corresponding-source archive and notices from the pinned AIM tree, its resolved Cargo lockfile, the supplied crate source cache. These are developer build inputs; ordinary imports execute the included helper directly.

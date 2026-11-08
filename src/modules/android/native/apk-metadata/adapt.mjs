@@ -7,21 +7,23 @@ export function adapt(directory) {
   const file=path.join(directory,'apk.rs'),original=fs.readFileSync(file,'utf8'),begin=original.indexOf('pub struct Apk {'),end=original.indexOf("/// An app's resources:");
   if(begin<0||end<=begin)throw Error('Original APK source boundary changed');
   fs.writeFileSync(file,original.slice(0,begin)+String.raw`pub struct Apk {
-    sources: Vec<Box<FileSource>>,
+    sources: Vec<Files>,
     table: Option<Table>,
-    manifest: Element,
+    manifest: Option<Element>,
     locale: String,
-}
-
-fn source_file(source: &FileSource, name: &str) -> Result<Option<Vec<u8>>> {
-    let archive = Archive::open(source).map_err(|e| bad(e.to_string()))?;
-    let Some(entry) = archive.find(name.as_bytes()) else { return Ok(None) };
-    archive.read(entry, MAX_ENTRY).map(Some).map_err(|e| bad(e.to_string()))
 }
 
 impl Apk {
     pub fn open(path: &Path) -> Result<Apk> {
         Self::open_many(&[path.to_path_buf()], "en-US")
+    }
+
+    /// An already-open APK, including a descriptor transferred over Binder.
+    pub fn from_source(source: Box<dyn ReadAt + Send + Sync>) -> Result<Apk> {
+        let files = Files { source };
+        let table = files.file_if_present("resources.arsc")?
+            .map(|bytes| Table::parse(&bytes)).transpose()?;
+        Ok(Apk { sources: vec![files], table, manifest: None, locale: "en-US".to_owned() })
     }
 
     /// The base and its verified resource/feature splits, in asset order.
@@ -31,8 +33,8 @@ impl Apk {
         let mut manifest: Option<Element> = None;
         let mut package = String::new();
         for (index, path) in paths.iter().enumerate() {
-            let source = Box::new(FileSource::open(path).map_err(|e| bad(e.to_string()))?);
-            let bytes = source_file(&source,"AndroidManifest.xml")?.ok_or_else(||bad("no AndroidManifest.xml"))?;
+            let source = Files::open(path)?;
+            let bytes = source.file_if_present("AndroidManifest.xml")?.ok_or_else(||bad("no AndroidManifest.xml"))?;
             let next = res::xml(&bytes)?;
             let Some(Value::String(name)) = next.named("package") else {return Err(bad("manifest has no package name"))};
             if index == 0 {
@@ -46,13 +48,13 @@ impl Apk {
                     if let Some(base) = manifest.as_mut().and_then(|m|m.children.iter_mut().find(|c|c.name=="application")) {base.children.extend(app.children);}
                 }
             }
-            if let Some(bytes) = source_file(&source,"resources.arsc")? {
+            if let Some(bytes) = source.file_if_present("resources.arsc")? {
                 let next = Table::parse(&bytes)?;
                 if let Some(base) = table.as_mut() {base.append(next)} else {table=Some(next)}
             }
             sources.push(source);
         }
-        Ok(Apk {sources, table, manifest:manifest.ok_or_else(||bad("no base package"))?, locale:locale.to_owned()})
+        Ok(Apk {sources, table, manifest:Some(manifest.ok_or_else(||bad("no base package"))?), locale:locale.to_owned()})
     }
 
     pub fn file(&self, name: &str) -> Result<Vec<u8>> {
@@ -61,15 +63,18 @@ impl Apk {
 
     pub fn file_if_present(&self, name: &str) -> Result<Option<Vec<u8>>> {
         if name == "AndroidManifest.xml" || name == "resources.arsc" {
-            return source_file(&self.sources[0], name);
+            return self.sources[0].file_if_present(name);
         }
         for source in self.sources.iter().rev() {
-            if let Some(bytes) = source_file(source,name)? {return Ok(Some(bytes));}
+            if let Some(bytes) = source.file_if_present(name)? {return Ok(Some(bytes));}
         }
         Ok(None)
     }
 
-    pub fn manifest(&self) -> Result<Element> { Ok(self.manifest.clone()) }
+    pub fn manifest(&self) -> Result<Element> {
+        if let Some(manifest) = &self.manifest { return Ok(manifest.clone()); }
+        res::xml(&self.file("AndroidManifest.xml")?)
+    }
     pub fn table(&self) -> Option<&Table> { self.table.as_ref() }
 }
 
