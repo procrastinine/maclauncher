@@ -1,6 +1,6 @@
 ---
 title: Versions and settings
-description: "Install and switch runtime versions on macOS, set defaults and per-game overrides, add launch arguments, save .command launchers and run games from the command line."
+description: "Install and switch runtime versions on macOS, set defaults and per-game overrides, add launch arguments and environment variables, control each game's network access, save .command launchers and run games from the command line."
 head:
   - tag: title
     content: "Runtime versions and game settings on Mac | MacLauncher"
@@ -8,7 +8,7 @@ sidebar:
   order: 4
 ---
 
-MacLauncher installs and switches the runtime versions that play games on your Mac, and each game can choose its own runtime, version, settings and launch arguments.
+MacLauncher lets you choose the version of everything it runs, and it passes through nearly every option a runtime has. Each game can pick its own runtime and version, change any runtime setting, add launch arguments and environment variables, and decide whether it may go online. This page covers where those choices live: the Runtimes window for versions, the game's inspector for per-game choices, and the Settings window for defaults.
 
 ## The Runtimes window
 
@@ -37,6 +37,8 @@ Some runtimes can use a copy you already have. **Register custom…** adds your 
 
 You don't have to refresh before playing. If a game needs a runtime and no version list has been loaded yet, the download prompt that **Play** shows covers looking up the versions too, and MacLauncher installs the runtime's default version, which is the newest one that runs on your Mac unless you've chosen another. Development builds published through GitHub Actions, such as LÖVE nightlies and MKXP-Z's upstream builds, download without a GitHub account or any developer tools. A MacLauncher Builds package of a project that publishes no releases of its own is listed by the date of the upstream code it was built from, such as **Development build (Oct 28)**. A package with neither an upstream version nor a date is listed by its own version instead, such as **MCLv8**.
 
+When a version you already have can play the game, Play uses it instead of downloading another one. A version that Play installed only because it was the default is tidied away later, once a newer default is installed and no game uses the old one; a version you installed yourself with **Install**, or made the default with **Set default**, stays until you remove it. Downloaded archives are deleted once they're unpacked, so only the installed files take up space.
+
 Downloads run in the background while you keep using the launcher. A download button in the Runtimes window lists everything in progress, with a progress bar and a cancel button for each.
 
 The graphics components are managed the same way, under **Runtimes → Effects**: shader collections, neural models, the upscaling and frame-generation components, and the adapters that pass a game's scene data to them. See [Graphics and effects](/maclauncher/graphics/).
@@ -63,9 +65,15 @@ A gear next to the runtime opens that runtime's settings for this game, such as 
 
 Launch arguments are extra command-line arguments passed to the game, for example `--windowed --name "Example name"`. Quotes keep spaces inside one argument. The arguments stay with the game even if you change its runtime, and shortcuts use them too.
 
+### Translator environment variables
+
+Many runtimes and translators read environment variables, and plenty of their switches exist nowhere else. A game's runtime settings have an **Environment variables** section for the ones it uses: WINE and the graphics translators it loads, the Android engines together with ANGLE and the Vulkan driver, and the PlayStation 5 runtimes. The section follows your other choices, so picking a different translator shows that translator's variables instead.
+
+Values set in **Settings → Environment variables** show up here marked **From Settings**. You can change one for this game, remove it for this game only, or add a variable of your own; names are suggested as you type, each with a short description. **Restore** brings back an inherited value, and **Reset** returns the whole game to the values from Settings. Values are passed exactly as written, without shell expansion, and apply from the next launch. For example, `DXVK_HUD=fps` shows DXVK's frame counter in one game, and `KK_EMULATION=conformance` turns on every emulated feature of [KosmicKrisp](/maclauncher/windows/kosmickrisp/#kk_emulation) for a game that needs it. A row marked **Set by MacLauncher** means MacLauncher sets that variable itself, and its hint explains whether your value replaces MacLauncher's or isn't used. [Runtime patching](/maclauncher/tools/runtime-patching/#4-add-environment-variables) shows this step in context.
+
 ### Network access
 
-Every game runs cut off from the Internet and your local network unless you allow it. A few games need access, for example web games that load their content from a website, and for those the **Network access** checkbox turns it on for this game; the default for newly added games is in **Settings → Launcher**. Changes apply the next time the game starts. The block covers the game and everything it starts, native code included, and if MacLauncher can't put it in place, the game doesn't start.
+Every game runs cut off from the Internet and your local network unless you allow it. A few games need access, for example web games that load their content from a website, and for those the **Network access** checkbox turns it on for this game; the default for newly added games is in **Settings → Launcher**, and it starts off. Changes apply the next time the game starts. The block covers the game and everything it starts, native code included, and if MacLauncher can't put it in place, the game doesn't start. [Network and privacy](/maclauncher/tools/network-and-privacy/#network-access-for-each-game) explains what it does and doesn't cover.
 
 ### Steam client on Play
 
@@ -80,7 +88,7 @@ You can point the game at a different save folder, or reset it to the default. S
 The **Settings** window (Cmd+,) holds preferences, and the only thing in it that goes online is the **Check for Updates…** button. Its sidebar starts with a search field, followed by these sections:
 
 - **Launcher**: appearance (System, Light or Dark), whether the library shows game icons and runtime tags, the default **Network access** for new games, **Steam client on Play**, the [graphics shortcuts and screenshot folder](/maclauncher/graphics/composing-effects/#shortcuts-and-screenshots), **Check for Updates…** with the result of the last check, and **Check for updates at launch**, which is off by default.
-- <span id="environment-variables"></span>**Environment variables**: extra environment variables for the translators and runtimes that games run through, such as CrossOver, Sikarugir, DXVK, KosmicKrisp or the Android engines, with one collapsed block for each. Values set here apply to every game that uses that translator, and a game's **Runtime Settings** can change, add or remove variables for that game alone. Common variables are suggested as you type, each with a short description, and a row marked **Set by MacLauncher** shows when a value replaces one that MacLauncher sets itself.
+- <span id="environment-variables"></span>**Environment variables**: extra environment variables for the translators and runtimes that games run through, such as CrossOver, Sikarugir, DXVK, KosmicKrisp, the Android engines or the PlayStation 5 runtimes, with one collapsed block for each. Values set here apply to every game that uses that translator, and a game's **Runtime Settings** can change, add or remove variables for that game alone. Common variables are suggested as you type, each with a short description, and a row marked **Set by MacLauncher** shows when a value replaces one that MacLauncher sets itself.
 - **Graphics**: the [shader library](/maclauncher/graphics/shaders/#the-shader-library) and your saved [graphics presets](/maclauncher/graphics/composing-effects/#presets), on the **Shaders** and **Presets** tabs.
 - One section per game type, with its **Default runtime** and a tab for each runtime's settings. A tab shows **Modified** when its settings differ from the defaults.
 

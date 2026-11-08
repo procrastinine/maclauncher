@@ -29,7 +29,9 @@ The one the game asks for, when its files name a version, and otherwise the defa
 
 ### Does it change my game files?
 
-No. MacLauncher reads your games where they are. Anything it generates (converted files, caches, the private Windows environments of [WINE](https://www.winehq.org/) games and the launch folders of their DLL adapters, saves kept by MacLauncher, and exports) goes into its own storage under `~/Library/Application Support/maclauncher/`. **Forget** removes that data for a game, and the original files stay put.
+Not on its own. MacLauncher plays your games from where they are, and anything it generates (converted files, caches, the private Windows environments of [WINE](https://www.winehq.org/) games and the launch folders of their DLL adapters, and exports) goes into its own storage under `~/Library/Application Support/maclauncher/`. **Forget** removes that data for a game, and the original files stay put.
+
+Two things can still write to a game folder. The game's engine saves and stores its settings where it always does, which for some engines is the game folder, so a save made in MacLauncher is there when you play the game some other way. A few tools, such as RPG Maker's in-game Tools overlay or Ren'Py's cheat add-ons, also need files in the game folder; MacLauncher tracks those files, shows whether a patch is in place and removes it again with one click. [Patch and tinker tools](/maclauncher/tools/#unchanged-source) explains the principle behind this.
 
 ### Can I keep games on an external drive?
 
@@ -59,11 +61,11 @@ Browser-based games are a big share of all games, and they run on the included [
 
 ### Does MacLauncher collect any data?
 
-No. MacLauncher sends no telemetry. The diagnostics it records go only into its log file on the Mac, where they help trace a problem when troubleshooting, and nothing sends that log anywhere. Anyone can read MacLauncher's source on [GitHub](https://github.com/procrastinine/maclauncher) to confirm this.
+No. MacLauncher sends no telemetry. The diagnostics it records go only into its log file on the Mac, which **Help → Show Log in Finder** opens, where they help trace a problem when troubleshooting, and nothing sends that log anywhere. Anyone can read MacLauncher's source on [GitHub](https://github.com/procrastinine/maclauncher) to confirm this.
 
 ### Does it connect to the Internet?
 
-Only for something you asked for: refreshing a version list, installing a runtime or tool, pressing **Play** for a game whose runtime isn't installed yet (MacLauncher asks first), using a store, or checking for updates. MacLauncher makes no network requests of its own in the background, and installed runtimes work offline. The only exception is one you have to turn on: **Check for updates at launch** in **Settings → Launcher** looks for a new MacLauncher each time it starts, and it's off by default. Games run without Internet or local-network access unless their **Network access** setting allows it, and **Settings → Launcher** sets the default for newly added games.
+Only for something you asked for: refreshing a version list, installing a runtime or tool, pressing **Play** for a game whose runtime isn't installed yet (MacLauncher asks first), using a store, or checking for updates. MacLauncher makes no network requests of its own in the background, and installed runtimes work offline. The only exception is one you have to turn on: **Check for updates at launch** in **Settings → Launcher** looks for a new MacLauncher each time it starts, and it's off by default. Games run without Internet or local-network access unless their **Network access** setting allows it, and **Settings → Launcher** sets the default for newly added games. [Network and privacy](/maclauncher/tools/network-and-privacy/) goes through all of this in more detail.
 
 ### How is MacLauncher updated?
 

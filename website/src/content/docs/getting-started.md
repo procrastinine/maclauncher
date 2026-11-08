@@ -6,7 +6,7 @@ head:
     content: "Install MacLauncher on a Mac and play your first game | MacLauncher"
 ---
 
-MacLauncher needs a Mac running macOS 13 or later, with either Apple Silicon or an Intel processor. Some runtimes need more: Android and iOS games need Apple Silicon, and a few runtimes need a newer macOS (the PlayStation 5 runtime and some Android runtimes need macOS 26, for example). MacLauncher tells you when that's the case, and [Macs and macOS versions](/maclauncher/macs-and-macos/) lists what works where.
+MacLauncher needs a Mac running macOS 13 or later, with either Apple Silicon or an Intel processor. Some runtimes need more: Android, iOS and Nintendo Switch games need Apple Silicon, and a few runtimes need a newer macOS (PlayStation 5 games need macOS 26, for example). MacLauncher simply turns off what your Mac can't run and tells you why, and [Macs and macOS versions](/maclauncher/macs-and-macos/) lists what works where.
 
 :::tip[Look around first]
 The [interactive demo](/maclauncher/demo/) runs the real MacLauncher interface in your browser, with a library of example games. Every button explains what it would do and links to the article about it.
@@ -45,9 +45,11 @@ There are three ways to bring a game into your library:
 - Use **File → Open…** (`⌘O`) or **Add game…** in the toolbar.
 - In Finder, right-click a game and choose **Open With → MacLauncher**.
 
-Usually you add the whole game folder or the game's main executable. MacLauncher also accepts packages directly: `.exe`, `.app`, `.apk`, `.ipa`, `.jar`, `.swf`, `.love`, Switch `.nsp`/`.xci` files, PS5 game folders, DOS programs, videos and more. Installers and self-extracting archives often work too, because MacLauncher can unpack the common ones.
+Usually you add the whole game folder or the game's main executable. MacLauncher also accepts packages directly: `.exe`, `.app`, `.apk`, `.ipa`, `.jar`, `.swf`, `.love`, Switch `.nsp`, `.nsz`, `.xci`, `.xcz` and `.nup` files, PS5 game folders, DOS programs, videos and more. Installers and self-extracting archives often work too, because MacLauncher can unpack the common ones.
 
-On import, MacLauncher reads the files to work out the game's [game type](/maclauncher/background/choosing-a-runtime/#game-types-and-runtimes) (the engine or platform it was made for), the engine version, and which runtime can play it on macOS. Your original files stay where they are.
+A game doesn't even have to be a file you add. **File → Apply Graphics…** picks another app's window, or a whole display, and gives it a library entry of its own, so MacLauncher's [graphics and effects](/maclauncher/graphics/window-graphics/) can run on it.
+
+On import, MacLauncher reads the files to work out the game's [game type](/maclauncher/background/choosing-a-runtime/#game-types-and-runtimes) (the engine or platform it was made for), the engine version, and which runtime can play it on macOS. Your original files stay where they are, and Play runs the game from there.
 
 ## 4. Look around the inspector
 
@@ -56,12 +58,12 @@ Click a game to open its **inspector** on the right, where everything about that
 - **Runtime and version** show what will run the game and which installed version it uses. The default is usually the right one; [Choosing a runtime](/maclauncher/background/choosing-a-runtime/) explains when to change it.
 - **Runtime Settings** holds options for that runtime, such as window size, language, controls or launch flags. These override the global defaults from **Settings** for this game only.
 - **Graphics** adds shaders, upscaling, frame generation and more. See [Graphics and effects](/maclauncher/graphics/).
-- **Tools** has saves, cheats, decompilers and extractors, depending on the game type. See [Tinker tools](/maclauncher/tools/).
-- **Network access** is a per-game switch that can cut the game off from the Internet and your local network.
+- **Tools** has saves, cheats, decompilers and extractors, depending on the game type. See [Patch and tinker tools](/maclauncher/tools/).
+- **Network access** decides whether the game can reach the Internet and your local network. It starts off for new games, and [Network and privacy](/maclauncher/tools/network-and-privacy/#network-access-for-each-game) explains when to turn it on.
 
 ## 5. Press Play
 
-Click **Play**. If the game's runtime isn't installed yet, MacLauncher asks before downloading it, installs it, and then prepares and launches the game without further clicks. Some games take longer the first time while MacLauncher prepares them, for example by converting files, compiling shaders or setting up a private Windows environment. Later launches reuse that work.
+Click **Play**. If the game's runtime isn't installed yet, and no compatible version you already have can play it, MacLauncher asks before downloading it, installs it, and then prepares and launches the game without further clicks. Some games take longer the first time while MacLauncher prepares them, for example by converting files, compiling shaders or setting up a private Windows environment. Later launches reuse that work.
 
 **Stop** ends the game from the launcher if you need to.
 

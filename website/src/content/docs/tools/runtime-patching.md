@@ -16,12 +16,12 @@ This page explains what those pieces do and why a different version can help. It
 
 Windows games draw through Microsoft's Direct3D, and a few draw through [Vulkan](https://www.vulkan.org/). A Mac has neither, because its graphics API is [Metal](https://developer.apple.com/metal/). A **graphics translator** fills that gap by turning each drawing call the game makes into work that Metal understands. Some translators go straight to Metal: [DXMT](https://github.com/3Shain/dxmt) handles Direct3D 10 and 11, and Apple's D3DMetal handles Direct3D 11 and 12. Others, [DXVK](https://github.com/doitsujin/dxvk) for Direct3D 8 to 11 and [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) for Direct3D 12, translate into Vulkan instead.
 
-Vulkan isn't native to the Mac either, so those translators need one more layer. A **Vulkan driver** is a library that implements Vulkan on top of Metal, and the Mac has two of them: [MoltenVK](https://github.com/KhronosGroup/MoltenVK), the long-established one, and [KosmicKrisp](https://docs.mesa3d.org/drivers/kosmickrisp.html), the newer, fully conformant one. A Direct3D 11 game can therefore reach your GPU in more than one way:
+Vulkan isn't native to the Mac either, so those translators need one more layer. A **Vulkan driver** is a library that implements Vulkan on top of Metal, and the Mac has two of them: [MoltenVK](https://github.com/KhronosGroup/MoltenVK), the long-established one, and [KosmicKrisp](https://docs.mesa3d.org/drivers/kosmickrisp.html), the newer, fully conformant one. A Direct3D 11 or 12 game can therefore reach your GPU in more than one way:
 
 ```text
-Direct3D 11 → DXMT                             → Metal
-Direct3D 11 → DXVK → Vulkan → KosmicKrisp      → Metal
-Direct3D 12 → D3DMetal                         → Metal
+Direct3D 11 → DXMT                                → Metal
+Direct3D 11 → DXVK         → Vulkan → KosmicKrisp → Metal
+Direct3D 12 → D3DMetal                            → Metal
 Direct3D 12 → vkd3d-proton → Vulkan → KosmicKrisp → Metal
 ```
 
@@ -29,7 +29,7 @@ WINE takes care of the rest of Windows, such as files, windows, input and sound.
 
 ## Why a different version helps
 
-Translators are active projects. DXVK, vkd3d-proton and DXMT publish new releases regularly, each of which can implement more of Direct3D, fix how particular games draw and make common work faster. A WINE distribution, on the other hand, keeps the versions it shipped with, and every game in it uses them. A newer game may need a Direct3D feature that only a later translator implements. Translation is also never perfect, so a game that draws wrongly with one translator can look right with another, which is why the choice is worth making game by game.
+Translators are active projects. DXVK, vkd3d-proton and DXMT publish new releases regularly, and a release can implement more of Direct3D, fix how particular games draw or simply run faster. A WINE distribution, on the other hand, keeps the versions it shipped with, and every game in it uses them. A newer game may need a Direct3D feature that only a later translator implements. Translation is also never perfect, so a game that draws wrongly with one translator can look right with another, which is why the choice is worth making game by game.
 
 The Vulkan driver matters just as much. Current releases of DXVK and vkd3d-proton ask for Vulkan features that MoltenVK, the driver CrossOver includes, doesn't have, and they refuse to start on it. MacLauncher's own build of KosmicKrisp adds those features, so pairing it with a current DXVK or vkd3d-proton puts a game on the same graphics path that Valve's [Proton](https://github.com/ValveSoftware/Proton) uses on Linux and the Steam Deck. Direct3D 12 games then reach Direct3D feature level 12_1 through vkd3d-proton, which [KosmicKrisp](/maclauncher/windows/kosmickrisp/#direct3d-12-games-through-vkd3d-proton) explains.
 

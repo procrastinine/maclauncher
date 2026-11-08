@@ -47,7 +47,7 @@ export default defineConfig({
     starlight({
       title: "MacLauncher",
       disable404Route: true,
-      description: "Play games on macOS with native runtimes, a Metal graphics and effects layer, and tools for tinkering.",
+      description: "Play games on macOS with native runtimes, a Metal graphics and effects layer, and patch and tinker tools.",
       logo: { src: "./src/assets/maclauncher.svg" },
       favicon: "/favicon.svg",
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/procrastinine/maclauncher" }],

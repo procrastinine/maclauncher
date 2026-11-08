@@ -1,6 +1,6 @@
 ---
 title: KosmicKrisp
-description: "Why KosmicKrisp, the conformant Vulkan 1.4 driver on Metal 4, matters for WINE and Android games on Apple Silicon Macs, how it compares with MoltenVK, what MacLauncher's own build adds for DXVK, vkd3d-proton and ANGLE, how Direct3D 12 games run through vkd3d-proton at feature level 12_1, and which build each game loads."
+description: "Why KosmicKrisp, the conformant Vulkan 1.4 driver on Metal 4, matters for WINE and Android games on Apple Silicon Macs, how it compares with MoltenVK, what MacLauncher's own build adds for DXVK, vkd3d-proton and ANGLE, how Direct3D 12 games run through vkd3d-proton at feature level 12_1, how Apple GPU families, the Performance and Conformance modes and KK_EMULATION work, and which build each game loads."
 head:
   - tag: title
     content: "KosmicKrisp vs MoltenVK on Mac: Vulkan on Metal 4 for WINE and Android games | MacLauncher"
@@ -22,15 +22,22 @@ The older driver, [MoltenVK](https://github.com/KhronosGroup/MoltenVK), has carr
 
 KosmicKrisp takes a different line. It [passed the Khronos Group's conformance tests for Vulkan 1.4](https://www.khronos.org/news/permalink/kosmickrisp-achieves-vulkan-1.4-conformance-on-apple-silicon), so it implements the full API without a portability subset. Khronos now recommends it, too: the [MoltenVK README](https://github.com/KhronosGroup/MoltenVK) now says that Khronos has deprecated MoltenVK, that the community maintains it on a best-effort basis, and that Khronos recommends KosmicKrisp for Vulkan on Apple Silicon Macs. MoltenVK stays the recommendation for Intel Macs and iOS.
 
-MacLauncher keeps both drivers. MoltenVK covers Intel Macs, macOS versions before 26 and virtual machines, it's the driver that comes with CrossOver, and natively executed Android apps need it for their shared graphics buffers. KosmicKrisp covers Apple Silicon Macs from macOS 26, where it lets more of the Vulkan routes run.
+MacLauncher keeps both drivers. MoltenVK covers Intel Macs, macOS versions before 26 and virtual machines, it's the driver that comes with CrossOver, and natively executed Android apps need it for their shared graphics buffers. KosmicKrisp covers Apple Silicon Macs from macOS 26, where it lets more of the Vulkan routes run. On those Macs it's the Vulkan driver that AnyPS5 and Prosper use by default, Sikarugir's automatic choice for Windows games is the KosmicKrisp in its own Template, and Android games can pick it too.
 
 ## MacLauncher KosmicKrisp
 
-Conformance means KosmicKrisp does everything Vulkan 1.4 requires, but the translators ask for more than the required core. DXVK insists on wireframe drawing, vkd3d-proton insists on transform feedback and a particular texel buffer alignment, and ANGLE wants transform feedback before it offers the geometry and tessellation shaders of OpenGL ES 3.2. Upstream KosmicKrisp has none of those, so DXVK and vkd3d-proton won't start on it at all.
+Conformance means KosmicKrisp does everything Vulkan 1.4 requires. The translators, however, ask for more than the required core. DXVK insists on wireframe drawing, vkd3d-proton insists on transform feedback and a particular texel buffer alignment, and ANGLE wants transform feedback before it offers the geometry and tessellation shaders of OpenGL ES 3.2. Upstream KosmicKrisp has none of those, so DXVK and vkd3d-proton won't even start on it.
 
-MacLauncher therefore publishes **MacLauncher KosmicKrisp**, its own build of KosmicKrisp from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds). It takes the same Mesa source and adds the missing Vulkan features, each one implemented on Metal. Besides what the translators require, it brings sparse resources, which Direct3D's tiled resources need, along with conservative rasterization, mesh and task shaders, 64-bit floating point computed in software, pipeline statistics, and a much larger push constant space. The build comes for Apple Silicon and Intel processes alike, and both need an Apple Silicon Mac with macOS 26.
+To close the gap, MacLauncher publishes **MacLauncher KosmicKrisp**, its own build of KosmicKrisp from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds). It starts from the same Mesa source and adds optional Vulkan features that upstream lacks, each one implemented on Metal so that what the driver reports actually works. Most of them are what DXVK and vkd3d-proton need to run Direct3D games properly:
 
-The Khronos conformance belongs to the upstream driver that was submitted for testing. MacLauncher's build is based on that driver but adds to it, so it has no conformance submission of its own.
+- transform feedback with geometry streams, mesh and task shaders, and geometry and tessellation shaders together with multiview;
+- pixel and sample interlock, which the translators use for Direct3D's rasterizer-ordered views;
+- conservative rasterization, depth bias control, wireframe and point fill, and wide or stippled lines;
+- sparse resources where Metal supports them, which Direct3D's tiled resources rest on, plus descriptor heaps and device-generated commands;
+- 64-bit floating point in shaders, computed in software;
+- pipeline statistics, a much larger push constant space and caches of the Metal shaders it generates.
+
+The build comes for Apple Silicon and Intel processes alike, and both need an Apple Silicon Mac with macOS 26. The Khronos conformance belongs to the upstream driver that was submitted for testing. MacLauncher's build is based on that driver but adds to it, so it has no conformance submission of its own. The [feature list](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md#features-of-maclauncher-kosmickrisp) in the KosmicKrisp reference names every added feature.
 
 ## Direct3D 12 games through vkd3d-proton
 
@@ -41,6 +48,10 @@ Creating the device is only the first hurdle. Direct3D 12 also sorts graphics ha
 Feature level 12_2, the highest, stays out of reach in both the performance and the conformance mode described below. Besides ray tracing and mesh shaders, it needs variable rate shading, which no KosmicKrisp build provides, so turning on more emulated features doesn't raise the level past 12_1. A game that insists on 12_2 won't start this way.
 
 To use this route, pick vkd3d-proton for **Direct3D 12** in the game's Runtime Settings and leave the **Vulkan driver** on its automatic choice. That choice pairs vkd3d-proton with MacLauncher KosmicKrisp, and Play offers the driver if it isn't installed yet. If you pick another driver yourself, MacLauncher warns that KosmicKrisp is recommended for vkd3d-proton. Sikarugir and the usual CrossOver releases run WINE as an Intel program, so they load the Intel build of MacLauncher KosmicKrisp under Rosetta, which still needs an Apple Silicon Mac with macOS 26 or later. Together with DXVK for older Direct3D versions, this is the graphics path that Proton takes on Linux, which [Proton's graphics path on a Mac](/maclauncher/windows/graphics-translators/#protons-graphics-path-on-a-mac) explains. A game that calls DLSS can also hand its scene data to MacLauncher's upscalers along this route, as [Effects and upscaling](/maclauncher/windows/effects-and-upscaling/#dlss-games-and-the-selected-upscaler) explains. The [Direct3D feature level rules](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md#direct3d-feature-levels) in the KosmicKrisp reference list the exact conditions for each level.
+
+## Direct3D 8 to 11 through DXVK
+
+[DXVK](https://github.com/doitsujin/dxvk), Proton's translator for Direct3D 8 to 11, works the same way. Its current releases need Vulkan features that MoltenVK and upstream KosmicKrisp lack, so they don't start on either driver, and MoltenVK runs only the DXVK-macOS builds made for it. When you pick a DXVK version installed from Runtimes for a game, MacLauncher DXVK included, and leave the **Vulkan driver** on Automatic, MacLauncher pairs it with MacLauncher KosmicKrisp. The game then goes through Proton's graphics path, with KosmicKrisp turning the Vulkan work into Metal at the end, instead of D3DMetal or DXMT. It's your choice, per game, and the WINE underneath is still CrossOver's or Sikarugir's. [Runtime patching](/maclauncher/tools/runtime-patching/#step-by-step) walks through making that choice.
 
 ## At a glance
 
@@ -55,13 +66,43 @@ To use this route, pick vkd3d-proton for **Direct3D 12** in the game's Runtime S
 
 The full feature comparison lives in the [KosmicKrisp reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md#compatibility-with-moltenvk).
 
+## Apple GPU families
+
+KosmicKrisp is built on Metal 4, so it needs macOS 26 and an Apple GPU from the Apple7 family or later, which covers every M-series Mac. Apple sorts its GPUs into families, and a newer family can do some things in hardware that an older one has to emulate:
+
+| GPU family | Mac chips |
+| --- | --- |
+| Apple7 | M1 |
+| Apple8 | M2 |
+| Apple9 | M3 and M4 |
+| Apple10 | M5 |
+| Apple11 | M6 |
+
+MacLauncher KosmicKrisp reads your Mac's family when a game creates its Vulkan device and takes Metal's native path wherever that family has one. On M5 and later, for example, sampler LOD bias and minimum and maximum sampler filtering go straight to Metal, while older chips do them in the shader, and textures can be 32,768 pixels wide instead of 16,384. On M2 and later, 64-bit image atomics are available as well. You don't have to set anything for this: each Mac gets the fast path its GPU supports, and the [Apple GPU family notes](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md#apple-gpu-families) list the details.
+
 ## Performance and conformance
 
-MacLauncher KosmicKrisp can provide Vulkan features that Metal does not have directly by reproducing their behavior in shaders or extra GPU passes. Some of these features are needed by Direct3D translators; others add work only for applications that use them.
+Some Vulkan features have no Metal equivalent at all, and MacLauncher KosmicKrisp reproduces them in shaders or extra GPU passes. Those emulations cost time, so each one is a named switch, and two modes decide which switches start out on:
 
-**Performance** is the default mode. It keeps the emulations that common translators need and leaves several optional, more expensive features off. **Conformance** enables every emulation in the registry, so applications can use the additional Vulkan capabilities, at the cost of their extra shader work, memory or rendering passes. Selecting this mode does not give MacLauncher's adapted build a separate Khronos conformance certification.
+- **Performance**, the default, turns off every emulated feature that Direct3D games don't need. A switch stays on only when turning it off would lower the shader model or feature level that DXVK or vkd3d-proton report, stop either from starting, or break a Direct3D feature they translate, such as ExecuteIndirect. Denormal handling, for example, stays on, because without it vkd3d-proton drops from shader model 6.2 and up to 6.1. Software 64-bit floating point, on the other hand, is off, because neither translator requires it.
+- **Conformance** turns every emulated feature on, so applications can use everything the build offers, at the cost of the extra shader work, memory or rendering passes. It doesn't give MacLauncher's adapted build a Khronos certification of its own.
 
-The choice can also be made per feature. The `KK_EMULATION` environment variable, set for every game in **Settings → Environment variables** or for one game in its **Runtime Settings**, accepts a mode followed by individual changes, such as `performance,+float64`, to enable software double-precision arithmetic while keeping the other performance defaults. A feature that is already native on the Mac keeps its native implementation. The [performance and conformance reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md#performance-and-conformance) lists every switch, its default, its cost and what becomes unavailable when it is off.
+A feature that your Mac's GPU family runs natively stays on in both modes, because it costs nothing extra. Ray tracing is reported only when you ask for it, with `+ray_tracing` or `conformance`.
+
+### KK_EMULATION
+
+The `KK_EMULATION` environment variable chooses the mode and individual switches. Like any environment variable, it can be set for every game in **Settings → Environment variables** or for one game in its runtime settings. Its value is a list of words separated by commas, read from left to right:
+
+| Value | Effect |
+| --- | --- |
+| `conformance` | Turns every emulated feature on. |
+| `performance,-denorm_preserve` | Keeps the performance defaults but turns denormal preservation off. |
+| `performance,+float64` | Keeps the performance defaults and adds software 64-bit floating point. |
+| `apple10` or `mode=10` | Turns on every switch that M5 runs natively, emulating them on an M1 to M4. |
+| `+ray_tracing` | Adds ray tracing to the performance defaults. |
+| `conformance,-ray_tracing` | Everything except ray tracing. |
+
+A chip preset like `apple10` is handy for checking how a game behaves with the feature set of a newer Mac, while a single `-name` helps narrow down which emulation a game trips over. The [performance and conformance reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md#performance-and-conformance) lists every switch with its default, its cost and what becomes unavailable when it's off.
 
 ## Shader compilation
 

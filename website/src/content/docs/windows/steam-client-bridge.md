@@ -1,6 +1,6 @@
 ---
 title: Steam client bridge
-description: "How MacLauncher connects Windows Steam games in CrossOver and Sikarugir to the Steam client for Mac: when Play offers the Steam client bridge, what Play Without Steam does, how to check that a game used it, and how to remove it in Runtimes."
+description: "How MacLauncher connects Windows Steam games in CrossOver and Sikarugir to the Steam client for Mac, without Windows Steam in the bottle and without patching Steam: when Play offers the Steam client bridge, what Play Without Steam does, how to check that a game used it, and how to remove it in Runtimes."
 head:
   - tag: title
     content: "Run Windows Steam games with the Steam client for Mac in WINE | MacLauncher"
@@ -11,6 +11,12 @@ sidebar:
 Windows games that use Steam's features carry Valve's Steam API, a `steam_api.dll` or `steam_api64.dll` file next to the game, which expects a Windows Steam client to answer it. Under WINE there's no Windows Steam client, so a game that checks your account or its ownership can refuse to start. The **Steam client bridge** connects the game's own Steam API to the Steam client for Mac, so Steam itself answers those requests. It works the same way in CrossOver and Sikarugir.
 
 The game keeps running in its usual CrossOver bottle or Sikarugir environment, with the same saves and settings. The bridge's own files load from MacLauncher's runtime storage outside the bottle, and MacLauncher writes only the few Steam registry entries that the bridge needs into the bottle; it makes no copy of the bottle. The game's files, its Steam API and its copy protection stay as they are, and the bridge doesn't change the CrossOver or Sikarugir app or the Steam client for Mac.
+
+## Why a bridge
+
+Without the bridge, the usual way to play a Windows Steam game on a Mac is to install the Windows version of Steam inside CrossOver and keep it running next to the game. That means a second Steam client with its own sign-in, its own updates and its own space in the bottle, running under WINE. The bridge skips all of that: the Steam app you already use on your Mac answers the game, so you never run Windows Steam in CrossOver or Sikarugir. The one requirement is that the Mac Steam app is running while you play, and MacLauncher can start it for you when you press Play.
+
+The community project [NotProton](https://github.com/NotProtonNot/NotProton) makes a similar connection by patching Steam. MacLauncher's bridge builds on the same foundation, the `lsteamclient` library from Valve's [Proton](https://github.com/ValveSoftware/Proton) with NotProton's macOS changes, but it leaves Steam untouched, following MacLauncher's [unchanged source](/maclauncher/tools/#unchanged-source) principle. Most Steam updates therefore don't affect it, and it works for both CrossOver and Sikarugir.
 
 ## When Play offers it
 

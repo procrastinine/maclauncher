@@ -15,7 +15,7 @@ A game launcher sits between you, your games and the Internet, so it's fair to a
 Every network request MacLauncher makes follows something you did. Nothing happens in the background, and simply opening a window or a tab doesn't go online either, because lists you've loaded before come from a local cache. The actions that do reach the network are these:
 
 - In **Runtimes**, **Load versions** or **Reload versions** fetches a version list, and **Install** downloads the version you selected. Shader collections and neural models under **Runtimes → Effects** work the same way.
-- **Play** for a game whose runtime, translator or tool isn't installed yet first shows a dialog naming what it will download, and only downloads after you agree. Preparation and the launch then carry on by themselves.
+- **Play** for a game whose runtime, translator or tool isn't installed yet first shows a dialog naming what it will download, and only downloads after you agree. Preparation and the launch then carry on by themselves. An inspector tool or a patch that needs a download asks the same way, and a missing video plugin is offered with a **Skip** button.
 - In the **External** window, connecting to a store, reloading a list, refreshing a game's versions and downloading a game use the network. So does **Fetch previous versions**, which asks [SteamDB](https://steamdb.info/) for a Steam game's older builds.
 - **Check for Updates…**, in the MacLauncher menu and in **Settings → Launcher**, asks GitHub for a newer release.
 
