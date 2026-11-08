@@ -1,10 +1,24 @@
-# Network isolation
+# Network access and isolation
 
-Network isolation blocks a game's Internet and local-network access. It is controlled per game and applies to every runtime.
+Two separate things decide what reaches the network: MacLauncher's own requests, which follow explicit actions, and each game's network access, which network isolation can block for every runtime.
 
-## Setting
+## MacLauncher's own requests
 
-Each game's inspector has one **Network access** checkbox, which applies to all of the game's runtimes; runtime settings have no separate network controls. A change takes effect on the next launch.
+MacLauncher contacts a server only after an explicit action, such as **Refresh** or **Install** in **Runtimes**, a download approved during Play or an inspector action, connecting or downloading in a store tab of **External**, an account sign-in, or **Check for Updates…**. [Downloads and offline use](README.md#downloads-and-offline-use) lists these actions and the offline behavior of installed runtimes. Starting the app, opening its windows and tabs, detection, runtime status and runtime selection read only local state. The one request that can run at startup is the [update check](../UPDATES.md), and only after **Check for updates at launch** has been turned on in **Settings → Launcher**.
+
+MacLauncher has no telemetry, analytics or crash reporting. The diagnostics it records stay in local log files, for troubleshooting on the Mac:
+
+| Location | Contents |
+| --- | --- |
+| `~/Library/Application Support/maclauncher/logs/main.log` | The launcher's log, up to 2 MB, with one earlier segment in `main.log.previous`. **Help → Show Log in Finder** reveals it. |
+| `~/Library/Application Support/maclauncher/games/<game ID>/logs/` | The runtime, tool and host logs of one game |
+| `~/Library/Application Support/maclauncher/games/<game ID>/effects/reshade/reshade.log` | The graphics log of a game's current launch, with the previous launch's log in `reshade.log.previous` |
+
+The [data model](../development/DATA_MODEL.md) lists every file under the data folder.
+
+## Per-game network access
+
+Network isolation blocks a game's Internet and local-network access. Each game's inspector has one **Network access** checkbox, which applies to all of the game's runtimes; runtime settings have no separate network controls. A change takes effect on the next launch.
 
 The **Network access** checkbox in **Settings → Launcher** sets the initial value for newly imported games, and it is off by default. Changing it does not change existing games. A game without a saved choice copies the current default once, and saved per-game choices are kept where possible. Some runtimes keep network access off where they cannot run online.
 

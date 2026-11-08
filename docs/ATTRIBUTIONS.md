@@ -132,7 +132,7 @@ The other Android runtimes are [Mac.apk](https://github.com/kksimp/Mac.apk) publ
 
 ## Native libraries and assets
 
-HashLink's JPEG support includes [libjpeg-turbo 1.4.2](https://github.com/libjpeg-turbo/libjpeg-turbo/tree/d8da49effe6460d55239c4c009c57f42d8e4a494). This software is based in part on the work of the Independent JPEG Group. The [complete JPEG notices](../src/modules/hashlink/resources/notices/libjpeg-turbo-1.4.2/provenance.json) ship with the runtime package.
+HashLink's JPEG support includes [libjpeg-turbo 1.4.2](https://github.com/libjpeg-turbo/libjpeg-turbo/tree/d8da49effe6460d55239c4c009c57f42d8e4a494). This software is based in part on the work of the Independent JPEG Group. The [complete JPEG notices](../src/modules/hashlink/resources/notices/libjpeg-turbo-1.4.2/) ship with the runtime package.
 
 Each runtime package includes its dependencies and their license notices, including transitive Rust crates and font licenses. Downloaded packages keep these notices in their installation directories, and the included graphics components and internal helpers keep theirs in the app. [Runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md) describes both.
 

@@ -10,6 +10,14 @@ Each download source also shows a short description of what it publishes. While 
 
 How much one action loads depends on the source. NW.js, Java, Godot and Ren'Py load their complete release lists, up to their limits, with a single **Reload** action. Their manager states set `supportsLatestOnly: false`, so the UI offers no separate **All versions** action for them. Catalogs of GitHub Actions builds whose history spans many pages (MKXP-Z upstream builds, LÖVE nightlies and Butterscotch) have two controls instead: the refresh control runs a short scan that lists the newest successful build, and **All versions** loads the longer history.
 
+## MacLauncher Builds catalogs
+
+MacLauncher Builds publishes one JSON catalog for each project, at `catalogs/<projectId>.json` on its `main` branch. Refresh reads the current catalog, so the list includes releases published after the installed app, and every release that the Mac can run is offered whatever package versions the app itself includes. A listed version installs from the HTTPS archive URL in its record and stays selectable after installation.
+
+Each record gives the version, the CPU architecture, the archive URL and its SHA-256, together with any dependency and compatibility metadata. A record can also carry additional fields or a later package schema or launcher-contract number, and neither hides the release. Whether a release installs depends on the Mac instead: its CPU, its macOS version and the native files in the downloaded archive, which installation checks. A record that cannot be used but has a readable version name stays listed with the reason, and the other records are unaffected. A catalog response can be up to 2 MiB, and the number of releases in it has no limit.
+
+The app's included packages are assembled from stricter declarations, which are kept separate from these download catalogs. [Runtime distribution](RUNTIME_DISTRIBUTION.md) specifies package contents and verification.
+
 ## Official release indexes
 
 NW.js, Java, Godot and Ren'Py read the release indexes that their publishers maintain:
