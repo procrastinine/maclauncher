@@ -350,9 +350,10 @@ bridge returns clipboard replies asynchronously on Android's main queue, so
 layout traversal barriers do not delay an accepted paste. Text input is handled
 by the included
 [text input component](../../src/modules/android/text-input.js), which keeps the
-original Android input connection and native text interfaces. Its
-[Java source](../../src/modules/android/text-input/java/maclauncher/android/framework/HostTextInput.java)
-and MIT license are included with its JAR.
+original Android input connection and native text interfaces. Its JAR is
+compiled from the MacLauncher Android framework's
+[HostTextInput source](https://github.com/procrastinine/maclauncher-android/blob/main/src/modules/android/native/java/maclauncher/android/framework/HostTextInput.java),
+whose MIT license is included with it.
 
 By default, the WASD keys control a virtual touch joystick. The per-game
 **Keyboard touch joystick** setting selects WASD, arrow keys, both, or Off, and
