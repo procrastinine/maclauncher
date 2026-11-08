@@ -39,7 +39,7 @@ The sections below explain each row.
 
 Neither DXMT nor D3DMetal handles Direct3D 9 or earlier, so these games choose between DXVK and WineD3D. On an Apple Silicon Mac with macOS 26, Sikarugir's automatic choice already runs them through D9VK on KosmicKrisp. Elsewhere it falls back to WineD3D, which works on any Mac.
 
-Which DXVK fits depends on the Vulkan driver. The releases from the DXVK project, versions 2 and 3, need features that MoltenVK and LWJGL's KosmicKrisp lack: MoltenVK has no geometry shaders, and LWJGL's KosmicKrisp has no wireframe drawing. MacLauncher KosmicKrisp provides them, and Sikarugir pairs its own KosmicKrisp with the DXVK builds in its Template. With MoltenVK, pick one of Gcenx's DXVK-macOS builds, which are made for it.
+Which DXVK fits depends on the Vulkan driver. The releases from the DXVK project, versions 2 and 3, need features that MoltenVK and LWJGL's KosmicKrisp lack: MoltenVK has no geometry shaders, and LWJGL's KosmicKrisp has no wireframe drawing. MacLauncher KosmicKrisp provides them, and when you pick a DXVK release from Runtimes with the **Vulkan driver** on Automatic, MacLauncher pairs the two. Sikarugir pairs its own KosmicKrisp with the DXVK builds in its Template. For MoltenVK, pick one of Gcenx's DXVK-macOS builds, which are made for it, and choose MoltenVK as the **Vulkan driver**.
 
 ### Direct3D 10 and 11
 
@@ -51,11 +51,11 @@ DXVK on MacLauncher KosmicKrisp is worth a try when both Metal translators strug
 
 D3DMetal is the one Direct3D 12 route that doesn't pass through Vulkan, and it hands a game's DLSS calls to MetalFX itself. It needs Apple Silicon and a 64-bit game.
 
-vkd3d-proton is the open-source alternative. It refuses to start on a driver without transform feedback, robust null descriptors and single-texel buffer alignment, which rules out MoltenVK and LWJGL's KosmicKrisp, while MacLauncher KosmicKrisp provides all three. MacLauncher recommends KosmicKrisp for vkd3d-proton and warns when a game pairs it with another driver. On MacLauncher KosmicKrisp, vkd3d-proton reports feature level 12_1, in the performance and the conformance mode alike. A game that insists on 12_2 won't run this way, because that level also needs variable rate shading, which no KosmicKrisp build has. A game's DLSS inputs can reach MacLauncher's upscalers on this route too. [KosmicKrisp](/maclauncher/windows/kosmickrisp/#direct3d-12-games-through-vkd3d-proton) explains what the route needs and what feature level 12_1 means for a game. WINE's own vkd3d is the third choice, and it comes with WINE itself.
+vkd3d-proton is the open-source alternative. It refuses to start on a driver without transform feedback, robust null descriptors and single-texel buffer alignment, which rules out MoltenVK and LWJGL's KosmicKrisp, while MacLauncher KosmicKrisp provides all three. With the **Vulkan driver** on Automatic, MacLauncher pairs vkd3d-proton with MacLauncher KosmicKrisp, and if you pick another driver, it warns that KosmicKrisp is recommended. On MacLauncher KosmicKrisp, vkd3d-proton reports feature level 12_1, in the performance and the conformance mode alike. A game that insists on 12_2 won't run this way, because that level also needs variable rate shading, which no KosmicKrisp build has. A game's DLSS inputs can reach MacLauncher's upscalers on this route too. [KosmicKrisp](/maclauncher/windows/kosmickrisp/#direct3d-12-games-through-vkd3d-proton) explains what the route needs and what feature level 12_1 means for a game. WINE's own vkd3d is the third choice, and it comes with WINE itself.
 
 ### Vulkan games
 
-Games that use Vulkan directly only need a driver. On an Apple Silicon Mac with macOS 26 or later, KosmicKrisp is a conformant Vulkan 1.4 implementation, and MacLauncher KosmicKrisp adds features that games sometimes use, such as transform feedback, sparse resources and mesh shaders. MoltenVK covers every other Mac. On CrossOver, one exception applies: the [FidelityFX scene route](/maclauncher/windows/effects-and-upscaling/#fidelityfx-in-vulkan-games-on-crossover) needs the **Vulkan driver** left at CrossOver's automatic choice.
+Games that use Vulkan directly only need a driver. On an Apple Silicon Mac with macOS 26 or later, KosmicKrisp is a conformant Vulkan 1.4 implementation, and MacLauncher KosmicKrisp adds features that games sometimes use, such as transform feedback, sparse resources and mesh shaders. MoltenVK covers every other Mac.
 
 ### Android games
 

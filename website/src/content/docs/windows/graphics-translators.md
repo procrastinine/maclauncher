@@ -86,7 +86,7 @@ A driver has to match the processor that WINE itself is built for. Sikarugir and
 
 [MoltenVK](https://github.com/KhronosGroup/MoltenVK) is the long-established Vulkan driver for the Mac, published by the Khronos Group, which also maintains the Vulkan standard. It maps Vulkan onto Metal and runs on both Intel and Apple Silicon Macs. Most of Vulkan maps directly onto Metal, but where the two differ too much, MoltenVK leaves a small part of the specification out, so it [implements a subset of Vulkan](https://github.com/KhronosGroup/MoltenVK#compliance) and reports what it lacks through Vulkan's portability subset extension. Khronos has since deprecated MoltenVK: the project is now maintained by its community, and Khronos recommends it for Intel Macs and KosmicKrisp for Apple Silicon.
 
-CrossOver and Sikarugir's Template both include MoltenVK, and MacLauncher can install Khronos's own releases. Its settings offer fast math, argument buffers and an Unreal Engine 4 compatibility option. A separate MoltenVK build, **MoltenVK scene support** from [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/), lets MacLauncher read the scene of CrossOver games that use AMD's FidelityFX through Vulkan; [Effects and upscaling](/maclauncher/windows/effects-and-upscaling/#fidelityfx-in-vulkan-games-on-crossover) describes that route.
+CrossOver and Sikarugir's Template both include MoltenVK, and MacLauncher can install Khronos's own releases. Its settings offer fast math, argument buffers and an Unreal Engine 4 compatibility option. A separate MoltenVK build, **MoltenVK scene support** from [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/), can carry a game's DLSS data from DXVK and vkd3d-proton to MacLauncher's upscalers, and it stands in for MacLauncher KosmicKrisp on Macs that can't run KosmicKrisp; [Effects and upscaling](/maclauncher/windows/effects-and-upscaling/#dlss-games-and-the-selected-upscaler) describes that route.
 
 ### KosmicKrisp
 
@@ -106,13 +106,13 @@ MacLauncher KosmicKrisp is MacLauncher's own build of KosmicKrisp, published in 
 
 The build adds plenty more, from mesh shaders to 64-bit floating point; [KosmicKrisp](/maclauncher/windows/kosmickrisp/#maclauncher-kosmickrisp) goes through it.
 
-Like KosmicKrisp itself, the build needs an Apple Silicon Mac with macOS 26 or later. It also comes as an Intel build, so CrossOver and Sikarugir games can choose it as their **Vulkan driver** and run DXVK, vkd3d-proton or a Vulkan game on it. CrossOver includes only MoltenVK, so this build also brings KosmicKrisp to CrossOver games.
+Like KosmicKrisp itself, the build needs an Apple Silicon Mac with macOS 26 or later. It also comes as an Intel build, so CrossOver and Sikarugir games can run DXVK, vkd3d-proton or a Vulkan game on it. It's the automatic Vulkan driver for any DXVK or vkd3d-proton you pick from Runtimes, and you can also choose it as the **Vulkan driver** yourself. CrossOver includes only MoltenVK, so this build also brings KosmicKrisp to CrossOver games.
 
 ### Proton's graphics path on a Mac
 
 On Linux and the Steam Deck, Valve's Proton runs a Windows game's graphics through DXVK for Direct3D 8 to 11 and vkd3d-proton for Direct3D 12, which turn the game's calls into Vulkan for the Linux GPU driver. Current releases of both need Vulkan features that MoltenVK and upstream KosmicKrisp lack. MacLauncher KosmicKrisp has them, so on a Mac the same two translators can produce the same kind of Vulkan work, and KosmicKrisp turns it into Metal at the end.
 
-Taking this path is a choice you make per game. Pick a release from the DXVK project as the Direct3D engine, or vkd3d-proton for **Direct3D 12**, and MacLauncher KosmicKrisp as the **Vulkan driver**, and the game goes through Proton's graphics path instead of D3DMetal or DXMT, while your other games keep theirs. Only the graphics path is shared with Proton. WINE itself is still CrossOver's or Sikarugir's, so a game doesn't automatically behave the way it does on Linux.
+Taking this path is a choice you make per game. Pick a release from the DXVK project as the Direct3D engine, or vkd3d-proton for **Direct3D 12**, and leave the **Vulkan driver** on Automatic. MacLauncher then pairs them with MacLauncher KosmicKrisp, so the game goes through Proton's graphics path instead of D3DMetal or DXMT, while your other games keep theirs. Only the graphics path is shared with Proton. WINE itself is still CrossOver's or Sikarugir's, so a game doesn't automatically behave the way it does on Linux.
 
 ### MoltenVK or KosmicKrisp
 
@@ -123,7 +123,7 @@ Taking this path is a choice you make per game. Pick a release from the DXVK pro
 | Status | Deprecated by Khronos, maintained by its community | Recommended by Khronos for Apple Silicon |
 | For WINE games | Included with CrossOver and Sikarugir, and installable from Khronos's releases | A build for WINE's processor: Sikarugir's own copy or one installed in Runtimes |
 
-On a Mac that can run it, KosmicKrisp is the more compatible driver. That's why Sikarugir's automatic choice prefers it on a real Apple Silicon Mac, and why MacLauncher recommends it for vkd3d-proton. MoltenVK covers the rest: Intel Macs, macOS versions before 26 and virtual machines. It's also the driver that CrossOver includes, and CrossOver's [Vulkan scene route](/maclauncher/windows/effects-and-upscaling/#fidelityfx-in-vulkan-games-on-crossover) needs it.
+On a Mac that can run it, KosmicKrisp is the more compatible driver. That's why Sikarugir's automatic choice prefers it on a real Apple Silicon Mac, and why the automatic driver pairs MacLauncher KosmicKrisp with any DXVK or vkd3d-proton you pick from Runtimes. MoltenVK covers the rest: Intel Macs, macOS versions before 26 and virtual machines. It's also the driver that CrossOver includes.
 
 ## How MacLauncher chooses
 
@@ -132,6 +132,8 @@ A new game starts with every translator setting at its runtime's automatic choic
 - Direct3D 10 and 11 games use DXMT, or WineD3D when DXMT can't be used.
 - On an Apple Silicon Mac with macOS 26 or later (a real Mac, not a virtual machine), KosmicKrisp becomes the Vulkan driver, and Direct3D 8 and 9 games run through D9VK.
 - On other Macs, Vulkan runs on MoltenVK, and Direct3D 8 and 9 games use WineD3D.
+
+One exception applies on both runtimes: when you pick a DXVK or vkd3d-proton version from Runtimes and leave the Vulkan driver on Automatic, the game runs on MacLauncher KosmicKrisp, or on MacLauncher's MoltenVK build where KosmicKrisp can't run, and the inspector says which one and why.
 
 A game in an [existing bottle or wrapper](/maclauncher/windows/existing-bottles/) starts with that environment's own settings instead, so nothing changes until you choose something else. Whatever the choice, MacLauncher checks it before the game starts, as [the last section](#when-a-translator-cant-load) explains.
 
