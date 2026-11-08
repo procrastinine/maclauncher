@@ -1,12 +1,12 @@
 ---
 title: MacLauncher
-description: Play games on macOS through native runtimes, with a Metal graphics and effects layer and tools for tinkering.
+description: Play games on macOS through native runtimes, with a Metal graphics and effects layer and patch and tinker tools.
 head:
   - tag: title
     content: "MacLauncher: native game runtimes and graphics effects for Mac"
 tableOfContents: false
 hero:
-  tagline: MacLauncher is a native runtime system, graphics/effects layer, and tinker tool for playing games on macOS.
+  tagline: MacLauncher is a native runtime system, graphics/effects layer, and patch/tinker tool for playing games on macOS.
   image:
     file: ../../assets/maclauncher.svg
   actions:
@@ -52,25 +52,25 @@ The demo below runs the launcher's interface in your browser, with a library of 
     <Card title="Native runtimes" icon="rocket">
       Many Windows games are built on engines that also run on macOS. MacLauncher
       detects the engine and version, fetches a macOS runtime for it, and plays the game natively. It also
-      runs Android, iOS, PS5 and Switch games without emulation.
+      runs Android, iOS, PS5, Switch and Switch 2 games without emulation.
     </Card>
   </a>
   <a class="homeCard" href="/maclauncher/graphics/">
     <Card title="Graphics and effects" icon="seti:image">
       Upscalers, frame generation, neural models and any ReShade, RetroArch or mpv
-      shader, stacked in any order and changed live, for every runtime.
+      shader, stacked in any order and changed live, for every runtime and even other apps' windows.
     </Card>
   </a>
   <a class="homeCard" href="/maclauncher/tools/">
-    <Card title="Tinker tools" icon="setting">
-      Download any version you own from Steam, GOG, Epic, itch.io and Google Play.
-      Snapshot and edit saves, use cheats, and decompile most engines.
+    <Card title="Patch and tinker tools" icon="setting">
+      Pick the version of every runtime and translator, swap DXVK or KosmicKrisp into
+      CrossOver per game, download any version you own, edit saves, cheat and decompile.
     </Card>
   </a>
-  <a class="homeCard" href="/maclauncher/help/faq/#does-it-change-my-game-files">
+  <a class="homeCard" href="/maclauncher/tools/network-and-privacy/">
     <Card title="Files and network" icon="approve-check">
-      Original files are never modified, every runtime is versioned, and nothing
-      goes online unless you ask.
+      Games and the apps MacLauncher builds on stay unchanged except through patches
+      you can undo, nothing goes online unless you ask, and there's no telemetry.
     </Card>
   </a>
 </CardGrid>
@@ -88,4 +88,6 @@ The demo below runs the launcher's interface in your browser, with a library of 
   <LinkCard title="How games run on a Mac" href="/maclauncher/background/how-games-run/" description="VMs, emulators, WINE and native runtimes, explained." />
   <LinkCard title="Games and runtimes" href="/maclauncher/games/" description="Everything MacLauncher can play, by game type, and the runtimes that play it." />
   <LinkCard title="Graphics and effects" href="/maclauncher/graphics/" description="Shaders, upscaling and frame generation, with examples." />
+  <LinkCard title="Patch and tinker tools" href="/maclauncher/tools/" description="Version management, unchanged source and as much control as possible." />
+  <LinkCard title="Runtime patching" href="/maclauncher/tools/runtime-patching/" description="Why a newer DXVK, vkd3d-proton or KosmicKrisp helps, and how to pick one per game." />
 </CardGrid>
