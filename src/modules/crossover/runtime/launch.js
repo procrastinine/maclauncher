@@ -438,7 +438,15 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (existingEnvironment?.running) {
     for (const key of ["WINEMSYNC", "WINEESYNC"]) { delete overrides[key]; delete environment[key]; }
   }
-  Object.assign(overrides, require("../temporal/ngx/connection").environment(ngxScene, { macDriverPath: winemac?.path || ngxScene?.nativeMacDriver, sceneDestinationRequested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects) }));
+  // The NGX scene destination binds through the CrossOver graphics
+  // integration package, which CrossOver's own Mac driver cannot replace.
+  // Without that package the transport stays off and the game starts.
+  if (ngxScene && !winemac) {
+    context.ngxSceneConnection = null;
+    context.graphicsBridgeFailure ||= { provider: "crossover-ngx-scene", reason: `No CrossOver graphics integration package for CrossOver ${selected.install.upstreamVersion || ""} (build ${selected.install.buildVersion || "unknown"}) is installed, so DLSS scene frames are not forwarded.` };
+    warnGraphics(context.logger, "CrossOver NGX scene forwarding is unavailable. The game starts without it.", context.graphicsBridgeFailure.reason);
+  }
+  Object.assign(overrides, require("../temporal/ngx/connection").environment(winemac ? ngxScene : null, { macDriverPath: winemac?.path || "", sceneDestinationRequested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects) }));
   if (Object.keys(overrides).length) args.push("--env", wineEnvironmentString(overrides));
   if (dll) args.push("--dll", dll);
   if (settings.wineDebug) args.push("--debugmsg", safeText(settings.wineDebug, "Wine debug channels"));

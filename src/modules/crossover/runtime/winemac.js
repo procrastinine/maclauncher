@@ -4,6 +4,7 @@ const { createProjectBuildManager } = require('../../shared/runtime/project-buil
 const Bundled = require('../../shared/runtime/bundled-native');
 const { compareRuntimeVersions, withDescription } = require('../../shared/runtime/pinned-native-manager');
 const { readJsonObject, writeJsonAtomic } = require('../../../core/json-files');
+const { usedForApi } = require('../../shared/runtime/translator-roles');
 
 const id = 'maclauncher-crossover-winemac';
 function matches(profile, installation) {
@@ -11,7 +12,25 @@ function matches(profile, installation) {
     profile.version === installation?.upstreamVersion && profile.build === installation?.buildVersion;
 }
 function capabilities(value) { return value?.projectPackage?.capabilities || value?.capabilities || value; }
-function create({ dependencies = {}, applications = userDataDir => require('./manager').core.listInstalled(userDataDir) } = {}) {
+// Only the NGX scene transport uses this package: its destination binds
+// through MacLauncherWineMacWithWindow1, which CrossOver's own Mac driver does
+// not export. That transport runs on a vkd3d-proton build of MacLauncher that
+// the game selected, so an automatic launch keeps CrossOver's own Mac driver
+// and Play never offers the package for it.
+function ownRoute(plan) {
+  const translator = plan?.runtime === 'crossover' ? usedForApi(plan, 'd3d12') : null;
+  return Boolean(translator && !translator.included && !translator.reference && translator.managerId);
+}
+function sceneConnection(entry, context, installation) {
+  const plan = context.translatorPlan;
+  if (!ownRoute(plan)) return null;
+  const DLSS = require('../dlss');
+  const settings = DLSS.withTemporalSelection(require('../../shared/runtime/wine-translators').settingsForPlan(context.runtimeSettings || {}, plan), entry?.effects, plan);
+  return require('../temporal/ngx/connection').resolve({ requested: settings.dlss === true || DLSS.needsSceneInputs(entry?.effects), runtimeId: 'crossover',
+    install: installation, translatorPlan: plan, executableArchitecture: require('../detect').cachedWindowsExecutable(entry)?.executableArchitecture });
+}
+function create({ dependencies = {}, applications = userDataDir => require('./manager').core.listInstalled(userDataDir),
+  connection = sceneConnection, catalog } = {}) {
   const base = createProjectBuildManager({ projectId: id, label: 'CrossOver graphics integration',
     repository: 'procrastinine/maclauncher-builds', manifestRelative: 'manifest.json', sourceRelative: 'provenance.json',
     executableRelative: manifest => manifest.libraries['x86_64-unix'], nativeLibrary: true, supportsDefault: false,
@@ -50,7 +69,7 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
   }
   function clearSkipped(userDataDir) { if (userDataDir) keepSkipped(userDataDir, []); }
   // Its Runtimes row is in the CrossOver tab.
-  const manager = { ...withDescription(base, 'An optional package matched to one CrossOver release and build. It adds Vulkan external memory, semaphore and fence sharing to CrossOver\'s Mac driver, and Play offers it, after consent, when that release runs a Vulkan game.'),
+  const manager = { ...withDescription(base, 'An optional package matched to one CrossOver release and build. It adds Vulkan external memory, semaphore and fence sharing to CrossOver\'s Mac driver, and Play offers it, after consent, when that release runs a game that forwards DLSS scene frames through a selected vkd3d-proton build of MacLauncher.'),
     ui: { groupId: 'crossover', sectionLabel: 'CrossOver graphics integration', memberOrder: 1, management: 'managed' }, distributionRequired: false };
   // One package is kept for each registered CrossOver release: the newest
   // revision. Nothing is inspected while no package is installed.
@@ -75,27 +94,26 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
   async function requirements(entry, context) {
     try { await prune(context.userDataDir); }
     catch (error) { if (context.signal?.aborted) throw error; }
-    const plan = context.translatorPlan;
-    if (plan?.runtime !== 'crossover' || !plan.components?.['vulkan-driver']?.used) return [];
+    if (!ownRoute(context.translatorPlan)) return [];
     const installation = context.wineEnvironment?.install || require('./manager').resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings).install;
-    if (!installation?.buildVersion) return [];
+    if (!installation?.buildVersion || !connection(entry, context, installation)) return [];
     if (installed(installation, rows(context.userDataDir)) || skippedReleases(context.userDataDir).includes(releaseKey(installation))) return [];
-    const pin = base.core.listDiscoveredCatalog({ userDataDir: context.userDataDir })
+    // Play offers only a listed package. Without one, the launch reports the
+    // scene transport unavailable and the game starts without it.
+    const pin = (catalog ? catalog(context.userDataDir) : base.core.listDiscoveredCatalog({ userDataDir: context.userDataDir }))
       .filter(pin => matches(capabilities(pin).runtimeProfile, installation))
       .sort((a, b) => compareRuntimeVersions(a.version, b.version))[0];
-    if (!pin && base.getState({ userDataDir: context.userDataDir }).catalog?.status === 'success') return [];
-    const size = pin?.asset?.bytes > 0 ? ` Download size: ${Math.max(0.1, pin.asset.bytes / 1048576).toFixed(1)} MB.` : '';
+    if (!pin) return [];
+    const size = pin.asset?.bytes > 0 ? ` Download size: ${Math.max(0.1, pin.asset.bytes / 1048576).toFixed(1)} MB.` : '';
     const summary = `Adds Vulkan external memory, semaphore and fence sharing to CrossOver ${installation.upstreamVersion} (build ${installation.buildVersion}).`;
-    return [{ managerId: id, version: pin?.version || null, ...(!pin ? { discoveryRequired: true } : {}),
-      installOptions: options, optional: true, silentFallback: true, companion: true,
+    return [{ managerId: id, version: pin.version, installOptions: options, optional: true, silentFallback: true, companion: true,
       release: { version: installation.upstreamVersion, build: installation.buildVersion },
-      label: manager.label, ...(pin?.asset?.bytes ? { bytes: pin.asset.bytes } : {}), summary, cancelLabel: 'Play Without It',
+      label: manager.label, ...(pin.asset?.bytes ? { bytes: pin.asset.bytes } : {}), summary, cancelLabel: 'Play Without It',
       detail: `${summary}${size} ${entry?.name || 'The game'} also starts without it, with CrossOver's own Mac driver.` }];
   }
   async function select(installation, context) {
     try {
-      if (context.translatorPlan?.runtime !== 'crossover' || !context.translatorPlan.components?.['vulkan-driver']?.used ||
-          context.translatorPlan.layout?.unixName !== 'x86_64-unix') return null;
+      if (!ownRoute(context.translatorPlan) || !context.ngxSceneConnection || context.translatorPlan.layout?.unixName !== 'x86_64-unix') return null;
       const current = installed(installation, rows(context.userDataDir));
       if (!current) return null;
       await context.useRuntime?.({ managerId: id, version: current.version, sourcePath: current.installDir });

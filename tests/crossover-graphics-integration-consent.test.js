@@ -50,20 +50,24 @@ function scratch(t) {
   return root;
 }
 const application = (build, extra = {}) => ({ version: `local-${build}`, upstreamVersion: '26.3', buildVersion: build, ready: true, ...extra });
-const vulkan = { runtime: 'crossover', components: { 'vulkan-driver': { used: true } } };
+const vkd3d = (extra = {}) => ({ id: 'vkd3d-proton:fixture', engine: 'vkd3d-proton', ...extra });
+const plan = translator => ({ runtime: 'crossover', components: { 'vulkan-driver': { used: true }, d3d12: { used: translator } } });
+const vulkan = plan(vkd3d({ managerId: 'vkd3d-proton' }));
+const packages = [{ version: '26.3.0-MCLv1', asset: { bytes: 244068 }, capabilities: { runtimeProfile: { product: 'CrossOver', version: '26.3', build: '26.3.0.39832' } } },
+  { version: '26.3.0-MCLv1', capabilities: { runtimeProfile: { product: 'CrossOver', version: '26.3', build: '26.3.0.40000' } } }];
 
 test('the integration is offered per CrossOver release and build until declined, and Refresh offers it again', async t => {
   const userDataDir = scratch(t);
   let registered = [application('26.3.0.39832')], listed = 0;
-  const manager = Winemac.create({ applications: () => { listed++; return registered; } });
+  const manager = Winemac.create({ applications: () => { listed++; return registered; }, connection: () => ({ transport: 2 }), catalog: () => packages });
   await manager.prune(userDataDir);
   assert.equal(listed, 0, 'with nothing installed or remembered, no CrossOver application is inspected');
   const context = install => ({ userDataDir, translatorPlan: vulkan, wineEnvironment: { install }, settings: { runtimes: {} } });
   const [plan] = await manager.requirements({ name: 'Fixture' }, context(registered[0]));
-  assert.equal(plan.companion, true); assert.equal(plan.optional, true); assert.equal(plan.discoveryRequired, true);
+  assert.equal(plan.companion, true); assert.equal(plan.optional, true); assert.equal(plan.version, '26.3.0-MCLv1'); assert.equal(plan.bytes, 244068);
   assert.equal(plan.cancelLabel, 'Play Without It');
   assert.deepEqual(plan.release, { version: '26.3', build: '26.3.0.39832' });
-  assert.match(plan.detail, /^Adds Vulkan external memory, semaphore and fence sharing to CrossOver 26\.3 \(build 26\.3\.0\.39832\)\. Fixture also starts without it/);
+  assert.match(plan.detail, /^Adds Vulkan external memory, semaphore and fence sharing to CrossOver 26\.3 \(build 26\.3\.0\.39832\)\. Download size: 0\.2 MB\. Fixture also starts without it/);
   manager.skipOptional(plan, { userDataDir });
   assert.deepEqual(await manager.requirements({ name: 'Fixture' }, context(registered[0])), [], 'a declined release is not offered again');
   assert.equal((await manager.requirements({ name: 'Fixture' }, context(application('26.3.0.40000')))).length, 1, 'another build is offered');
@@ -79,6 +83,23 @@ test('the integration is offered per CrossOver release and build until declined,
   assert.equal((await manager.requirements({ name: 'Fixture' }, context(registered[0]))).length, 1, 'an explicit Refresh offers it again');
   assert.deepEqual(await manager.requirements({ name: 'Fixture' }, { ...context(registered[0]), translatorPlan: { ...vulkan, components: {} } }), [],
     'a launch without the Vulkan driver needs no integration');
+});
+
+test('an automatic CrossOver Vulkan launch, or a release with no listed package, gets no integration offer', async t => {
+  const userDataDir = scratch(t), install = application('26.3.0.39832');
+  let consulted = 0;
+  const manager = Winemac.create({ applications: () => [install], connection: () => { consulted++; return { transport: 2 }; }, catalog: () => packages });
+  const context = translatorPlan => ({ userDataDir, translatorPlan, wineEnvironment: { install }, settings: { runtimes: {} } });
+  assert.deepEqual(await manager.requirements({ name: 'Fixture' }, context(plan(vkd3d({ included: true })))), [], 'CrossOver\'s own vkd3d-proton');
+  assert.deepEqual(await manager.requirements({ name: 'Fixture' }, context(plan({ id: 'dxvk:included', engine: 'dxvk', included: true }))), [], 'CrossOver\'s own DXVK');
+  assert.deepEqual(await manager.requirements({ name: 'Fixture' }, context({ runtime: 'crossover', components: { 'vulkan-driver': { used: true } } })), [], 'no Direct3D 12 translator');
+  assert.equal(consulted, 0, 'an automatic launch never resolves the scene transport');
+  const unlisted = Winemac.create({ applications: () => [install], connection: () => ({ transport: 2 }), catalog: () => [] });
+  assert.deepEqual(await unlisted.requirements({ name: 'Fixture' }, context(vulkan)), [], 'no download is offered for an unlisted package');
+  const unused = Winemac.create({ applications: () => [install], connection: () => null, catalog: () => packages });
+  assert.deepEqual(await unused.requirements({ name: 'Fixture' }, context(vulkan)), [], 'a selected route without the scene transport');
+  assert.equal(await manager.select(install, { userDataDir, translatorPlan: { ...plan(vkd3d({ included: true })), layout: { unixName: 'x86_64-unix' } }, ngxSceneConnection: { transport: 2 } }), null,
+    'an automatic launch never links the package');
 });
 
 test('the Play download dialog lists each companion with version, size and what it adds', async () => {
