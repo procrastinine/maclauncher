@@ -26,7 +26,7 @@ function canonicalDestination(directory) {
 }
 
 /** Stage reviewed sources and headers only. A second Lua VM is never linked. */
-function stageSource({ roots, destination, inputs = INPUTS } = {}) {
+function stageSource({ roots, destination, luaHeadersRevision = LUA_HEADERS_REVISION, inputs = INPUTS } = {}) {
   if (!path.isAbsolute(destination || "") || !roots || !Array.isArray(inputs) || !inputs.length || inputs.length > 512)
     throw new Error("Explicit source roots and a fresh absolute LuaSteam build directory are required.");
   destination = canonicalDestination(destination);
@@ -70,7 +70,7 @@ function stageSource({ roots, destination, inputs = INPUTS } = {}) {
     const relative="licenses/"+name,bytes=fs.readFileSync(path.join(licenses,name));
     records.push({origin:"generated",path:relative,destination:relative,size:bytes.length,sha256:sha256(bytes)});
   }
-  return { version: VERSION, sourceRevision: SOURCE_REVISION, luaHeadersRevision: LUA_HEADERS_REVISION,
+  return { version: VERSION, sourceRevision: SOURCE_REVISION, luaHeadersRevision,
     sdkHeadersRevision: SDK_HEADERS_REVISION, sdkVersion: SDK_VERSION, hostLuaAbi: HOST_LUA_ABI,
     sourceTreeSha256: sha256(JSON.stringify(records)), files: records };
 }
