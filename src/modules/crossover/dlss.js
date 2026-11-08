@@ -35,7 +35,8 @@ function hasLibraries(directory) {
 
 function checkSelection(settings, { backend, dxmt = false, d3dmetal = false,
   vulkan = false, hardwareArch = require("../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, macOSVersion, executableArchitecture, translatorPlan } = {}) {
-  if (settings.dlss !== true) return { enabled: false, dxmt: false, d3dmetal: false };
+  // Forwarding on an explicit Vulkan carrier route needs no setting.
+  if (settings.dlss !== true) return vulkan ? { enabled: true, dxmt: false, d3dmetal: false, vulkan: true } : { enabled: false, dxmt: false, d3dmetal: false };
   if (hardwareArch !== "arm64") throw new Error("MetalFX Temporal requires Apple Silicon.");
   if (executableArchitecture && executableArchitecture !== "x86_64") throw new Error("MetalFX Temporal requires a 64-bit Windows executable.");
   const resolvedEngines = translatorPlan && [usedForApi(translatorPlan, "d3d11")?.engine, usedForApi(translatorPlan, "d3d12")?.engine];

@@ -69,16 +69,21 @@ function carrierDriver(plan, hasCarrier = file => {
   if (!['kosmickrisp', 'moltenvk'].includes(driver?.engine)) return null;
   return driver.files?.some(file => file.format === 'macho' && hasCarrier(file.path)) ? driver : null;
 }
-function requested(settings, plan, architecture, hasCarrier) {
-  if (settings?.dlss !== true || architecture !== 'x86_64') return false;
+// Forwarding needs no setting: a 64-bit game whose Direct3D 11 or 12 renders
+// through DXVK or vkd3d-proton, with DXVK's own DXGI placed and an explicitly
+// selected carrier driver, always forwards its DLSS frames. The runtime's own
+// driver has no carrier, and DXVK-NVAPI reaches the device through DXVK's DXGI.
+function requested(plan, architecture, hasCarrier) {
+  if (architecture !== 'x86_64') return false;
   if (!['d3d11', 'd3d12'].some(api => ['dxvk', 'vkd3d-proton'].includes(usedForApi(plan, api)?.engine))) return false;
+  if (!(plan.placements || []).some(item => item.description.engine === 'dxvk' && path.basename(item.file.path).toLowerCase() === 'dxgi.dll' && item.file.machine === 0x8664)) return false;
   return Boolean(carrierDriver(plan, hasCarrier));
 }
 function selection(manager, entry, context) { return manager.resolveSelection(entry, context.settings, context.userDataDir, { verification: 'status' }); }
 async function requirements(entry, context, { translatorPlan = context.translatorPlan, architecture, runtimeManagers = managers, hasCarrier } = {}) {
-  if (context.runtimeSettings?.dlss !== true) return [];
   architecture ||= require('../detect').cachedWindowsExecutable(entry)?.executableArchitecture;
-  if (!translatorPlan && architecture === 'x86_64') {
+  if (architecture !== 'x86_64') return [];
+  if (!translatorPlan) {
     const runtimeId=context.runtimeId || entry.runtimeId || 'crossover';
     const manager=require(runtimeId==='sikarugir'?'../sikarugir/runtime/manager':'../runtime/manager');
     const selected=manager.resolveSelection(entry,context.settings,context.userDataDir,context.runtimeSettings);
@@ -88,8 +93,7 @@ async function requirements(entry, context, { translatorPlan = context.translato
       translatorPlan=await translators.resolve(environment.wineEnvironment?.install || selected.install,runtimeId,context,{entry,executableArchitecture:architecture});
     }
   }
-  const settings = require('../dlss').withTemporalSelection(context.runtimeSettings || {}, entry.effects, translatorPlan);
-  if (!requested(settings, translatorPlan, architecture, hasCarrier)) return [];
+  if (!requested(translatorPlan, architecture, hasCarrier)) return [];
   return runtimeManagers.flatMap(manager => {
     const selected = selection(manager, entry, context);
     return selected.ready ? [] : [{ managerId: manager.id, version: selected.version || null, requiresDownload: true,
@@ -98,9 +102,7 @@ async function requirements(entry, context, { translatorPlan = context.translato
   });
 }
 async function prepare(entry, context, settings, plan, architecture, view, { runtimeManagers = managers, hasCarrier, inspect = readPeExports } = {}) {
-  if (!requested(settings, plan, architecture, hasCarrier)) return { view, enabled: false };
-  const dxgi = (plan.placements || []).find(item => item.description.engine === 'dxvk' && path.basename(item.file.path).toLowerCase() === 'dxgi.dll' && item.file.machine === 0x8664);
-  if (!dxgi) throw Error('Vulkan DLSS forwarding requires the selected DXVK DXGI library.');
+  if (!requested(plan, architecture, hasCarrier)) return { view, enabled: false };
   const selected = runtimeManagers.map(manager => ({ manager, value: selection(manager, entry, context) }));
   if (selected.some(item => !item.value.ready)) throw Error('Install the requested Vulkan DLSS forwarding packages before Play.');
   const nvapi = selected[0].value.install.executablePath, core = selected[1].value.install.executablePath;
