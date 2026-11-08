@@ -24,3 +24,7 @@
 	path = src/modules/renpy/resources/unren/third_party/unrpyc-legacy
 	url = https://github.com/CensoredUsername/unrpyc
 	branch = legacy
+
+[submodule "maclauncher-kosmickrisp"]
+	path = src/external/maclauncher-kosmickrisp
+	url = https://github.com/procrastinine/maclauncher-kosmickrisp.git

@@ -122,3 +122,5 @@ Graphics and Vulkan native source lives in `src/modules/shared/reshade/` and `sr
 - [macOS app builds](CI.md): the app build workflow.
 - [Releases](RELEASING.md): runtime and app versions.
 - [Upstreams](../runtimes/UPSTREAMS.md) and [attributions](../ATTRIBUTIONS.md): exact upstream sources and licenses.
+
+Shared driver headers come from the pinned `src/external/maclauncher-kosmickrisp` source. Android runtime tests and fixtures belong to the pinned Android repository. Source initialization includes the shared helper submodules of both repositories.

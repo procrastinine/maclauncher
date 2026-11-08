@@ -6,10 +6,15 @@
     "src/modules/renpy/resources/universal-renpy-walkthrough",
     "src/modules/renpy/resources/unren/third_party/rpatool",
     "src/modules/renpy/resources/unren/third_party/UnRen-Gideon-mod-",
-    "src/modules/renpy/resources/unren/third_party/unrpyc"
+    "src/modules/renpy/resources/unren/third_party/unrpyc",
+    "src/external/maclauncher-kosmickrisp"
   ],
   "testSubmodules": [
     "src/external/maclauncher-android",
     "src/modules/renpy/resources/unren/third_party/unrpyc-legacy"
+  ],
+  "recursiveSubmodules": [
+    "src/external/maclauncher-android",
+    "src/external/maclauncher-kosmickrisp"
   ]
 }
