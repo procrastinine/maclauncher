@@ -6,7 +6,7 @@ head:
     content: "Install MacLauncher on a Mac and play your first game | MacLauncher"
 ---
 
-MacLauncher needs a Mac running macOS 13 or later, with either Apple Silicon or an Intel processor. Some runtimes need more: Android, iOS and Nintendo Switch games need Apple Silicon, and a few runtimes need a newer macOS (PlayStation 5 games need macOS 26, for example). MacLauncher simply turns off what your Mac can't run and tells you why, and [Macs and macOS versions](/maclauncher/macs-and-macos/) lists what works where.
+MacLauncher needs a Mac running macOS 13 or later, with either Apple Silicon or an Intel processor. Some runtimes need more: Android, iOS and Nintendo Switch games need Apple Silicon, and a few runtimes need a newer macOS (PlayStation 5 games need macOS 26, for example). MacLauncher turns off what your Mac can't run and tells you why, and [Macs and macOS versions](/maclauncher/macs-and-macos/) lists what works where.
 
 :::tip[Look around first]
 The [interactive demo](/maclauncher/demo/) runs the real MacLauncher interface in your browser, with a library of example games. Every button explains what it would do and links to the article about it.
@@ -74,4 +74,6 @@ Click **Play**. If the game's runtime isn't installed yet, and no compatible ver
 - **Forget** removes a game from the library and deletes MacLauncher's private data for it: generated files, caches and the saves it keeps in its own storage. The game's original files are never touched.
 - MacLauncher's own data, including installed runtimes, lives in `~/Library/Application Support/maclauncher/`.
 
-To learn more, read [how games run on a Mac](/maclauncher/background/how-games-run/), browse the [supported games and runtimes](/maclauncher/games/), or go straight to [graphics and effects](/maclauncher/graphics/).
+## Where to go next
+
+The rest of this site follows MacLauncher's three roles. As a native runtime system, it plays games on engines that run on macOS, and [how games run on a Mac](/maclauncher/background/how-games-run/) and the [supported games and runtimes](/maclauncher/games/) explain that side. As a graphics and effects layer, it adds shaders, upscaling and frame generation to any game or window, which [graphics and effects](/maclauncher/graphics/) shows with examples. As a patch/tinker tool, it lets you choose the version of every runtime and translator, change any setting, and use save tools, cheats and decompilers, all without changing your games or the apps it builds on except through patches you can undo; [Patch and tinker tools](/maclauncher/tools/) explains those principles.
