@@ -459,7 +459,7 @@ test('translator member declarations separate DirectX targets, Vulkan drivers an
     sections: [{ id: 'default', label: 'Versions' }] }; });
   modelTest(`const groups=groupRuntimeManagers(${JSON.stringify(states)});
     for(const [id,label,members] of [
-      ['directx-vulkan','DirectX → Vulkan',['translator-dxvk','translator-vkd3d-proton','translator-vkd3d','dxvk-nvapi','vkd3d-proton']],
+      ['directx-vulkan','DirectX → Vulkan',['translator-dxvk','dxvk','translator-vkd3d-proton','translator-vkd3d','dxvk-nvapi','vkd3d-proton']],
       ['directx-metal','DirectX → Metal',['sikarugir-graphics-bridge','translator-d3dmetal']],
       ['vulkan-drivers','Vulkan drivers',['vulkan-moltenvk','vulkan-kosmickrisp','maclauncher-kosmickrisp','vulkan-moltenvk-scene']],
       ['codecs','Video codecs',['translator-gstreamer']]]){

@@ -22,6 +22,7 @@ test('every registered runtime manager has a linked upstream project in Credits'
     'browser-woditor': 'https://frostyhowl.com/browser-woditor/',
     butterscotch: 'https://github.com/ButterscotchRunner/Butterscotch',
     crossover: 'https://www.codeweavers.com/crossover',
+    dxvk: 'https://github.com/doitsujin/dxvk',
     'dxvk-nvapi': 'https://github.com/jp7677/dxvk-nvapi',
     'vkd3d-proton': 'https://github.com/metalsharp/VKD3D-Proton-MacOS',
     'maclauncher-steam-bridge': 'https://github.com/ValveSoftware/Proton',
