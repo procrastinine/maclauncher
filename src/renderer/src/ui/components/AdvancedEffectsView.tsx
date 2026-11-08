@@ -100,7 +100,13 @@ function advancedRow(editor: EffectsEditor, node: VideoEffectNode, index: number
   const state = chainOff ? "" : !node.enabled ? "Off" : sourceUnsupported ? "Inactive" : unavailable ? "Unavailable" : inputPending ? inputsLabel(choice.pendingInputs!) : !running ? "" : pending ? pending.retained ? "Using previous" : "Pending"
     : stage?.phase === "preparing" ? "Preparing…" : stage && ["failed", "bypassed", "stopped"].includes(stage.phase) ? "Fallback" : stage && stage.completed > 0 ? "Active" : "";
   const moveBy = (offset: number) => void editor.move(node.id, index + offset);
-  return <li key={node.id} draggable onDragStart={event => {
+  // Only the row header starts a reorder drag; sliders, fields and buttons in
+  // the row keep their own pointer drags.
+  return <li key={node.id} draggable onPointerDown={event => {
+    const target = event.target as Element;
+    event.currentTarget.dataset.dragOrigin = target.closest(".effectNodeHeader") && !target.closest("input, select, textarea, button, a, [role=slider]") ? "header" : "content";
+  }} onDragStart={event => {
+    if (event.currentTarget.dataset.dragOrigin !== "header") {event.preventDefault();event.stopPropagation();return;}
     event.dataTransfer.setData(EFFECT_DRAG, JSON.stringify({gamePath: game.gamePath, id: node.id}));event.dataTransfer.effectAllowed = "move";event.stopPropagation();
   }} onDragOver={event => {if (event.dataTransfer.types.includes(EFFECT_DRAG)) {event.preventDefault();event.stopPropagation();}}}
     onDrop={event => {

@@ -179,6 +179,26 @@ export default function App() {
   const [revealGamePath, setRevealGamePath] = useState<string | null>(null);
   const [addDropActive, setAddDropActive] = useState(false);
   const addDropDepth = useRef(0);
+  // A drag that ends outside the window or is cancelled can leave the enter and
+  // leave counts unbalanced. The overlay closes on any sign that no drag is over
+  // the window: no dragover for a second (a drag repeats it at least every
+  // 550 ms), a drop or drag end anywhere, focus loss, pointer movement or Escape.
+  useEffect(() => {
+    if (!addDropActive) return;
+    let last = performance.now();
+    const clear = () => { addDropDepth.current = 0; setAddDropActive(false); };
+    const seen = () => { last = performance.now(); };
+    const key = (event: KeyboardEvent) => { if (event.key === "Escape") clear(); };
+    const timer = window.setInterval(() => { if (performance.now() - last > 1000) clear(); }, 250);
+    const capture: Array<[string, EventListener]> = [["dragenter", seen], ["dragover", seen], ["drop", clear], ["dragend", clear], ["pointermove", clear], ["keydown", key as EventListener]];
+    for (const [type, listener] of capture) window.addEventListener(type, listener, true);
+    window.addEventListener("blur", clear);
+    return () => {
+      window.clearInterval(timer);
+      for (const [type, listener] of capture) window.removeEventListener(type, listener, true);
+      window.removeEventListener("blur", clear);
+    };
+  }, [addDropActive]);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inspectorSelection = useRef({ selectedGamePath, inspectorOpen });
   inspectorSelection.current = { selectedGamePath, inspectorOpen };
@@ -1120,27 +1140,33 @@ export default function App() {
     return Array.from(ev.dataTransfer.types || []).includes(INTERNAL_GAME_DRAG_TYPE);
   }
 
+  // The add overlay is for files dragged in from outside the launcher. Drags
+  // that start inside it (reordering, sliders) carry no files.
+  function isExternalFileDrag(ev: React.DragEvent) {
+    return !isInternalGameDrag(ev) && Array.from(ev.dataTransfer.types || []).includes("Files");
+  }
+
   function onAppDragEnter(ev: React.DragEvent) {
-    if (isInternalGameDrag(ev)) return;
+    if (!isExternalFileDrag(ev)) return;
     addDropDepth.current += 1;
     setAddDropActive(true);
   }
 
   function onAppDragLeave(ev: React.DragEvent) {
-    if (isInternalGameDrag(ev)) return;
+    if (!isExternalFileDrag(ev)) return;
     addDropDepth.current = Math.max(0, addDropDepth.current - 1);
     if (addDropDepth.current === 0) setAddDropActive(false);
   }
 
   function onAppDragOver(ev: React.DragEvent) {
-    if (isInternalGameDrag(ev)) return;
+    if (!isExternalFileDrag(ev)) return;
     ev.preventDefault();
   }
 
   async function onDropAdd(ev: React.DragEvent) {
     const handled=ev.defaultPrevented;
     ev.preventDefault();
-    if (isInternalGameDrag(ev)) return;
+    if (!isExternalFileDrag(ev)) return;
     if (!api) return;
     const launcherApi = api;
     addDropDepth.current = 0;
