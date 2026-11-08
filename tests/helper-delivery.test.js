@@ -80,10 +80,10 @@ test("Sikarugir provider returns its fresh-profile discovery plan without refres
   assert.equal(Harness.network.requests.length, before);
 });
 
-test("all three scene adapters retain discovery plans for a selected scene effect", t => {
+test("all three scene adapters retain discovery plans for a selected scene effect once the FidelityFX route records frames", t => {
   const root = profile(t), Catalog = require("../src/modules/crossover/temporal/catalog"), previous = Catalog.FIDELITYFX_PROFILE;
   const bytes = Buffer.from("original scene API fixture"), crypto = require("node:crypto");
-  Catalog.FIDELITYFX_PROFILE = {...previous, referenceSha256:crypto.createHash("sha256").update(bytes).digest("hex")};
+  Catalog.FIDELITYFX_PROFILE = {...previous, referenceSha256:crypto.createHash("sha256").update(bytes).digest("hex"), recordsSceneFrames:true};
   t.after(() => { Catalog.FIDELITYFX_PROFILE = previous; });
   fs.writeFileSync(path.join(root, previous.library), bytes);
   const entry = {gamePath:root, runtimeData:{crossover:{sourceRoot:root, windowsExecutablePath:path.join(root,"game.exe"),executableArchitecture:"x86_64"}},

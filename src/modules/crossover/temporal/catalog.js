@@ -2,7 +2,10 @@ const SOURCE_URL = "https://github.com/Sikarugir-App/Template/releases";
 // Runtime contracts are separate from excluded producer recipes/source inputs.
 const VULKAN_PROFILE = Object.freeze({ id: "crossover-26.3.0-winevulkan-scene-v1",
   driverVersion: 47, unixCallCount: 674, marker: 0x2630002f });
-const FIDELITYFX_PROFILE = Object.freeze({ id: "fidelityfx-api-1.0.1-sdk1.1.4", library: "amd_fidelityfx_vk.dll",
+// recordsSceneFrames: the proxy's WineVulkan observer finds no recording
+// export in the adapted winevulkan modules, so the route hands no frame to the
+// shared processor and Play neither offers nor links its scene packages.
+const FIDELITYFX_PROFILE = Object.freeze({ id: "fidelityfx-api-1.0.1-sdk1.1.4", library: "amd_fidelityfx_vk.dll", recordsSceneFrames: false,
   original: "maclauncher_fidelityfx_vk_original.dll", referenceSha256: "a1624cc4238fef046f30c4d80ce3f47be63fc5f5373f49e3ee9edb9960f54c78",
   exports: Object.freeze(["ffxConfigure", "ffxCreateContext", "ffxDestroyContext", "ffxDispatch", "ffxQuery"]) });
 function withSettingsOptions(manifest) {

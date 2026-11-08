@@ -273,6 +273,10 @@ function resolveScenePlan(entry, context = {}, { install, settings = context.run
     return null;
   }
   const sources = sceneLibraries(entry, settings);if (!sources.length) return null;
+  if (!require("./catalog").FIDELITYFX_PROFILE.recordsSceneFrames) {
+    context.graphicsBridgeFailure = { provider: "crossover-vulkan", reason: "The FidelityFX Vulkan route records no scene frames, so the game keeps its own FidelityFX upscaling." };
+    return null;
+  }
   support ||= require("./support-manager");vulkan ||= require("../../shared/vulkan/managed");
   const verification = verify ? "full" : "status", selections = {};
   for (const id of ["winevulkan-scene", "fidelityfx-api"]) selections[id] = support.apiManagers[id].resolvePayload(entry, context, { verification });

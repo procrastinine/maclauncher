@@ -203,6 +203,21 @@ test("Graphics Off does no scene package or original-library discovery", () => {
   const Temporal = require("../src/modules/crossover/temporal"), unavailable = new Proxy({}, { get() { assert.fail("Off must not inspect packages"); } });
   assert.equal(Temporal.resolveScenePlan({}, {}, { install: { crossoverRoot: "/unreadable/vendor" }, requested: false, support: unavailable, vulkan: unavailable }), null);
 });
+test("an automatic launch with the FidelityFX Vulkan library gets no scene package work while the route records no frames", t => {
+  const Temporal = require("../src/modules/crossover/temporal"), Catalog = require("../src/modules/crossover/temporal/catalog");
+  const Detection = require("../src/modules/crossover/detect"), crypto = require("node:crypto");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-ffx-scene-"));t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const library = path.join(root, "amd_fidelityfx_vk.dll");fs.writeFileSync(library, "game FidelityFX library");fs.writeFileSync(path.join(root, "Game.exe"), "game");
+  const original = Catalog.FIDELITYFX_PROFILE;t.after(() => { Catalog.FIDELITYFX_PROFILE = original; });
+  Catalog.FIDELITYFX_PROFILE = { ...original, referenceSha256: crypto.createHash("sha256").update(fs.readFileSync(library)).digest("hex") };
+  t.mock.method(Detection, "cachedWindowsExecutable", () => ({ sourceRoot: root, windowsExecutablePath: path.join(root, "Game.exe") }));
+  const unavailable = new Proxy({}, { get() { assert.fail("the FidelityFX route must not offer or link scene packages"); } });
+  const entry = { effects: { schema: 2, mode: "advanced", enabled: true, video: [{ id: "scene", kind: "temporal", method: "metalfx", enabled: true, settings: {} }] } };
+  assert.equal(Temporal.sceneLibraries(entry).length, 1, "the game's FidelityFX library is recognized");
+  const context = {};
+  assert.equal(Temporal.resolveScenePlan(entry, context, { install: { crossoverRoot: root }, support: unavailable, vulkan: unavailable }), null);
+  assert.match(context.graphicsBridgeFailure.reason, /records no scene frames/);
+});
 test("image filters, scaling and image-pair generation never acquire or activate the scene API", t => {
   const Temporal = require("../src/modules/crossover/temporal"), ReShade = require("../src/modules/shared/reshade");
   t.mock.method(ReShade, "resolveShaderSelection", () => ({requirements: {depth: false, motion: false}, traits: {}}));
