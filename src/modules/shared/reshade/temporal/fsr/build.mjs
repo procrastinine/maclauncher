@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {addLicense} from "../../../../../../scripts/license-files.mjs";
+import {addLicenses} from '../../../../../../scripts/license-files.mjs';
 // Offline AMD HLSL -> SPIR-V -> Metal build. Runtime use needs no shader tools.
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -13,7 +13,7 @@ const source = path.resolve(sourceArg), tools = path.resolve(toolsArg), out = pa
 const fsr3=process.argv.includes('--fsr3');
 const group=fsr3?'fsr3':'fsr2', shaderPrefix=fsr3?'fsr3upscaler':'fsr2';
 const pin = fsr3?'c6efa6bf7f2027b3ec94f28578bb5965eabb9e55':'1680d1edd5c034f88ebbbb793d8b88f8842cf804';
-const run = (exe, args) => execFileSync(exe, args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+const run = (exe, args) => execFileSync(exe, args, { encoding: 'utf8', maxBuffer: Infinity});
 if (run('git', ['-C', source, 'rev-parse', 'HEAD']).trim() !== pin) throw new Error('FSR2 source revision differs from the build pin.');
 const api = path.join(source, fsr3?'sdk/src/components/fsr3upscaler':'src/ffx-fsr2-api');
 const shaders = fsr3?path.join(source,'sdk/src/backends/dx12/shaders/fsr3upscaler'):path.join(api, 'shaders');
@@ -80,7 +80,6 @@ for(const arch of ['arm64','x86_64']) {
 const library=path.join(out,`libmaclauncher-${group}.dylib`);
 run('lipo',['-create',...['arm64','x86_64'].map(arch=>path.join(out,`libmaclauncher-${group}-${arch}.dylib`)),'-output',library]);
 run('codesign',['--force','--sign','-',library]);
-addLicense(out,group,path.join(source,'LICENSE.txt'));
 for(let variant=0;variant<16;++variant)for(let pass=0;pass<passes.length;++pass)for(const ext of ['metal','json']){
   if(!(await fs.stat(path.join(out,group,String(variant),`${pass}.${ext}`))).isFile())throw new Error('Incomplete shader resources.');
 }
@@ -89,7 +88,7 @@ const payload=path.join(out,'payload');
 await fs.mkdir(payload,{recursive:true});
 await fs.cp(path.join(out,group),path.join(payload,group),{recursive:true});
 for(const name of [`libmaclauncher-${group}.dylib`,`${group}-build.json`])await fs.copyFile(path.join(out,name),path.join(payload,name));
-if(await fs.access(path.join(out,'licenses')).then(()=>true,()=>false))await fs.cp(path.join(out,'licenses'),path.join(payload,'licenses'),{recursive:true});
+addLicenses(payload,group.toUpperCase(),source);
 const methods=[];
 for(const method of ['fsr2','fsr3']){try{await fs.access(path.join(payload,`${method}-build.json`));methods.push(method);}catch{}}
 await fs.writeFile(path.join(payload,'provider.json'),JSON.stringify({providerABI:1,complete:true,methods,minimumMacOS:'13.0',architectures:['arm64','x86_64'],libraries:methods.map(method=>`libmaclauncher-${method}.dylib`),shaders:methods,resolvedPaths:methods.map(method=>method+'/')},null,2));

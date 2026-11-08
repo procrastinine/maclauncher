@@ -23,3 +23,27 @@ export function addLicense(root,component,source,licence=component){
   fs.appendFileSync(index,`${component}: ${file}\n`);
  }catch(error){console.log(`::warning::No licence text for ${component}: ${error.message}`);}
 }
+
+/** Merge a producer's component index through the same package-level operation. */
+export function includeLicenses(root,directory){
+ try{if(path.resolve(root,'licenses')===path.resolve(directory))return;
+ for(const row of fs.readFileSync(path.join(directory,'components.txt'),'utf8').split('\n').filter(Boolean)){
+  const split=row.lastIndexOf(': '),file=row.slice(split+2);
+  addLicense(root,row.slice(0,split),path.join(directory,file),file.replace(/\.txt$/,''));
+ }}catch(error){try{console.log(`::warning::No licence texts from ${directory}: ${error.message}`);}catch{}}
+}
+
+/** Add the licence texts at the top of a source directory, including the files of a LICENSES folder. */
+export function addLicenses(root,component,directory,immediateChildren=false){
+ try{
+  if(immediateChildren){
+   for(const entry of fs.readdirSync(directory,{withFileTypes:true}).sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0))if(entry.isDirectory())addLicenses(root,entry.name,path.join(directory,entry.name));
+   return;
+  }
+  const copy=file=>{try{
+   if(fs.statSync(file).isDirectory())for(const name of fs.readdirSync(file).sort())copy(path.join(file,name));
+   else addLicense(root,component,file);
+  }catch(error){try{console.log(`::warning::No licence text from ${file}: ${error.message}`);}catch{}}};
+  for(const name of fs.readdirSync(directory).sort().filter(name=>/^(?:licen[cs](?:e|ing)|copying|notice|copyright|third[_ .-]?party[_ .-]?(?:notices?|licen[cs]es?)|(?:[AL]?GPL|MPL|Apache|MIT|BSD|ISC|Zlib|OFL|UFL|BSL|CC0|Unlicense)(?:[._ -]|$))/i.test(name)))copy(path.join(directory,name));
+ }catch(error){try{console.log(`::warning::No licence texts in ${directory}: ${error.message}`);}catch{}}
+}

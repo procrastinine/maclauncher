@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {addLicense} from "../../../../../../scripts/license-files.mjs";
+import {addLicenses} from '../../../../../../scripts/license-files.mjs';
 // Offline translation of the original Arm ASR mixed fragment/compute graph.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,7 +9,7 @@ const here=import.meta.dirname,spec=JSON.parse(fs.readFileSync(path.join(here,'s
 for(let i=2;i<process.argv.length;i+=2){const key=process.argv[i];if(key==='--native-only'){options[key]=true;i--;continue;}if(!['--source','--tools','--output'].includes(key)||!process.argv[i+1]||options[key])throw Error('Expected unique source, tools and output paths.');options[key]=path.resolve(process.argv[i+1]);}
 for(const key of ['--source','--tools','--output'])if(!options[key])throw Error('Missing '+key);
 const source=options['--source'],tools=options['--tools'],out=options['--output'];
-const run=(exe,args)=>execFileSync(exe,args,{encoding:'utf8',maxBuffer:16*1024*1024}),hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const run=(exe,args)=>execFileSync(exe,args,{encoding:'utf8',maxBuffer: Infinity}),hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 if(run('git',['-C',source,'rev-parse','HEAD']).trim()!==spec.commit)throw Error('Arm ASR source differs from its registered exact revision.');
 run('git',['-C',source,'diff','--exit-code','HEAD','--']);
 if(fs.existsSync(out)&&!options['--native-only'])throw Error('Choose a new ASR output directory.');fs.mkdirSync(out,{recursive:true});
@@ -76,9 +76,9 @@ for(const arch of ['arm64','x86_64']){
  run('xcrun',['clang++',...args,'-arch',arch,'-fobjc-arc','-dynamiclib',path.join(here,'backend.mm'),...objects,'-framework','Metal','-framework','Foundation','-install_name','@rpath/libmaclauncher-asr.dylib','-o',path.join(out,'libmaclauncher-asr-'+arch+'.dylib')]);
 }
 run('lipo',['-create',...['arm64','x86_64'].map(a=>path.join(out,'libmaclauncher-asr-'+a+'.dylib')),'-output',path.join(out,'libmaclauncher-asr.dylib')]);run('codesign',['--force','--sign','-',path.join(out,'libmaclauncher-asr.dylib')]);
-addLicense(out,'arm-asr',path.join(source,'LICENSES/MIT.txt'));
+addLicenses(out,'Arm-ASR',source);
 const ownedNames=['source.json','build.mjs','backend.mm','descriptor.js','host-compat.hpp','../frame.h','../command-order.hpp','../payload-files.hpp'],owned=Object.fromEntries(ownedNames.map(n=>[n,hash(path.join(here,n))]));
 function inventory(dir,prefix=''){return fs.readdirSync(path.join(dir,prefix),{withFileTypes:true}).flatMap(e=>{const r=path.posix.join(prefix,e.name);return e.isDirectory()?inventory(dir,r):[{path:r,size:fs.statSync(path.join(dir,r)).size,sha256:hash(path.join(dir,r))}];});}
-const files=[{path:'libmaclauncher-asr.dylib',size:fs.statSync(path.join(out,'libmaclauncher-asr.dylib')).size,sha256:hash(path.join(out,'libmaclauncher-asr.dylib'))},...inventory(out,'licenses'),...inventory(out,'asr')];
+const files=inventory(out).filter(row=>!['shader-overlay','host-overlay'].includes(row.path.split('/')[0])&&!row.path.endsWith('.o')&&!['provider.json','libmaclauncher-asr-arm64.dylib','libmaclauncher-asr-x86_64.dylib'].includes(row.path));
 fs.writeFileSync(path.join(out,'provider.json'),JSON.stringify({providerABI:1,complete:true,methods:['asr'],minimumMacOS:spec.minimumMacOS,architectures:['arm64','x86_64'],libraries:['libmaclauncher-asr.dylib'],shaders:['asr'],resolvedPaths:['asr/'],resourcePreparation:1,shaderProfiles:['quality','balanced','performance','ultra-performance'],files,owned,source:{repository:spec.repository,commit:spec.commit},adaptations:[{file:'include/host/ffxm_fsr2.h',sourceSha256:hash(original),appliedSha256:hash(path.join(overlay,'ffxm_fsr2.h')),changes:['Darwin-wchar-context-capacity']},{file:spec.rgbBoundary.file,sourceSha256:hash(rgbOriginal),appliedSha256:hash(rgbOverlay),changes:['Clamp-integer-RGB-loads-to-logical-render-region']},{file:spec.sdrHistory.file,sourceSha256:hash(historyOriginal),appliedSha256:hash(historyOverlay),changes:['Match-SDR-Performance-history-to-tonemapped-prepared-color']}],buildInputs:Object.fromEntries(['dxc','spirv-cross','spirv-val'].map(n=>[n,hash(path.join(tools,n))]))},null,2)+'\n');
 console.log('Built Arm ASR Metal provider: '+out);

@@ -139,6 +139,7 @@
       "!src/modules/shared/reshade/{stage-royale.mjs,shaderc-offline.cpp}",
       "!src/modules/shared/reshade/temporal/*.{h,hpp}",
       "!src/modules/shared/reshade/temporal/*/{build.mjs,adapt-runtime.mjs,*.mm,*.hpp}",
+      "!src/modules/shared/reshade/temporal/fsr4/licenses{,/**}",
       "!src/modules/shared/vulkan/native{,/**}",
       "!src/modules/renpy/resources/unren{,/**}",
       "!src/modules/renpy/resources/universal-renpy-walkthrough{,/**}",

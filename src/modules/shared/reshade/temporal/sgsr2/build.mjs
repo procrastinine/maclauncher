@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {addLicense} from "../../../../../../scripts/license-files.mjs";
+import {addLicenses} from '../../../../../../scripts/license-files.mjs';
 // Offline GLSL -> SPIR-V -> Metal translation of Qualcomm's two-pass SGSR2.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,7 +11,7 @@ const options={};
 for(let i=2;i<process.argv.length;i+=2){const key=process.argv[i];if(key==='--native-only'&&!options[key]){options[key]=true;i--;continue;}if(!['--source','--tools','--shaderc-library','--shaderc-headers','--shader-cache','--output'].includes(key)||!process.argv[i+1]||options[key])throw new Error('Expected unique named build input paths.');options[key]=path.resolve(process.argv[i+1]);}
 for(const key of ['--source','--output',...(options['--native-only']?['--shader-cache']:['--tools','--shaderc-library','--shaderc-headers'])])if(!options[key])throw new Error('Missing '+key);
 if(options['--shader-cache']&&!options['--native-only'])throw new Error('--shader-cache requires --native-only.');
-const run=(exe,args)=>execFileSync(exe,args,{encoding:'utf8',maxBuffer:16*1024*1024});
+const run=(exe,args)=>execFileSync(exe,args,{encoding:'utf8',maxBuffer: Infinity});
 const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const source=options['--source'],out=options['--output'],tools=options['--tools'];
 if(run('git',['-C',source,'rev-parse','HEAD']).trim()!==spec.commit)throw new Error('SGSR source differs from the registered exact commit.');
@@ -27,7 +27,10 @@ if(options['--native-only']){
   adaptations.push(...metadata.adaptations);buildInputs=metadata.buildInputs;
 }else{
 const compiler=path.join(out,'shaderc-offline');
-run('xcrun',['clang++','-std=c++17','-O2','-I',options['--shaderc-headers'],path.join(here,'../../shaderc-offline.cpp'),'-o',compiler]);
+const compilerArchitectures=run('lipo',['-archs',options['--shaderc-library']]).trim().split(/\s+/),hostCPU=process.arch==='x64'?'x86_64':process.arch;
+const compilerCPU=compilerArchitectures.includes(hostCPU)?hostCPU:compilerArchitectures.length===1?compilerArchitectures[0]:null;
+if(!['arm64','x86_64'].includes(compilerCPU))throw new Error('Shader compiler library has no supported build-host CPU.');
+run('xcrun',['clang++','-std=c++17','-O2','-arch',compilerCPU,'-I',options['--shaderc-headers'],path.join(here,'../../shaderc-offline.cpp'),'-o',compiler]);
 for(const [filename,expected] of Object.entries(spec.shaders)){
   const original=path.join(source,'sgsr/v2/include/glsl_2_pass_cs',filename);
   if(hash(original)!==expected)throw new Error('SGSR shader input changed: '+filename);
@@ -69,8 +72,8 @@ for(const arch of ['arm64','x86_64'])run('xcrun',['clang++','-std=c++17','-O2','
 const library=path.join(out,'libmaclauncher-sgsr2.dylib');
 run('lipo',['-create',...['arm64','x86_64'].map(arch=>path.join(out,`libmaclauncher-sgsr2-${arch}.dylib`)),'-output',library]);
 run('codesign',['--force','--sign','-',library]);
-addLicense(out,'sgsr2',path.join(source,'LICENSE'));
-const files=[];for(const relative of ['libmaclauncher-sgsr2.dylib',...(fs.existsSync(path.join(out,'licenses'))?fs.readdirSync(path.join(out,'licenses')).map(file=>'licenses/'+file):[]),...['convert','upscale'].flatMap(pass=>['metal','json'].map(ext=>'sgsr2/'+pass+'.'+ext))])files.push({path:relative,size:fs.statSync(path.join(out,relative)).size,sha256:hash(path.join(out,relative))});
+addLicenses(out,'SGSR2',source);
+const files=fs.readdirSync(out,{recursive:true}).filter(relative=>!['provider.json','shaderc-offline','libmaclauncher-sgsr2-arm64.dylib','libmaclauncher-sgsr2-x86_64.dylib'].includes(relative)&&fs.statSync(path.join(out,relative)).isFile()).map(relative=>({path:relative,size:fs.statSync(path.join(out,relative)).size,sha256:hash(path.join(out,relative))}));
 const owned=Object.fromEntries(['source.json','build.mjs','backend.mm','descriptor.js','../frame.h','../command-order.hpp','../../shaderc-offline.cpp'].map(name=>[name,hash(path.join(here,name))]));
 fs.writeFileSync(path.join(out,'provider.json'),JSON.stringify({providerABI:1,complete:true,methods:['sgsr2'],minimumMacOS:spec.minimumMacOS,architectures:['arm64','x86_64'],libraries:['libmaclauncher-sgsr2.dylib'],shaders:['sgsr2'],resourcePreparation:1,files,source:{repository:spec.repository,commit:spec.commit},owned,adaptations,buildInputs},null,2)+'\n');
 console.log('Built SGSR2 Metal provider: '+out);

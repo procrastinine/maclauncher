@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {addLicense} from "../../../../../../scripts/license-files.mjs";
+import {addLicense} from '../../../../../../scripts/license-files.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -8,7 +8,7 @@ const here=import.meta.dirname,pin=JSON.parse(fs.readFileSync(path.join(here,'so
 const [sourceArg,toolsArg,outputArg,...options]=process.argv.slice(2);
 if(!outputArg)throw Error('Usage: build.mjs SOURCE_GIT TOOLS OUTPUT [--shaders-only] [--native-only]');
 const source=path.resolve(sourceArg),tools=path.resolve(toolsArg),output=path.resolve(outputArg);
-const run=(file,args)=>execFileSync(file,args,{encoding:'utf8',maxBuffer:32*1024*1024});
+const run=(file,args)=>execFileSync(file,args,{encoding:'utf8',maxBuffer: Infinity});
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 if(run('git',['-C',source,'rev-parse','HEAD']).trim()!==pin.commit)throw Error('Select the declared FidelityFX SDK commit.');
 for(const name of ['dxc','spirv-cross'])if(hash(fs.readFileSync(path.join(tools,name)))!==pin.tools[name])throw Error('The shader compiler differs from the declared build input: '+name);
