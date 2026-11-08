@@ -4,7 +4,7 @@ import {execFileSync} from "node:child_process";
 // wrapper functions, library identities and upstream files remain intact.
 // Keep the shared first 's' of spirv_cross/simple_json export-tree edges.
 // The complete loader export set below verifies the resulting namespace.
-const exportsFor=file=>execFileSync("dyld_info",["-exports",file],{encoding:"utf8",maxBuffer:16*1024*1024}).split("\n").map(line=>/^\s*0x[0-9a-f]+\s+(\S+)/i.exec(line)?.[1]).filter(Boolean);
+const exportsFor=file=>execFileSync("dyld_info",["-exports",file],{encoding:"utf8",maxBuffer: Infinity}).split("\n").map(line=>/^\s*0x[0-9a-f]+\s+(\S+)/i.exec(line)?.[1]).filter(Boolean);
 export function isolateCompiler(file,replacements){
   const renamed=name=>replacements.reduce((text,[from,to])=>text.replaceAll(from,to),name);
   const before=exportsFor(file),bytes=fs.readFileSync(file),slices=[];
