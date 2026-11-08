@@ -14,9 +14,9 @@
 #endif
 
 namespace macfx::wcap {
-constexpr uint32_t Version=1;
+constexpr uint32_t Version=2;
 enum Command:uint32_t {Hello=1,Welcome=2,Control=3,Event=4,Frame=5,Release=6,Heartbeat=7,Goodbye=8};
-struct FrameInfo {uint64_t sequence=0,generation=0;double time=0;uint32_t width=0,height=0;};
+struct FrameInfo {uint64_t sequence=0,generation=0;double time=0;uint32_t width=0,height=0;uint32_t cropX=0,cropY=0,cropWidth=0,cropHeight=0;double contentScale=1,scaleFactor=1;};
 // Every protocol message has the same two descriptors, including empty ones.
 struct Message {
     mach_msg_header_t header{};mach_msg_body_t body{};

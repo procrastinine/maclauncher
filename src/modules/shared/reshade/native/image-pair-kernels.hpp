@@ -10,7 +10,7 @@ inline constexpr const char*imagePairKernels=R"MSL(
 #include <metal_stdlib>
 using namespace metal;
 struct Convert {uint fullRange;uint flags;float2 coverage;float2 vectorScale;};
-struct FlowParams {float t;float gain;float consistency;float colorTolerance;};
+struct FlowParams {float t;float gain;float consistency;float colorTolerance;uint borrowedAvailable;};
 constexpr sampler linearClamp(filter::linear,address::clamp_to_edge);
 static float3 encodeSRGB(float3 c){c=saturate(c);return select(1.055f*pow(c,1.0f/2.4f)-0.055f,c*12.92f,c<=0.0031308f);}
 static float3 decodeSRGB(float3 c){c=saturate(c);return select(pow((c+0.055f)/1.055f,2.4f),c/12.92f,c<=0.04045f);}
@@ -54,16 +54,20 @@ kernel void fillDepth(texture2d<float,access::write>depth[[texture(0)]],uint2 gi
 // motion and backward next to prev, in flow-texture pixels after gain. A side
 // is trusted where its vector survives a round trip through the other field.
 // Without valid flow the pair is blended.
-kernel void flowInterpolate(texture2d<float,access::sample>prev[[texture(0)]],texture2d<float,access::sample>next[[texture(1)]],texture2d<float,access::sample>forward[[texture(2)]],texture2d<float,access::sample>backward[[texture(3)]],texture2d<float,access::write>output[[texture(4)]],constant FlowParams&params[[buffer(0)]],device const uint*valid[[buffer(1)]],uint2 gid[[thread_position_in_grid]]){
+static float2 selectedFlow(texture2d<float,access::sample>exact,texture2d<float,access::sample>borrowed,bool useBorrowed,float2 uv){
+  if(useBorrowed)return borrowed.sample(linearClamp,uv).rg;return exact.sample(linearClamp,uv).rg;
+}
+kernel void flowInterpolate(texture2d<float,access::sample>prev[[texture(0)]],texture2d<float,access::sample>next[[texture(1)]],texture2d<float,access::sample>forward[[texture(2)]],texture2d<float,access::sample>backward[[texture(3)]],texture2d<float,access::write>output[[texture(4)]],texture2d<float,access::sample>borrowedForward[[texture(5)]],texture2d<float,access::sample>borrowedBackward[[texture(6)]],constant FlowParams&params[[buffer(0)]],device const uint*valid[[buffer(1)]],uint2 gid[[thread_position_in_grid]]){
   const uint width=output.get_width(),height=output.get_height();if(gid.x>=width||gid.y>=height)return;
   const float2 uv=(float2(gid)+0.5f)/float2(width,height);const float t=params.t;
   const float4 blended=mix(prev.sample(linearClamp,uv),next.sample(linearClamp,uv),t);
-  if(!valid[0]){output.write(blended,gid);return;}
+  const bool useBorrowed=!valid[0]&&params.borrowedAvailable;
+  if(!valid[0]&&!useBorrowed){output.write(blended,gid);return;}
   const float2 flowSize=float2(forward.get_width(),forward.get_height());
-  const float2 f=forward.sample(linearClamp,uv).rg*params.gain,b=backward.sample(linearClamp,uv).rg*params.gain;
+  const float2 f=selectedFlow(forward,borrowedForward,useBorrowed,uv)*params.gain,b=selectedFlow(backward,borrowedBackward,useBorrowed,uv)*params.gain;
   const float2 uvA=uv-f*t/flowSize,uvB=uv-b*(1.0f-t)/flowSize;
-  const float2 fA=forward.sample(linearClamp,uvA).rg*params.gain,bA=backward.sample(linearClamp,uvA+fA/flowSize).rg*params.gain;
-  const float2 bB=backward.sample(linearClamp,uvB).rg*params.gain,fB=forward.sample(linearClamp,uvB+bB/flowSize).rg*params.gain;
+  const float2 fA=selectedFlow(forward,borrowedForward,useBorrowed,uvA)*params.gain,bA=selectedFlow(backward,borrowedBackward,useBorrowed,uvA+fA/flowSize)*params.gain;
+  const float2 bB=selectedFlow(backward,borrowedBackward,useBorrowed,uvB)*params.gain,fB=selectedFlow(forward,borrowedForward,useBorrowed,uvB+bB/flowSize)*params.gain;
   // Large motion is allowed a proportionally larger round-trip error.
   const float toleranceA=params.consistency+0.08f*length(fA),toleranceB=params.consistency+0.08f*length(bB);
   const float confA=1.0f-smoothstep(toleranceA,toleranceA*4.0f,length(fA+bA)),confB=1.0f-smoothstep(toleranceB,toleranceB*4.0f,length(bB+fB));
@@ -71,7 +75,7 @@ kernel void flowInterpolate(texture2d<float,access::sample>prev[[texture(0)]],te
   const float weightA=(1.0f-t)*confA,weightB=t*confB,weightSum=weightA+weightB;
   const float4 warped=weightSum>1e-4f?(cA*weightA+cB*weightB)/weightSum:mix(cA,cB,t);
   float reliability=max(confA,confB);
-  if(params.colorTolerance>0.0f){
+  if(useBorrowed&&params.colorTolerance>0.0f){
     // Neighbourhoods rather than single texels keep one decision across a badly tracked object.
     const float2 taps[5]={float2(0,0),float2(2,0),float2(-2,0),float2(0,2),float2(0,-2)};float colorError=0.0f;
     for(int i=0;i<5;++i){const float2 d=taps[i]/flowSize;colorError+=length(prev.sample(linearClamp,uvA+d).rgb-next.sample(linearClamp,uvB+d).rgb);}

@@ -5,6 +5,8 @@
 #import <CoreVideo/CoreVideo.h>
 #import <QuartzCore/QuartzCore.h>
 #include "browser-frame-policy.hpp"
+#include "capture-frame-geometry.hpp"
+#include "iosurface-texture.hpp"
 #include "image-admission.hpp"
 #include "presentation.hpp"
 #include "runtime-status.hpp"
@@ -15,7 +17,7 @@
 #include <optional>
 #include <string>
 // The completed-window adapter. One ScreenCaptureKit stream delivers composed
-// window images; complete frames are copied into GPU slots and submitted to a
+// window images; leased full-content frames are submitted directly to a
 // FramePresenter, so every mode the presenter supports applies to the capture.
 // Clients supply the content filter, the geometry and the output host:
 // browser-frame.mm for a browser's own window, window-source.mm for any
@@ -28,13 +30,19 @@ struct WindowStream;
 }
 @end
 namespace macfx {
-struct WindowStreamSample {
-    CMSampleBufferRef value=nullptr;uint64_t generation=0;
-    explicit WindowStreamSample(CMSampleBufferRef v,uint64_t g):value(v),generation(g){CFRetain(v);}
-    ~WindowStreamSample(){CFRelease(value);}
+struct WindowStreamSlot {id<MTLTexture>texture=nil;std::atomic<bool>busy{false};};
+struct WindowStreamSample:WindowStreamSlot {
+    CMSampleBufferRef value=nullptr;uint64_t generation=0;CaptureFrameGeometry content;
+    CVMetalTextureRef imported=nullptr;std::shared_ptr<std::atomic<unsigned>>retained;
+    explicit WindowStreamSample(CMSampleBufferRef v,uint64_t g,CaptureFrameGeometry c={},std::shared_ptr<std::atomic<unsigned>>count={})
+        :value(v),generation(g),content(c),retained(std::move(count)){CFRetain(v);}
+    ~WindowStreamSample(){if(imported)CFRelease(imported);CFRelease(value);if(retained)retained->fetch_sub(1);}
+    static std::shared_ptr<WindowStreamSample>acquire(CMSampleBufferRef value,uint64_t generation,CaptureFrameGeometry content,const std::shared_ptr<std::atomic<unsigned>>&retained){
+        unsigned count=retained->load();do{if(count>=3)return {};}while(!retained->compare_exchange_weak(count,count+1));
+        try{return std::make_shared<WindowStreamSample>(value,generation,content,retained);}catch(...){retained->fetch_sub(1);throw;}
+    }
 };
 struct WindowStreamPixelLease {std::shared_ptr<WindowStreamSample>sample;CVMetalTextureRef texture=nullptr;~WindowStreamPixelLease(){if(texture)CFRelease(texture);}};
-struct WindowStreamSlot {id<MTLTexture>texture=nil;std::atomic<bool>busy{false};};
 inline bool sameWindowGeometry(const BrowserFrameGeometry &a,const BrowserFrameGeometry &b)noexcept {
     return a.x==b.x&&a.y==b.y&&a.width==b.width&&a.height==b.height&&a.pixelsWidth==b.pixelsWidth&&a.pixelsHeight==b.pixelsHeight;
 }
@@ -74,7 +82,8 @@ struct WindowStream :std::enable_shared_from_this<WindowStream> {
     CAMetalLayer *layer=nil;
     id<MTLDevice>device=nil;id<MTLCommandQueue>queue=nil,copyQueue=nil;bool copyQueueAttempted=false;
     SCStream *stream=nil;MacFXWindowStreamReceiver *receiver=nil;
-    CVMetalTextureCacheRef cache=nullptr;
+    CVMetalTextureCacheRef cache=nullptr;IOSurfaceTextureCache sourceTextures;uint64_t importedGeneration=0;
+    std::shared_ptr<std::atomic<unsigned>>retainedSamples=std::make_shared<std::atomic<unsigned>>(0);
     dispatch_queue_t renderQueue,intakeQueue;
     explicit WindowStream(const char*frames="org.maclauncher.window-frames",const char*capture="org.maclauncher.window-capture")
         :renderQueue(dispatch_queue_create(frames,DISPATCH_QUEUE_SERIAL)),intakeQueue(dispatch_queue_create(capture,DISPATCH_QUEUE_SERIAL)) {}

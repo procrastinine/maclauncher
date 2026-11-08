@@ -24,7 +24,7 @@ bool WindowStream::prepareDevice(){
     return queue&&CVMetalTextureCacheCreate(kCFAllocatorDefault,nullptr,device,nullptr,&cache)==kCVReturnSuccess;
 }
 void WindowStream::prepareLayer(CGFloat scale,bool opaque){
-    layer=[CAMetalLayer layer];ownPresentation(layer);
+    layer=[CAMetalLayer layer];layer.maximumDrawableCount=3;ownPresentation(layer);
     layer.device=device;layer.pixelFormat=MTLPixelFormatBGRA8Unorm;layer.framebufferOnly=NO;
     layer.hidden=YES;
     layer.displaySyncEnabled=YES;layer.opaque=opaque;layer.contentsScale=scale;
@@ -75,7 +75,7 @@ void WindowStream::close(){ // Main thread. Late stream and GPU callbacks retain
     if(closed.exchange(true))return;retired=true;ready=false;hostClosed();
     ++streamStops;
     auto self=shared_from_this();dispatch_async(renderQueue,^{
-        if(self->presenter){self->presenter->setPreparationObserver({});self->presenter->stop();}self->raw.reset();self->replayRequested=false;
+        if(self->presenter){self->presenter->setPreparationObserver({});self->presenter->stop();}self->raw.reset();self->sourceTextures.clear();self->replayRequested=false;
         {std::lock_guard<std::mutex>lock(self->pendingMutex);self->pending.reset();}
         self->stopRequested=true;self->stopCapture();
     });
@@ -91,7 +91,7 @@ void WindowStream::stopCapture(){
 SCStreamConfiguration *WindowStream::configuration(const BrowserFrameGeometry &g){
     auto config=[SCStreamConfiguration new];config.width=g.pixelsWidth;config.height=g.pixelsHeight;
     config.minimumFrameInterval=kCMTimeZero;config.pixelFormat=kCVPixelFormatType_32BGRA;
-    config.queueDepth=3;config.showsCursor=showsCursor;config.capturesAudio=NO;
+    config.queueDepth=4;config.showsCursor=showsCursor;config.capturesAudio=NO;
     config.colorSpaceName=kCGColorSpaceSRGB;config.scalesToFit=YES;
     // ScreenCaptureKit source crops use logical points. The destination
     // and stream extent use pixels; no desktop mode or frame-rate change.
@@ -160,8 +160,19 @@ void WindowStream::receive(CMSampleBufferRef sample){
     NSDictionary *info=(__bridge NSDictionary*)CFArrayGetValueAtIndex(attachments,0);
     NSNumber *status=info[SCStreamFrameInfoStatus];
     if(!status||status.integerValue!=SCFrameStatusComplete){++idle;return;}
-    ++complete;auto value=std::make_shared<WindowStreamSample>(sample,geometryGeneration.load());bool schedule=false;
-    {std::lock_guard<std::mutex>lock(pendingMutex);if(pending)++dropped;pending=std::move(value);if(!worker){worker=true;schedule=true;}}
+    CVPixelBufferRef pixels=CMSampleBufferGetImageBuffer(sample);
+    if(!pixels){++dropped;return;}
+    const auto content=captureFrameGeometry(info,uint32_t(CVPixelBufferGetWidth(pixels)),uint32_t(CVPixelBufferGetHeight(pixels)));
+    if(!content.valid){++dropped;return;}
+    ++complete;bool schedule=false;
+    {std::lock_guard<std::mutex>lock(pendingMutex);
+        if(pending){++dropped;pending.reset();}
+        // At most three distinct SCK samples survive the callback: raw replay,
+        // GPU readers and one coalesced newest input share this strict bound.
+        auto value=WindowStreamSample::acquire(sample,geometryGeneration.load(),content,retainedSamples);
+        if(!value){++dropped;return;}
+        pending=std::move(value);if(!worker){worker=true;schedule=true;}
+    }
     if(schedule){auto self=shared_from_this();dispatch_async(renderQueue,^{self->drain();});}
 }
 void WindowStream::drain(){
@@ -245,8 +256,9 @@ void WindowStream::unusable(CVPixelBufferRef pixels,unsigned w,unsigned h){ // r
 void WindowStream::render(const std::shared_ptr<WindowStreamSample>&sample){
     CVPixelBufferRef pixels=CMSampleBufferGetImageBuffer(sample->value);
     const unsigned w=width.load(),h=height.load();
-    if(!pixels||CVPixelBufferGetPixelFormatType(pixels)!=kCVPixelFormatType_32BGRA||
-        CVPixelBufferGetWidth(pixels)!=w||CVPixelBufferGetHeight(pixels)!=h){unusable(pixels,w,h);return;}
+    const auto content=sample->content;
+    if(!pixels||!content.valid||CVPixelBufferGetPixelFormatType(pixels)!=kCVPixelFormatType_32BGRA||
+        CVPixelBufferGetWidth(pixels)!=content.surfaceWidth||CVPixelBufferGetHeight(pixels)!=content.surfaceHeight){unusable(pixels,w,h);return;}
     unusableEpoch=0;
     auto attachments=CMSampleBufferGetSampleAttachmentsArray(sample->value,false);
     NSDictionary *info=(__bridge NSDictionary*)CFArrayGetValueAtIndex(attachments,0);
@@ -257,17 +269,29 @@ void WindowStream::render(const std::shared_ptr<WindowStreamSample>&sample){
         time=CMTimeGetSeconds(pts);}
     if(time<geometryTime.load()||sample->generation!=geometryGeneration||!browserFrameTimeAccepted(time,lastTime)){++dropped;return;}
     if(!windowCaptureIntervalAccepted(time,lastTime,minimumInterval.load())){++dropped;return;}
+    const auto generation=sample->generation;
+    if(importedGeneration!=generation){sourceTextures.clear();importedGeneration=generation;}
+    id<MTLTexture>input=nil;
+    if(IOSurfaceRef surface=CVPixelBufferGetIOSurface(pixels))input=sourceTextures.texture(device,surface,MTLPixelFormatBGRA8Unorm);
+    if(!input){
+        // Preserve the CV buffer route when a direct surface import is not
+        // available. A retained sample reuses its wrapper across retries.
+        if(!sample->imported)CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault,cache,pixels,nullptr,MTLPixelFormatBGRA8Unorm,content.surfaceWidth,content.surfaceHeight,0,&sample->imported);
+        if(sample->imported)input=CVMetalTextureGetTexture(sample->imported);
+    }
+    if(!input){fail("Completed frame is not available as a Metal texture");return;}
+    if(content.cropX==0&&content.cropY==0&&content.width==content.surfaceWidth&&content.height==content.surfaceHeight){
+        sample->texture=input;sample->busy=true;budgetRetryAt=0;budgetPressure.reset();lastTime=time;
+        submitCopied(std::static_pointer_cast<WindowStreamSlot>(sample),++frame,time,generation,w,h);return;
+    }
+    // Only a padded/cropped image needs a normalization copy. Full-content
+    // frames retain their source sample and cached import above, without blits.
     std::shared_ptr<WindowStreamSlot>slot;
     for(auto &entry:slots){if(!entry)entry=std::make_shared<WindowStreamSlot>();if(raw&&entry==raw->slot)continue;bool expected=false;
         if(entry->busy.compare_exchange_strong(expected,true)){slot=entry;break;}}
     if(!slot){++dropped;return;}
-    auto lease=std::make_shared<WindowStreamPixelLease>();lease->sample=sample;
-    const auto result=CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault,cache,pixels,nullptr,MTLPixelFormatBGRA8Unorm,w,h,0,&lease->texture);
-    if(result!=kCVReturnSuccess||!lease->texture){slot->busy=false;fail("Completed frame is not available as a Metal texture");return;}
-    id<MTLTexture>input=CVMetalTextureGetTexture(lease->texture);
-    if(!input){slot->busy=false;return;}
-    if(!slot->texture||slot->texture.width!=w||slot->texture.height!=h){
-        auto desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:w height:h mipmapped:NO];
+    if(!slot->texture||slot->texture.width!=content.width||slot->texture.height!=content.height){
+        auto desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:content.width height:content.height mipmapped:NO];
         desc.storageMode=MTLStorageModePrivate;desc.usage=MTLTextureUsageShaderRead|MTLTextureUsageRenderTarget;
         try{slot->texture=newAdmittedTexture(device,desc,reinterpret_cast<uintptr_t>(this),admissionStage);}
         catch(const ImageBudgetExceeded&error){
@@ -280,17 +304,16 @@ void WindowStream::render(const std::shared_ptr<WindowStreamSample>&sample){
     }
     if(!slot->texture){slot->busy=false;fail("Completed frame GPU storage is unavailable");return;}
     budgetRetryAt=0;budgetPressure.reset();lastTime=time;
-    // A separate, ordered GPU copy releases the SCK pool lease independently
-    // of slow neural inference or generated-frame presentation.
+    // Normalization retains the sample only through its private crop copy.
     if(!copyQueueAttempted){copyQueueAttempted=true;copyQueue=[device newCommandQueue];}
     auto copy=[(copyQueue?:queue) commandBuffer];if(!copy){slot->busy=false;fail("Completed frame GPU copy is unavailable");return;}
     ownPresentationBuffer(copy);auto blit=[copy blitCommandEncoder];
     if(!blit){slot->busy=false;fail("Completed frame GPU copy encoder is unavailable");return;}
-    [blit copyFromTexture:input sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(w,h,1)
+    [blit copyFromTexture:input sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(content.cropX,content.cropY,0) sourceSize:MTLSizeMake(content.width,content.height,1)
         toTexture:slot->texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[blit endEncoding];
-    const auto frameId=++frame,generation=sample->generation;auto self=shared_from_this();
+    const auto frameId=++frame;auto self=shared_from_this();
     [copy addCompletedHandler:^(id<MTLCommandBuffer>buffer){
-        (void)lease;const bool failed=buffer.status!=MTLCommandBufferStatusCompleted;
+        (void)sample;const bool failed=buffer.status!=MTLCommandBufferStatusCompleted;
         // Never call a presenter or wait for submission from a Metal
         // callback. Failed copies never become effect inputs.
         dispatch_async(self->renderQueue,^{

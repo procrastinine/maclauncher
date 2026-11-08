@@ -34,25 +34,41 @@ void ForwardedStream::submit(std::shared_ptr<ForwardedFrame> f){
 }
 void ForwardedStream::consume(std::shared_ptr<ForwardedFrame> f){
  const auto i=f->info;const auto generation=geometryGeneration.load();const unsigned w=width,h=height;
- if(retired||!f->surface||i.generation!=serviceGeneration||i.width!=w||i.height!=h||IOSurfaceGetWidth(f->surface)!=w||IOSurfaceGetHeight(f->surface)!=h||(!browserFrameTimeAccepted(i.time,lastTime)||!windowCaptureIntervalAccepted(i.time,lastTime,minimumInterval))||held(i)||(settled&&!settled())){++dropped;return;}
+ const bool crop=i.cropWidth||i.cropHeight;
+ const unsigned x=crop?i.cropX:0,y=crop?i.cropY:0,cropWidth=crop?i.cropWidth:i.width,cropHeight=crop?i.cropHeight:i.height;
+ if(retired||!w||!h||!f->surface||i.generation!=serviceGeneration||!i.width||!i.height||IOSurfaceGetWidth(f->surface)!=i.width||IOSurfaceGetHeight(f->surface)!=i.height||
+    !cropWidth||!cropHeight||x>i.width||y>i.height||cropWidth>i.width-x||cropHeight>i.height-y||
+    (!browserFrameTimeAccepted(i.time,lastTime)||!windowCaptureIntervalAccepted(i.time,lastTime,minimumInterval))||held(i)||(settled&&!settled())){++dropped;return;}
+ if(importedGeneration!=i.generation){sourceTextures.clear();importedGeneration=i.generation;}
+ auto input=sourceTextures.texture(device,f->surface,MTLPixelFormatBGRA8Unorm);
+ if(!input){fail("Forwarded source texture unavailable");return;}
+ // A leased SCK frame can be read directly. The frame itself is the raw/GPU
+ // slot, so the service's sample acknowledgment waits until both the latest
+ // replay image and all GPU reads release it. The service permits the next
+ // frame concurrently; one retained static image cannot stall the stream.
+ if(x==0&&y==0&&cropWidth==i.width&&cropHeight==i.height){
+  f->texture=input;f->busy=true;budgetRetryAt=0;budgetPressure.reset();
+  const auto frameId=++frame;lastTime=i.time;++complete;
+  submitCopied(std::static_pointer_cast<WindowStreamSlot>(f),frameId,i.time,generation,w,h);return;
+ }
+ // A padded/nonzero content rectangle needs one normalization copy because
+ // FramePresenter consumes a complete source texture, rather than a subrect.
+ // Full-content frames above avoid the copy and reuse their imported texture.
  std::shared_ptr<WindowStreamSlot>slot;
  for(auto &candidate:slots){if(!candidate)candidate=std::make_shared<WindowStreamSlot>();if(raw&&raw->slot==candidate)continue;bool idle=false;if(candidate->busy.compare_exchange_strong(idle,true)){slot=candidate;break;}}
  auto self=std::static_pointer_cast<ForwardedStream>(shared_from_this());
  auto retry=[&]{if(forwardPending)++dropped;forwardPending=f;if(!forwardRetry){forwardRetry=true;dispatch_after(dispatch_time(DISPATCH_TIME_NOW,int64_t(std::max(.025,budgetRetryAt-CACurrentMediaTime())*NSEC_PER_SEC)),renderQueue,^{self->forwardRetry=false;auto pending=std::move(self->forwardPending);if(pending)self->consume(pending);});}};
  if(!slot){retry();return;}
- auto desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:w height:h mipmapped:NO];desc.usage=MTLTextureUsageShaderRead|MTLTextureUsageRenderTarget;desc.storageMode=MTLStorageModePrivate;
- if(!slot->texture||slot->texture.width!=w||slot->texture.height!=h){try{slot->texture=newAdmittedTexture(device,desc,reinterpret_cast<uintptr_t>(this),admissionStage);}catch(const ImageBudgetExceeded&e){slot->busy=false;if(e.structurallyImpossible)fail(e.what());else {budgetRetryAt=CACurrentMediaTime()+(budgetPressure.record()?1:.25);retry();}return;}}
+ auto desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:cropWidth height:cropHeight mipmapped:NO];desc.usage=MTLTextureUsageShaderRead|MTLTextureUsageRenderTarget;desc.storageMode=MTLStorageModePrivate;
+ if(!slot->texture||slot->texture.width!=cropWidth||slot->texture.height!=cropHeight){try{slot->texture=newAdmittedTexture(device,desc,reinterpret_cast<uintptr_t>(this),admissionStage);}catch(const ImageBudgetExceeded&e){slot->busy=false;if(e.structurallyImpossible)fail(e.what());else {budgetRetryAt=CACurrentMediaTime()+(budgetPressure.record()?1:.25);retry();}return;}}
  budgetRetryAt=0;budgetPressure.reset();
- desc.storageMode=MTLStorageModeShared;auto input=[device newTextureWithDescriptor:desc iosurface:f->surface plane:0];
  if(!copyQueueAttempted){copyQueueAttempted=true;copyQueue=[device newCommandQueue];}
  auto copy=[(copyQueue?:queue) commandBuffer];if(copy)ownPresentationBuffer(copy);auto blit=[copy blitCommandEncoder];
- if(!input||!slot->texture||!blit){slot->busy=false;fail("Forwarded image copy unavailable");return;}
- [blit copyFromTexture:input sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(w,h,1) toTexture:slot->texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[blit endEncoding];
+ if(!slot->texture||!blit){slot->busy=false;fail("Forwarded content crop unavailable");return;}
+ [blit copyFromTexture:input sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(x,y,0) sourceSize:MTLSizeMake(cropWidth,cropHeight,1) toTexture:slot->texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[blit endEncoding];
  const auto frameId=++frame;lastTime=i.time;++complete;
- // A hold or a new generation that began while the copy ran drops the
- // frame as well.
  [copy addCompletedHandler:^(id<MTLCommandBuffer>b){f->release();(void)input;dispatch_async(self->renderQueue,^{
-  if(b.status!=MTLCommandBufferStatusCompleted){slot->busy=false;self->fail("Forwarded image copy failed");return;}
+  if(b.status!=MTLCommandBufferStatusCompleted){slot->busy=false;self->fail("Forwarded content crop failed");return;}
   if(self->held(i)||i.generation!=self->serviceGeneration){slot->busy=false;++self->dropped;return;}
   self->submitCopied(slot,frameId,i.time,generation,w,h);});}];[copy commit];
 }

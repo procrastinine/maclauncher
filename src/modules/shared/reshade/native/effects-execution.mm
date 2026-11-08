@@ -1489,7 +1489,7 @@ EffectExecutionSelection EffectPlanExecutor::buildSnapshot(const ShaderFrame &in
                 ShaderResult ready;if(reusedGenerator)ready=generator->preparationStatus();else{const auto prepared=generator->prepare(validation,current,temporal&&generator->requiresScene()?&probe:nullptr);ready={prepared.encoded,prepared.reason,prepared.busy};}
                 if(!ready.encoded){if(ready.busy)throw ScenePreparing(ready.reason,[generator]{return generator->preparationStatus();});impl->pendingGenerations.erase(node.id);require(ready);}
                 if(usesImagePairAnalysis(node.method)&&!stageState->pairAnalysis)
-                    stageState->pairAnalysis=std::make_shared<ImagePairAnalysis>(next->queue,current,description,next->statusContext);
+                    stageState->pairAnalysis=std::make_shared<ImagePairAnalysis>(next->finalQueue,current,description,next->statusContext);
                 EffectGenerationStage stage;stage.id=node.id;stage.inputIdentity=upstream;stage.historyIdentity=contract;stage.sceneCoordinates=sceneCoordinates;stage.row=next->rows.size();stage.width=current.width;stage.height=current.height;stage.graphics=config;stage.encoder=generator;stage.keepStaticContent=node.settings.boolean("keepStaticContent",false);if(stageState)stage.state=std::move(stageState);stage.historySource=std::move(historySource);
                 next->stages.push_back(std::move(stage));
                 {RuntimeStatusEvent event;event.context=next->statusContext;event.processing=true;event.phase=RuntimeStatusPhase::Prepared;event.planRevision=snapshot->revision;event.stageId=node.id;event.requestedMethod=node.method;event.activeMethod=node.method;event.inputWidth=current.width;event.inputHeight=current.height;event.outputWidth=current.width;event.outputHeight=current.height;observeRuntimeStatus(event);}
@@ -1735,8 +1735,12 @@ EffectExecutionSelection EffectPlanExecutor::buildSnapshot(const ShaderFrame &in
         // when a provider is unavailable. Prepare each deferred image owner on
         // its actual phase queue only after that split has been resolved.
         id<MTLCommandBuffer>finalValidation=nil;
+        const bool imagePair=std::any_of(next->stages.begin(),next->stages.end(),[](const auto&stage){return !stage.encoder->requiresScene();});
         for(size_t index=0;index<next->rows.size();++index){auto&row=next->rows[index];if(!row.preparationFrame)continue;auto context=*row.preparationFrame;if(row.preparationDepth)context.depth=&*row.preparationDepth;
-            const auto desired=index>=next->split?next->finalQueue:next->queue;
+            // Image-pair presentation starts after the producer's scene prefix.
+            // Its image rows, including those before the first generator, run
+            // on the presenter queue after the retained real image is ready.
+            const auto desired=index>=next->split||(imagePair&&index>=next->temporalEnd)?next->finalQueue:next->queue;
             if(desired==next->queue)context.commands=validation;else{if(!finalValidation)finalValidation=[desired commandBuffer];if(!finalValidation)throw std::runtime_error("The final image preparation queue is unavailable");context.commands=finalValidation;}
             try{
                 if(row.reusedPreparation&&row.preparedQueue!=desired){

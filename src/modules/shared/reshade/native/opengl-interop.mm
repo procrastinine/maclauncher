@@ -1,3 +1,4 @@
+#include "opengl-flip.hpp"
 #include "opengl-interop.hpp"
 #include "frame.hpp"
 #include "frame-depth.hpp"
@@ -55,6 +56,7 @@ struct OpenGLInterop::Impl {
     bool core=false;
     bool contextAvailable=true;
     OpenGLDepthCapture depthCapture;
+    OpenGLFlip colorFlip;
     std::chrono::steady_clock::time_point depthRetry{};
     std::string depthFailure;
     id<MTLDevice> device=MTLCreateSystemDefaultDevice();
@@ -89,7 +91,7 @@ struct OpenGLInterop::Impl {
         // Teardown/resize is rare. Drain GL readers before destroying their
         // framebuffer objects; Metal completion captures retain the CV images.
         if(contextAvailable&&!slots.empty())glFinish();
-        if(contextAvailable)depthCapture.clear();
+        if(contextAvailable){depthCapture.clear();colorFlip.clear();}
         depthRetry={};depthFailure.clear();
         slots.clear();width=height=cursor=0;
         if(contextAvailable&&glCache)CVOpenGLTextureCacheFlush(glCache,0);
@@ -97,7 +99,7 @@ struct OpenGLInterop::Impl {
     }
     void abandon() noexcept {
         contextAvailable=false;
-        depthCapture.abandon();
+        depthCapture.abandon();colorFlip.abandon();
         // Submitted Metal commands retain their CV image leases. Discard only
         // context-owned names, which cannot be safely deleted on another one.
         for(const auto &slot:slots) {
@@ -159,7 +161,7 @@ struct OpenGLInterop::Impl {
         glDisable(GL_SCISSOR_TEST);glDisable(GL_FRAMEBUFFER_SRGB);glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
         glBindFramebuffer(GL_READ_FRAMEBUFFER,slot->output.fbo);glReadBuffer(GL_COLOR_ATTACHMENT0);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER,0);glDrawBuffer(GL_BACK);
-        glBlitFramebuffer(0,height,width,0,0,0,width,height,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+        colorFlip.toDefault(slot->output.fbo,width,height);
         if(slot->retirement)glDeleteSync(slot->retirement);
         slot->retirement=glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);glFlush();
         if(!slot->retirement)throw std::runtime_error("Cannot fence processed frame replay");
@@ -207,7 +209,7 @@ struct OpenGLInterop::Impl {
         glBindFramebuffer(GL_READ_FRAMEBUFFER,0);glReadBuffer(GL_BACK);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER,slot->source.fbo);glDrawBuffer(GL_COLOR_ATTACHMENT0);
         {DiagnosticScope stage(DiagnosticStage::OpenGLSourceCopy,reinterpret_cast<uintptr_t>(context),w,h);
-            glBlitFramebuffer(0,0,w,h,0,h,w,0,GL_COLOR_BUFFER_BIT,GL_NEAREST);}
+            colorFlip.fromDefault(slot->source.fbo,w,h);}
         // Apple's CoreVideo interop contract submits the GL producer before
         // Metal reads the shared pixel buffer; it does not CPU-wait for finish.
         {DiagnosticScope stage(DiagnosticStage::OpenGLSourceWait,reinterpret_cast<uintptr_t>(context),w,h);glFlush();}

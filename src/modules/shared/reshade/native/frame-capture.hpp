@@ -21,15 +21,19 @@ inline dispatch_queue_t captureWriterQueue(){static auto queue=dispatch_queue_cr
 // One reservation follows one admitted source frame through its final output.
 // Neither an unsuccessful read nor an abandoned command consumes the request.
 class FrameCapture {
-    struct Image {id<MTLBuffer> bytes;id<MTLTexture> texture;unsigned width=0,height=0,stride=0;bool bgra=false;};
+    struct Image {id<MTLBuffer> bytes;id<MTLTexture> texture;unsigned width=0,height=0,stride=0;bool bgra=false,hdr=false;};
     static bool supported(id<MTLTexture> texture) {
-        return texture&&captureWritesFormat(texture.pixelFormat);
+        return captureWritesTexture(texture);
     }
     static bool readable(id<MTLCommandBuffer> commands,id<MTLTexture> texture) {
         return commands&&texture&&commands.status<MTLCommandBufferStatusCommitted&&commands.device==texture.device&&texture.sampleCount==1&&!texture.framebufferOnly;
     }
     static void unsupported(id<MTLTexture> texture) {
-        static std::atomic<bool>warned{false};if(!warned.exchange(true))nativeLog("Frame capture needs an 8-bit RGB image; format="+std::to_string(texture?texture.pixelFormat:MTLPixelFormatInvalid)+"; request remains pending");
+        static std::atomic<bool>warned{false};if(!warned.exchange(true))nativeLog("Frame capture needs 8-bit RGB or converted 16-bit HDR pixels; format="+std::to_string(texture?texture.pixelFormat:MTLPixelFormatInvalid)+"; request remains pending");
+    }
+    static void writeImage(const std::string&file,const Image&image,bool flip){
+        if(image.hdr)writeCaptureFile(file,image.bytes.contents,image.width,image.height,false,flip,image.stride,true);
+        else writeCapturedFrame(file,image.bytes.contents,image.width,image.height,image.bgra,flip,image.stride);
     }
     struct State : std::enable_shared_from_this<State> {
         std::mutex mutex;uint64_t ticket;std::string prefix;Image before,after;bool beforeFlip=false,afterFlip=false,sourceDone=false,finalDone=false,writing=false;
@@ -64,8 +68,8 @@ class FrameCapture {
             // A final-only capture has no source image and publishes one file.
             const bool pair=first.bytes!=nil;
             @try{try{if(captureFrameCurrent(reservation)){
-                if(pair)writeCapturedFrame(input,first.bytes.contents,first.width,first.height,first.bgra,inputFlip,first.stride);
-                writeCapturedFrame(output,last.bytes.contents,last.width,last.height,last.bgra,outputFlip,last.stride);
+                if(pair)writeImage(input,first,inputFlip);
+                writeImage(output,last,outputFlip);
                 const timeval time{time_t(capturedAt/1000000),suseconds_t(capturedAt%1000000)},times[2]{time,time};
                 if((pair&&utimes(input.c_str(),times))||utimes(output.c_str(),times))throw std::runtime_error("Cannot timestamp the captured frame");
                 if(captureFrameCurrent(reservation)){
@@ -90,14 +94,17 @@ class FrameCapture {
     static bool read(const std::shared_ptr<State>&state,id<MTLCommandBuffer>commands,id<MTLTexture>texture,bool source,bool flip,const ImageColorDescription *color=nullptr) {
         if(!readable(commands,texture))return false;
         if(texture.width>captureMaximumDimension||texture.height>captureMaximumDimension)return false;
-        const unsigned width=texture.width,height=texture.height,stride=(width*4+255)&~255u;
-        if(!captureLayout(width,height,stride))return false;
-        // Preparation is lazy and 8-bit images pass through unchanged. A
-        // failed conversion keeps the request pending through abandon().
+        const unsigned width=texture.width,height=texture.height;
+        // Preparation is lazy and 8-bit images pass through unchanged. HDR
+        // output is converted to marked BT.2020 PQ RGBA16Unorm. A failed
+        // conversion keeps the request pending through abandon().
         texture=(source?state->sourceImage:state->outputImage).prepare(commands,texture,color?*color:state->color,state->frameId);
         if(!supported(texture)){unsupported(texture);return false;}
+        const bool hdr=screenshotHDRTexture(texture);
+        const unsigned stride=(width*(hdr?8:4)+255)&~255u;
+        if(!captureLayout(width,height,stride,hdr))return false;
         auto bytes=[commands.device newBufferWithLength:size_t(stride)*height options:MTLResourceStorageModeShared];if(!bytes)return false;
-        Image image{bytes,texture,width,height,stride,texture.pixelFormat==MTLPixelFormatBGRA8Unorm||texture.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB};
+        Image image{bytes,texture,width,height,stride,texture.pixelFormat==MTLPixelFormatBGRA8Unorm||texture.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB,hdr};
         auto completion=std::make_shared<Completion>(state,image,source);
         {std::lock_guard guard(state->mutex);if(!state->ticket)return false;if(source)state->before=image;else{state->after=image;state->afterFlip=flip;}}
         [commands addCompletedHandler:^(id<MTLCommandBuffer>completed){@autoreleasepool{completion->completed(completed);}}];

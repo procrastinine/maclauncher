@@ -1,10 +1,34 @@
 #pragma once
 // Copyright (c) MacLauncher contributors. MIT license.
 #include <chrono>
+#include <atomic>
+#include <cstdint>
+#include <cmath>
+#include <algorithm>
 #include <cstddef>
 #include <optional>
 #include <vector>
 namespace macfx {
+// Independently implemented measured work sizing; no MetalGoose source used.
+class ImagePairWorkSize {
+ unsigned level_=0,slow=0,fast=0;double average=0;
+public:
+ unsigned level()const noexcept{return level_;}
+ bool observe(double seconds,double interval,unsigned maximumLevel=2)noexcept{
+  if(!std::isfinite(seconds)||!std::isfinite(interval)||seconds<=0||interval<=0)return false;
+  const double ratio=seconds/interval;average=average?average*.75+ratio*.25:ratio;
+  if(average>.8){++slow;fast=0;}else if(average<.4){++fast;slow=0;}else slow=fast=0;
+  if(slow>=3&&level_<maximumLevel){++level_;slow=fast=0;average=0;return true;}
+  if(fast>=120&&level_){--level_;slow=fast=0;average=0;return true;}
+  return false;
+ }
+ static unsigned dimension(unsigned level)noexcept{constexpr unsigned sizes[]={1920,1280,960,640};return sizes[std::min(level,3u)];}
+};
+struct ImagePairWorkTiming {
+ std::atomic<double>seconds{0};std::atomic<uint64_t>generation{0};
+ void record(double elapsed)noexcept{if(std::isfinite(elapsed)&&elapsed>0){seconds.store(elapsed,std::memory_order_relaxed);generation.fetch_add(1,std::memory_order_release);}}
+};
+inline bool automaticGenerationBehind(bool busy,bool preparing)noexcept{return busy&&!preparing;}
 // Automatic engine choice for one generation row. Candidates are ordered by
 // preference. A candidate that falls behind is left at once for the next one;
 // a preferred candidate is retried only after ten seconds of continuous

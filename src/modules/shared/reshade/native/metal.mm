@@ -1,3 +1,4 @@
+#include "depth-resample.hpp"
 #include "live-controls.hpp"
 #include "log.hpp"
 #include "native-config.hpp"
@@ -161,12 +162,19 @@ void bypassNativeHistory(id<MTLDrawable> drawable){
 
 // One current-frame association per game command buffer. No global texture
 // history and no dependency on guessed offscreen render targets.
+@interface RSMDepthSampling : NSObject { @public std::shared_ptr<macfx::DepthResampler> sampler; }
+@end
+@implementation RSMDepthSampling
+@end
+
 @interface RSMFrameDepth : NSObject {
 @public
     id<MTLTexture> color;
     id<MTLTexture> depth;
     MTLStoreAction colorStore,depthStore;
     bool valid;
+    bool promoted;
+    bool sampled;
 }
 @end
 @implementation RSMFrameDepth
@@ -1005,12 +1013,14 @@ std::map<void*,SurfacePool> &surfacePools(){static auto *m=new std::map<void*,Su
 
 macfx::HookOriginals &hooks() { static auto *value=new macfx::HookOriginals; return *value; }
 IMP original(id object,SEL selector) { return hooks().original(object,selector); }
+char depthSamplingKey;
 char frameDepthKey;
 std::atomic<bool> captureDepth{false};
 void replace(Class,SEL,IMP);
 void depthStoreAction(id object,SEL selector,MTLStoreAction action) {
-    reinterpret_cast<void(*)(id,SEL,MTLStoreAction)>(original(object,selector))(object,selector,action);
     RSMFrameDepth *frame=objc_getAssociatedObject(object,&frameDepthKey);
+    if(frame&&frame->promoted&&action==MTLStoreActionDontCare)action=MTLStoreActionStore;
+    reinterpret_cast<void(*)(id,SEL,MTLStoreAction)>(original(object,selector))(object,selector,action);
     if(frame&&action!=frame->depthStore)frame->valid=false;
 }
 void colorStoreAction(id object,SEL selector,MTLStoreAction action,NSUInteger index) {
@@ -1019,27 +1029,26 @@ void colorStoreAction(id object,SEL selector,MTLStoreAction action,NSUInteger in
     if(frame&&!index&&action!=frame->colorStore)frame->valid=false;
 }
 id<MTLRenderCommandEncoder> captureRenderPass(id object,SEL selector,MTLRenderPassDescriptor *descriptor) {
-    auto encoder=reinterpret_cast<id<MTLRenderCommandEncoder>(*)(id,SEL,MTLRenderPassDescriptor*)>(original(object,selector))(object,selector,descriptor);
-    if(!encoder||!captureDepth.load(std::memory_order_relaxed))return encoder;
-    const auto attachment=descriptor.depthAttachment;
-    const auto colorAttachment=descriptor.colorAttachments[0];
     const auto stored=[](MTLRenderPassAttachmentDescriptor *a)->id<MTLTexture>{
         if(a.storeAction==MTLStoreActionStore)return a.texture;
         if(a.storeAction==MTLStoreActionMultisampleResolve||a.storeAction==MTLStoreActionStoreAndMultisampleResolve)return a.resolveTexture;
         return nil;
     };
-    const auto color=stored(colorAttachment);
-    // Match the actual acquired presentation color. A previous depth shader
-    // cannot keep retaining attachments for a later color-only selection, and
-    // one layer's color-only frame cannot clear another layer's requirement.
-    // Other passes return before the environment-backed request check.
-    if(!color||!macfx::colorRequiresDepth(color)||!macfx::effectRequested())return encoder;
+    const auto color=stored(descriptor.colorAttachments[0]);
+    const auto originalDepth=descriptor.depthAttachment.texture;
+    const bool demanded=captureDepth.load(std::memory_order_relaxed)&&color&&macfx::colorRequiresDepth(color)&&macfx::effectRequested();
+    const auto eligible=[&](id<MTLTexture> depth){return depth&&depth.storageMode!=MTLStorageModeMemoryless&&!depth.framebufferOnly&&
+        (depth.pixelFormat==MTLPixelFormatDepth16Unorm||depth.pixelFormat==MTLPixelFormatDepth32Float||depth.pixelFormat==MTLPixelFormatDepth32Float_Stencil8||depth.pixelFormat==MTLPixelFormatDepth24Unorm_Stencil8)&&
+        (depth.textureType==MTLTextureType2D||depth.textureType==MTLTextureType2DMultisample)&&depth.width==color.width&&depth.height==color.height;};
+    bool promote=demanded&&eligible(originalDepth)&&descriptor.depthAttachment.storeAction==MTLStoreActionDontCare;
+    if(promote){descriptor=[descriptor copy];descriptor.depthAttachment.storeAction=MTLStoreActionStore;}
+    auto encoder=reinterpret_cast<id<MTLRenderCommandEncoder>(*)(id,SEL,MTLRenderPassDescriptor*)>(original(object,selector))(object,selector,descriptor);
+    if(!encoder||!demanded||!originalDepth||originalDepth.storageMode==MTLStorageModeMemoryless)return encoder;
+    const auto attachment=descriptor.depthAttachment;
     const auto depth=stored(attachment);
-    if(!depth||!color||depth.pixelFormat!=MTLPixelFormatDepth32Float||depth.sampleCount!=1||depth.textureType!=MTLTextureType2D||
-       depth.width!=color.width||depth.height!=color.height||depth.framebufferOnly||
-       (depth.usage!=MTLTextureUsageUnknown&&!(depth.usage&MTLTextureUsageShaderRead)))return encoder;
-    auto frame=[RSMFrameDepth new];frame->color=color;frame->depth=depth;frame->valid=true;
-    frame->colorStore=colorAttachment.storeAction;frame->depthStore=attachment.storeAction;
+    if(!eligible(depth))return encoder;
+    auto frame=[RSMFrameDepth new];frame->color=color;frame->depth=depth;frame->valid=true;frame->promoted=promote;
+    frame->colorStore=descriptor.colorAttachments[0].storeAction;frame->depthStore=attachment.storeAction;
     objc_setAssociatedObject(object,&frameDepthKey,frame,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(encoder,&frameDepthKey,frame,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     replace(object_getClass(encoder),@selector(setDepthStoreAction:),reinterpret_cast<IMP>(depthStoreAction));
@@ -1048,7 +1057,29 @@ id<MTLRenderCommandEncoder> captureRenderPass(id object,SEL selector,MTLRenderPa
 }
 RSMFrameDepth *capturedDepth(id<MTLCommandBuffer> commands,id<MTLTexture> color) {
     RSMFrameDepth *frame=objc_getAssociatedObject(commands,&frameDepthKey);
-    return frame&&frame->valid&&frame->color==color?frame:nil;
+    if(!frame||!frame->valid||frame->color!=color)return nil;
+    // Keep the previously admitted, directly readable depth path unchanged.
+    if(frame->depth.pixelFormat==MTLPixelFormatDepth32Float&&frame->depth.sampleCount==1&&
+       (frame->depth.usage==MTLTextureUsageUnknown||(frame->depth.usage&MTLTextureUsageShaderRead)))return frame;
+    if(frame->sampled)return frame;
+    @try{try{
+        id<MTLTexture> input=frame->depth;
+        if(input.usage!=MTLTextureUsageUnknown&&!(input.usage&MTLTextureUsageShaderRead)){
+            auto d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:input.pixelFormat width:input.width height:input.height mipmapped:NO];
+            d.textureType=input.textureType;d.sampleCount=input.sampleCount;d.storageMode=MTLStorageModePrivate;d.usage=MTLTextureUsageShaderRead;
+            auto readable=macfx::newAdmittedTexture(commands.device,d);auto blit=[commands blitCommandEncoder];
+            if(!blit)return nil;
+            [blit copyFromTexture:input sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(input.width,input.height,1) toTexture:readable destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[blit endEncoding];input=readable;
+        }
+        RSMDepthSampling *sampling;
+        @synchronized(commands.commandQueue){sampling=objc_getAssociatedObject(commands.commandQueue,&depthSamplingKey);if(!sampling){sampling=[RSMDepthSampling new];sampling->sampler=std::make_shared<macfx::DepthResampler>(commands.device);objc_setAssociatedObject(commands.commandQueue,&depthSamplingKey,sampling,OBJC_ASSOCIATION_RETAIN_NONATOMIC);}}
+        auto d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatR32Float width:input.width height:input.height mipmapped:NO];d.storageMode=MTLStorageModePrivate;d.usage=MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite;
+        auto output=macfx::newAdmittedTexture(commands.device,d);std::string reason;
+        if(!sampling->sampler->encode(commands,{input,0,macfx::FrameOrigin::TopLeft},output,macfx::FrameOrigin::TopLeft,reason))return nil;
+        frame->depth=output;frame->sampled=true;return frame;
+    }catch(const std::exception&e){frame->valid=false;log(std::string("Depth capture unavailable: ")+e.what());}}
+    @catch(NSException*e){frame->valid=false;log(std::string("Depth capture unavailable: ")+(e.reason.UTF8String?:"Depth copy failed"));}
+    return nil;
 }
 void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *timingScope="game-and-effects",uint64_t captureFrame=UINT64_MAX,double sourceTime=0) {
     if(![drawable conformsToProtocol:@protocol(CAMetalDrawable)]) return;
@@ -1241,14 +1272,21 @@ void presentTime(id object,SEL selector,id<MTLDrawable> drawable,CFTimeInterval 
 struct PendingPresent { id<MTLDrawable> drawable; SEL selector; CFTimeInterval time; uint64_t captureFrame=0; };
 struct ScheduledContext { std::vector<PendingPresent> pending; };
 thread_local ScheduledContext *scheduledContext=nullptr;
+struct DrawableForward {id object;SEL selector;Class parent;DrawableForward *previous;};
+thread_local DrawableForward *forwardingDrawable=nullptr;
 void finishPresent(const PendingPresent &pending) {
-    IMP implementation=original(pending.drawable,pending.selector);
-    if(pending.selector==@selector(present))
-        reinterpret_cast<void(*)(id,SEL)>(implementation)(pending.drawable,pending.selector);
-    else reinterpret_cast<void(*)(id,SEL,CFTimeInterval)>(implementation)(pending.drawable,pending.selector,pending.time);
+    const bool nested=forwardingDrawable&&forwardingDrawable->object==pending.drawable&&forwardingDrawable->selector==pending.selector;
+    const auto found=hooks().find(nested?forwardingDrawable->parent:object_getClass(pending.drawable),pending.selector);
+    DrawableForward active{pending.drawable,pending.selector,class_getSuperclass(found.owner),forwardingDrawable};
+    forwardingDrawable=&active;IMP implementation=found.implementation;
+    @try {
+        if(pending.selector==@selector(present))
+            reinterpret_cast<void(*)(id,SEL)>(implementation)(pending.drawable,pending.selector);
+        else reinterpret_cast<void(*)(id,SEL,CFTimeInterval)>(implementation)(pending.drawable,pending.selector,pending.time);
+    } @finally {forwardingDrawable=active.previous;}
 }
 bool deferPresent(id<MTLDrawable> drawable,SEL selector,CFTimeInterval time=0) {
-    if(!scheduledContext || ![drawable conformsToProtocol:@protocol(CAMetalDrawable)] ||
+    if((forwardingDrawable&&forwardingDrawable->object==drawable)||!scheduledContext || ![drawable conformsToProtocol:@protocol(CAMetalDrawable)] ||
         objc_getAssociatedObject(drawable,&nativePresentationKey) || macfx::ownsPresentation(((id<CAMetalDrawable>)drawable).layer)) return false;
     if(!layerPresentationDemand(((id<CAMetalDrawable>)drawable).layer)){observeBypassedLayer(((id<CAMetalDrawable>)drawable).layer);return false;}
     if(!acceptsNativeLayer(((id<CAMetalDrawable>)drawable).layer)) return false;
@@ -1267,6 +1305,17 @@ void drawablePresent(id object,SEL selector) {
 }
 void drawablePresentTime(id object,SEL selector,CFTimeInterval time) {
     if(!deferPresent(object,selector,time)) finishPresent({object,selector,time});
+}
+void hookDrawableClass(Class cls) {
+    replace(cls,@selector(present),reinterpret_cast<IMP>(drawablePresent));
+    replace(cls,@selector(presentAtTime:),reinterpret_cast<IMP>(drawablePresentTime));
+    replace(cls,@selector(presentAfterMinimumDuration:),reinterpret_cast<IMP>(drawablePresentTime));
+}
+void hookDrawableClasses() {
+    unsigned count=0;Class *classes=objc_copyClassList(&count);
+    for(unsigned i=0;i<count;++i)for(Class cls=classes[i];cls;cls=class_getSuperclass(cls))
+        if(class_conformsToProtocol(cls,@protocol(CAMetalDrawable))){hookDrawableClass(classes[i]);break;}
+    free(classes);
 }
 char scheduledEffectsKey;
 RSMScheduledEffects *scheduledEffects(id<MTLCommandQueue> producer) {
@@ -1372,6 +1421,7 @@ void signalMetal4Drawable(id object,SEL selector,id<MTLDrawable> drawable) {
     auto forward=reinterpret_cast<void(*)(id,SEL,id<MTLDrawable>)>(original(object,selector));
     if(![drawable conformsToProtocol:@protocol(CAMetalDrawable)]) {forward(object,selector,drawable);return;}
     id<CAMetalDrawable> metal=(id<CAMetalDrawable>)drawable;
+    hookDrawableClass(object_getClass(drawable));
     const auto captureFrame=pendingCaptureFrame(metal.layer);
     const bool explicitFrame=nativeLayer(metal.layer)!=nil;
     if((!explicitFrame&&!macfx::effectRequested()&&!macfx::graphicsRequested()&&!captureFrame)||macfx::ownsPresentation(metal.layer) || !acceptsNativeLayer(metal.layer) || objc_getAssociatedObject(drawable,&nativePresentationKey)) {forward(object,selector,drawable);return;}
@@ -1655,6 +1705,25 @@ void observeGameDrawable(CAMetalLayer *layer,bool acquired,double milliseconds,b
     if(first)log("Game drawable request on layer "+std::to_string(key)+(acquired?" waited ":" returned nil after ")+waited+
         " ms during graphics processing; edits report this until a later request succeeds within 500 ms");
 }
+// Only restore a layer property that this adapter changed. A later game
+// setter owns the new choice, including an explicit NO while effects are idle.
+char framebufferOverrideKey;
+thread_local const void *adjustingFramebuffer=nullptr;
+void setFramebufferOnly(id object,SEL selector,BOOL value) {
+    @synchronized(object) {
+        if(adjustingFramebuffer!=(__bridge const void*)object)objc_setAssociatedObject(object,&framebufferOverrideKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        reinterpret_cast<void(*)(id,SEL,BOOL)>(original(object,selector))(object,selector,value);
+    }
+}
+void updateFramebufferAccess(CAMetalLayer *layer,bool readable) {
+    @synchronized(layer) {
+        const bool restore=!readable&&objc_getAssociatedObject(layer,&framebufferOverrideKey);
+        if(!(readable&&layer.framebufferOnly)&&!restore)return;
+        objc_setAssociatedObject(layer,&framebufferOverrideKey,readable?@YES:nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        const auto previous=adjustingFramebuffer;adjustingFramebuffer=(__bridge const void*)layer;
+        @try{[layer setFramebufferOnly:!readable];}@finally{adjustingFramebuffer=previous;}
+    }
+}
 void installMetalDeviceHooks(id<MTLDevice> device);
 id<CAMetalDrawable> nextDrawable(id object,SEL selector) {
     if(macfx::ownsPresentation(object)||(explicitHost()&&!nativeLayer(object))) return reinterpret_cast<id<CAMetalDrawable>(*)(id,SEL)>(original(object,selector))(object,selector);
@@ -1665,6 +1734,10 @@ id<CAMetalDrawable> nextDrawable(id object,SEL selector) {
     const auto activePresentation=macfx::metalPresentation((CAMetalLayer*)object);
     const bool readsSource=activePresentation&&!activePresentation->snapshot().stopped;
     bool source=false;try{source=macfx::drawableResolutionRequested();}catch(...){}
+    CAMetalLayer *layer=(CAMetalLayer*)object;
+    const bool processing=macfx::imageProcessingRequested(readsSource)||macfx::FrameCapture::forcesAttachment();
+    const bool readable=nativeLayer(object)||(processing&&!macfx::nativeMetalSourceReadable(layer.pixelFormat,true,macfx::framebuffer::supported(layer.device)));
+    updateFramebufferAccess(layer,readable);
     if(!nativeLayer(object)&&!macfx::imageProcessingRequested(readsSource)&&!source&&!macfx::virtualWindowEnabled()&&!macfx::timingEnabled()&&!macfx::FrameCapture::forcesAttachment())
         return reinterpret_cast<id<CAMetalDrawable>(*)(id,SEL)>(original(object,selector))(object,selector);
     installMetalDeviceHooks(((CAMetalLayer*)object).device);
@@ -1675,10 +1748,6 @@ id<CAMetalDrawable> nextDrawable(id object,SEL selector) {
     // The attachment-fetch adapter preserves the producer's framebuffer-only
     // contract (which SpriteKit uses for its Y convention) for its supported
     // layer formats. Other cases need a sampleable drawable.
-    CAMetalLayer *layer=(CAMetalLayer*)object;
-    if(nativeLayer(object)||(macfx::imageProcessingRequested(readsSource)&&
-       !macfx::nativeMetalSourceReadable(layer.pixelFormat,layer.framebufferOnly,
-           macfx::framebuffer::supported(layer.device))))[layer setFramebufferOnly:NO];
     id<CAMetalDrawable> drawable;const auto requested=layer.drawableSize;const auto began=std::chrono::steady_clock::now();
     {macfx::DiagnosticScope scope(macfx::DiagnosticStage::MetalDrawable,reinterpret_cast<uintptr_t>((__bridge void*)layer),unsigned(requested.width),unsigned(requested.height),"game.next-drawable");
      drawable=reinterpret_cast<id<CAMetalDrawable>(*)(id,SEL)>(original(object,selector))(object,selector);}
@@ -1692,10 +1761,7 @@ id<CAMetalDrawable> nextDrawable(id object,SEL selector) {
             if(required)captureDepth.store(true,std::memory_order_relaxed);
         }catch(const std::exception &error){log("Cannot inspect selected Metal effect: "+std::string(error.what()));}
         objc_setAssociatedObject(drawable,&nativePresentationKey,nil,OBJC_ASSOCIATION_RETAIN);
-        Class cls=object_getClass(drawable);
-        replace(cls,@selector(present),reinterpret_cast<IMP>(drawablePresent));
-        replace(cls,@selector(presentAtTime:),reinterpret_cast<IMP>(drawablePresentTime));
-        replace(cls,@selector(presentAfterMinimumDuration:),reinterpret_cast<IMP>(drawablePresentTime));
+        hookDrawableClass(object_getClass(drawable));
     }
     return drawable;
 }
@@ -1725,33 +1791,47 @@ id<MTLCommandBuffer> statusCommandBuffer(id object,SEL selector) {
     return reinterpret_cast<id<MTLCommandBuffer>(*)(id,SEL)>(original(object,selector))(object,selector);
 }
 void installMetalDeviceHooks(id<MTLDevice> device) {
-    static std::atomic<bool> installed{false};static std::mutex installing;
-    if(!device||installed.load(std::memory_order_acquire))return;
-    std::lock_guard<std::mutex> lock(installing);if(installed.load())return;
-    // Device allocation belongs after the application creates its renderer.
-    // In particular, Wine must reserve its Windows address space before Metal
-    // allocates GPU mappings. The layer hook runs before the first presentation.
-    id<MTLCommandQueue> queue=[device newCommandQueue];id<MTLCommandBuffer> buffer=[queue commandBuffer];
-    if(!buffer) { log("Metal is unavailable"); return; }
-    Class cls=object_getClass(buffer);
-    replace(cls,@selector(presentDrawable:),reinterpret_cast<IMP>(present));
-    replace(cls,@selector(presentDrawable:atTime:),reinterpret_cast<IMP>(presentTime));
-    replace(cls,@selector(presentDrawable:afterMinimumDuration:),reinterpret_cast<IMP>(presentTime));
-    replace(cls,@selector(commit),reinterpret_cast<IMP>(commit));
-    replace(cls,@selector(addScheduledHandler:),reinterpret_cast<IMP>(addScheduled));
-    replace(cls,@selector(renderCommandEncoderWithDescriptor:),reinterpret_cast<IMP>(captureRenderPass));
-    replace(object_getClass(queue),@selector(commandBufferWithUnretainedReferences),reinterpret_cast<IMP>(unretainedCommandBuffer));
-    if(macfx::diagnosticsEnabled())replace(object_getClass(queue),@selector(commandBuffer),reinterpret_cast<IMP>(statusCommandBuffer));
-    macfx::installSceneCopyBoundaryHooks(buffer);
-    if(@available(macOS 26.0,*)) {
-        Class deviceClass=object_getClass(device);
-        replace(deviceClass,@selector(newMTL4CommandQueue),reinterpret_cast<IMP>(newMetal4Queue));
-        replace(deviceClass,@selector(newMTL4CommandQueueWithDescriptor:error:),reinterpret_cast<IMP>(newMetal4QueueDescriptor));
-        hookMetal4Queue([device newMTL4CommandQueue]);
-        log("Metal 4 queue presentation hooks installed");
+    if(!device)return;
+    static char installedKey;
+    @synchronized(device) {
+        if(objc_getAssociatedObject(device,&installedKey))return;
+        // The game has already created this device. Never create a default
+        // device or acquire a sample drawable before Wine reserves its memory.
+        bool metal4=false;
+        if(@available(macOS 26.0,*)) {
+            Class deviceClass=object_getClass(device);
+            replace(deviceClass,@selector(newMTL4CommandQueue),reinterpret_cast<IMP>(newMetal4Queue));
+            replace(deviceClass,@selector(newMTL4CommandQueueWithDescriptor:error:),reinterpret_cast<IMP>(newMetal4QueueDescriptor));
+            @try {if([device respondsToSelector:@selector(newMTL4CommandQueue)]) {
+                auto queue=[device newMTL4CommandQueue];hookMetal4Queue(queue);metal4=queue!=nil;
+            }} @catch(NSException*){} // Optional Metal 4 probing cannot prevent classic hooks.
+        }
+        id<MTLCommandQueue> queue=[device newCommandQueue];id<MTLCommandBuffer> buffer=[queue commandBuffer];
+        if(buffer) {
+            Class cls=object_getClass(buffer);
+            replace(cls,@selector(presentDrawable:),reinterpret_cast<IMP>(present));
+            replace(cls,@selector(presentDrawable:atTime:),reinterpret_cast<IMP>(presentTime));
+            replace(cls,@selector(presentDrawable:afterMinimumDuration:),reinterpret_cast<IMP>(presentTime));
+            replace(cls,@selector(commit),reinterpret_cast<IMP>(commit));
+            replace(cls,@selector(addScheduledHandler:),reinterpret_cast<IMP>(addScheduled));
+            replace(cls,@selector(renderCommandEncoderWithDescriptor:),reinterpret_cast<IMP>(captureRenderPass));
+            replace(object_getClass(queue),@selector(commandBufferWithUnretainedReferences),reinterpret_cast<IMP>(unretainedCommandBuffer));
+            if(macfx::diagnosticsEnabled())replace(object_getClass(queue),@selector(commandBuffer),reinterpret_cast<IMP>(statusCommandBuffer));
+            macfx::installSceneCopyBoundaryHooks(buffer);
+        }
+        hookDrawableClasses();
+        if(buffer||metal4) {
+            objc_setAssociatedObject(device,&installedKey,@YES,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            log("Metal presentation hooks installed on the application device");
+        }
     }
-    installed.store(true,std::memory_order_release);
-    log("Metal presentation hooks installed: "+std::string(object_getClassName(buffer))+" device="+device.name.UTF8String);
+}
+void setMetalDevice(id object,SEL selector,id<MTLDevice> device) {
+    reinterpret_cast<void(*)(id,SEL,id<MTLDevice>)>(original(object,selector))(object,selector,device);
+    if(!macfx::ownsPresentation(object)&&(!explicitHost()||nativeLayer(object))&&(nativeLayer(object)||currentPresentationDemand())){
+        @try{try{installMetalDeviceHooks(device);}catch(const std::exception&){}}
+        @catch(NSException*){} // nextDrawable retains its existing installation route.
+    }
 }
 }
 void macfx::writeCapturedFrame(const std::string &file,const void *bytes,unsigned width,unsigned height,bool bgra,bool flip,unsigned stride){writeCaptureFile(file,bytes,width,height,bgra,flip,stride);}
@@ -1763,6 +1843,8 @@ __attribute__((constructor)) static void loadMetal() { @autoreleasepool {
     try { if(macfx::effectRequested())prepareLaunchEffect(); }
     catch(const std::exception &error) { log("Effect preload failed: "+std::string(error.what())); return; }
     Class layer=(Class)objc_getClass("CAMetalLayer");
+    replace(layer,@selector(setDevice:),reinterpret_cast<IMP>(setMetalDevice));
+    replace(layer,@selector(setFramebufferOnly:),reinterpret_cast<IMP>(setFramebufferOnly));
     replace(layer,@selector(nextDrawable),reinterpret_cast<IMP>(nextDrawable));
     replace(layer,@selector(setDrawableSize:),reinterpret_cast<IMP>(setDrawableSize));
 }}
@@ -1777,6 +1859,8 @@ extern "C" int rsRegisterNativeMetalLayer(void *value,RSNativeMetalFrame frame,v
         objc_setAssociatedObject(layer,&nativeLayerKey,registration,OBJC_ASSOCIATION_RETAIN);
     }
     retireNativeLayer(previous);
+    replace(CAMetalLayer.class,@selector(setDevice:),reinterpret_cast<IMP>(setMetalDevice));
+    replace(CAMetalLayer.class,@selector(setFramebufferOnly:),reinterpret_cast<IMP>(setFramebufferOnly));
     replace(CAMetalLayer.class,@selector(nextDrawable),reinterpret_cast<IMP>(nextDrawable));
     replace(CAMetalLayer.class,@selector(setDrawableSize:),reinterpret_cast<IMP>(setDrawableSize));
     installMetalDeviceHooks(((CAMetalLayer*)layer).device);

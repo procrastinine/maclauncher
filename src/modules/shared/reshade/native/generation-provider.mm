@@ -348,12 +348,14 @@ class AutomaticGeneration final:public GenerationEncoder {
  struct Timing {std::atomic<double>cost{0};std::atomic<bool>measured{false};};
  id<MTLDevice>device;std::vector<Candidate>candidates;AutomaticGenerationChoice choice;
  std::chrono::steady_clock::time_point previousEncode{};std::shared_ptr<Timing>timing=std::make_shared<Timing>();bool previousBusy=false;
+ unsigned sourceWidth=0,sourceHeight=0;
  mutable std::mutex reasonLock;std::string reason;
  static const char*label(std::string_view method){return method=="vt-interpolation"?"VideoToolbox interpolation":method=="metalfx-image"?"MetalFX image interpolation":method=="vision-flow"?"Vision optical flow":"another method";}
  void explain(size_t from,bool returned,const char*why){
   const auto*was=candidates[from].encoder?candidates[from].encoder->method():"";std::lock_guard guard(reasonLock);
   reason=std::string("Automatic: ")+(returned?std::string("returned to ")+label(activeMethod())+" "+why:std::string(label(was))+" "+why+"; using "+label(activeMethod()));
  }
+ bool retainPreparing(size_t index)const{return index==choice.active()&&candidates[index].encoder&&candidates[index].error.empty()&&candidates[index].encoder->preparationStatus().busy;}
  bool usable(size_t index)const{const auto&candidate=candidates[index];if(!candidate.encoder||!candidate.error.empty())return false;const auto status=candidate.encoder->preparationStatus();return status.encoded;}
  template<class Action>void each(Action action){for(auto&candidate:candidates)if(candidate.encoder&&candidate.error.empty())try{action(*candidate.encoder);}catch(const std::exception&error){candidate.error=error.what();}}
  const Candidate&active()const{return candidates[choice.active()];}
@@ -369,7 +371,7 @@ public:
  }
  const char*method()const noexcept override{return "auto";}
  const char*activeMethod()const noexcept override{return active().encoder?active().encoder->method():method();}
- std::string activeReason()const override{std::lock_guard guard(reasonLock);return reason.empty()?std::string("Automatic: using ")+label(activeMethod()):reason;}
+ std::string activeReason()const override{std::lock_guard guard(reasonLock);auto text=reason.empty()?std::string("Automatic: using ")+label(activeMethod()):reason;if(active().encoder){const auto detail=active().encoder->activeReason();if(!detail.empty())text+="; "+detail;}return text;}
  void setColorDescription(const ImageColorDescription&color)override{
   each([&](GenerationEncoder&encoder){encoder.setColorDescription(color);});
   if(std::none_of(candidates.begin(),candidates.end(),[](const auto&candidate){return candidate.encoder&&candidate.error.empty();}))throw std::runtime_error(candidates.front().error);
@@ -388,24 +390,25 @@ public:
    const auto result=candidate.encoder->prepare(commands,source,frame);
    if(result.encoded&&!any){first=result;any=true;}else if(!result.encoded&&!result.busy)candidate.error=result.reason;else busy|=result.busy;
   }
-  choice.settle([&](size_t index){return usable(index);});
+  choice.settle([&](size_t index){return retainPreparing(index)||usable(index);});
   if(any)return first;
-  GenerationResult result;result.busy=busy;result.reason=busy?"Preparing automatic generation":preparationStatus().reason;return result;
+  GenerationResult result;result.busy=busy;result.preparing=busy;result.reason=busy?"Preparing automatic generation":preparationStatus().reason;return result;
  }
  uint64_t imageBytes(unsigned width,unsigned height,const GenerationMeasure&measure)const override{uint64_t total=0;for(const auto&candidate:candidates)if(candidate.encoder)total+=candidate.encoder->imageBytes(width,height,measure);return total;}
  GenerationResult encode(id<MTLCommandBuffer>commands,id<MTLTexture>source,const std::vector<id<MTLTexture>>&outputs,uint64_t sequence,const InterpolationPlan&phases)override{
   const auto now=std::chrono::steady_clock::now();
+  if(sourceWidth!=source.width||sourceHeight!=source.height){sourceWidth=unsigned(source.width);sourceHeight=unsigned(source.height);previousEncode={};previousBusy=false;timing=std::make_shared<Timing>();}
   if(previousEncode!=std::chrono::steady_clock::time_point{}&&(timing->measured.load()||previousBusy)){
    // Behind: the last pair took longer than a capture interval or was refused
    // as busy. Headroom: it took at most three quarters of the interval.
    const double interval=std::chrono::duration<double>(now-previousEncode).count(),cost=timing->cost.load();const size_t from=choice.active();const bool behind=previousBusy||cost>interval;
    if(choice.observe(behind,!previousBusy&&cost<=interval*.75,now,[&](size_t index){return usable(index);}))explain(from,!behind,behind?"fell behind":"after ten seconds of headroom");
   }
-  {const size_t from=choice.active();if(choice.settle([&](size_t index){return usable(index);}))explain(from,false,"is not prepared");}
+  {const size_t from=choice.active();if(choice.settle([&](size_t index){return retainPreparing(index)||usable(index);}))explain(from,false,"is not prepared");}
   previousEncode=now;timing->measured.store(false);
   auto&candidate=candidates[choice.active()];
   if(!candidate.encoder||!candidate.error.empty()){GenerationResult result;result.frameId=sequence;result.reason=candidate.error.empty()?"Automatic generation has no prepared method":candidate.error;return result;}
-  auto result=candidate.encoder->encode(commands,source,outputs,sequence,phases);previousBusy=result.busy;
+  auto result=candidate.encoder->encode(commands,source,outputs,sequence,phases);previousBusy=automaticGenerationBehind(result.busy,result.preparing);
   if(result.encoded&&result.ready){auto measured=timing;[commands addCompletedHandler:^(id<MTLCommandBuffer>finished){if(finished.status==MTLCommandBufferStatusCompleted){measured->cost.store(std::chrono::duration<double>(std::chrono::steady_clock::now()-now).count());measured->measured.store(true);}}];}
   return result;
  }

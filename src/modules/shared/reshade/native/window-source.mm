@@ -470,8 +470,12 @@ extern "C" unsigned rsWindowSourceAPI(){return RS_WINDOW_SOURCE_ABI_VERSION;}
 extern "C" int rsWindowSourceSetGeometry(void*v,const RSWindowSourceGeometry*g){if(!v||!g||g->size<sizeof(*g)||g->version!=2||!NSThread.isMainThread)return 0;auto*h=static_cast<SourceHandle*>(v);h->remote=*g;h->poll();return 1;}
 extern "C" double rsWindowSourceCaptureInterval(void*v){return v?static_cast<SourceHandle*>(v)->captureInterval():0;}
 extern "C" int rsWindowSourceSubmit(void*v,IOSurfaceRef surface,const RSWindowSourceFrame*f,RSWindowSourceReleased released,void*context){
- if(!f)return 0;auto frame=std::make_shared<macfx::ForwardedFrame>(surface,*f,released,context);
- if(!v||f->size<sizeof(*f)||f->version!=2)return 0;
+ if(!f)return 0;
+ // ABI 2's original prefix remains sufficient. An old producer does not own
+ // the appended crop fields, so never read those bytes from its pointer.
+ const auto info=macfx::forwardedFrameInfo(f);
+ auto frame=std::make_shared<macfx::ForwardedFrame>(surface,info,released,context);
+ if(!v||f->size<RS_WINDOW_SOURCE_FRAME_BASE_SIZE||f->version!=2)return 0;
  auto*h=static_cast<SourceHandle*>(v);std::lock_guard<std::mutex>lock(h->inletMutex);auto s=h->inlet.lock();if(!s)return 0;s->submit(frame);return 1;
 }
 extern "C" int rsWindowSourceSetPointer(void*v,const RSWindowSourcePointer*p){

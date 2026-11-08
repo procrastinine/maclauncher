@@ -9,6 +9,7 @@
 #include "runtime-status.hpp"
 #include "command-deadline.hpp"
 #include "contents-geometry.hpp"
+#include "iosurface-texture.hpp"
 #include <atomic>
 #include <algorithm>
 #include <mutex>
@@ -35,11 +36,12 @@ struct macfx::LayerPresentation::Impl:std::enable_shared_from_this<Impl> {
     std::unique_ptr<FramePresenter>presenter;
     mutable std::mutex mutex;
     std::vector<std::shared_ptr<Snapshot>>pool;
+    IOSurfaceTextureCache sourceTextures;
     bool bypassed=false;double retryAt=0;TransientBound budgetPressure;std::string bypassReason,bypassedRevision;std::optional<LivePacket>bypassedControls;unsigned bypassedWidth=0,bypassedHeight=0;EffectPlanState failurePlans;
     void bypassLocked(const std::string&reason){
         if(bypassed)return;bypassed=true;bypassReason=reason;bypassedWidth=width;bypassedHeight=height;
         if(const auto packet=livePacket())bypassedControls=*packet;failurePlans.poll();if(const auto plan=failurePlans.snapshot())bypassedRevision=plan->revision;
-        presenter->stop();pool.clear();copies=nil;processing=nil;Transaction transaction;output.hidden=YES;[output removeFromSuperlayer];
+        presenter->stop();pool.clear();sourceTextures.clear();copies=nil;processing=nil;Transaction transaction;output.hidden=YES;[output removeFromSuperlayer];
         RuntimeStatusEvent event;event.context=reinterpret_cast<uintptr_t>(this);event.processing=true;event.phase=RuntimeStatusPhase::Bypassed;event.reason=reason;observeRuntimeStatus(event);
     }
     bool sameFailure(){
@@ -56,6 +58,7 @@ struct macfx::LayerPresentation::Impl:std::enable_shared_from_this<Impl> {
         if(!copies||!processing)throw std::runtime_error("Cannot create remote presentation queues");
         output=[MacFXRemotePresentationLayer layer];output.device=device;output.pixelFormat=MTLPixelFormatBGRA8Unorm;
         if(!opaqueSource&&config.generation)throw std::runtime_error("Frame generation requires an opaque source image");
+        output.maximumDrawableCount=3; // Configure before the layer is attached.
         output.framebufferOnly=NO;output.opaque=opaqueSource;output.displaySyncEnabled=YES;output.hidden=YES;
         presenter=std::make_unique<FramePresenter>(output,this,config);
         {Transaction transaction;[layer insertSublayer:output atIndex:0];}
@@ -91,12 +94,11 @@ struct macfx::LayerPresentation::Impl:std::enable_shared_from_this<Impl> {
         if(format==MTLPixelFormatInvalid){result.reason="Remote presentation requires an SDR surface (format="+std::to_string(IOSurfaceGetPixelFormat(surface))+")";return result;}
         const auto inputW=IOSurfaceGetWidth(surface),inputH=IOSurfaceGetHeight(surface);
         if(!inputW||!inputH||inputW>width||inputH>height||width>inputW*2||height>inputH*2){result.reason="Remote output dimensions must be between the source size and twice its size";return result;}
-        if(inputWidth!=inputW||inputHeight!=inputH||inputFormat!=format){inputWidth=inputW;inputHeight=inputH;inputFormat=format;retryAt=0;budgetPressure.reset();}
+        if(inputWidth!=inputW||inputHeight!=inputH||inputFormat!=format){inputWidth=inputW;inputHeight=inputH;inputFormat=format;sourceTextures.clear();retryAt=0;budgetPressure.reset();}
         if(CACurrentMediaTime()<retryAt){result.busy=true;result.reason="Remote graphics resources are busy";return result;}
         auto image=acquire(inputW,inputH,format);
         if(!image){result.busy=true;result.reason="Remote source queue is full";return result;}
-        auto descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format width:image->width height:image->height mipmapped:NO];
-        descriptor.usage=MTLTextureUsageShaderRead;auto input=[output.device newTextureWithDescriptor:descriptor iosurface:surface plane:0];
+        auto input=sourceTextures.texture(output.device,surface,format);
         if(!input){result.reason="Cannot read remote source surface";return result;}
         waitWindowSurfaceProducer((__bridge void*)source);
         // The publisher may recycle this IOSurface as soon as setContents returns.
@@ -127,7 +129,7 @@ struct macfx::LayerPresentation::Impl:std::enable_shared_from_this<Impl> {
             dispatch_async(dispatch_get_main_queue(),^{if(auto value=weak.lock()){std::lock_guard<std::mutex>guard(value->mutex);if(!value->stopped.load()&&value->generation==frameGeneration&&value->source&&value->output.superlayer==value->source){Transaction transaction;value->output.hidden=NO;value->revealed.store(true);}value->revealQueued.store(false);}});
         }}];[commands commit];return result;
     }}
-    void stop(){std::lock_guard<std::mutex>lock(mutex);if(stopped.exchange(true))return;presenter->stop();pool.clear();Transaction transaction;output.hidden=YES;[output removeFromSuperlayer];}
+    void stop(){std::lock_guard<std::mutex>lock(mutex);if(stopped.exchange(true))return;presenter->stop();pool.clear();sourceTextures.clear();Transaction transaction;output.hidden=YES;[output removeFromSuperlayer];}
 };
 macfx::LayerPresentation::LayerPresentation(CALayer *layer,unsigned width,unsigned height,const PresenterConfig &config):LayerPresentation(layer,width,height,config,true){}
 macfx::LayerPresentation::LayerPresentation(CALayer *layer,unsigned width,unsigned height,const PresenterConfig &config,bool opaqueSource):impl(std::make_shared<Impl>(layer,width,height,config,opaqueSource)){}

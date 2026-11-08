@@ -88,5 +88,21 @@ int main(){@autoreleasepool{
     // Drawables may outlive their presenter; their handlers then refer to no count.
     [kept[0] display:3.0];[kept[1] display:0];[kept removeAllObjects];
     check(shared.inUse->load()==1,"drawables outliving their presenter retire normally");
+    // A live drawable-count option limits admission inside the attached pool
+    // without reconfiguring it, and never exceeds that pool.
+    ControlledLayer *limited=[ControlledLayer new];limited.maximumDrawableCount=3;NSMutableArray *leases=[NSMutableArray new];
+    {
+        macfx::OverlayDrawables capped;capped.setCapacity(2);
+        check(capped.capacity((CAMetalLayer*)(id)limited)==2,"a live count limits capacity");
+        for(unsigned i=0;i<3;++i)if(id value=capped.acquire((CAMetalLayer*)(id)limited))[leases addObject:value];
+        check(leases.count==2&&capped.held()==2&&limited.calls->load()==2&&limited.maximumDrawableCount==3,"admission follows the live count");
+        capped.setCapacity(8);check(capped.capacity((CAMetalLayer*)(id)limited)==3,"a live count never exceeds the attached pool");
+        // A display-link update drawable is tracked without a second nextDrawable call.
+        ControlledDrawable *update=(ControlledDrawable*)(id)[limited nextDrawable];const unsigned calls=limited.calls->load();
+        check(update&&capped.adopt((CAMetalLayer*)(id)limited,(id<CAMetalDrawable>)update)==(id)update&&capped.held()==3&&limited.calls->load()==calls,"an adopted drawable is counted once");
+        check(!capped.adopt((CAMetalLayer*)(id)limited,(id<CAMetalDrawable>)update)&&capped.held()==3,"adoption respects capacity");
+        [update display:4.0];[leases[0] display:0];check(capped.held()==2,"adopted and acquired drawables retire through the same count");
+    }
+    [leases removeAllObjects];
     std::printf("Owned output drawables: %u checks; refusals and admissions took at most %.2f ms; nextDrawable was never entered while every drawable was in use.\n",checks,slowest);
 }}

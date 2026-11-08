@@ -6,6 +6,7 @@
 #include "presentation-internal.hpp"
 #include "presentation-ticket.hpp"
 #include "overlay-drawables.hpp"
+#include "presentation-display-link.hpp"
 #include "source-timing.hpp"
 #include "diagnostics.hpp"
 #include "log.hpp"
@@ -88,10 +89,13 @@ std::string legacyInputIdentity(const macfx::LivePacket&packet){
 }
 struct macfx::FramePresenter::Impl:std::enable_shared_from_this<Impl>{
  CAMetalLayer*layer;void*owner;PresenterConfig config;ImageColorSpace colorSpace=ImageColorSpace::LegacySDR;ImageRetry frameRetry;id<MTLCommandQueue>queue;id<MTLRenderPipelineState>flipPipeline,motionPipeline;dispatch_queue_t worker;dispatch_source_t wakeup=nullptr;CVDisplayLinkRef link=nullptr;
+ std::unique_ptr<PresentationDisplayLink>metalLink;std::atomic<bool>metalTiming{false};bool metalTimingUnavailable=false;std::atomic<uint64_t>timingEpoch{0};
+ std::mutex displayDrawableMutex;id<CAMetalDrawable>displayDrawable=nil;
  ImageColorDescription sourceColor,outputColor;MTLPixelFormat graphFormat=MTLPixelFormatInvalid;std::shared_ptr<ColorEncoder>colorEncoder;std::atomic<float>displayHeadroom{1};
  std::atomic<PresenterPreparation>preparation{PresenterPreparation::Ready};
  std::atomic<RuntimeFrameSource>frameSource{RuntimeFrameSource::Unknown};
  std::atomic<bool>outputVisible{true},outputIdleCut{false};
+ std::atomic<bool>imagePairPending{false};
  mutable std::mutex mutex;std::mutex submission,privateQueueMutex;std::atomic<bool>privateQueueUnavailable{false};PresenterStatus status;RSPresentationTiming timing{};std::vector<std::shared_ptr<Batch>>pool;std::vector<std::weak_ptr<Retirement>>retirements;std::optional<Display>immediate,motionFrame;OutputPolicy outputPolicy;unsigned nextSubframe=0,lastQueuedSubframe=0;double nextSubframeTime=0,lastQueuedTime=0;bool motionRepeated=false;
  std::atomic<bool>gpuFailed{false};std::shared_ptr<const FramePublication>publication,failedPublication;uint64_t publicationGeneration=~uint64_t(0);std::unique_ptr<EffectPlanState>failureReader;std::mutex failureReaderMutex;
  std::atomic<unsigned> displayHz{0};unsigned appliedRefresh=0;uint32_t currentDisplay=0;
@@ -142,8 +146,9 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   // after this lock is released, so their callbacks may query presenter state.
   std::lock_guard lock(mutex);return layer;
  }
- // Owned output layer options, set outside the state lock like other layer
- // properties. An unset option restores the layer's own default.
+ // Display sync is a layer property; drawable count limits admission within
+ // the backing pool configured before attachment. Unset options restore the
+ // layer's initial values without changing an attached pool.
  void applyPresentationOptions(){
   std::optional<bool>sync;std::optional<unsigned>count;
   {std::lock_guard<std::mutex>lock(mutex);
@@ -153,7 +158,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   if(!sync&&!count)return;
   CAMetalLayer*target=layerSnapshot();if(!target)return;
   if(sync)target.displaySyncEnabled=*sync;
-  if(count)target.maximumDrawableCount=*count;
+  if(count)drawables.setCapacity(*count);
  }
  // Overlay counters come from the presenter's own status and timing; nothing
  // here adds work to a frame that the overlay does not draw.
@@ -190,9 +195,13 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   if(!outputVisible.load(std::memory_order_acquire)||outputIdleCut.load(std::memory_order_acquire))return nil;
   const auto size=target.drawableSize;
   DiagnosticScope scope(DiagnosticStage::MetalDrawable,reinterpret_cast<uintptr_t>((__bridge void*)target),unsigned(size.width),unsigned(size.height),"presentation.next-drawable");
-  auto drawable=drawables.acquire(target);
+  id<CAMetalDrawable>drawable=nil;
+  if(metalTiming.load()){
+   std::lock_guard lock(displayDrawableMutex);drawable=std::exchange(displayDrawable,nil);
+   if(drawable&&(drawable.texture.width!=unsigned(size.width)||drawable.texture.height!=unsigned(size.height)||drawable.texture.pixelFormat!=target.pixelFormat))drawable=nil;
+  }else drawable=drawables.acquire(target);
   if(!drawable&&drawables.refusingSeconds()>=2&&!drawablesReported.exchange(true))
-   nativeLog("Presentation output drawables have all been in use for 2 s: "+std::to_string(drawables.held())+" of "+std::to_string(target.maximumDrawableCount));
+   nativeLog("Presentation output drawables have all been in use for 2 s: "+std::to_string(drawables.held())+" of "+std::to_string(drawables.capacity(target)));
   return drawable;
  }
  id<MTLCommandQueue> privateCommandsQueue(){
@@ -204,7 +213,31 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   }return queue;
  }
  void retryPrivateQueue(){std::lock_guard lock(privateQueueMutex);privateQueueUnavailable.store(false);generationUnavailable=false;}
+ void displayUpdate(uint64_t epoch,id<CAMetalDrawable> drawable,double target,unsigned rate){
+  if(stopping.load()||epoch!=timingEpoch||!metalTiming.load())return;
+  if(!drawable&&target==0){
+   const auto weak=weak_from_this();dispatch_async(worker,^{if(auto self=weak.lock()){
+    std::lock_guard serial(self->submission);if(self->stopping.load()||epoch!=self->timingEpoch)return;
+    self->metalTimingUnavailable=true;self->metalTiming=false;++self->timingEpoch;
+    if(self->metalLink){self->metalLink->invalidate();self->metalLink.reset();}
+    {std::lock_guard lock(self->displayDrawableMutex);self->displayDrawable=nil;}
+    self->start();
+   }});return;
+  }
+  if(std::isfinite(target)&&target>0)refreshTime.store(target);if(rate>=20&&rate<=1000)displayHz.store(rate);
+  CAMetalLayer *output=layerSnapshot();if(!output)return;
+  {std::lock_guard lock(displayDrawableMutex);if(stopping.load()||epoch!=timingEpoch)return;
+   if(displayDrawable!=drawable){displayDrawable=nil;displayDrawable=drawables.adopt(output,drawable);}}
+  schedule();
+ }
+ void pauseGenerationTiming(){
+  if(metalLink)metalLink->pause();
+  if(link&&CVDisplayLinkIsRunning(link))CVDisplayLinkStop(link);
+  std::lock_guard lock(displayDrawableMutex);displayDrawable=nil;
+ }
  void stopGenerationTiming(){
+  ++timingEpoch;metalTiming=false;if(metalLink){metalLink->invalidate();metalLink.reset();}
+  {std::lock_guard lock(displayDrawableMutex);displayDrawable=nil;}
   if(link){CVDisplayLinkStop(link);CVDisplayLinkRelease(link);link=nullptr;}
   if(wakeup){dispatch_source_cancel(wakeup);wakeup=nullptr;}
  }
@@ -215,16 +248,30 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
  }
  bool start(bool enabled=true){
   if((!generator&&!outputPolicy.active())||generationUnavailable)return false;
-  if(!enabled){if(link&&CVDisplayLinkIsRunning(link))CVDisplayLinkStop(link);return true;}
+  if(!enabled){pauseGenerationTiming();return true;}
   @try{try{
    if(!privateCommandsQueue())throw std::runtime_error("Frame generation delivery is unavailable; other effects use the source command buffer");
-   if(!link){
+   if(!wakeup){
     // Generated phases can fall between display-link callbacks. One rearmed
     // timer services the next phase; it never builds an asynchronous frame queue.
     wakeup=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,worker);
     if(!wakeup)throw std::runtime_error("Frame generation scheduling is unavailable");
     std::weak_ptr<Impl>weak=shared_from_this();dispatch_source_set_event_handler(wakeup,^{if(auto self=weak.lock())self->schedule();});
     dispatch_source_set_timer(wakeup,DISPATCH_TIME_FOREVER,DISPATCH_TIME_FOREVER,0);dispatch_resume(wakeup);
+   }
+   if(@available(macOS 14.0,*))if(!metalTimingUnavailable){
+    @try{try{
+     if(!metalLink){
+      const auto epoch=++timingEpoch;const std::weak_ptr<Impl>weak=shared_from_this();
+      metalLink=std::make_unique<PresentationDisplayLink>(layer,[weak,epoch](id<CAMetalDrawable> drawable,double target,unsigned rate){if(auto self=weak.lock())self->displayUpdate(epoch,drawable,target,rate);});
+      metalLink->setDisplay(currentDisplay);metalTiming=true;
+     }
+     metalLink->resume();return true;
+    }catch(const std::exception&){metalLink.reset();metalTiming=false;metalTimingUnavailable=true;}}
+    @catch(NSException*){metalLink.reset();metalTiming=false;metalTimingUnavailable=true;}
+    // Keep the existing timing route when the optional Metal driver is unavailable.
+   }
+   if(!link){
     if(CVDisplayLinkCreateWithActiveCGDisplays(&link)!=kCVReturnSuccess||!link)throw std::runtime_error("Frame generation display timing is unavailable");
     if(CVDisplayLinkSetOutputCallback(link,[](CVDisplayLinkRef,const CVTimeStamp*,const CVTimeStamp*out,CVOptionFlags,CVOptionFlags*,void*opaque)->CVReturn{auto*self=static_cast<Impl*>(opaque);static const double hostSeconds=[]{mach_timebase_info_data_t base{};mach_timebase_info(&base);return double(base.numer)/base.denom/1e9;}();if(out&&(out->flags&kCVTimeStampHostTimeValid))self->refreshTime.store(double(out->hostTime)*hostSeconds);if(out&&(out->flags&kCVTimeStampVideoRefreshPeriodValid)&&out->videoRefreshPeriod>0){const auto hz=unsigned(std::lround(double(out->videoTimeScale)/out->videoRefreshPeriod));if(hz>=20&&hz<=1000)self->displayHz.store(hz);}self->schedule();return kCVReturnSuccess;},this)!=kCVReturnSuccess)throw std::runtime_error("Frame generation display callback is unavailable");
     if(currentDisplay&&CVDisplayLinkSetCurrentCGDisplay(link,currentDisplay)!=kCVReturnSuccess)throw std::runtime_error("Frame generation display selection is unavailable");
@@ -465,7 +512,10 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   if(scene.execution){receiptDepth=scene.depth;effectFrameId=scene.frameId;receiptMapped=scene.displayMapped;receiptInputs=scene.inputs;}
   EffectExecutionSelection selected;std::shared_ptr<TemporalSceneContinuation>continuation;std::string rendererPendingReason;
   if(sceneWindow){holdPlans.poll();const auto desired=holdPlans.snapshot();if(desired&&desired->mode=="advanced")if(auto candidate=temporalSceneContinuation(sceneWindow)){if(candidate->execution()->revision()==desired->revision)continuation=std::move(candidate);else if(std::any_of(desired->nodes.begin(),desired->nodes.end(),[](const auto&node){return node.enabled&&(node.kind=="temporal"||node.requirements.depth||node.requirements.motion||node.kind=="frame-generation"&&generationRequiresScene(node.method));})){rendererPendingReason="Waiting for the latest renderer scene graph; the accepted scene remains active";continuation=std::move(candidate);}}}
-  if(scene.execution&&scene.deferred){
+  // A renderer receipt owns its scene prefix. Reprepare its image-pair
+  // suffix for this presenter's queue instead of reusing producer resources.
+  const bool sceneImagePair=scene.execution&&std::any_of(scene.execution->generationStages().begin(),scene.execution->generationStages().end(),[](const auto&stage){return !stage.encoder->requiresScene();});
+  if(scene.execution&&(scene.deferred||sceneImagePair)){
    const auto prefix=scene.execution;std::optional<RSTemporalFrame>inputs;
    if(sceneInputs){std::shared_ptr<const EffectSceneLease>derived;const auto bound=prefix->bindSceneImage(commands,source,planTarget,sceneInputs,derived,config.origin);if(!bound.encoded){result.busy=bound.busy;result.reason=bound.reason;return false;}sceneInputs=std::move(derived);inputs=retainedSceneFrame(sceneInputs);if(!inputs){result.reason="The Metal 4 final image lost its exact scene lease";return false;}receiptDepth={(__bridge id<MTLTexture>)inputs->depth,inputs->frameId,config.origin};frame.depth=receiptDepth.texture?&receiptDepth:nullptr;}
    selected=plans->prepareSceneContinuation(frame,inputs?&*inputs:nullptr,colorSpace,sourceColor,prefix->sceneSuffixSnapshot(),prefix->sceneOutputIdentity(),sceneInputs);
@@ -498,7 +548,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
     pacing=config.adaptive?std::make_unique<AdaptivePacing>(*config.adaptive):nullptr;
    }
    if(generator||outputPolicy.active())start();
-   else if(link&&CVDisplayLinkIsRunning(link))CVDisplayLinkStop(link);
+   else pauseGenerationTiming();
   }else if(planMode){
    auto desired=presentationGraphicsEnvironment();auto next=desired.generation?prepareGenerator(desired.generationMethod,*desired.generation):nullptr;
    {std::lock_guard<std::mutex>lock(mutex);if(inFlight){result.busy=true;result.reason="Waiting for the current graphics frame";return false;}retireDelivery();generator=std::move(next);execution.reset();outputPolicy={};motionFrame.reset();planMode=false;config.generation=desired.generation;config.generationMethod=desired.generationMethod;config.adaptive=desired.adaptive;pool.clear();historyReady=false;generationSequence=0;appliedControls=~uint64_t(0);}
@@ -827,7 +877,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
  std::shared_ptr<Batch>acquire(unsigned w,unsigned h,const GenerationDelivery*mode=nullptr){
   const unsigned gw=planMode&&execution&&generator?execution->generationOutputWidth():w,gh=planMode&&execution&&generator?execution->generationOutputHeight():h;
   const bool displayLimited=mode&&mode->displayLimited;
-  std::lock_guard<std::mutex>lock(mutex);const unsigned capacity=mode?mode->sourceCapacity:generator&&generationEnabled?1:std::min(4u,unsigned(layer.maximumDrawableCount));if(inFlight>=capacity)return {};
+  std::lock_guard<std::mutex>lock(mutex);const unsigned capacity=mode?mode->sourceCapacity:generator&&generationEnabled?1:std::min(4u,drawables.capacity(layer));if(inFlight>=capacity)return {};
   if(width!=w||height!=h||!pool.empty()&&(pool.front()->real.width!=gw||pool.front()->real.height!=gh)){cancelRetirements();completedReplay.reset();pool.clear();immediate.reset();motionFrame.reset();latest.reset();delivery.reset();accountedDeliveryDrops=0;if(pacing)pacing->reset();historyReady=false;width=w;height=h;}
   generationBudgetContract(gw,gh);
   std::shared_ptr<Batch>batch;for(auto&candidate:pool)if(candidate.use_count()==1){batch=candidate;break;}
@@ -999,8 +1049,20 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   if(traceEnabled&&sourceTime-lastTrace>2){lastTrace=sourceTime;std::lock_guard<std::mutex>lock(mutex);traceStatus("frame");}
   const auto size=layer.drawableSize;if(!std::isfinite(size.width)||!std::isfinite(size.height)||size.width<1||size.height<1||size.width>16384||size.height>16384){result.reason="Invalid presentation dimensions";return result;}
   if(!content&&planMode&&execution&&execution->canDetachNeural()&&!target&&!observer&&!effectDepth&&execution->commandQueue()==privateCommandsQueue())return submitDetached(commands,source,frameId,sourceTime,sourcePeriod,opaque);
+  const bool imagePair=generator&&generationEnabled&&(!generator->requiresScene()||(execution&&std::any_of(execution->generationStages().begin(),execution->generationStages().end(),[](const auto&stage){return !stage.encoder->requiresScene();})));
+  const bool detached=imagePair&&commands.commandQueue!=privateCommandsQueue();
+  const auto retainedContent=content?std::optional<RSPresentationContent>(*content):std::nullopt;
+  const auto retainedTarget=target?std::optional<RSPresentationTarget>(*target):std::nullopt;
+  const auto retainedObserver=observer?std::optional<RSPresentationObserver>(*observer):std::nullopt;
+  const auto retainedRetirement=detached&&observer?std::make_shared<Retirement>(*observer,frameId):nullptr;
+  // Preserve this source's metadata and scene leases across producer completion.
+  auto encodeImage=[=,sceneInputs=std::move(sceneInputs),receiptCompletion=std::move(receiptCompletion),sceneContinuation=std::move(sceneContinuation),sceneCapture=std::move(sceneCapture)](id<MTLCommandBuffer>commands,id<MTLTexture>source,DepthFrame copiedDepth) mutable -> FrameResult {
+  const auto content=retainedContent?&*retainedContent:nullptr;
+  const auto target=retainedTarget?&*retainedTarget:nullptr;
+  const auto observer=retainedObserver?&*retainedObserver:nullptr;
+  FrameResult result;const DepthFrame*depth=copiedDepth.texture?&copiedDepth:nullptr;const DepthFrame*effectDepth=depth;
   const bool windowCapture=frameSource.load(std::memory_order_relaxed)==RuntimeFrameSource::ExternalWindow;
-  const auto deliveryMode=generationDelivery(generator&&generationEnabled,outputPolicy.active(),windowCapture?displayHz.load():0,sourcePeriod,unsigned(layer.maximumDrawableCount));
+  const auto deliveryMode=generationDelivery(generator&&generationEnabled,outputPolicy.active(),windowCapture?displayHz.load():0,sourcePeriod,drawables.capacity(layer));
   // Retire an older paced interval only when its delivery route changes.
   // A real-only source buffer must not race a previously queued image.
   {std::lock_guard lock(mutex);if(displayLimitedDelivery!=deliveryMode.displayLimited){retireDelivery();displayLimitedDelivery=deliveryMode.displayLimited;}}
@@ -1050,7 +1112,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
     if(heldInputs){if(!failHeldAttempt(heldEpoch,{heldInputs->plan->revision,heldInputs->controlsDigest},result.reason)){result.busy=true;result.reason="A newer graphics update replaced this frame";}}
     else fail(result.reason);
    }return result;}
-  auto retirement=observer?std::make_shared<Retirement>(*observer,frameId):nullptr;
+  auto retirement=retainedRetirement?retainedRetirement:observer?std::make_shared<Retirement>(*observer,frameId):nullptr;
   if(content&&lastContentId)pendingProducerReset|=content->imageRevision!=lastImageRevision||sourceMapped!=lastContentMapped;
   bool generatedReady=false;if(!redraw&&generator&&generationEnabled){
    if(pendingProducerReset){historyReady=false;++generationSequence;if(batch->execution)for(const auto&stage:batch->execution->generationStages())++stage.state->sequence;pendingProducerReset=false;}
@@ -1097,6 +1159,47 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   // Rejected/busy frames retain their identity so callers can retry unchanged.
   // An accepted encoding reserves identity even if its host later abandons it.
   producer->encoded.store(true);if(!contentTimed)observe(RuntimeStatusPhase::Encoded,batch);requestRuntimeStatusPoll(true);frameRetry.reset();lastSubmission=frameId;{std::lock_guard<std::mutex>lock(mutex);if(!redraw){if(content){interval=sourcePeriod;lastContentId=content->contentId;lastContentEpoch=content->epoch;lastContentPTS=content->pts;lastContentTimeMs=contentTimeMs;lastContentPTSUnknown=ptsUnknown;lastImageRevision=content->imageRevision;lastContentMapped=sourceMapped;lastContentDuration=sourcePeriod;lastContentMediaDuration=contentPeriod;lastContentTarget=target?target->hostTime:0;}else if(!config.sourceFrameRate&&lastSourceTime)interval=updateSourceInterval(interval,sourceTime-lastSourceTime);}lastSourceTime=sourceTime;if(!contentTimed)++status.encoded;if(target){++timing.accepted;if(target->hostTime<=targetSubmittedAt)++timing.lateAtSubmit;}if(retirement){retirements.erase(std::remove_if(retirements.begin(),retirements.end(),[](const auto&entry){auto value=entry.lock();return !value||value->done.load();}),retirements.end());retirements.push_back(retirement);retirement->arm();}}return result;
+  };
+  if(detached){
+   if(imagePairPending.exchange(true)){result.busy=true;result.reason="Image-pair presentation is occupied";return result;}
+   std::weak_ptr<Impl>weak=shared_from_this();
+   auto pending=std::make_shared<CompletionLease>([weak](bool){if(auto self=weak.lock())self->imagePairPending.store(false);});
+   auto snapshot=makeTexture(layer.device,source.width,source.height,source.pixelFormat);
+   auto copy=[commands blitCommandEncoder];if(!copy)throw std::runtime_error("Cannot retain image-pair source pixels");
+   [copy copyFromTexture:source sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(source.width,source.height,1) toTexture:snapshot destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[copy endEncoding];
+   DepthFrame retainedDepth{nil,0,FrameOrigin::TopLeft};
+   if(effectDepth&&effectDepth->texture){
+    const auto input=effectDepth->texture;auto d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:input.pixelFormat width:input.width height:input.height mipmapped:NO];
+    d.textureType=input.textureType;d.sampleCount=input.sampleCount;d.storageMode=MTLStorageModePrivate;d.usage=MTLTextureUsageShaderRead;
+    retainedDepth={newAdmittedTexture(layer.device,d),effectDepth->frameId,effectDepth->origin};
+    auto depthCopy=[commands blitCommandEncoder];if(!depthCopy)throw std::runtime_error("Cannot retain image-pair depth pixels");
+    [depthCopy copyFromTexture:input sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(input.width,input.height,1) toTexture:retainedDepth.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[depthCopy endEncoding];
+   }
+   const auto acceptedExecution=execution;uint64_t acceptedEpoch;{std::lock_guard lock(mutex);acceptedEpoch=presentationEpoch;}
+   const auto acceptedControls=presentationControlsDigest();
+   auto encode=std::make_shared<decltype(encodeImage)>(std::move(encodeImage));
+   [commands addCompletedHandler:^(id<MTLCommandBuffer>completed){
+    if(completed.status!=MTLCommandBufferStatusCompleted){if(retainedRetirement)retainedRetirement->completed(completed.status);pending->finish(false);return;}
+    if(auto self=weak.lock())dispatch_async(self->worker,^{@autoreleasepool{
+     std::lock_guard serial(self->submission);
+     bool obsolete;{std::lock_guard lock(self->mutex);obsolete=self->presentationEpoch!=acceptedEpoch;}
+     LiveStatePin pin;
+     if(self->stopping.load()||self->execution!=acceptedExecution||obsolete||presentationControlsDigest()!=acceptedControls){pending->finish(false);return;}
+     id<MTLCommandBuffer>owned=nil;
+     @try{try{
+      owned=[self->privateCommandsQueue() commandBuffer];if(!owned)throw std::runtime_error("Image-pair presentation commands are unavailable");ownPresentationBuffer(owned);
+      const auto result=(*encode)(owned,snapshot,retainedDepth);
+      if(!result.encoded&&!result.busy)self->fail(result.reason);
+      // Retire any external work admitted even when a later stage was busy.
+      [owned commit];pending->finish(result.encoded);
+     }catch(const std::exception&e){self->fail(e.what());if(owned&&owned.status<MTLCommandBufferStatusCommitted)[owned commit];pending->finish(false);}}
+     @catch(NSException*e){self->fail(e.reason.UTF8String?:"Image-pair presentation failed");if(owned&&owned.status<MTLCommandBufferStatusCommitted)[owned commit];pending->finish(false);}
+    }});else pending->finish(false);
+   }];
+   if(retainedRetirement)retainedRetirement->arm();
+   result.encoded=true;result.effects=true;return result;
+  }
+  return encodeImage(commands,source,effectDepth?*effectDepth:DepthFrame{nil,0,FrameOrigin::TopLeft});
   }();}catch(const ImageBudgetExceeded&error){result={};frameRetry.denied(error,CACurrentMediaTime());result.busy=!frameRetry.impossible;result.reason=frameRetry.reason;}
   catch(const std::exception&error){result={};result.reason=error.what();}}
   @catch(NSException*error){result={};result.reason=error.reason.UTF8String?:"Frame presentation failed";}
@@ -1137,19 +1240,19 @@ macfx::FrameResult macfx::FramePresenter::submitDisplayFrame(id<MTLCommandBuffer
 
 void macfx::FramePresenter::setDisplay(uint32_t displayId){std::unique_lock<std::mutex>serial(impl->submission,std::try_to_lock);if(!serial.owns_lock())return;if(displayId&&displayId!=impl->currentDisplay&&!impl->stopping.load()){
  impl->currentDisplay=displayId;
- if(impl->link&&CVDisplayLinkSetCurrentCGDisplay(impl->link,displayId)!=kCVReturnSuccess)impl->bypassGeneration("Frame generation display selection is unavailable");
- // The HUD also needs display timing when no generator starts the delivery
- // link. Read the display's nominal period without starting another timer.
- CVDisplayLinkRef timing=impl->link;const bool temporary=!timing;
- if(!timing&&CVDisplayLinkCreateWithCGDisplay(displayId,&timing)!=kCVReturnSuccess)timing=nullptr;
  unsigned refresh=0;
- if(timing){
-  const auto period=CVDisplayLinkGetNominalOutputVideoRefreshPeriod(timing);
-  if(!(period.flags&kCVTimeIsIndefinite)&&period.timeValue>0&&period.timeScale>0){
-   const double hz=double(period.timeScale)/period.timeValue;
-   if(std::isfinite(hz)&&hz>=20&&hz<=1000)refresh=unsigned(std::lround(hz));
-  }
-  if(temporary)CVDisplayLinkRelease(timing);
+ if(impl->link&&CVDisplayLinkSetCurrentCGDisplay(impl->link,displayId)!=kCVReturnSuccess)impl->bypassGeneration("Frame generation display selection is unavailable");
+ if(@available(macOS 14.0,*)){
+  if(impl->metalLink)impl->metalLink->setDisplay(displayId);
+  if(auto mode=CGDisplayCopyDisplayMode(displayId)){const double rate=CGDisplayModeGetRefreshRate(mode);CGDisplayModeRelease(mode);
+   if(std::isfinite(rate)&&rate>=20&&rate<=1000)refresh=unsigned(std::lround(rate));}
+ }else{
+  CVDisplayLinkRef timing=impl->link;const bool temporary=!timing;
+  if(!timing&&CVDisplayLinkCreateWithCGDisplay(displayId,&timing)!=kCVReturnSuccess)timing=nullptr;
+  if(timing){const auto period=CVDisplayLinkGetNominalOutputVideoRefreshPeriod(timing);
+   if(!(period.flags&kCVTimeIsIndefinite)&&period.timeValue>0&&period.timeScale>0){const double hz=double(period.timeScale)/period.timeValue;
+    if(std::isfinite(hz)&&hz>=20&&hz<=1000)refresh=unsigned(std::lround(hz));}
+   if(temporary)CVDisplayLinkRelease(timing);}
  }
  impl->displayHz.store(refresh);
 }}

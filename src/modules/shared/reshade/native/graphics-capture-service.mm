@@ -9,6 +9,7 @@
 #include "graphics-window-catalog.hpp"
 #include "window-capture-client.hpp"
 #include "window-capture-wire.hpp"
+#include "capture-frame-geometry.hpp"
 #include "window-overlay-policy.hpp"
 #include <algorithm>
 #include <atomic>
@@ -153,13 +154,15 @@ struct CaptureFeed:std::enable_shared_from_this<CaptureFeed> {
     bool cursor=false,appliedCursor=false;double interval=0,lastSent=0,configurationStarted=0,unusableSince=0,cropX=0,cropY=0;
     Geometry desired,applied;uint64_t revision=0,appliedRevision=0,sequence=mach_absolute_time();unsigned attempts=0,starts=0,stopCount=0,dropped=0,retainedPeak=0;
     struct Sample {CMSampleBufferRef value=nullptr;FrameInfo info;Sample(CMSampleBufferRef s,const FrameInfo &f):value(s),info(f){CFRetain(value);}~Sample(){CFRelease(value);}};
-    std::shared_ptr<Sample>inFlight,pending;std::shared_ptr<ServiceState>state;
+    macfx::CaptureFrameLeases<Sample>frames;std::shared_ptr<ServiceState>state;
     struct Waiter {uint64_t revision;void (^done)(bool);};std::vector<Waiter>waiters;
     void event(NSDictionary *value){NSMutableDictionary *event=[value mutableCopy];event[@"feed"]=@(id);send(peer->port,Event,id,{},MACH_PORT_NULL,event);}
     void capture(NSString *status,NSString *reason=nil){NSMutableDictionary *event=[@{@"event":@"capture",@"state":status,@"source":palettes?@"application-windows":@"window"} mutableCopy];if(reason.length)event[@"reason"]=reason;this->event(event);
         if([status isEqualToString:@"running"]){auto self=shared_from_this();dispatch_async(dispatch_get_main_queue(),^{[self->owner captureRecovered:self];});}}
     SCStreamConfiguration *configuration(){
-        auto config=[SCStreamConfiguration new];config.width=desired.width;config.height=desired.height;config.queueDepth=6;
+        auto config=[SCStreamConfiguration new];config.width=desired.width;config.height=desired.height;
+        // Two sent leases and one coalesced sample leave a producer slot free.
+        config.queueDepth=4;
         config.minimumFrameInterval=kCMTimeZero;config.pixelFormat=kCVPixelFormatType_32BGRA;config.showsCursor=cursor;config.capturesAudio=NO;
         config.colorSpaceName=kCGColorSpaceSRGB;config.scalesToFit=YES;
         const auto origin=(display||palettes)?CGPointMake(desired.rect.origin.x-desired.screen.origin.x,desired.rect.origin.y-desired.screen.origin.y):CGPointMake(cropX,cropY);
@@ -206,7 +209,7 @@ struct CaptureFeed:std::enable_shared_from_this<CaptureFeed> {
         configuring=true;auto self=shared_from_this();dispatch_async(intake,^{
             if(self->ended){if(done)done(false);return;}self->desired=g;if(nextFilter)self->requestedFilter=nextFilter;
             ++self->revision;self->attempts=0;self->beginConfiguration();
-            self->pending.reset();if(done)self->waiters.push_back({self->revision,[done copy]});
+            self->frames.clearPending();if(done)self->waiters.push_back({self->revision,[done copy]});
             if(!self->stream)self->start();else self->configureLatest();
         });
     }
@@ -257,16 +260,16 @@ struct CaptureFeed:std::enable_shared_from_this<CaptureFeed> {
             if([options[@"interval"] isKindOfClass:NSNumber.class]){const auto v=[options[@"interval"] doubleValue];if(std::isfinite(v)&&v>=0&&v<=1)self->interval=v;}
             if([options[@"paused"] isKindOfClass:NSNumber.class])self->paused=[options[@"paused"] boolValue];
             if(self->paused||self->suspended){self->capture(self->suspended?@"suspended":@"paused");self->stop(false);return;}
-            if(changed){self->configuring=true;++self->revision;self->attempts=0;self->beginConfiguration();self->pending.reset();self->configureLatest();}
+            if(changed){self->configuring=true;++self->revision;self->attempts=0;self->beginConfiguration();self->frames.clearPending();self->configureLatest();}
             self->start();
         });
     }
     void stop(bool final){ // intake queue
-        if(final){ended=true;completed(false);}pending.reset();if(stopRequested)return;
+        if(final){ended=true;completed(false);}frames.clearPending();if(stopRequested)return;
         // A client may still be copying the leased IOSurface. Keep the pool
         // sample until capture has stopped, even after the feed is removed
         // and its late Release can no longer find it in the service map.
-        if(!stream){if(!starting&&!operation)inFlight.reset();return;}
+        if(!stream){if(!starting&&!operation)frames.clear();return;}
         stopRequested=true;++state->stops;stopNow();
     }
     void stopNow(){ // intake queue; receiver and stream retained through completion
@@ -274,31 +277,37 @@ struct CaptureFeed:std::enable_shared_from_this<CaptureFeed> {
         SCStream *capture=stream;MacFXCaptureReceiver *output=receiver;stream=nil;receiver=nil;
         auto self=shared_from_this();++stopCount;
         [capture stopCaptureWithCompletionHandler:^(NSError*){(void)capture;(void)output;dispatch_async(self->intake,^{
-            self->inFlight.reset();--self->state->stops;self->stopRequested=false;self->configurationStarted=0;if(!self->ended)self->start();
+            self->frames.clear();--self->state->stops;self->stopRequested=false;self->configurationStarted=0;if(!self->ended)self->start();
         });}];
     }
     void streamFailed(SCStream *capture,NSError *error){auto self=shared_from_this();dispatch_async(intake,^{
         if(!self->ended&&!self->paused&&!self->suspended&&!self->stopRequested&&self->stream==capture)self->fail(error);
     });}
-    void release(uint64_t number){if(inFlight&&inFlight->info.sequence==number){inFlight.reset();auto next=std::move(pending);
-        if(next&&!ended&&!configuring&&next->info.generation==applied.generation&&next->info.width==applied.width&&next->info.height==applied.height)forward(std::move(next));}}
+    void release(uint64_t number){
+        if(!frames.release(number))return;auto next=frames.takePending();
+        if(next&&!ended&&!configuring&&!paused&&!suspended&&next->info.generation==applied.generation)forward(std::move(next));
+    }
     void forward(std::shared_ptr<Sample>sample){
         CVPixelBufferRef pixels=CMSampleBufferGetImageBuffer(sample->value);IOSurfaceRef surface=pixels?CVPixelBufferGetIOSurface(pixels):nullptr;
         mach_port_t port=surface?IOSurfaceCreateMachPort(surface):MACH_PORT_NULL;if(!port){++dropped;return;}
-        inFlight=std::move(sample);lastSent=inFlight->info.time;
-        if(!send(peer->port,Frame,id,inFlight->info,port)){inFlight.reset();++dropped;}
-        retainedPeak=std::max(retainedPeak,unsigned(bool(inFlight))+unsigned(bool(pending)));
+        const auto frame=sample->info;
+        if(!frames.retain(std::move(sample))){mach_port_deallocate(mach_task_self(),port);++dropped;return;}
+        lastSent=frame.time;
+        if(!send(peer->port,Frame,id,frame,port)){frames.release(frame.sequence);++dropped;}
+        retainedPeak=std::max(retainedPeak,frames.size());
     }
     void receive(CMSampleBufferRef sample){ // SCK intake queue
         if(ended||configuring||paused||suspended||!CMSampleBufferIsValid(sample))return;
         CFArrayRef attachments=CMSampleBufferGetSampleAttachmentsArray(sample,false);if(!attachments||CFArrayGetCount(attachments)<1)return;
         NSDictionary *info=(__bridge NSDictionary*)CFArrayGetValueAtIndex(attachments,0);
         if(!info[SCStreamFrameInfoStatus]||[info[SCStreamFrameInfoStatus] integerValue]!=SCFrameStatusComplete)return;
-        CVPixelBufferRef pixels=CMSampleBufferGetImageBuffer(sample);const unsigned w=applied.width,h=applied.height;
-        if(!pixels||CVPixelBufferGetPixelFormatType(pixels)!=kCVPixelFormatType_32BGRA||CVPixelBufferGetWidth(pixels)!=w||CVPixelBufferGetHeight(pixels)!=h){
+        CVPixelBufferRef pixels=CMSampleBufferGetImageBuffer(sample);
+        const unsigned w=pixels?unsigned(CVPixelBufferGetWidth(pixels)):0,h=pixels?unsigned(CVPixelBufferGetHeight(pixels)):0;
+        const auto content=macfx::captureFrameGeometry(info,w,h);
+        if(!pixels||!content.valid||CVPixelBufferGetPixelFormatType(pixels)!=kCVPixelFormatType_32BGRA){
             ++dropped;if(!unusableSince){unusableSince=now();const auto epoch=unusableSince;auto self=shared_from_this();
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),intake,^{if(!self->ended&&!self->configuring&&self->unusableSince==epoch)
-                    self->fail([NSError errorWithDomain:SCStreamErrorDomain code:SCStreamErrorInternalError userInfo:@{NSLocalizedDescriptionKey:@"Capture images do not match the configured window"}]);});}return;}
+                    self->fail([NSError errorWithDomain:SCStreamErrorDomain code:SCStreamErrorInternalError userInfo:@{NSLocalizedDescriptionKey:@"Capture images have invalid content geometry"}]);});}return;}
         unusableSince=0;double time=0;NSNumber *displayTime=info[SCStreamFrameInfoDisplayTime];
         if(displayTime.unsignedLongLongValue)time=CMTimeGetSeconds(CMClockMakeHostTimeFromSystemUnits(displayTime.unsignedLongLongValue));
         else {CMTime pts=CMSampleBufferGetPresentationTimeStamp(sample);if(stream.synchronizationClock)pts=CMSyncConvertTime(pts,stream.synchronizationClock,CMClockGetHostTimeClock());time=CMTimeGetSeconds(pts);}
@@ -306,10 +315,10 @@ struct CaptureFeed:std::enable_shared_from_this<CaptureFeed> {
         if(NSDictionary *rect=info[SCStreamFrameInfoScreenRect]){CGRect r=CGRectZero;
             if([rect isKindOfClass:NSDictionary.class]&&CGRectMakeWithDictionaryRepresentation((__bridge CFDictionaryRef)rect,&r)&&!CGRectEqualToRect(r,applied.rect)){
                 auto self=shared_from_this();dispatch_async(dispatch_get_main_queue(),^{[self->owner poll];});}}
-        FrameInfo frame{++sequence,applied.generation,time,w,h};
-        if(inFlight&&pending){pending.reset();++dropped;}
+        FrameInfo frame{++sequence,applied.generation,time,w,h,content.cropX,content.cropY,content.width,content.height,content.contentScale,content.scaleFactor};
         auto value=std::make_shared<Sample>(sample,frame);
-        if(inFlight){pending=std::move(value);retainedPeak=std::max(retainedPeak,2u);}else forward(std::move(value));
+        if(frames.full()){if(frames.coalesce(std::move(value)))++dropped;retainedPeak=std::max(retainedPeak,frames.size());}
+        else forward(std::move(value));
     }
 };
 }
@@ -612,7 +621,7 @@ struct CaptureFeed:std::enable_shared_from_this<CaptureFeed> {
 - (NSDictionary*)feedSnapshot:(uint32_t)number process:(pid_t)process {
     Feed feed=[self feed:number process:process];if(!feed)return nil;__block NSDictionary *snapshot;
     dispatch_sync(feed->intake,^{snapshot=@{@"stream":@((uintptr_t)(__bridge void*)feed->stream),@"starts":@(feed->starts),@"stops":@(feed->stopCount),
-        @"retained":@(unsigned(bool(feed->inFlight))+unsigned(bool(feed->pending))),@"peak":@(feed->retainedPeak),@"dropped":@(feed->dropped),
+        @"retained":@(feed->frames.size()),@"peak":@(feed->retainedPeak),@"dropped":@(feed->dropped),
         @"cropX":@(feed->configuration().sourceRect.origin.x),@"cropY":@(feed->configuration().sourceRect.origin.y),@"queueDepth":@(feed->configuration().queueDepth),@"cursor":@(feed->cursor),@"appliedCursor":@(feed->appliedCursor),@"source":feed->palettes?@"application-windows":@"window",@"generation":@(feed->applied.generation),
         @"configuring":@(bool(feed->configuring)),@"paused":@(feed->paused),@"suspended":@(feed->suspended),@"width":@(feed->applied.width),@"height":@(feed->applied.height)};});return snapshot;
 }

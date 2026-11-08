@@ -78,7 +78,7 @@ struct macfx::ViewPresentation::Impl:std::enable_shared_from_this<Impl> {
         if(!NSThread.isMainThread||!view.superview||!view.window||!w||!h)
             throw std::runtime_error("Presentation requires an attached game view");
         source=view;sourcePublisher=virtualPublisherIdentity(view);
-        layer=[CAMetalLayer layer];layer.device=MTLCreateSystemDefaultDevice();
+        layer=[CAMetalLayer layer];layer.maximumDrawableCount=3;layer.device=MTLCreateSystemDefaultDevice();
         sourceColorTag.set(color);const auto selectedColor=layerColor(layer,view,config,color);sourceColorMode=*selectedColor.sourceColorSpace;
         layer.opaque=YES;layer.displaySyncEnabled=YES;
         const auto destination=virtualPresentationSource(view,CGSizeMake(w,h));

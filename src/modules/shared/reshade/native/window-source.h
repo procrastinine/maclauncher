@@ -1,5 +1,6 @@
 #pragma once
 #include "presentation.h"
+#include <stddef.h>
 #include <IOSurface/IOSurfaceRef.h>
 #ifdef __cplusplus
 extern "C" {
@@ -37,7 +38,11 @@ struct RSWindowSourceGeometry {
  double x,y,width,height,scale; uint32_t displayID,pixelsWidth,pixelsHeight;
  uint64_t generation;
 };
-struct RSWindowSourceFrame {uint32_t size,version;uint64_t sequence,generation;double time;uint32_t width,height;};
+// The original 40-byte prefix remains accepted. Optional content metadata is
+// present when size covers the complete appended tail; zero crop extent means
+// the full surface for callers that supply only the original prefix.
+struct RSWindowSourceFrame {uint32_t size,version;uint64_t sequence,generation;double time;uint32_t width,height;uint32_t cropX,cropY,cropWidth,cropHeight;double contentScale,scaleFactor;};
+#define RS_WINDOW_SOURCE_FRAME_BASE_SIZE offsetof(struct RSWindowSourceFrame,cropX)
 struct RSWindowSourcePointer {uint32_t size,version,visible;double x,y;};
 typedef void (*RSWindowSourceReleased)(void *,uint64_t);
 struct RSWindowSourceStatus {

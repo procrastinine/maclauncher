@@ -31,6 +31,7 @@ namespace {std::atomic<unsigned>queues{0},images{0},copies{0};id device;bool rej
 @end
 @interface FailureCommands:NSObject
 @property MTLCommandBufferStatus status;
+@property(strong)id queue;
 @property(strong)NSMutableArray *handlers;
 @end
 @implementation FailureCommands
@@ -40,7 +41,7 @@ namespace {std::atomic<unsigned>queues{0},images{0},copies{0};id device;bool rej
 - (NSTimeInterval)GPUEndTime{return 0;}
 - (BOOL)retainedReferences{return YES;}
 - (id)device{return device;}
-- (id)commandQueue{return nil;}
+- (id)commandQueue{return self.queue;}
 - (id)blitCommandEncoder{return [FailureBlit new];}
 - (void)addCompletedHandler:(MTLCommandBufferHandler)handler{[self.handlers addObject:[handler copy]];}
 - (void)addScheduledHandler:(MTLCommandBufferHandler)handler{(void)handler;}
@@ -51,7 +52,7 @@ namespace {std::atomic<unsigned>queues{0},images{0},copies{0};id device;bool rej
 @interface FailureQueue:NSObject
 @end
 @implementation FailureQueue
-- (id)commandBuffer{return [FailureCommands new];}
+- (id)commandBuffer{auto commands=[FailureCommands new];commands.queue=self;return commands;}
 @end
 @interface FailureDevice:NSObject
 @end
@@ -81,7 +82,7 @@ namespace {std::atomic<unsigned>queues{0},images{0},copies{0};id device;bool rej
 namespace generation_failure {
 enum class Fault {None,Queue,Create,CreateNil,Callback,Start,Display};
 struct Counts {unsigned creates=0,callbacks=0,starts=0,stops=0,releases=0,queries=0,displays=0,encodes=0,live=0;};
-Fault fault=Fault::None;Counts counts;
+Fault fault=Fault::None;Counts counts;dispatch_semaphore_t generated;
 struct Link {bool running=false;CVDisplayLinkOutputCallback callback=nullptr;void*context=nullptr;};
 Link*lastLink=nullptr;unsigned lastPhaseCount=0;
 Link* checked(CVDisplayLinkRef value){assert(value);return reinterpret_cast<Link*>(value);}
@@ -111,12 +112,21 @@ CVReturn display(CVDisplayLinkRef value,CGDirectDisplayID){checked(value);++coun
 #undef CVDisplayLinkRelease
 #undef CVDisplayLinkIsRunning
 #undef CVDisplayLinkSetCurrentCGDisplay
+// Metal display timing is optional and falls back to CoreVideo when it cannot
+// start. These cases control that CoreVideo route.
+struct macfx::PresentationDisplayLink::Impl {};
+macfx::PresentationDisplayLink::PresentationDisplayLink(CAMetalLayer*,Update){throw std::runtime_error("Metal display timing is unavailable in this fixture");}
+macfx::PresentationDisplayLink::~PresentationDisplayLink()=default;
+void macfx::PresentationDisplayLink::resume(){}
+void macfx::PresentationDisplayLink::pause(){}
+void macfx::PresentationDisplayLink::invalidate(){}
+void macfx::PresentationDisplayLink::setDisplay(uint32_t){}
 // The presenter obtains its generator from the provider factory
 // (prepareGenerator → makeGenerationEncoder), not from LsfgEncoder directly.
 namespace macfx {
 namespace {struct ControlledGeneration final:GenerationEncoder {
  const char*method()const noexcept override{return "lsfg";}
- GenerationResult encode(id<MTLCommandBuffer>,id<MTLTexture>,const std::vector<id<MTLTexture>>&,uint64_t,const InterpolationPlan&phases)override{generation_failure::lastPhaseCount=phases.count;++generation_failure::counts.encodes;GenerationResult result;result.encoded=true;return result;}
+ GenerationResult encode(id<MTLCommandBuffer>commands,id<MTLTexture>,const std::vector<id<MTLTexture>>&,uint64_t,const InterpolationPlan&phases)override{assert(commands.commandQueue);generation_failure::lastPhaseCount=phases.count;++generation_failure::counts.encodes;dispatch_semaphore_signal(generation_failure::generated);GenerationResult result;result.encoded=true;return result;}
  uint64_t imageBytes(unsigned,unsigned,const GenerationMeasure&)const override{return 0;}
 };}
 std::shared_ptr<GenerationEncoder>makeGenerationEncoder(id<MTLDevice>,const std::string&,const LsfgConfig&){return std::make_shared<ControlledGeneration>();}
@@ -131,7 +141,7 @@ void sourceSchedulingParity(const std::string&file){
     using namespace generation_failure;
     for(const auto sourceKind:{macfx::RuntimeFrameSource::Unknown,macfx::RuntimeFrameSource::MetalDrawable,macfx::RuntimeFrameSource::BrowserWindow,macfx::RuntimeFrameSource::ExternalWindow})
     for(const unsigned hz:{60u,120u}){
-        assert(!counts.live);counts={};fault=Fault::None;rejectPrivateQueue=false;publishGeneration(file,true,3);
+        assert(!counts.live);counts={};generated=dispatch_semaphore_create(0);fault=Fault::None;rejectPrivateQueue=false;publishGeneration(file,true,3);
         auto layer=[FailureLayer layer];layer.pixelFormat=MTLPixelFormatBGRA8Unorm;layer.drawableSize=CGSizeMake(32,24);
         auto descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:layer.pixelFormat width:32 height:24 mipmapped:NO];
         auto source=(id<MTLTexture>)[device newTextureWithDescriptor:descriptor];
@@ -141,14 +151,18 @@ void sourceSchedulingParity(const std::string&file){
         CVOptionFlags flags=0;lastLink->callback(reinterpret_cast<CVDisplayLinkRef>(lastLink),&refresh,&refresh,0,&flags,lastLink->context);
         auto commands=[FailureCommands new];const auto result=presenter.submit((id<MTLCommandBuffer>)commands,source,1,CACurrentMediaTime());
         if(!result.encoded)fprintf(stderr,"source scheduling failed: %s\n",result.reason.c_str());assert(result.encoded);
-        const bool window=sourceKind==macfx::RuntimeFrameSource::ExternalWindow;
-        assert(counts.encodes==(window&&hz==60?0u:1u));
+        const bool window=sourceKind==macfx::RuntimeFrameSource::ExternalWindow,generates=!(window&&hz==60);
+        // Image-pair generation waits for the producer copy to complete.
+        assert(counts.encodes==0);[commands fire:MTLCommandBufferStatusCompleted];
+        if(generates)assert(!dispatch_semaphore_wait(generated,dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC)));
+        else assert(dispatch_semaphore_wait(generated,dispatch_time(DISPATCH_TIME_NOW,50*NSEC_PER_MSEC)));
+        assert(counts.encodes==(generates?1u:0u));
         if(counts.encodes)assert(lastPhaseCount==(window?1u:2u));
-        presenter.stop();[commands fire:MTLCommandBufferStatusCompleted];assert(!counts.live);
+        presenter.stop();assert(!counts.live);
     }
 }
 void generationCase(generation_failure::Fault failure,const std::string&file){
-    using namespace generation_failure;assert(!counts.live);counts={};fault=failure;rejectPrivateQueue=failure==Fault::Queue;publishGeneration(file,true);
+    using namespace generation_failure;assert(!counts.live);counts={};generated=dispatch_semaphore_create(0);fault=failure;rejectPrivateQueue=failure==Fault::Queue;publishGeneration(file,true);
     auto layer=[FailureLayer layer];layer.pixelFormat=MTLPixelFormatBGRA8Unorm;layer.drawableSize=CGSizeMake(32,24);
     auto descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:layer.pixelFormat width:32 height:24 mipmapped:NO];auto source=(id<MTLTexture>)[device newTextureWithDescriptor:descriptor];
     macfx::PresenterConfig config;config.generation=macfx::LsfgConfig{"controlled-no-provider",true,false,1,2};int owner=0;
@@ -161,8 +175,15 @@ void generationCase(generation_failure::Fault failure,const std::string&file){
     // A real accepted Off packet is inert, then a new accepted On packet may
     // retry the same owner after the controlled allocation/timing fault clears.
     fault=Fault::None;rejectPrivateQueue=false;publishGeneration(file,false);auto off=[FailureCommands new];assert(presenter.submit((id<MTLCommandBuffer>)off,source,5,CACurrentMediaTime()).encoded);[off fire:MTLCommandBufferStatusCompleted];assert(queues==queueAttempts&&counts.creates==createAttempts&&counts.starts==startAttempts);
-    publishGeneration(file,true);auto on=[FailureCommands new];auto resumed=presenter.submit((id<MTLCommandBuffer>)on,source,6,CACurrentMediaTime());if(!resumed.encoded)fprintf(stderr,"FG recovery rejected: %s\n",resumed.reason.c_str());assert(resumed.encoded&&counts.live==1&&counts.encodes==1&&counts.creates==createAttempts+1&&counts.starts==startAttempts+1);
-    presenter.stop();[on fire:MTLCommandBufferStatusCompleted];assert(!counts.live);const auto afterStop=counts.starts;
+    publishGeneration(file,true);auto on=[FailureCommands new];auto resumed=presenter.submit((id<MTLCommandBuffer>)on,source,6,CACurrentMediaTime());if(!resumed.encoded)fprintf(stderr,"FG recovery rejected: %s\n",resumed.reason.c_str());assert(resumed.encoded&&counts.live==1&&counts.encodes==0&&counts.creates==createAttempts+1&&counts.starts==startAttempts+1);
+    // Only the producer copy is encoded at submit. Completion admits the
+    // image-pair generator on a presenter-owned queue, never that producer.
+    [on fire:MTLCommandBufferStatusError];assert(counts.encodes==0);
+    auto completed=[FailureCommands new];assert(presenter.submit((id<MTLCommandBuffer>)completed,source,7,CACurrentMediaTime()).encoded);
+    [completed fire:MTLCommandBufferStatusCompleted];assert(!dispatch_semaphore_wait(generated,dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC)));assert(counts.encodes==1);
+    auto stopped=[FailureCommands new];macfx::FrameResult stopping;const auto deadline=CACurrentMediaTime()+2;do{stopping=presenter.submit((id<MTLCommandBuffer>)stopped,source,8,CACurrentMediaTime());if(stopping.busy)usleep(1000);}while(stopping.busy&&CACurrentMediaTime()<deadline);assert(stopping.encoded);
+    presenter.stop();[stopped fire:MTLCommandBufferStatusCompleted];assert(dispatch_semaphore_wait(generated,dispatch_time(DISPATCH_TIME_NOW,20*NSEC_PER_MSEC)));assert(counts.encodes==1);
+    assert(!counts.live);const auto afterStop=counts.starts;
     presenter.stop();assert(counts.starts==afterStop);
 }
 }
@@ -178,7 +199,7 @@ int main(int argc,char**argv){@autoreleasepool{
     assert(phase.argc==2);const std::string file=phase.argv[1];device=[FailureDevice new];
     for(const auto fault:{generation_failure::Fault::Queue,generation_failure::Fault::Create,generation_failure::Fault::CreateNil,generation_failure::Fault::Callback,generation_failure::Fault::Start,generation_failure::Fault::Display})generationCase(fault,file);
     sourceSchedulingParity(file);
-    puts("Actual presenter source: FG queue/create/nil/callback/start/display failures bypass generation without null CoreVideo calls; four unchanged submissions keep caller-buffer rendering and make no resource retry; actual Off/On packets recover the same owner. CoreVideo/LSFG/Metal NSObject stand-ins only, no GPU or display.");
+    puts("Actual presenter source: FG queue/create/nil/callback/start/display failures bypass generation without null CoreVideo calls; four unchanged submissions keep caller-buffer rendering and make no resource retry; actual Off/On packets recover the same owner; image-pair encoding starts only after producer completion and uses a private queue; source kind and refresh rate select the same phase counts after that completion. CoreVideo/LSFG/Metal NSObject stand-ins only, no GPU or display.");
 }}
 #else
 int main(){@autoreleasepool{

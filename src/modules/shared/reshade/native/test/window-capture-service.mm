@@ -126,11 +126,11 @@ int main(){@autoreleasepool{
     [target setFrame:NSMakeRect(100,100,360,200) display:YES];
     until(5,^bool{auto info=state->last(1);return info.generation>first.generation&&info.width==360*target.backingScaleFactor&&info.height==200*target.backingScaleFactor;},"resized generation");
     std::puts("1 PASS real IOSurfaces, configured extent, geometry before each generation including resize");
-    state->releaseFrames=false;unsigned before=state->count(1);until(3,^bool{return state->count(1)>before;},"withheld frame");before=state->count(1);pump(.4);
+    state->releaseFrames=false;unsigned before=state->count(1);until(3,^bool{return state->count(1)>before;},"withheld frame");pump(.4);before=state->count(1);pump(.4);
     assert(state->count(1)==before);NSDictionary *snapshot=[service feedSnapshot:1 process:getpid()];
-    assert([snapshot[@"queueDepth"] intValue]==6&&[snapshot[@"retained"] intValue]<=2&&[snapshot[@"peak"] intValue]<=2);
+    assert([snapshot[@"queueDepth"] intValue]==4&&[snapshot[@"retained"] intValue]<=3&&[snapshot[@"peak"] intValue]<=3);
     state->releaseFrames=true;client->release(1,state->last(1).sequence);until(3,^bool{return state->count(1)>before;},"release drains pending");
-    std::puts("2 PASS queue depth 6; one in flight, one pending, Release resumes newest frame");
+    std::puts("2 PASS queue depth 4; at most two leased, one pending, Release resumes newest frame");
     snapshot=[service feedSnapshot:1 process:getpid()];const auto stream=[snapshot[@"stream"] unsignedLongLongValue];const auto starts=[snapshot[@"starts"] unsignedIntValue],stops=[snapshot[@"stops"] unsignedIntValue];
     before=state->count(1);client->options(1,@{@"cursor":@YES});
     until(5,^bool{return [[service feedSnapshot:1 process:getpid()][@"cursor"] boolValue]&&state->count(1)>before+1;},"cursor update resumes frames");

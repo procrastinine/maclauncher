@@ -31,5 +31,21 @@ int main(){
     assert(generationAcceptsMultiplier("vt-interpolation",2)&&generationAcceptsMultiplier("vt-interpolation",4)&&!generationAcceptsMultiplier("vt-interpolation",3));
     assert(generationAcceptsMultiplier("metalfx-image",2)&&!generationAcceptsMultiplier("metalfx-image",4)&&generationAcceptsMultiplier("vision-flow",5));
     assert(generationUsesImagePairs("auto")&&!generationUsesImagePairs("metalfx")&&generationUsesSDRColor("vt-interpolation")&&!generationUsesSDRColor("vision-flow"));
-    puts("Automatic generation leaves a late candidate at once and returns after ten seconds of headroom outside a thirty-second back-off");
+    // Replacement preparation is not overload; a busy prepared session is.
+    assert(automaticGenerationBehind(true,false)&&!automaticGenerationBehind(true,true)&&!automaticGenerationBehind(false,false));
+    // Measured work sizing: three slow smoothed ratios step down, 120 fast
+    // ones step up, invalid timing is ignored and the level stays bounded.
+    ImagePairWorkSize size;assert(size.level()==0&&ImagePairWorkSize::dimension(0)==1920);
+    assert(!size.observe(0,1)&&!size.observe(1,0)&&!size.observe(INFINITY,1)&&size.level()==0);
+    assert(!size.observe(.9,1)&&!size.observe(.9,1)&&size.observe(.9,1)&&size.level()==1&&ImagePairWorkSize::dimension(1)==1280);
+    for(unsigned step=0;step<3;++step)size.observe(.95,1);
+    assert(size.level()==2);for(unsigned step=0;step<12;++step)size.observe(.95,1);
+    assert(size.level()==2&&ImagePairWorkSize::dimension(2)==960&&ImagePairWorkSize::dimension(9)==640);
+    ImagePairWorkSize recover;for(unsigned step=0;step<3;++step)recover.observe(.9,1);
+    unsigned fast=0;while(!recover.observe(.1,1)&&fast<1000)++fast;
+    assert(fast==119&&recover.level()==0);
+    // A mid-range ratio resets both counters.
+    ImagePairWorkSize steady;steady.observe(.9,1);steady.observe(.9,1);steady.observe(.2,1);
+    assert(!steady.observe(.9,1)&&steady.level()==0);
+    puts("Automatic generation leaves a late candidate at once and returns after ten seconds of headroom outside a thirty-second back-off; image-pair work sizes follow measured timing");
 }

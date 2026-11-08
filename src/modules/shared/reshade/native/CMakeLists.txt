@@ -105,6 +105,8 @@ add_subdirectory(compat/vkd3d)
 include(compat/mako-ls1.cmake)
 add_library(reshade-macos SHARED src/effects-plan.mm src/effects-execution.mm src/neural-node.mm src/temporal-plan.mm src/temporal.mm src/fsr1.mm src/layer-presentation.mm src/mako-spatial.mm src/ls1.mm src/presentation-api.mm src/view-presentation.mm src/graphics.mm src/presentation.mm src/lsfg.mm src/opengl-interop.mm src/opengl.mm src/metal.mm src/window.mm src/spatial.mm)
 target_sources(reshade-macos PRIVATE src/runtime-status.cpp)
+target_sources(reshade-macos PRIVATE src/presentation-display-link.mm src/presentation-display-link.hpp src/presentation-refresh.hpp src/capture-frame-geometry.hpp src/iosurface-texture.hpp)
+set_source_files_properties(src/presentation-display-link.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 # One launch-time read of the process environment (native-config.hpp).
 target_sources(reshade-macos PRIVATE src/native-config.mm)
 set_source_files_properties(src/native-config.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)

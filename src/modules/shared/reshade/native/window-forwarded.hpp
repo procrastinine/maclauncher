@@ -1,9 +1,20 @@
 #pragma once
 #include "window-stream.hpp"
 #include "window-source.h"
+#include "iosurface-texture.hpp"
 #include <functional>
+#include <algorithm>
+#include <cstring>
 namespace macfx {
-struct ForwardedFrame {
+inline RSWindowSourceFrame forwardedFrameInfo(const RSWindowSourceFrame *source){
+ RSWindowSourceFrame info{};info.contentScale=info.scaleFactor=1;
+ if(!source)return info;
+ const size_t prefix=std::min(size_t(source->size),size_t(RS_WINDOW_SOURCE_FRAME_BASE_SIZE));
+ std::memcpy(&info,source,prefix);
+ if(source->size>=sizeof(info))std::memcpy(&info,source,sizeof(info));
+ return info;
+}
+struct ForwardedFrame:WindowStreamSlot {
  IOSurfaceRef surface;RSWindowSourceFrame info;RSWindowSourceReleased released;void *context;
  ForwardedFrame(IOSurfaceRef s,const RSWindowSourceFrame&i,RSWindowSourceReleased r,void*c):surface(s),info(i),released(r),context(c){if(s)CFRetain(s);}
  void release(){auto callback=released;released=nullptr;if(callback)callback(context,info.sequence);}

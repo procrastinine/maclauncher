@@ -113,27 +113,34 @@ vertex float4 static_blend_vertex(uint id[[vertex_id]]) {
 }
 // Static-content blend-back. A pixel whose 3x3 neighborhood is unchanged
 // between the two real endpoints, relative to that neighborhood's own
-// contrast, takes the real image at the generated phase. Changed and flat
-// areas, nonfinite input and unmatched history keep the generated pixel.
+// contrast, takes the real image at the generated phase. Exactly unchanged
+// neighborhoods also keep flat real-image content. Nonfinite input, changed
+// flat areas and unmatched history keep the generated pixel.
+float staticBlendWeight(float change,float contrast,bool identical){
+ return identical?1.f:(1-smoothstep(.05f,.15f,change/(contrast+.02f)))*smoothstep(.03f,.10f,contrast);
+}
 fragment BlendOutput static_blend(float4 position[[position]],
  texture2d<float,access::read>current[[texture(0)]],texture2d<float,access::read>previous[[texture(1)]],
  device const History&history[[buffer(0)]],constant BlendParameters&p[[buffer(1)]]) {
  const uint2 center=uint2(position.xy);
  if(!p.previousEventId||history.eventId!=p.previousEventId||history.epoch!=p.epoch||history.imageRevision!=p.imageRevision||
     history.contract!=p.contract||center.x>=p.width||center.y>=p.height)discard_fragment();
- float change=0,low=MAXFLOAT,high=-MAXFLOAT;
+ float change=0,low=MAXFLOAT,high=-MAXFLOAT;bool identical=true;
  for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x){
   const uint2 at=uint2(clamp(int2(center)+int2(x,y),int2(0),int2(p.width-1,p.height-1)));
-  const float4 a=visible(current.read(at),p.alphaMode),b=visible(previous.read(at),p.alphaMode);
+  const float4 rawA=current.read(at),rawB=previous.read(at);
+  if(any(!isfinite(rawA))||any(!isfinite(rawB)))discard_fragment();
+  identical=identical&&all(rawA==rawB);
+  const float4 a=visible(rawA,p.alphaMode),b=visible(rawB,p.alphaMode);
   if(any(!isfinite(a))||any(!isfinite(b)))discard_fragment();
   const float4 d=abs(a-b);change=max(change,max(max(d.r,d.g),max(d.b,d.a)));
   const float la=dot(a.rgb,float3(.2126f,.7152f,.0722f)),lb=dot(b.rgb,float3(.2126f,.7152f,.0722f));
   low=min(low,min(la,lb));high=max(high,max(la,lb));
  }
  const float contrast=high-low;
- const float weight=(1-smoothstep(.05f,.15f,change/(contrast+.02f)))*smoothstep(.03f,.10f,contrast);
+ const float weight=staticBlendWeight(change,contrast,identical);
  if(weight<=0)discard_fragment();
- BlendOutput output;output.color=mix(previous.read(center),current.read(center),p.phase);output.weight=float4(weight);
+ BlendOutput output;output.color=identical?current.read(center):mix(previous.read(center),current.read(center),p.phase);output.weight=float4(weight);
  return output;
 }
 )METAL";

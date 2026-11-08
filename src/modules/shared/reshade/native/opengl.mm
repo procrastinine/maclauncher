@@ -1,3 +1,4 @@
+#include "opengl-flip.hpp"
 #include "runtime-status.hpp"
 #include "effects-execution.hpp"
 #include "image-admission.hpp"
@@ -323,9 +324,11 @@ struct Runtime {
 // data on the GPU: blit through IOSurface textures and run the Metal backend.
 // Explicit GPU completion fences transfers between the independent API queues.
 struct LegacySurface {
+    macfx::OpenGLFlip colorFlip;
     IOSurfaceRef input=nullptr;GLuint inputTexture=0,inputFbo=0,outputTexture=0,outputFbo=0;
     unsigned w=0,h=0;uint64_t frames=0;
     void clear() {
+        colorFlip.clear();
         glDeleteTextures(1,&inputTexture);glDeleteTextures(1,&outputTexture);glDeleteFramebuffers(1,&inputFbo);glDeleteFramebuffers(1,&outputFbo);
         if(input) CFRelease(input);input=nullptr;inputTexture=outputTexture=inputFbo=outputFbo=0;w=h=0;
     }
@@ -355,7 +358,7 @@ struct LegacySurface {
         glDisable(GL_SCISSOR_TEST);glDisable(GL_FRAMEBUFFER_SRGB);glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
         glBindFramebuffer(GL_READ_FRAMEBUFFER,0);glReadBuffer(GL_BACK);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER,inputFbo);glDrawBuffer(GL_COLOR_ATTACHMENT0);
-        {macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLSourceCopy,reinterpret_cast<uintptr_t>(context),w,h);glBlitFramebuffer(0,0,w,h,0,h,w,0,GL_COLOR_BUFFER_BIT,GL_NEAREST);}
+        {macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLSourceCopy,reinterpret_cast<uintptr_t>(context),w,h);colorFlip.fromDefault(inputFbo,w,h);}
         {macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLSourceWait,reinterpret_cast<uintptr_t>(context),w,h);glFinish();}
         IOSurfaceRef output=rsFilterOpenGLSurface(context,input);
         // The shared processor owns its failure/retry state. A pending first
@@ -369,7 +372,7 @@ struct LegacySurface {
         glFramebufferTexture2D(GL_READ_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_RECTANGLE,outputTexture,0);glReadBuffer(GL_COLOR_ATTACHMENT0);
         if(glCheckFramebufferStatus(GL_READ_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) throw std::runtime_error("Filtered legacy GPU framebuffer is incomplete");
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER,0);glDrawBuffer(GL_BACK);
-        {macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLCopyBack,reinterpret_cast<uintptr_t>(context),w,h);glBlitFramebuffer(0,h,w,0,0,0,w,h,GL_COLOR_BUFFER_BIT,GL_NEAREST);}
+        {macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLCopyBack,reinterpret_cast<uintptr_t>(context),w,h);colorFlip.toDefault(outputFbo,w,h);}
         {macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLCopyWait,reinterpret_cast<uintptr_t>(context),w,h);glFinish();}
         if(++frames==1 || frames==120) log(std::string(core?"Core":"Legacy")+" OpenGL GPU surface effect frame="+std::to_string(frames));
     }
@@ -417,6 +420,7 @@ void releaseContextResources(CGLContextObj context) {
         if(surface)surface.mapped().clear();
     } catch(const std::exception &error) {
         if(runtime)runtime.mapped().abandon();
+        if(surface)surface.mapped().colorFlip.abandon();
         if(surface&&surface.mapped().input) {CFRelease(surface.mapped().input);surface.mapped().input=nullptr;}
         log("OpenGL context cleanup: "+std::string(error.what()));
     }

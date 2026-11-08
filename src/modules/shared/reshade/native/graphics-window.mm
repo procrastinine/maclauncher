@@ -217,7 +217,7 @@ bool validNumber(id value,double minimum,double maximum){
         auto*self=(__bridge MacFXWindowGraphicsSession*)context;std::lock_guard<std::mutex>lock(self->_feedMutex);
         struct Lease {std::shared_ptr<macfx::wcap::Client>client;uint32_t feed;};
         for(const auto&o:self->_outputs)if(o->feed==feed&&o->handle){
-            RSWindowSourceFrame f{sizeof(f),2,i.sequence,i.generation,i.time,i.width,i.height};
+            RSWindowSourceFrame f{sizeof(f),2,i.sequence,i.generation,i.time,i.width,i.height,i.cropX,i.cropY,i.cropWidth,i.cropHeight,i.contentScale,i.scaleFactor};
             self->_core.submit(o->handle,surface,&f,[](void*c,uint64_t sequence){auto*l=static_cast<Lease*>(c);l->client->release(l->feed,sequence);delete l;},new Lease{self->_client,feed});return;
         }
         self->_client->release(feed,i.sequence);
