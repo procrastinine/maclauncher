@@ -140,6 +140,8 @@ function sanitizeHomebrewReceipt(receipt, formula) {
   const sanitized = JSON.parse(JSON.stringify(receipt));
   if (!sanitized.source || typeof sanitized.source !== "object" || Array.isArray(sanitized.source)) throw new Error("Homebrew receipt source identity is missing.");
   delete sanitized.source.path;
+  // Installation bookkeeping varies with the host; dependency and build identities stay.
+  for (const key of ['time', 'source_modified_time', 'installed_on_request', 'installed_as_dependency', 'poured_from_bottle', 'loaded_from_api', 'loaded_from_internal_api', 'changed_files', 'homebrew_version']) delete sanitized[key];
   const tap = sanitized.source.tap || "homebrew/core";
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(tap)) throw new Error("Homebrew receipt tap identity is invalid.");
   sanitized.source.formula = `${tap}/${formula.name}`;
@@ -151,7 +153,7 @@ function addDependencyLicenses(source, payload, seen, receiptRoot) {
   const formula = formulaRoot(source);
   if (!formula || seen.has(formula.root)) return;
   // The formula's notices are carried when its keg has any.
-  const candidates = fs.readdirSync(formula.root).filter(name => /^(?:licen[sc]e|copying|copyright|notice)(?:[._-].*)?$/i.test(name)).sort();
+  const candidates = fs.readdirSync(formula.root).filter(name => /^(?:(?:licen[sc]e|copying|copyright|notice)(?:[._-].*)?|(?:AGPL|GPL|LGPL|MPL|Apache|MIT|BSD|ISC|Zlib)(?:[-_.].*)?)$/i.test(name)).sort();
   seen.add(formula.root);
   for(const name of candidates)addLicense(payload,formula.name,path.join(formula.root,name),name);
   const receipt = path.join(formula.root, "INSTALL_RECEIPT.json");

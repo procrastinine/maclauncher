@@ -103,7 +103,8 @@ test("native dependency receipts retain formula and build identities while keepi
     built_on: { os: "Macintosh", os_version: "macOS 13" } };
   const before = structuredClone(receipt);
   const sanitized = sanitizeHomebrewReceipt(receipt, { name: "formula@1", version: "1.2.3_1" });
-  assert.deepEqual(sanitized, { ...receipt, source: { spec: "stable", versions: receipt.source.versions, tap: "homebrew/core",
+  const { homebrew_version, ...publicReceipt } = receipt;
+  assert.deepEqual(sanitized, { ...publicReceipt, source: { spec: "stable", versions: receipt.source.versions, tap: "homebrew/core",
     tap_git_head: "c".repeat(40), formula: "homebrew/core/formula@1", pkg_version: "1.2.3_1" } });
   assert.deepEqual(receipt, before);
   assert.throws(() => sanitizeHomebrewReceipt({ ...receipt, extra: "/tmp/private-native/cache" }, { name: "formula", version: "1.2.3" }), /private filesystem/);
