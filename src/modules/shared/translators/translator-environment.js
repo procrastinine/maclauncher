@@ -4,7 +4,7 @@
 // and the DLSS integration in src/modules/crossover/dlss.js.
 const temporal = "Set by Game temporal integration in Runtime Settings.";
 module.exports = [
-  { id: "dxvk", label: "DXVK", managerIds: ["translator-dxvk"],
+  { id: "dxvk", label: "DXVK", managerIds: ["translator-dxvk", "dxvk"],
     description: "Applies to games whose Direct3D 8, 9, 10 or 11 choice uses DXVK, D8VK or D9VK.",
     keys: [
       { key: "DXVK_CONFIG", description: "dxvk.conf options separated by semicolons, such as dxvk.enableAsync = True." },
