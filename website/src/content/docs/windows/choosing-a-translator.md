@@ -49,9 +49,9 @@ DXVK on MacLauncher KosmicKrisp is worth a try when both Metal translators strug
 
 ### Direct3D 12
 
-D3DMetal is the one Direct3D 12 route that doesn't pass through Vulkan, and it's the only route for DLSS to MetalFX in Direct3D 12 games. It needs Apple Silicon and a 64-bit game.
+D3DMetal is the one Direct3D 12 route that doesn't pass through Vulkan, and it hands a game's DLSS calls to MetalFX itself. It needs Apple Silicon and a 64-bit game.
 
-vkd3d-proton is the open-source alternative. It refuses to start on a driver without transform feedback, robust null descriptors and single-texel buffer alignment, which rules out MoltenVK and LWJGL's KosmicKrisp, while MacLauncher KosmicKrisp provides all three. MacLauncher recommends KosmicKrisp for vkd3d-proton and warns when a game pairs it with another driver. On MacLauncher KosmicKrisp, vkd3d-proton reports feature level 12_1. A game that insists on 12_2 won't run this way, because that level also needs ray tracing, which no KosmicKrisp build has. WINE's own vkd3d is the third choice, and it comes with WINE itself.
+vkd3d-proton is the open-source alternative. It refuses to start on a driver without transform feedback, robust null descriptors and single-texel buffer alignment, which rules out MoltenVK and LWJGL's KosmicKrisp, while MacLauncher KosmicKrisp provides all three. MacLauncher recommends KosmicKrisp for vkd3d-proton and warns when a game pairs it with another driver. On MacLauncher KosmicKrisp, vkd3d-proton reports feature level 12_1, in the performance and the conformance mode alike. A game that insists on 12_2 won't run this way, because that level also needs variable rate shading, which no KosmicKrisp build has. A game's DLSS inputs can reach MacLauncher's upscalers on this route too. [KosmicKrisp](/maclauncher/windows/kosmickrisp/#direct3d-12-games-through-vkd3d-proton) explains what the route needs and what feature level 12_1 means for a game. WINE's own vkd3d is the third choice, and it comes with WINE itself.
 
 ### Vulkan games
 

@@ -75,7 +75,7 @@ Settings holds the defaults, and each game's Runtime Settings can override them.
 | Environment | A private prefix for the game, or a reference to an existing Sikarugir wrapper. Set per game only. |
 | Default Direct3D engine | The renderer choice for every Direct3D API without a choice of its own: the Template's automatic choice, the engines that the selected runtime supplies, or a specific translator version installed in Runtimes. Each choice names its engine, version and source. |
 | Direct3D 8, 9, 10 / 10.1 and 11 | A choice for each API among the installed implementations. Choices that share DLLs or helpers are linked, and the inspector reports the selected and the used component. |
-| Direct3D 12 | Wine vkd3d, D3DMetal, or a vkd3d-proton or D3DMetal version installed in Runtimes. KosmicKrisp is recommended for vkd3d-proton. |
+| Direct3D 12 | Wine vkd3d, D3DMetal, or a vkd3d-proton or D3DMetal version installed in Runtimes. KosmicKrisp is recommended for vkd3d-proton, which reports Direct3D feature level 12_1 on [MacLauncher KosmicKrisp](KOSMICKRISP.md#direct3d-12-through-vkd3d-proton). |
 | Vulkan driver | The Template's automatic choice, a driver that the runtime supplies, or a specific MoltenVK or KosmicKrisp version installed in Runtimes. |
 | Video codecs | The runtime defaults or a registered GStreamer codec folder. |
 | Game temporal integration | Exposes MetalFX Temporal through a compatible 64-bit game's DLSS integration with DXMT or D3DMetal, or forwards it with DXVK or vkd3d-proton. Listed for Unity and Windows games; hidden only for WineD3D. See [Game temporal integration](#game-temporal-integration). |

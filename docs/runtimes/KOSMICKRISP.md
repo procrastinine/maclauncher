@@ -1,6 +1,6 @@
 # KosmicKrisp
 
-macOS has no Vulkan driver of its own. Vulkan games, the Vulkan-based Direct3D translators in Wine and ANGLE's Vulkan renderer for Android therefore depend on a driver that implements Vulkan on Metal, and MacLauncher offers two: MoltenVK and KosmicKrisp. KosmicKrisp is also available as **MacLauncher KosmicKrisp**, an adapted build that adds the Vulkan features which DXVK, vkd3d-proton and ANGLE use.
+macOS has no Vulkan driver of its own. Vulkan games, the Vulkan-based Direct3D translators in Wine and ANGLE's Vulkan renderer for Android therefore depend on a driver that implements Vulkan on Metal, and MacLauncher offers two: MoltenVK and KosmicKrisp. KosmicKrisp is also available as **MacLauncher KosmicKrisp**, an adapted build that adds the Vulkan features which DXVK, vkd3d-proton and ANGLE use. On this build, vkd3d-proton runs Direct3D 12 games in CrossOver and Sikarugir and reports Direct3D feature level 12_1, as [Direct3D feature levels](#direct3d-feature-levels) describes. vkd3d-proton is the Direct3D 12 translator of Valve's [Proton](https://github.com/ValveSoftware/Proton), which runs Direct3D 12 games on Linux and the Steam Deck, so a game for which vkd3d-proton is selected takes the same Direct3D 12 path as under Proton. On upstream KosmicKrisp and MoltenVK, vkd3d-proton cannot create a device.
 
 ## What KosmicKrisp is
 
@@ -173,6 +173,8 @@ The Khronos conformance shown for KosmicKrisp belongs to the submitted upstream 
 
 ## Where the differences matter
 
+Upstream DXVK and vkd3d-proton are the Direct3D-to-Vulkan translators that Valve's [Proton](https://github.com/ValveSoftware/Proton) uses on Linux: DXVK for Direct3D 8 to 11 and vkd3d-proton for Direct3D 12. A game in CrossOver or Sikarugir that selects one of them, with MacLauncher KosmicKrisp as its Vulkan driver, therefore uses the same translators as under Proton, and the driver then carries their Vulkan work to Metal. D3DMetal and DXMT remain the alternatives that translate Direct3D to Metal directly, and the translator is selected for each game. In either case, the Wine runtime stays CrossOver's or Sikarugir's.
+
 ### Direct3D 8 to 11 through DXVK
 
 DXVK 2.x and 3.x require Vulkan 1.3 and a fixed set of device features, among them geometry shaders, non-solid polygon fill, and the robust buffer access and null descriptors of robustness2. Upstream KosmicKrisp lacks non-solid fill, and MoltenVK lacks geometry shaders and those robustness2 features, so these DXVK versions cannot create a device on either. MacLauncher KosmicKrisp provides all of them. With MoltenVK, Direct3D 8 to 11 instead use DXVK builds made for it: the DXVK-macOS packages and the Sikarugir Template's `dxvk` folder. DXVK also uses transform feedback for Direct3D stream output when the driver supports it.
@@ -180,6 +182,8 @@ DXVK 2.x and 3.x require Vulkan 1.3 and a fixed set of device features, among th
 ### Direct3D 12 through vkd3d-proton
 
 vkd3d-proton refuses to create a device unless the driver provides transform feedback queries, single-texel alignment of texel buffer views, vertex attribute divisors including a zero divisor, the robust buffer and image access and null descriptors of robustness2, push descriptors, shader draw parameters and mirror-clamp-to-edge sampling. Upstream KosmicKrisp lacks transform feedback and single-texel alignment, while MoltenVK lacks transform feedback and the robustness2 features. MacLauncher KosmicKrisp provides each requirement, and the **Direct3D 12** control recommends KosmicKrisp for vkd3d-proton.
+
+With vkd3d-proton selected for **Direct3D 12** and MacLauncher KosmicKrisp as the **Vulkan driver**, a Direct3D 12 game in CrossOver or Sikarugir runs through vkd3d-proton on this driver. Intel Wine, which Sikarugir and CrossOver's Intel builds use, loads the x64 package under Rosetta, while CrossOver's ARM64 Wine loads the arm64 package, as [CPU builds and consumers](#cpu-builds-and-consumers) shows. In both performance and conformance mode, the highest Direct3D feature level that vkd3d-proton reports on this driver is 12_1; [Direct3D feature levels](#direct3d-feature-levels) gives the conditions. Games that call DLSS can also pass their Super Resolution inputs through vkd3d-proton to MacLauncher's shared graphics pipeline, as [Temporal frames](#temporal-frames) describes.
 
 ### Direct3D feature levels
 
@@ -192,7 +196,7 @@ DXVK and vkd3d-proton each derive a game's highest Direct3D feature level from t
 | 12_1 | Rasterizer-ordered views and conservative rasterization tier 1 | Rasterizer-ordered views and conservative rasterization tier 1 |
 | 12_2 | Not offered | Shader model 6.5, ray tracing tier 1.1, variable shading rate tier 2, mesh shader tier 1, sampler feedback, tiled resources tier 3, conservative rasterization tier 3, resource binding tier 3 and further options |
 
-Tiled resources tier 2 rests on Vulkan sparse residency, so feature level 12_0 needs the sparse features that MacLauncher KosmicKrisp exposes where Metal supports placement sparse resources. Both translators report rasterizer-ordered views only when the driver offers pixel interlock. MacLauncher KosmicKrisp provides pixel interlock together with conservative rasterization, so vkd3d-proton reports feature level 12_1 on it. Feature level 12_2 also requires ray tracing tier 1.1 and variable shading rate tier 2. MacLauncher KosmicKrisp reports ray tracing only when `KK_EMULATION` selects it, and no other KosmicKrisp build provides it, so by default neither translator reports feature level 12_2.
+Tiled resources tier 2 rests on Vulkan sparse residency, so feature level 12_0 needs the sparse features that MacLauncher KosmicKrisp exposes where Metal supports placement sparse resources. Both translators report rasterizer-ordered views only when the driver offers pixel interlock. MacLauncher KosmicKrisp provides pixel interlock together with conservative rasterization, so vkd3d-proton reports feature level 12_1 on it. Feature level 12_2 also requires variable shading rate tier 2, which vkd3d-proton implements through `VK_KHR_fragment_shading_rate`. No KosmicKrisp build exposes that extension, so vkd3d-proton reports feature level 12_1 at most in both performance and conformance mode, including when `KK_EMULATION` selects ray tracing. DXVK offers no level above 12_1.
 
 ### OpenGL ES on Android through ANGLE
 
@@ -241,7 +245,7 @@ Two modes set the starting selection:
 In performance mode, an entry is off only when turning it off lowers no Direct3D shader model or feature level reported by DXVK or vkd3d-proton and does not prevent either translator from creating its device. All other entries stay on, with two exceptions:
 
 - Ray tracing interfaces are reported only when selected explicitly, with `+ray_tracing` or `conformance`.
-- Fragment barycentrics are off, although vkd3d-proton reports mesh shaders, and therefore feature level 12.2, only with `+fragment_barycentric` or `conformance`. Applications that use reported barycentric support for all fragment interpolation move every fragment shader to per-corner transport.
+- Fragment barycentrics are off, although vkd3d-proton reports mesh shaders only with `+fragment_barycentric` or `conformance`. Applications that use reported barycentric support for all fragment interpolation move every fragment shader to per-corner transport.
 
 For example, vkd3d-proton reports shader model 6.2 and later only when FP32 flush-to-zero, FP32 denormal preservation and independent denormal controls are all reported. Disabling either denormal entry limits vkd3d-proton to shader model 6.1, so both entries stay on in performance mode.
 

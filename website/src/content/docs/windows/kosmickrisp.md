@@ -1,6 +1,6 @@
 ---
 title: KosmicKrisp
-description: "Why KosmicKrisp, the conformant Vulkan 1.4 driver on Metal 4, matters for WINE and Android games on Apple Silicon Macs, how it compares with MoltenVK, what MacLauncher's own build adds for DXVK, vkd3d-proton and ANGLE, and which build each game loads."
+description: "Why KosmicKrisp, the conformant Vulkan 1.4 driver on Metal 4, matters for WINE and Android games on Apple Silicon Macs, how it compares with MoltenVK, what MacLauncher's own build adds for DXVK, vkd3d-proton and ANGLE, how Direct3D 12 games run through vkd3d-proton at feature level 12_1, and which build each game loads."
 head:
   - tag: title
     content: "KosmicKrisp vs MoltenVK on Mac: Vulkan on Metal 4 for WINE and Android games | MacLauncher"
@@ -30,7 +30,17 @@ Conformance means KosmicKrisp does everything Vulkan 1.4 requires, but the trans
 
 MacLauncher therefore publishes **MacLauncher KosmicKrisp**, its own build of KosmicKrisp from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds). It takes the same Mesa source and adds the missing Vulkan features, each one implemented on Metal. Besides what the translators require, it brings sparse resources, which Direct3D's tiled resources need, along with conservative rasterization, mesh and task shaders, 64-bit floating point computed in software, pipeline statistics, and a much larger push constant space. The build comes for Apple Silicon and Intel processes alike, and both need an Apple Silicon Mac with macOS 26.
 
-The Khronos conformance belongs to the upstream driver that was submitted for testing. MacLauncher's build is based on that driver but adds to it, so it has no conformance submission of its own. Direct3D 12 games reach feature level 12_1 through vkd3d-proton on this build. That level needs rasterizer-ordered views, which vkd3d-proton builds on a Vulkan feature called pixel interlock, and MacLauncher KosmicKrisp provides it. Feature level 12_2 has further requirements, including ray tracing and variable rate shading; enabling one emulated feature does not by itself raise the Direct3D feature level.
+The Khronos conformance belongs to the upstream driver that was submitted for testing. MacLauncher's build is based on that driver but adds to it, so it has no conformance submission of its own.
+
+## Direct3D 12 games through vkd3d-proton
+
+Those extra features give Direct3D 12 games a new route on the Mac. [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) is the Direct3D 12 translator from Valve's Proton, the same one that runs Direct3D 12 games on Linux and the Steam Deck, and it turns a game's Direct3D 12 calls into Vulkan. Upstream KosmicKrisp lacks the transform feedback and texel buffer alignment that vkd3d-proton requires, and MoltenVK lacks transform feedback and robust null descriptors, so on either driver vkd3d-proton refuses to create a device and the game stops before it draws anything. MacLauncher KosmicKrisp has everything vkd3d-proton requires, so a Direct3D 12 game in CrossOver or Sikarugir can run through vkd3d-proton on it.
+
+Creating the device is only the first hurdle. Direct3D 12 also sorts graphics hardware into **feature levels**, and a game can refuse to start below the level it was made for. On MacLauncher KosmicKrisp, vkd3d-proton reports feature level 12_1, the second highest. Feature level 12_0 rests on tiled resources, which vkd3d-proton builds from the sparse resources this build offers wherever Metal supports them, and 12_1 adds rasterizer-ordered views and conservative rasterization. vkd3d-proton makes rasterizer-ordered views out of a Vulkan feature called pixel interlock, and MacLauncher KosmicKrisp provides both pixel interlock and conservative rasterization.
+
+Feature level 12_2, the highest, stays out of reach in both the performance and the conformance mode described below. Besides ray tracing and mesh shaders, it needs variable rate shading, which no KosmicKrisp build provides, so turning on more emulated features doesn't raise the level past 12_1. A game that insists on 12_2 won't start this way.
+
+To use this route, pick vkd3d-proton for **Direct3D 12** in the game's Runtime Settings and MacLauncher KosmicKrisp as its **Vulkan driver**. MacLauncher recommends KosmicKrisp for vkd3d-proton and warns when a game pairs it with another driver. Sikarugir and the usual CrossOver releases run WINE as an Intel program, so they load the Intel build of MacLauncher KosmicKrisp under Rosetta, which still needs an Apple Silicon Mac with macOS 26 or later. Together with DXVK for older Direct3D versions, this is the graphics path that Proton takes on Linux, which [Proton's graphics path on a Mac](/maclauncher/windows/graphics-translators/#protons-graphics-path-on-a-mac) explains. A game that calls DLSS can also hand its scene data to MacLauncher's upscalers along this route, as [Effects and upscaling](/maclauncher/windows/effects-and-upscaling/#dlss-games-and-the-selected-upscaler) explains. The [Direct3D feature level rules](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md#direct3d-feature-levels) in the KosmicKrisp reference list the exact conditions for each level.
 
 ## At a glance
 
@@ -40,7 +50,7 @@ The Khronos conformance belongs to the upstream driver that was submitted for te
 | Macs | Apple Silicon, macOS 26 or later | Apple Silicon, macOS 26 or later | Intel and Apple Silicon, macOS 12 or later |
 | Builds | Apple Silicon only | Apple Silicon and Intel | Apple Silicon, Intel or universal |
 | DXVK 2.x and 3.x | Doesn't start | Runs | Doesn't start; DXVK-macOS builds are made for it |
-| vkd3d-proton | Doesn't start | Runs | Doesn't start |
+| vkd3d-proton | Doesn't start | Runs, at Direct3D feature level 12_1 | Doesn't start |
 | ANGLE's Vulkan renderer | No geometry or tessellation shaders, which OpenGL ES 3.2 needs | Geometry and tessellation shaders available | No geometry or tessellation shaders |
 
 The full feature comparison lives in the [KosmicKrisp reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/KOSMICKRISP.md#compatibility-with-moltenvk).

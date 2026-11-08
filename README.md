@@ -102,7 +102,7 @@ Most of the above runtimes are existing tools with MacLauncher managing them. Ho
 - Similarly, a [macOS port of AnyPS5](docs/game-types/PS5.md).
 - Also, custom macOS ports of [ONScripter-EN](docs/game-types/NSCRIPTER.md), [AI5](docs/game-types/AI5.md), [KAG3](docs/game-types/KIRIKIRI.md), and [ReMinori](docs/game-types/MINORI.md).
 - Automatic [offline Steam API support](docs/runtimes/STEAM_API.md) (for things needing Steam API before play).
-- [MacLauncher KosmicKrisp](src/modules/shared/vulkan/README.md), our own build of KosmicKrisp that adds the Vulkan features upstream is missing (transform feedback, wireframe/point fill, single-texel buffer alignment and variable multisample rate), implemented on Metal rather than stubbed. This lets ANGLE do OpenGL ES 3.2 for Android games, and lets DXVK and vkd3d-proton run on KosmicKrisp in CrossOver and Sikarugir.
+- [MacLauncher KosmicKrisp](src/modules/shared/vulkan/README.md), our own build of KosmicKrisp that adds the Vulkan features upstream is missing (transform feedback, wireframe/point fill, single-texel buffer alignment and variable multisample rate), implemented on Metal rather than stubbed. This lets ANGLE do OpenGL ES 3.2 for Android games, and lets DXVK and vkd3d-proton (the translators behind Proton on Linux) run on KosmicKrisp in CrossOver and Sikarugir, so Direct3D 12 games can run through vkd3d-proton at feature level 12_1.
 
 # MacLauncher as a graphics and effects layer
 
@@ -196,7 +196,9 @@ To bridge this gap, we ship our own, heavily modified build of KosmicKrisp, whic
 - 64-bit floating point in shaders, done in software
 - Metal shader caches
 
-[KOSMICKRISP.md](docs/runtimes/KOSMICKRISP.md) has the full list and table. tl;dr: we get vkd3d-proton to Direct3D feature level 12_1 (the second highest level, where the highest is 12_2, with ray tracing), and also achieve ANGLE GLES 3.2 compliance (the highest level).
+[KOSMICKRISP.md](docs/runtimes/KOSMICKRISP.md) has the full list and table. tl;dr: Direct3D 12 games run through vkd3d-proton on our KosmicKrisp, in both CrossOver and Sikarugir, at Direct3D feature level 12_1 (the second highest level, where the highest is 12_2, with ray tracing). vkd3d-proton is the Direct3D 12 translator from Valve's [Proton](https://github.com/ValveSoftware/Proton), the one that runs Direct3D 12 games on Linux and the Steam Deck, so picking it for a game puts that game on the same Direct3D 12 path Proton uses. On upstream KosmicKrisp or MoltenVK, vkd3d-proton doesn't even start. We also achieve ANGLE GLES 3.2 compliance (the highest level).
+
+The same goes for DXVK, Proton's translator for Direct3D 8 to 11. Current versions of DXVK and vkd3d-proton both need Vulkan features that MoltenVK and upstream KosmicKrisp don't have, so if you pick either one for a game in CrossOver or Sikarugir, with our KosmicKrisp as the Vulkan driver, the game basically goes through Proton's graphics path (with KosmicKrisp turning the Vulkan into Metal at the end) instead of D3DMetal or DXMT. It's your choice, per game, and the Wine underneath is still CrossOver's or Sikarugir's, not Proton's.
 
 ### Apple GPU support
 

@@ -57,7 +57,7 @@ CrossOver includes a DXVK build of its own as well. DXVK's settings offer the as
 
 ### vkd3d-proton
 
-[vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) is Proton's translator for Direct3D 12, which it turns into Vulkan. It's the open-source alternative to D3DMetal for Direct3D 12 games, and it asks a lot of the Vulkan driver underneath: its own documentation lists Vulkan 1.3 and several extensions as hard requirements. For that reason, MacLauncher recommends KosmicKrisp for vkd3d-proton and shows a warning when a game uses it with another driver. MacLauncher installs vkd3d-proton from the project's releases.
+[vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) is Proton's translator for Direct3D 12, which it turns into Vulkan. It's the open-source alternative to D3DMetal for Direct3D 12 games, and it asks a lot of the Vulkan driver underneath: its own documentation lists Vulkan 1.3 and several extensions as hard requirements. For that reason, MacLauncher recommends KosmicKrisp for vkd3d-proton and shows a warning when a game uses it with another driver. On [MacLauncher KosmicKrisp](#maclauncher-kosmickrisp), vkd3d-proton runs and reports Direct3D feature level 12_1, which [KosmicKrisp](/maclauncher/windows/kosmickrisp/#direct3d-12-games-through-vkd3d-proton) explains. MacLauncher installs vkd3d-proton from the project's releases.
 
 ### WineD3D and WINE's vkd3d
 
@@ -107,6 +107,12 @@ MacLauncher KosmicKrisp is MacLauncher's own build of KosmicKrisp, published in 
 The build adds plenty more, from mesh shaders to 64-bit floating point; [KosmicKrisp](/maclauncher/windows/kosmickrisp/#maclauncher-kosmickrisp) goes through it.
 
 Like KosmicKrisp itself, the build needs an Apple Silicon Mac with macOS 26 or later. It also comes as an Intel build, so CrossOver and Sikarugir games can choose it as their **Vulkan driver** and run DXVK, vkd3d-proton or a Vulkan game on it. CrossOver includes only MoltenVK, so this build also brings KosmicKrisp to CrossOver games.
+
+### Proton's graphics path on a Mac
+
+On Linux and the Steam Deck, Valve's Proton runs a Windows game's graphics through DXVK for Direct3D 8 to 11 and vkd3d-proton for Direct3D 12, which turn the game's calls into Vulkan for the Linux GPU driver. Current releases of both need Vulkan features that MoltenVK and upstream KosmicKrisp lack. MacLauncher KosmicKrisp has them, so on a Mac the same two translators can produce the same kind of Vulkan work, and KosmicKrisp turns it into Metal at the end.
+
+Taking this path is a choice you make per game. Pick a release from the DXVK project as the Direct3D engine, or vkd3d-proton for **Direct3D 12**, and MacLauncher KosmicKrisp as the **Vulkan driver**, and the game goes through Proton's graphics path instead of D3DMetal or DXMT, while your other games keep theirs. Only the graphics path is shared with Proton. WINE itself is still CrossOver's or Sikarugir's, so a game doesn't automatically behave the way it does on Linux.
 
 ### MoltenVK or KosmicKrisp
 
