@@ -470,12 +470,13 @@ async function resolve(install, runtime, context, { executableArchitecture, host
     const capable = await kosmicKrispHost(host, context);
     const kosmicKrisp = capable && managedDriver(input, compatibility, context, Managed.projectId);
     const scene = !kosmicKrisp && managedDriver(input, compatibility, context, Managed.sceneProjectId);
+    const uses = own.some(item => item.engine !== 'vkd3d-proton') && vkd3d ? 'use' : 'uses';
     let reason;
-    if (kosmicKrisp) { vulkan.used = actualFiles(kosmicKrisp); reason = `${names} uses MacLauncher KosmicKrisp.`; }
+    if (kosmicKrisp) { vulkan.used = actualFiles(kosmicKrisp); reason = `${names} ${uses} MacLauncher KosmicKrisp.`; }
     else {
       if (scene) vulkan.used = actualFiles(scene);
-      reason = capable ? `${names} uses MacLauncher KosmicKrisp, which Play installs after consent.`
-        : `KosmicKrisp needs Metal 4 and a physical Apple GPU, so ${names} uses MacLauncher's MoltenVK build.${vkd3d ? ' vkd3d-proton may not start on MoltenVK.' : ''}`;
+      reason = capable ? `${names} ${uses} MacLauncher KosmicKrisp, which Play installs after consent.`
+        : `KosmicKrisp needs Metal 4 and a physical Apple GPU, so ${names} ${uses} MacLauncher's MoltenVK build.${vkd3d ? ' vkd3d-proton needs MacLauncher KosmicKrisp.' : ''}`;
       if (capable || !scene) plan.vulkanPending = { architecture: Architecture.targetArchitecture(input.layout?.architecture) || 'x64',
         kosmicKrisp: Boolean(capable), vkd3d: Boolean(capable) && vkd3d, carrier: !scene };
     }

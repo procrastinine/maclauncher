@@ -84,7 +84,7 @@ test('MacLauncher DXVK and vkd3d-proton pair an automatic Vulkan driver with Kos
     for (const host of [{ ...capable, physicalAppleGPU: false }, { ...capable, macOSVersion: '15.7' }]) {
       const fallback = await resolve(runtimeId, { translatorD3D11: dxvk.id, translatorD3D12: proton.id }, [dxvk, proton, kk, scene], host);
       assert.equal(row(fallback).used.id, scene.id, 'without Metal 4 or a physical Apple GPU the carrier MoltenVK build is used');
-      assert.match(row(fallback).reason, /needs Metal 4 and a physical Apple GPU, so MacLauncher's DXVK and vkd3d-proton uses MacLauncher's MoltenVK build\. vkd3d-proton may not start on MoltenVK\./);
+      assert.match(row(fallback).reason, /needs Metal 4 and a physical Apple GPU, so MacLauncher's DXVK and vkd3d-proton use MacLauncher's MoltenVK build\. vkd3d-proton needs MacLauncher KosmicKrisp\./);
       assert.equal(fallback.vulkanPending, null);
     }
     const explicitStock = await resolve(runtimeId, { translatorD3D11: dxvk.id, translatorVulkan: stock.id }, [dxvk, kk, scene, stock]);
