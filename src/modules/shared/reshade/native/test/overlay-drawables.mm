@@ -100,8 +100,12 @@ int main(){@autoreleasepool{
         // A display-link update drawable is tracked without a second nextDrawable call.
         ControlledDrawable *update=(ControlledDrawable*)(id)[limited nextDrawable];const unsigned calls=limited.calls->load();
         check(update&&capped.adopt((CAMetalLayer*)(id)limited,(id<CAMetalDrawable>)update)==(id)update&&capped.held()==3&&limited.calls->load()==calls,"an adopted drawable is counted once");
-        check(!capped.adopt((CAMetalLayer*)(id)limited,(id<CAMetalDrawable>)update)&&capped.held()==3,"adoption respects capacity");
-        [update display:4.0];[leases[0] display:0];check(capped.held()==2,"adopted and acquired drawables retire through the same count");
+        // Core Animation supplies an update drawable only when one is free, so
+        // adoption accepts it past the live count; acquisition still refuses.
+        ControlledLayer *spare=[ControlledLayer new];spare.maximumDrawableCount=1;ControlledDrawable *second=(ControlledDrawable*)(id)[spare nextDrawable];
+        check(second&&capped.adopt((CAMetalLayer*)(id)limited,(id<CAMetalDrawable>)second)==(id)second&&capped.held()==4,"a display-link drawable is accepted past the live count");
+        check(!capped.acquire((CAMetalLayer*)(id)limited)&&limited.calls->load()==calls,"acquisition still refuses while adopted drawables fill the count");
+        [update display:4.0];[second display:5.0];[leases[0] display:0];check(capped.held()==2,"adopted and acquired drawables retire through the same count");
     }
     [leases removeAllObjects];
     std::printf("Owned output drawables: %u checks; refusals and admissions took at most %.2f ms; nextDrawable was never entered while every drawable was in use.\n",checks,slowest);

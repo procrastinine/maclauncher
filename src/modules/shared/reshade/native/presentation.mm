@@ -204,6 +204,13 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
    nativeLog("Presentation output drawables have all been in use for 2 s: "+std::to_string(drawables.held())+" of "+std::to_string(drawables.capacity(target)));
   return drawable;
  }
+ // A due image is taken from the delivery plan only when it can be presented: on the Metal display-link
+ // route the latest tick's drawable, otherwise a free drawable of the layer. Otherwise it stays due.
+ bool outputDrawableReady(CAMetalLayer *target){
+  if(!target)return false;
+  if(metalTiming.load()){std::lock_guard lock(displayDrawableMutex);return displayDrawable!=nil;}
+  return drawables.held()<drawables.capacity(target);
+ }
  id<MTLCommandQueue> privateCommandsQueue(){
   CAMetalLayer *layer=layerSnapshot();
   std::lock_guard lock(privateQueueMutex);if(stopping.load())return nil;
@@ -294,7 +301,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   return false;
  }
  // Called only by the opt-in trace path with mutex held.
- void traceStatus(const char*phase){nativeLog("Presentation status phase="+std::string(phase)+" owner="+std::to_string(reinterpret_cast<uintptr_t>(owner))+" epoch="+std::to_string(presentationEpoch)+" revision="+(execution?execution->revision():std::string{})+" submitted="+std::to_string(status.submitted)+" encoded="+std::to_string(status.encoded)+" inFlight="+std::to_string(inFlight)+" pool="+std::to_string(pool.size())+" real="+std::to_string(status.presentedReal)+" generated="+std::to_string(status.presentedGenerated)+" callbacks="+std::to_string(presentedCallbacks)+" nonpositive="+std::to_string(nonpositivePresentations)+" duplicate="+std::to_string(duplicatePresentations)+" pending="+std::to_string(status.pending)+" dropped="+std::to_string(status.dropped)+" sourceAgeMs="+std::to_string(status.lastLatencyMs)+" reason="+status.reason);}
+ void traceStatus(const char*phase){nativeLog("Presentation status phase="+std::string(phase)+" owner="+std::to_string(reinterpret_cast<uintptr_t>(owner))+" epoch="+std::to_string(presentationEpoch)+" revision="+(execution?execution->revision():std::string{})+" submitted="+std::to_string(status.submitted)+" encoded="+std::to_string(status.encoded)+" inFlight="+std::to_string(inFlight)+" pool="+std::to_string(pool.size())+" real="+std::to_string(status.presentedReal)+" generated="+std::to_string(status.presentedGenerated)+" callbacks="+std::to_string(presentedCallbacks)+" nonpositive="+std::to_string(nonpositivePresentations)+" duplicate="+std::to_string(duplicatePresentations)+" pending="+std::to_string(status.pending)+" dropped="+std::to_string(status.dropped)+" sourceAgeMs="+std::to_string(status.lastLatencyMs)+" displayHz="+std::to_string(displayHz.load())+" deliveryDroppedGenerated="+std::to_string(delivery.snapshot().droppedGenerated)+" deliveryDroppedReal="+std::to_string(delivery.snapshot().droppedReal)+" reason="+status.reason);}
  ~Impl(){shutdown();}
  void shutdown(){std::vector<std::shared_ptr<Retirement>>cancelled;
   // Releasing a layer can invoke foreign teardown; keep that outside locks.
@@ -847,10 +854,11 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   if(!outputVisible.load(std::memory_order_acquire)||outputIdleCut.load(std::memory_order_acquire)){
    std::lock_guard lock(mutex);if(wakeup)dispatch_source_set_timer(wakeup,DISPATCH_TIME_FOREVER,DISPATCH_TIME_FOREVER,0);pumpQueued.store(false);return;
   }
-  pollRuntimeStatus(imageProcessingRequested());std::shared_ptr<Batch>undeliveredReal;@try{try{
-   CAMetalLayer *layer=layerSnapshot();
+  pollRuntimeStatus(imageProcessingRequested());std::shared_ptr<Batch>undeliveredReal;bool waitingForDrawable=false;@try{try{
+   CAMetalLayer *layer=layerSnapshot();const bool drawableReady=outputDrawableReady(layer);
    std::optional<Display>display;{std::lock_guard<std::mutex>lock(mutex);if(stopping.load()){pumpQueued.store(false);return;}const double now=CACurrentMediaTime();
-    if(immediate){display=immediate;immediate.reset();if(generator)deliveryMetrics();else status.pending=0;}
+    if(!drawableReady&&(immediate||generator&&generationEnabled&&delivery.nextTime()&&*delivery.nextTime()<=now+(displayHz.load()?1./displayHz.load():0)))waitingForDrawable=true;
+    else if(immediate){display=immediate;immediate.reset();if(generator)deliveryMetrics();else status.pending=0;}
     else if(generator&&generationEnabled){const auto refresh=displayHz.load();const double lookahead=latest&&latest->targeted&&refresh?1./refresh:0;const auto due=delivery.takeAhead(now,lookahead);if(due&&latest&&due->sourceId==latest->id)display=Display{latest,due->generated,due->due};deliveryMetrics();}
     if(display){
      handed=display->batch;display->outputId=++outputSequence;
@@ -860,7 +868,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
       display->totalSubframes=std::min(outputPolicy.subframes,capacity);
       motionFrame=*display;motionRepeated=false;nextSubframe=1;nextSubframeTime=std::max(now,display->due)+period/display->totalSubframes;
      }
-    }else if(outputPolicy.active()&&motionFrame&&motionFrame->totalSubframes>1&&nextSubframeTime<=now){
+    }else if(drawableReady&&outputPolicy.active()&&motionFrame&&motionFrame->totalSubframes>1&&nextSubframeTime<=now){
      const double step=motionFrame->batch->sourcePeriod/motionFrame->batch->displayImages/motionFrame->totalSubframes;
      // Drop missed display phases rather than queueing a burst after a stall.
      const auto missed=uint64_t(std::max(0.,std::floor((now-nextSubframeTime)/step)));
@@ -878,7 +886,10 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   }catch(const std::exception&e){fail(e.what());}}@catch(NSException*e){fail(e.reason.UTF8String?:"Presentation failed");}
   if(undeliveredReal){std::lock_guard<std::mutex>lock(mutex);retireBatch(undeliveredReal);}
   {std::lock_guard lock(mutex);handed.reset();}
-  pumpQueued.store(false);bool more=false;{std::lock_guard<std::mutex>lock(mutex);more=immediate.has_value();if(wakeup&&!stopping.load()){auto next=delivery.nextTime();const auto refresh=displayHz.load();if(next&&latest&&latest->targeted&&refresh)*next-=1./refresh;if(motionFrame&&motionFrame->totalSubframes>1&&(!next||nextSubframeTime<*next))next=nextSubframeTime;dispatch_source_set_timer(wakeup,next?dispatch_time(DISPATCH_TIME_NOW,int64_t(std::max(0.,*next-CACurrentMediaTime())*NSEC_PER_SEC)):DISPATCH_TIME_FOREVER,DISPATCH_TIME_FOREVER,100*NSEC_PER_USEC);}}if(more)schedule();
+  pumpQueued.store(false);bool more=false;{std::lock_guard<std::mutex>lock(mutex);more=immediate.has_value()&&!waitingForDrawable;if(wakeup&&!stopping.load()){auto next=delivery.nextTime();const auto refresh=displayHz.load();if(next&&latest&&latest->targeted&&refresh)*next-=1./refresh;if(motionFrame&&motionFrame->totalSubframes>1&&(!next||nextSubframeTime<*next))next=nextSubframeTime;
+   // Waiting for a drawable: the next display-link tick schedules the pump; the layer route retries after half a refresh.
+   if(waitingForDrawable)next=metalTiming.load()?std::optional<double>{}:std::optional<double>(CACurrentMediaTime()+(refresh?0.5/refresh:0.004));
+   dispatch_source_set_timer(wakeup,next?dispatch_time(DISPATCH_TIME_NOW,int64_t(std::max(0.,*next-CACurrentMediaTime())*NSEC_PER_SEC)):DISPATCH_TIME_FOREVER,DISPATCH_TIME_FOREVER,100*NSEC_PER_USEC);}}if(more)schedule();
  }
  void generationBudgetContract(unsigned w,unsigned h){
   const auto device=reinterpret_cast<uintptr_t>((__bridge void*)layer.device);const unsigned multiplier=config.generation?config.generation->multiplier:0;

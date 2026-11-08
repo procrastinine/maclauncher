@@ -54,7 +54,8 @@ API_AVAILABLE(macos(14.0))
     const auto revision=_displayRevision.load();
     if(_appliedRevision!=revision){
         _appliedRevision=revision;_clock.reset();const float maximum=float(_maximum.load());
-        _link.preferredFrameRateRange=CAFrameRateRangeMake(20,maximum,maximum);
+        // A lower minimum lets Core Animation pick a slower cadence, which caps the images that reach the screen.
+        _link.preferredFrameRateRange=CAFrameRateRangeMake(maximum,maximum,maximum);
     }
     const bool paused=_state->paused.load();if(_link.paused&&!paused)_clock.reset();_link.paused=paused;
 }

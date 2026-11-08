@@ -63,8 +63,13 @@ private:
 public:
     // CAMetalDisplayLink already acquired its update drawable. Track that exact
     // lease instead of calling nextDrawable a second time for the same tick.
+    // Core Animation hands the link a drawable only when one is free, so it is
+    // never refused here: a refusal cannot prevent blocking and only discards a
+    // frame. Its hold still counts toward the admission that acquire() applies.
     id<CAMetalDrawable> adopt(CAMetalLayer *layer,id<CAMetalDrawable> drawable){
-        if(!drawable)return nil;auto hold=reserve(layer);return hold?track(drawable,std::move(hold)):nil;
+        (void)layer;if(!drawable)return nil;
+        std::shared_ptr<Hold> hold;{std::lock_guard<std::mutex>lock(state->mutex);++state->held;state->refusing={};hold=std::make_shared<Hold>(state);}
+        return track(drawable,std::move(hold));
     }
     id<CAMetalDrawable> acquire(CAMetalLayer *layer){
         auto hold=reserve(layer);if(!hold)return nil;return track([layer nextDrawable],std::move(hold));
