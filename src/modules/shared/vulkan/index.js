@@ -125,22 +125,13 @@ function choices(context, dependencies = {}) {
   }
   return { vulkanRuntimes: [{ value: "auto", label: "Automatic" }, ...rows] };
 }
-function automaticRequest(request, available, dependencies) {
-  if (!dependencies.sceneOperations || !["auto", "moltenvk:auto"].includes(request)) return request;
-  // Preserve the ordinary backend ordering, including a preferred KosmicKrisp.
-  // MoltenVK needs the managed scene build to forward temporal frame inputs.
-  const ordinary = available.find(item => !item.sceneOnly);
-  if (request === "auto" && ordinary && ordinary.backend !== "moltenvk") return request;
-  return available.find(item => item.projectId === managed.sceneProjectId)?.id || managed.sceneSelectionId;
-}
 function resolve(context, dependencies = {}) {
-  const requested = savedChoice(context);
-  const reason = unavailableReason(requested.split(":")[0], dependencies);
+  const request = savedChoice(context);
+  const reason = unavailableReason(request.split(":")[0], dependencies);
   if (reason) throw new Error(reason);
   const available = installed(context, dependencies);
-  const request = automaticRequest(requested, available, dependencies);
   const managedRequest = managed.providers.find(item => item.selectionId === request);
-  const selected = request === "auto" ? available.find(item => !item.sceneOnly || dependencies.sceneOperations) : request.endsWith(":auto")
+  const selected = request === "auto" ? available.find(item => !item.sceneOnly) : request.endsWith(":auto")
     ? available.find(item => item.backend === request.slice(0, -5) && !item.projectId) : managedRequest
     ? available.find(item => item.projectId === managedRequest.projectId) : available.find(item => item.id === request);
   if (!selected && request === "auto") return null;
@@ -149,18 +140,14 @@ function resolve(context, dependencies = {}) {
   return owner ? (dependencies.adapted || owner.provider).resolve(selected, consumerContext(context, dependencies, owner.projectId)) : selected;
 }
 function requirements(context, dependencies = {}) {
-  const requested = savedChoice(context);
-  // Ordinary optional status reads keep their no-inspection fast path.
-  const automatic = dependencies.sceneOperations && ["auto", "moltenvk:auto"].includes(requested)
-    ? installed(context, dependencies) : null;
-  const request = automaticRequest(requested, automatic || [], dependencies);
+  const request = savedChoice(context);
   const reason = unavailableReason(request.split(":")[0], dependencies);
   if (reason) throw new Error(reason);
   const managedRequest = managed.providers.find(item => item.selectionId === request || request.startsWith(item.prefix));
   if (!managedRequest) {
     if (!dependencies.required && request === "auto") return [];
-    const available = automatic || installed(context, dependencies);
-    const selected = request === "auto" ? available.find(item => !item.sceneOnly || dependencies.sceneOperations) : request.endsWith(":auto")
+    const available = installed(context, dependencies);
+    const selected = request === "auto" ? available.find(item => !item.sceneOnly) : request.endsWith(":auto")
       ? available.find(item => item.backend === request.slice(0, -5) && !item.projectId) : available.find(item => item.id === request);
     if (selected) {
       context.recordRuntimeUse?.({ managerId: selected.projectId || "vulkan-" + selected.backend, version: selected.version, sectionId: "default", sourcePath: path.dirname(selected.library) });
@@ -215,7 +202,7 @@ function requirements(context, dependencies = {}) {
   const prefix = managedRequest.prefix, manager = dependencies.adaptedManager || managedRequest.manager;
   const version = request.startsWith(prefix) ? request.slice(prefix.length) : undefined;
   const installOptions = dependencies.architecture ? { architecture: dependencies.architecture } : {};
-  const available = dependencies.architecture ? automatic || installed(context, dependencies) : null;
+  const available = dependencies.architecture ? installed(context, dependencies) : null;
   const selection = managedSelection(managedRequest, context, dependencies, version, available);
   if (!selection.version && selection.discoveryRequired) return [{ managerId: manager.id, version: null,
     discoveryRequired: true, requiresDownload: true, installOptions }];
