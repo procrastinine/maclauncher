@@ -84,7 +84,7 @@ LWJGL's KosmicKrisp builds contain only Apple Silicon code, which is why Intel W
 
 ## Getting it
 
-KosmicKrisp and MacLauncher KosmicKrisp live in **Runtimes → Graphics → Vulkan drivers**, next to MoltenVK. You rarely need to visit, though. When a game that runs as an Intel program needs Vulkan on a Mac that can run KosmicKrisp, and no fitting driver is installed yet, Play offers the Intel build of MacLauncher KosmicKrisp, and **Use MoltenVK** carries on with MoltenVK instead. When no Intel build can be downloaded, Play says so in one line under its progress and carries on with MoltenVK. Once installed, a version works offline and every game shares it.
+KosmicKrisp and MacLauncher KosmicKrisp live in **Runtimes → Graphics → Vulkan drivers**, next to MoltenVK. You rarely need to visit, though. When AnyPS5 or Prosper, which run as Intel programs, needs Vulkan on a Mac that can run KosmicKrisp, and no fitting driver is installed yet, Play offers the Intel build of MacLauncher KosmicKrisp, and **Use MoltenVK** carries on with MoltenVK instead. When no Intel build can be downloaded, Play says so in one line under its progress and carries on with MoltenVK. Once installed, a version works offline and every game shares it.
 
 To pick a driver yourself, use the **Vulkan driver** control in a WINE game's Runtime Settings, or **Vulkan implementation** for Android games. [Choosing a translator](/maclauncher/windows/choosing-a-translator/) walks through which driver suits which kind of game.
 
