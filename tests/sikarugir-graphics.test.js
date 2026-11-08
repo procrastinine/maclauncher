@@ -206,6 +206,10 @@ test("D3DMetal DLSS requires the engine's actual path conversion exports before 
     await assert.rejects(Graphics.prepareGraphicsView(options), /cannot expose MetalFX Temporal through D3DMetal/);
     assert.equal(fs.existsSync(viewRoot), false);
   }
+  // Integration that an explicitly selected translator enables starts the game without it.
+  const optional = await Graphics.prepareGraphicsView({ ...options, settings: { ...options.settings, dlssOptional: true }, viewRoot: viewRoot + "-optional" });
+  assert.equal(optional.dlss.d3dmetal, false);
+  assert.equal(optional.env.D3DM_ENABLE_METALFX, "0");
   fs.writeFileSync(ntdll, image({ cpu: X64, symbols: ["ntdll_get_unix_file_name", "ntdll_get_dos_file_name"] }));
   const result = await Graphics.prepareGraphicsView(options);
   assert.equal(result.dlss.d3dmetal, true);

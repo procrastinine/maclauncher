@@ -117,6 +117,34 @@ test("temporal eligibility uses resolved engine families for foreign references 
   }
 });
 
+test("explicitly selected DXMT and D3DMetal forward DLSS without the setting; the runtime's own translators follow it", () => {
+  const host = { hardwareArch: "arm64", macOSVersion: "26.0", executableArchitecture: "x86_64" };
+  for (const engine of ["dxmt", "d3dmetal"]) {
+    const installed = { id: `${engine}:1.0`, engine, managerId: engine }, own = { id: `included:d3d-renderer:${engine}`, engine, included: true };
+    const plan = used => ({ runtime: "crossover", apiMode: true, components: { d3d11: { used }, d3d12: { used } } });
+    const flags = { dxmt: engine === "dxmt", d3dmetal: engine === "d3dmetal" };
+    for (const saved of [{}, { dlss: false }]) {
+      const settings = DLSS.withTemporalSelection(saved, null, plan(installed));
+      assert.equal(settings.dlss, true, `${engine}: an explicit translator forwards without the setting`);
+      assert.deepEqual(DLSS.checkSelection(settings, { ...host, backend: "auto", translatorPlan: plan(installed), ...flags }), { enabled: true, ...flags });
+      // A route that cannot run integration starts the game without it.
+      for (const unsupported of [{ executableArchitecture: "x86" }, { hardwareArch: "x64" }, { macOSVersion: "13.0" }])
+        assert.deepEqual(DLSS.checkSelection(settings, { ...host, ...unsupported, backend: "auto", translatorPlan: plan(installed), ...flags }),
+          { enabled: false, dxmt: false, d3dmetal: false });
+      assert.deepEqual(DLSS.checkSelection(settings, { ...host, executableArchitecture: "x86", backend: "auto", translatorPlan: plan(installed), vulkan: true }),
+        { enabled: true, dxmt: false, d3dmetal: false, vulkan: true });
+    }
+    // The runtime's own translator, automatic or picked, runs as shipped unless the setting asks for integration.
+    for (const used of [own, null]) {
+      const settings = DLSS.withTemporalSelection({ graphicsBackend: "dxvk" }, null, plan(used));
+      assert.equal(settings.dlss, false);
+      assert.deepEqual(DLSS.checkSelection(settings, { ...host, backend: "auto", translatorPlan: plan(used), ...flags }), { enabled: false, dxmt: false, d3dmetal: false });
+    }
+    assert.throws(() => DLSS.checkSelection(DLSS.withTemporalSelection({ dlss: true }, null, plan(own)),
+      { ...host, executableArchitecture: "x86", backend: "auto", translatorPlan: plan(own), ...flags }), /64-bit Windows/);
+  }
+});
+
 test("turning DLSS off clears inherited flags without changing graphics or requiring libraries", () => {
   const install = { crossoverRoot: "/absent/CrossOver" };
   const result = CrossOver.buildEnvironment({ graphicsBackend: "wined3d", dlss: false }, install, "/game", "/game/bottle",

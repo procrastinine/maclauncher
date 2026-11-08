@@ -19,7 +19,15 @@ function withTemporalSelection(settings, effects, translatorPlan) {
     !sources.length && ["auto", "dxmt", "d3dmetal"].includes(settings.graphicsBackend || "auto");
   // Preserve saved runtime integration, including its ability to expose the
   // game's temporal inputs before a shared replacement is selected live.
-  return { ...settings, dlss: settings.dlss === true || classicSource && needsSceneInputs(effects) };
+  const requested = settings.dlss === true || classicSource && needsSceneInputs(effects);
+  // A DXMT or D3DMetal version installed in Runtimes and selected explicitly
+  // for Direct3D 11 or 12 forwards the game's DLSS without the setting, and
+  // the game starts without forwarding where the route cannot run it. The
+  // runtime's own translators run as shipped unless the setting or a shared
+  // temporal upscaler asks for integration. Vulkan translators forward through
+  // their carrier driver (temporal/vulkan-dlss.js).
+  const explicit = !requested && sources.some(source => !source.included && (source.engine === "dxmt" || source.engine === "d3dmetal"));
+  return { ...settings, dlss: requested || explicit, ...(explicit ? { dlssOptional: true } : {}) };
 }
 
 function hasLibraries(directory) {
@@ -33,10 +41,18 @@ function hasLibraries(directory) {
   });
 }
 
-function checkSelection(settings, { backend, dxmt = false, d3dmetal = false,
+const DISABLED = Object.freeze({ enabled: false, dxmt: false, d3dmetal: false });
+// Integration that only an explicitly selected translator enables is skipped
+// where the Mac, macOS, executable or libraries cannot run it.
+function checkSelection(settings, options = {}) {
+  if (settings.dlssOptional !== true) return selection(settings, options);
+  try { return selection(settings, options); }
+  catch { return options.vulkan ? { ...DISABLED, enabled: true, vulkan: true } : { ...DISABLED }; }
+}
+function selection(settings, { backend, dxmt = false, d3dmetal = false,
   vulkan = false, hardwareArch = require("../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, macOSVersion, executableArchitecture, translatorPlan } = {}) {
   // Forwarding on an explicit Vulkan carrier route needs no setting.
-  if (settings.dlss !== true) return vulkan ? { enabled: true, dxmt: false, d3dmetal: false, vulkan: true } : { enabled: false, dxmt: false, d3dmetal: false };
+  if (settings.dlss !== true) return vulkan ? { enabled: true, dxmt: false, d3dmetal: false, vulkan: true } : { ...DISABLED };
   if (hardwareArch !== "arm64") throw new Error("MetalFX Temporal requires Apple Silicon.");
   if (executableArchitecture && executableArchitecture !== "x86_64") throw new Error("MetalFX Temporal requires a 64-bit Windows executable.");
   const resolvedEngines = translatorPlan && [usedForApi(translatorPlan, "d3d11")?.engine, usedForApi(translatorPlan, "d3d12")?.engine];

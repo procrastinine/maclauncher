@@ -220,7 +220,7 @@ function rendererFile(plan, architecture, filename, fallback) {
 function cameraRequirements(entry, context, { manager, root } = {}) {
   const runtimeId = context.runtimeId || entry?.runtimeId;
   if (!["crossover", "sikarugir"].includes(runtimeId)) return [];
-  const settings = require("../dlss").withTemporalSelection(context.runtimeSettings || {}, entry.effects);
+  const settings = require("../dlss").withTemporalSelection(context.runtimeSettings || {}, entry.effects, context.translatorPlan);
   const automatic = settings.dlss !== true;
   if (automatic) {
     const match = Detection.cachedWindowsExecutable(entry);

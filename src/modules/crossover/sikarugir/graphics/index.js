@@ -251,12 +251,14 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
   const selection = translatorPlan ? { graphicsBackend: translatorPlan.apiMode ? 'wined3d' : translatorPlan.components["d3d-renderer"].used?.engine || "auto",
     vulkanBackend: translatorPlan.components["vulkan-driver"].used?.engine || "auto", components: [] } : selectGraphics(settings, capabilities, executableArchitecture);
   const rendererRoot = path.join(support, "Frameworks", "renderer");
-  const dlss = DLSS.checkSelection(settings, { ...hostInfo, executableArchitecture, translatorPlan, vulkan: vulkanDLSS?.enabled===true,
+  let dlss = DLSS.checkSelection(settings, { ...hostInfo, executableArchitecture, translatorPlan, vulkan: vulkanDLSS?.enabled===true,
     backend: selection.components.includes("dxmt") ? "dxmt" : selection.graphicsBackend === "auto" ? "wined3d" : selection.graphicsBackend,
     dxmt: settings.dlss === true && (translatorPlan ? Boolean(cameraBridge) || DLSS.hasPlanLibraries(translatorPlan, "dxmt") : capabilities.dxmt && (Boolean(cameraBridge) || DLSS.hasLibraries(path.join(rendererRoot, "dxmt", "wine", layout.primaryWindows)))),
     d3dmetal: settings.dlss === true && (translatorPlan ? DLSS.hasPlanLibraries(translatorPlan, "d3dmetal") : capabilities.d3dmetal && DLSS.hasLibraries(path.join(rendererRoot, "d3dmetal", "wine", layout.primaryWindows))) });
-  if (dlss.d3dmetal && !await DLSS.hasD3DMetalPathBridge(engine))
-    fail("The selected Wine engine cannot expose MetalFX Temporal through D3DMetal's game integration. Choose DXMT, select a compatible newer Wine version, or disable MetalFX Temporal.");
+  if (dlss.d3dmetal && !await DLSS.hasD3DMetalPathBridge(engine)) {
+    if (settings.dlssOptional !== true) fail("The selected Wine engine cannot expose MetalFX Temporal through D3DMetal's game integration. Choose DXMT, select a compatible newer Wine version, or disable MetalFX Temporal.");
+    dlss = { ...dlss, d3dmetal: false, enabled: dlss.dxmt || dlss.vulkan === true };
+  }
   const destination = prospectiveRealPath(viewRoot || ".");
   if (Closure.inside(support, destination) || Closure.inside(engine, destination)) fail("Per-game graphics state must be outside the shared runtime.");
   ownDirectory(viewRoot);

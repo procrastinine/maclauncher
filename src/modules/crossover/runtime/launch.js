@@ -248,7 +248,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const scenePlan = Temporal.resolveScenePlan(entry, context, { install: selected.install, settings, translatorPlan, verify: true, root: graphicsRoot });
   let sceneClosure = scenePlan?.packageReady ? scenePlan.sceneClosure : null;
   // A Vulkan scene source does not request a different Direct3D renderer.
-  if (scenePlan) settings = { ...settings, dlss: context.runtimeSettings?.dlss === true };
+  if (scenePlan) settings = { ...settings, dlss: context.runtimeSettings?.dlss === true || settings.dlssOptional === true };
   let cameraBridge = Temporal.resolvePlan(entry, context,
     { install: selected.install, settings, translatorPlan, runtimeId: "crossover", root: graphicsRoot, host, verify: true, automatic: settings.dlss !== true });
   if (cameraBridge) settings = { ...settings, dlss: true };
