@@ -2,7 +2,7 @@
 
 `android-apk-metadata` reads APK package names, localized labels, activity orientations and icons. It runs as a standalone macOS executable. Android system images, Java and game runtimes are not required.
 
-The helper uses the complete AIM APK, binary XML, resource-table and drawable modules listed in `sources.json`. CoreGraphics and ImageIO render raster, vector and adaptive drawables into a 256 × 256 PNG. The owned adaptation adds a base-plus-split resource view and locale selection while retaining the original parser interfaces. Framework-only resources and drawables that the parser cannot render produce no icon; the helper does not run application code. Adaptive icon layers use Android's 72 dp visible viewport within their 108 dp drawing canvas. Legacy drawables retain their full image bounds. The launcher applies the Dock silhouette to the rendered image once.
+The helper uses the complete AIM APK, binary XML, resource-table and drawable modules from the selected AIM source (`crates/aim-android-xml` and `tools/android-image-extract`). CoreGraphics and ImageIO render raster, vector and adaptive drawables into a 256 × 256 PNG. The owned adaptation adds a base-plus-split resource view and locale selection while retaining the original parser interfaces. Framework-only resources and drawables that the parser cannot render produce no icon; the helper does not run application code. Adaptive icon layers use Android's 72 dp visible viewport within their 108 dp drawing canvas. Legacy drawables retain their full image bounds. The launcher applies the Dock silhouette to the rendered image once.
 
 ## Protocol
 
