@@ -1028,6 +1028,8 @@ void colorStoreAction(id object,SEL selector,MTLStoreAction action,NSUInteger in
     RSMFrameDepth *frame=objc_getAssociatedObject(object,&frameDepthKey);
     if(frame&&!index&&action!=frame->colorStore)frame->valid=false;
 }
+// Depth-store preservation follows the technique demonstrated by MacShade
+// (BSD-3-Clause); see macshade-BSD-3-Clause.txt. This implementation is independent.
 id<MTLRenderCommandEncoder> captureRenderPass(id object,SEL selector,MTLRenderPassDescriptor *descriptor) {
     const auto stored=[](MTLRenderPassAttachmentDescriptor *a)->id<MTLTexture>{
         if(a.storeAction==MTLStoreActionStore)return a.texture;

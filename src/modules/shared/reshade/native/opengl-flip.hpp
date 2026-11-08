@@ -1,4 +1,6 @@
 #pragma once
+// Multisample copy orientation follows the technique demonstrated by MacShade
+// (BSD-3-Clause); see macshade-BSD-3-Clause.txt. This implementation is independent.
 #include <OpenGL/gl3.h>
 #include <stdexcept>
 namespace macfx {
