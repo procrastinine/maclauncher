@@ -1,5 +1,4 @@
 {
-  "upstreamCommit": "a21ffb8f6c13233ba336352bdff293894c706575",
   "compilerVersion": "Glslang Version: 11:16.6.0",
   "target": "vulkan1.1",
   "sourceSha256": "998d1b2efbe2c8727e177c6fa4c7970afc86c0b80bc53fa72426d00f82624bab",
