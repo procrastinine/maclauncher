@@ -176,13 +176,13 @@ Downsample defaults to 0.5× its input. Upscale defaults to 100% of the window o
 
 MetalFX Spatial renders at the requested output size. Fixed-scale models and shaders, by contrast, keep their intrinsic scale, and a separate resize row or the final fit changes the resulting size. A chain can, for example, run Downsample → neural reconstruction → Upscale → CRT. A smaller processing size lowers the work of the effects that follow it, but the game's own rendering cost changes only through **Game resolution**.
 
-In Simple, **Upscale** chooses its input size automatically: half size for general spatial filters, or the reciprocal of a uniform intrinsic scale, so a 4× model starts at 25% of the presentation size. Its output fits the window unless a manual size is selected. Turning Upscale off removes the input size it added, and manual sizes stay. Simple neural rendering picks a compatible installed model and starts with a fixed input height of 720 pixels, preserving the aspect ratio and leaving smaller inputs at their size.
+In Simple, **Upscale** chooses its input size automatically: half size for general spatial filters, or the reciprocal of a uniform intrinsic scale, so a 4× model starts at 25% of the presentation size. Its output fits the window unless a manual size is selected. Turning Upscale off removes the input size it added, and manual sizes stay. Simple neural rendering picks a compatible installed model and starts with a fixed input height of 540 pixels, preserving the aspect ratio and leaving smaller inputs at their size.
 
 ### Window fitting
 
 Every chain ends on a final presentation surface, which follows the native window's backing size, or the fullscreen surface, including Retina scaling. Intermediate image sizes never resize the window; instead, a common final fit scales the last processed image to that surface. An explicit resize row at the end of the chain can choose the fitting algorithm, and when its result already matches the surface, no further resize runs.
 
-The **DLSS · 720p + LSFG 4×** preset, for example, downsamples bilinearly to 720p, runs same-size neural rendering, fits the result to the window and generates frames at 4×.
+The **DLSS · 540p + LSFG 4×** preset, for example, downsamples bilinearly to 540p, runs same-size neural rendering, fits the result to the window and generates frames at 4×.
 
 ### Adaptive quality
 

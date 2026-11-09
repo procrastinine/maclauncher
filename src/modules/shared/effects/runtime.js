@@ -212,7 +212,7 @@ function reconstructionTemplates(current, ctx) {
     if (!modelPath) throw new Error("Choose a compatible neural rendering model before applying this preset.");
     Neural.model(modelPath,"mlx-dlss");
   } catch (error) { reason = error.message; }
-  return [{id: "reconstruction-4x", name: "DLSS · 720p + LSFG 4×", plan, available: !reason, ...(reason ? {reason} : {})}];
+  return [{id: "reconstruction-4x", name: "DLSS · 540p + LSFG 4×", plan, available: !reason, ...(reason ? {reason} : {})}];
 }
 function sourceResolution(ctx, launch) {
   const support = SourceResolution.capabilities(ctx.graphicsHost, ctx.graphicsInputs, ctx.graphicsCapabilities.resolutionMultipliers, ctx.graphicsCapabilities.virtualWindow);

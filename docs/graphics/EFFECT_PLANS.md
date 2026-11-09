@@ -125,7 +125,7 @@ Edits keep these rules as well: `effects/edit-operations.mjs` applies every plan
 Which helpers a row receives is decided only by the shared geometry classifier:
 
 - An Upscale owner receives an input reduction and, at a fixed scale, a fit after it. Another source request, an explicit owner size or another reduction makes the sizing manual instead.
-- A neural image row receives a 720-pixel processing input, except for decoded video. It also receives a fit when the chain has no other reduction or upscaler.
+- A neural image row receives a 540-pixel processing input, except for decoded video. It also receives a fit when the chain has no other reduction or upscaler.
 - A fixed pixel size is a Downsample and derives no helpers.
 - A shader that replaces a row keeps the row's explicit factor or pixel size, even when that size gives the shader another resize type. A presentation fit or an automatic size takes the new slot's default instead.
 - A fixed-scale model's fit uses a filter that works in both directions, so it follows the window whether the model's output is larger or smaller.

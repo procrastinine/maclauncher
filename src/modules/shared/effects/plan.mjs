@@ -4,8 +4,8 @@ export const MAX_NODES = 32;
 export const MAX_PARAMETERS = 4096;
 // Earlier saved Automatic sizes and unset neural inputs meant 540 pixels.
 export const DEFAULT_PROCESSING_HEIGHT = 540;
-// New DLSS rows and the DLSS preset reduce to 720 pixels.
-export const NEURAL_INPUT_HEIGHT = 720;
+// New DLSS rows and the DLSS preset reduce to 540 pixels.
+export const NEURAL_INPUT_HEIGHT = 540;
 export const RENDER_DIVISORS = Object.freeze([1, 1.5, 2, 3, 4]);
 export const validRenderDivisor = value => typeof value === "number" && Number.isFinite(value) && value >= 1;
 const kinds = new Set(["shader", "spatial", "downsample", "upscale", "temporal", "neural", "frame-generation"]);

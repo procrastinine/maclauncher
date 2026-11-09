@@ -818,11 +818,11 @@ test('Simple composes image filters without node cards and Off hides dependent c
   assert.equal(changes.length,1);
  }finally{harness.close();global.window=oldWindow;}
 });
-test('Simple neural selection uses a literal 720p input and an installed Automatic model without frame generation',async()=>{
+test('Simple neural selection uses a literal 540p input and an installed Automatic model without frame generation',async()=>{
  const before={schema:2,mode:'advanced',enabled:true,video:[]},changes=[],catalog=[{id:'neural:mlx-dlss',kind:'neural',label:'DLSS neural rendering',group:'Image filters',available:true,intrinsicScale:1,template:{kind:'neural',method:'mlx-dlss',enabled:true,settings:{modelPath:null,intensity:1,temporal:false}}},{id:'upscale:metalfx',kind:'upscale',label:'MetalFX',group:'Resize',available:true,template:{kind:'upscale',method:'metalfx',enabled:true,settings:{}}}];
  const harness=simpleHarness(EffectsControls,{game:{gamePath:'preset',effects:before},running:false,status:{neuralModels:[{method:'mlx-dlss',modelPath:'/managed/model.dlssmodel',version:'installed'}]},editor:{info:{plan:before,catalog},onChange:next=>changes.push(next),pickFile:()=>assert.fail('Automatic installed model must not ask for a file')}});
  try{elements(harness.render()).find(n=>n.props.id==='simple-effect-image-new').props.onChange({target:{value:'neural:mlx-dlss'}});await harness.settle();
-  const next=changes.at(-1);assert.deepEqual(next.video.map(n=>n.kind),['downsample','neural','upscale']);assert.deepEqual(next.video[0].extent,{height:720});assert.equal(next.video[1].settings.modelPath,null);assert.equal(next.video[1].settings.temporal,false);assert.equal(next.video[1].settings.intensity,1);
+  const next=changes.at(-1);assert.deepEqual(next.video.map(n=>n.kind),['downsample','neural','upscale']);assert.deepEqual(next.video[0].extent,{height:540});assert.equal(next.video[1].settings.modelPath,null);assert.equal(next.video[1].settings.temporal,false);assert.equal(next.video[1].settings.intensity,1);
  }finally{harness.close();}
 });
 test('Advanced Add exposes fixed I/O types before a searchable method library',()=>{

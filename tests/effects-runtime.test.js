@@ -1472,10 +1472,10 @@ test("contextual reconstruction templates use installed bindings and report miss
   f.record.features.graphics.frameGenerationMethods = ["lsfg"];f.record.features.graphics.presentation.hosts.window.frameGeneration = true;
   fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
   const entry = {...f.entry, effects: undefined, graphics: {spatialMethod: "metalfx"}}, template = Effects.templates(entry, f.options)[0];
-  assert.equal(template.available, true);assert.equal(template.id, "reconstruction-4x");assert.equal(template.name, "DLSS · 720p + LSFG 4×");
+  assert.equal(template.available, true);assert.equal(template.id, "reconstruction-4x");assert.equal(template.name, "DLSS · 540p + LSFG 4×");
   assert.equal(template.plan.video.find(row => row.kind === "neural").settings.modelPath, modelPath);
   assert.equal(template.plan.video.find(row => row.kind === "frame-generation").settings.modelVersion, version);
-  assert.deepEqual(template.plan.video.find(row => row.id === "legacy-neural-input").extent, {height:720});
+  assert.deepEqual(template.plan.video.find(row => row.id === "legacy-neural-input").extent, {height:540});
   assert.equal(fs.existsSync(Effects.file(entry, f.userDataDir)), false);
   models.mock.restore();t.mock.method(Models, "listInstalled", () => []);
   const unavailable = Effects.templates(entry, f.options)[0];
