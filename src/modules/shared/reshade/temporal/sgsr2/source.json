@@ -3,7 +3,6 @@
   "method": "sgsr2",
   "version": "2",
   "repository": "https://github.com/SnapdragonGameStudios/snapdragon-gsr.git",
-  "revision": "d926f074bcb9d714e179f1ce0fcb9ee2eeb5074e",
   "license": "BSD-3-Clause",
   "minimumMacOS": "13.0",
   "sourceScope": ["sgsr/v2/include/glsl_2_pass_cs", "LICENSE"],

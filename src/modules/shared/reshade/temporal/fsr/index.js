@@ -14,7 +14,7 @@ function inspect(root) {
       try {
         const metadata = JSON.parse(fs.readFileSync(path.join(directory, `${method}-build.json`), 'utf8'));
         const library = path.join(directory, `libmaclauncher-${method}.dylib`);
-        if (metadata.commit !== source[method].revision || metadata.providerABI !== 1 || metadata.shaderVariants !== 16 || !fs.statSync(library).isFile()) continue;
+        if (metadata.providerABI !== 1 || metadata.shaderVariants !== 16 || !fs.statSync(library).isFile()) continue;
         if (!Payload.exists(directory, method)) continue;
         methods.push(method); libraries[method] = library;
         minimumMacOSByMethod[method] = metadata.minimumMacOS && Requirements.versionAtLeast(metadata.minimumMacOS, source.minimumMacOS)

@@ -13,8 +13,8 @@ function inspect(root) {
         metadata.model !== SOURCE.model)
       return null;
     const legacy =
-        SOURCE.legacyPayloads.find(value => value.revision === metadata.commit &&
-                                            value.model === metadata.model);
+        metadata.profilesAPI === undefined &&
+        SOURCE.legacyPayloads.find(value => value.model === metadata.model);
     let profiles;
     if (legacy) {
       if (metadata.profile !== 'exact-fast')
@@ -30,8 +30,6 @@ function inspect(root) {
           JSON.stringify(metadata.profiles) !== JSON.stringify(SOURCE.profiles))
         return null;
       profiles = [...metadata.supportedProfiles ];
-      if (metadata.lite2?.sha256 !== SOURCE.lite2.sha256)
-        return null;
     }
     const library = path.join(directory, metadata.library),
           build = path.join(directory, 'build');

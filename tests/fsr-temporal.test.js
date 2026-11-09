@@ -16,7 +16,7 @@ test('FSR provider discovery keeps installed algorithms independent and stays of
   for (const method of ['fsr2', 'fsr3']) {
     fs.mkdirSync(path.join(directory, method));
     fs.writeFileSync(path.join(directory, `libmaclauncher-${method}.dylib`), 'provider');
-    fs.writeFileSync(path.join(directory, `${method}-build.json`), JSON.stringify({ providerABI: 1, commit: source[method].revision, shaderVariants: 16 }));
+    fs.writeFileSync(path.join(directory, `${method}-build.json`), JSON.stringify({ providerABI: 1, commit: 'installed-build', shaderVariants: 16 }));
   }
   assert.deepEqual(FSR.resolve(root, options).methods, ['fsr2', 'fsr3']);
   const environment = FSR.prepare(root, options);
@@ -26,7 +26,7 @@ test('FSR provider discovery keeps installed algorithms independent and stays of
   assert.deepEqual(FSR.resolve(root, options).methods, ['fsr2']);
   assert.equal(FSR.prepare(root, options).RESHADE_FSR3_LIBRARY, undefined);
   fs.writeFileSync(path.join(directory, 'fsr2-build.json'), JSON.stringify({ providerABI: 1, commit: 'another-source', shaderVariants: 16 }));
-  assert.deepEqual(FSR.prepare(root, options), {});
+  assert.deepEqual(FSR.resolve(root, options).methods, ['fsr2'], 'the graphics version lock, not a source commit, selects the installed build');
   assert.equal(FSR.resolve(root, { ...options, macOSVersion: '12.7' }), null);
   assert.equal(FSR.resolve(root, { ...options, platform: 'linux' }), null);
 });

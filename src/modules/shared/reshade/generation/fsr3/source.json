@@ -1,7 +1,6 @@
 {
   "providerABI": 1,
   "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
-  "revision": "c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",
   "version": "1.1.4",
   "effects": ["opticalflow", "frameinterpolation"],
   "license": "MIT",

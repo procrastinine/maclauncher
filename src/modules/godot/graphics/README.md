@@ -140,12 +140,9 @@ frames, and it neither submits commands nor waits for GPU completion.
 ## Build and payload
 
 The helper's native library uses only Godot's public GDExtension C header, and
-no Godot C++ ABI or private object layout. `source.json` records the Godot source
-at its exact commit and the SHA-256 of the consumed header.
-
-```sh
-node src/modules/godot/graphics/build.mjs /path/to/godot-checkout /path/to/output
-```
+no Godot C++ ABI or private object layout. MacLauncher Builds compiles it from the
+Godot source at the commit its submodule records, and `source.json` records the
+SHA-256 of the consumed header.
 
 The build requires the Xcode command-line tools and produces a universal arm64 and
 x86_64 library for macOS 13 or later. The shared graphics component includes this

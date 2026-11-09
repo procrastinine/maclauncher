@@ -12,11 +12,11 @@ function fixture(t) {
     graphics: { spatialMethods: ["fsr1", "metalfx"], temporalMethods: ["metalfx", "fsr2", "fsr3", "fsr4"] } } }));
   file("libreshade-macos.dylib", "provider");
   for (const method of ["fsr2", "fsr3"]) {
-    file(`temporal/fsr/${method}-build.json`, JSON.stringify({ providerABI: 1, commit: FSR[method].revision, shaderVariants: 16 }));
+    file(`temporal/fsr/${method}-build.json`, JSON.stringify({ providerABI: 1, commit: "installed-build", shaderVariants: 16 }));
     file(`temporal/fsr/libmaclauncher-${method}.dylib`, "provider");
     fs.mkdirSync(path.join(root, "temporal/fsr", method));
   }
-  file("temporal/fsr4/provider.json", JSON.stringify({ providerABI: 1, complete: true, commit: FSR4.revision, library: "libmaclauncher-fsr4.dylib", model: FSR4.model,
+  file("temporal/fsr4/provider.json", JSON.stringify({ providerABI: 1, complete: true, commit: "installed-build", library: "libmaclauncher-fsr4.dylib", model: FSR4.model,
     profilesAPI: 1, resourcePreparation: 1, supportedProfiles: FSR4.supportedProfiles, profiles: FSR4.profiles, lite2: FSR4.lite2 }));
   file("temporal/fsr4/libmaclauncher-fsr4.dylib", "provider");
   file("temporal/fsr4/third_party/fsr411/initializers.bin", "model");
@@ -42,7 +42,7 @@ test("Graphics overview separates installed components, system requirements and 
   assert.equal(current.status, "Included");assert.equal(current.available, true);
   // An accepted older payload reports its own floor rather than the current source's.
   const legacy = FSR4.legacyPayloads[0], provider = path.join(root, "temporal/fsr4/provider.json");
-  fs.writeFileSync(provider, JSON.stringify({ providerABI: 1, complete: true, commit: legacy.revision, library: "libmaclauncher-fsr4.dylib",
+  fs.writeFileSync(provider, JSON.stringify({ providerABI: 1, complete: true, commit: "legacy-build", library: "libmaclauncher-fsr4.dylib",
     model: legacy.model, profile: "exact-fast" }));
   const payload = Components.getComponents({ ...options, macOSVersion: "15.0" }).find(row => row.id === "fsr4");
   assert.equal(payload.status, `Requires macOS ${legacy.minimumMacOS}`);assert.equal(payload.available, false);

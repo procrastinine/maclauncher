@@ -7,7 +7,7 @@ function resolve(root,options={}){
   if((options.platform||process.platform)!=="darwin"||!path.isAbsolute(root||"")||!Native.versionAtLeast(options.macOSVersion||Native.systemVersionSync(),Source.minimumMacOS))return null;
   try{
     const directory=fs.realpathSync(path.join(root,"temporal/asr")),descriptor=JSON.parse(fs.readFileSync(path.join(directory,"provider.json"),"utf8"));
-    if(descriptor.providerABI!==1||descriptor.complete!==true||descriptor.methods?.join()!=="asr"||descriptor.source?.commit!==Source.revision||descriptor.source?.repository!==Source.repository||descriptor.architectures?.join()!=="arm64,x86_64"||descriptor.resourcePreparation!==1||!Array.isArray(descriptor.files))return null;
+    if(descriptor.providerABI!==1||descriptor.complete!==true||descriptor.methods?.join()!=="asr"||descriptor.architectures?.join()!=="arm64,x86_64"||descriptor.resourcePreparation!==1||!Array.isArray(descriptor.files))return null;
     const library=path.join(directory,"libmaclauncher-asr.dylib");
     if(!descriptor.files.some(row=>row.path==="libmaclauncher-asr.dylib")||!fs.statSync(library).isFile()||!Payload.exists(directory,"asr"))return null;
     return {directory,library,descriptor,methods:["asr"],minimumMacOS:Source.minimumMacOS};

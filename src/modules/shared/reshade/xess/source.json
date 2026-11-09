@@ -5,12 +5,9 @@
   "version": "sdk-de0fb9c1c510",
   "label": "Intel XeSS",
   "repository": "https://github.com/intel/xess",
-  "revision": "de0fb9c1c510661c571164e1418ceca8101dab69",
   "file": "libxess.dll",
   "bytes": 77795704,
   "sha256": "251659dd84a3e84de67c886a4186e01f3eca49b00641906fe38bb6b807e5d5b7",
-  "url": "https://raw.githubusercontent.com/intel/xess/de0fb9c1c510661c571164e1418ceca8101dab69/bin/libxess.dll",
-  "sourceUrl": "https://github.com/intel/xess/tree/de0fb9c1c510661c571164e1418ceca8101dab69",
   "license": "LicenseRef-Intel-Simplified-Software-October-2022",
   "licenseFile": "INTEL-LICENSE.txt"
 }

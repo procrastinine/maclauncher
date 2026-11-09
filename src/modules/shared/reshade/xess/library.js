@@ -1,7 +1,10 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypto");
 const Source=require("./source.json"),Writable=require("../../writable-input"),Upstream=require("../../runtime/upstream");
-const Components=require("./components.json");
+const Components=require("./components.json"),SourcePins=require("../runtime/source-pins");
+// Intel's files are read at the XeSS SDK revision the installed graphics package was built from.
+function release(root){const revision=SourcePins.sourceRevision("third_party/xess",root);return {revision,sourceUrl:Source.repository+"/tree/"+revision,url:file=>"https://raw.githubusercontent.com/intel/xess/"+revision+"/bin/"+file};}
+function sourceUrl(root){try{return release(root).sourceUrl;}catch{return Source.repository;}}
 const {withRuntimeMutation}=require("../../../../core/coordinated-runtime-managers"),{runDownloadTask}=require("../../runtime/download-manager"),{downloadApproved}=require("../../runtime/tool-install");
 const cache=new Map();
 function assertVersion(context){const version=context.version&&context.version!=="auto"?context.version:context.settings?.runtimes?.[Source.managerId]?.defaultVersion;if(version&&version!=="auto"&&version!==Source.version)throw Error("The selected Intel SDK version does not match the included XeSS adapter.");}
@@ -11,17 +14,17 @@ function read(userDataDir){try{
   const root=directory(userDataDir);Writable.assertOwnDirectory(userDataDir,root,{create:false});const file=path.join(root,"runtime.json"),stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16384)return null;
   const record=JSON.parse(fs.readFileSync(file,"utf8"));if(record.schema!==1||record.version!==Source.version||record.sha256!==Source.sha256||typeof record.external!=="boolean")return null;
   const library=record.external?record.file:path.join(root,Source.file);if(!path.isAbsolute(library||""))return null;const source=fs.lstatSync(library);if(!source.isFile()||source.isSymbolicLink()||source.size!==Source.bytes)return null;
-  return {version:Source.version,versionLabel:"Intel XeSS",runtimePath:library,library,sourcePath:library,installDir:root,external:record.external,ready:true,sourceUrl:Source.sourceUrl};
+  return {version:Source.version,versionLabel:"Intel XeSS",runtimePath:library,library,sourcePath:library,installDir:root,external:record.external,ready:true,sourceUrl:sourceUrl()};
 }catch{return null;}}
 function readComponents(userDataDir){try{
   const root=directory(userDataDir);Writable.assertOwnDirectory(userDataDir,root,{create:false});
   const file=path.join(root,"interpolation.json"),stat=fs.lstatSync(file);
   if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16384)return null;
   const record=JSON.parse(fs.readFileSync(file,"utf8"));
-  if(record.schema!==1||record.version!==Source.version||record.commit!==Source.revision)return null;
+  if(record.schema!==1||record.version!==Source.version)return null;
   const libraries={};let external=false;
   for(const spec of Components.files){const row=record.files?.[spec.id];if(!row||typeof row.external!=="boolean")return null;const library=row.external?row.file:path.join(root,spec.file);if(!path.isAbsolute(library||""))return null;const item=fs.lstatSync(library);if(!item.isFile()||item.isSymbolicLink()||item.size!==spec.bytes)return null;libraries[spec.id]=library;external||=row.external;}
-  return {version:Source.version,versionLabel:"Intel XeSS",operation:"interpolate",library:libraries.frameGeneration,runtimePath:libraries.frameGeneration,sourcePath:libraries.frameGeneration,libraries,installDir:root,external,ready:true,sourceUrl:Source.sourceUrl};
+  return {version:Source.version,versionLabel:"Intel XeSS",operation:"interpolate",library:libraries.frameGeneration,runtimePath:libraries.frameGeneration,sourcePath:libraries.frameGeneration,libraries,installDir:root,external,ready:true,sourceUrl:sourceUrl()};
 }catch{return null;}}
 function listInstalled(userDataDir){if(!userDataDir)return [];const sr=read(userDataDir),fg=readComponents(userDataDir),value=sr||fg;return value?[{...value,capabilities:[...(sr?["superresolution"]:[]),...(fg?["interpolate"]:[])]}]:[];}
 async function inspect(file,signal,spec=Source){
@@ -32,7 +35,7 @@ async function inspect(file,signal,spec=Source){
 // A downloaded file must be Intel's file at the declared commit.
 async function downloaded(file,signal,spec=Source){try{return await inspect(file,signal,spec);}catch(error){signal?.throwIfAborted();throw Error(`The downloaded ${spec.file} is not the declared Intel XeSS file: its size or checksum differs.`,{cause:error});}}
 async function resolve(userDataDir,context={}){assertVersion(context);const {signal,useRuntime,operation}=context;const record=operation==="interpolate"?readComponents(userDataDir):read(userDataDir);if(!record)throw Object.assign(new Error("Install or import the Intel XeSS runtime in Graphics."),{code:"GRAPHICS_XESS_RUNTIME_MISSING",managerId:Source.managerId});if(operation==="interpolate"){for(const spec of Components.files)record.libraries[spec.id]=await inspect(record.libraries[spec.id],signal,spec);record.library=record.sourcePath=record.runtimePath=record.libraries.frameGeneration;for(const sourcePath of Object.values(record.libraries))await useRuntime?.({managerId:Source.managerId,sectionId:"interpolation",version:record.version,sourcePath});}else{record.library=await inspect(record.library,signal);await useRuntime?.({managerId:Source.managerId,sectionId:"default",version:record.version,sourcePath:record.library});}return record;}
-function receipt(userDataDir,file,external){const root=directory(userDataDir);Writable.assertOwnDirectory(userDataDir,root);try{const licenses=path.join(root,"licenses");fs.mkdirSync(licenses,{recursive:true});fs.copyFileSync(path.join(__dirname,Source.licenseFile),path.join(licenses,"xess.txt"));}catch(error){console.warn("Optional XeSS license copy skipped:",error.message);}Writable.atomicWrite(path.join(root,"runtime.json"),JSON.stringify({schema:1,version:Source.version,sha256:Source.sha256,file:external?file:Source.file,external,sourceUrl:Source.sourceUrl}),{root:userDataDir});return read(userDataDir);}
+function receipt(userDataDir,file,external){const root=directory(userDataDir);Writable.assertOwnDirectory(userDataDir,root);try{const licenses=path.join(root,"licenses");fs.mkdirSync(licenses,{recursive:true});fs.copyFileSync(path.join(__dirname,Source.licenseFile),path.join(licenses,"xess.txt"));}catch(error){console.warn("Optional XeSS license copy skipped:",error.message);}Writable.atomicWrite(path.join(root,"runtime.json"),JSON.stringify({schema:1,version:Source.version,sha256:Source.sha256,file:external?file:Source.file,external,sourceUrl:sourceUrl()}),{root:userDataDir});return read(userDataDir);}
 async function importRuntime(context={}){if(context.operation==="interpolate"||fs.statSync(context.runtimePath).isDirectory()||path.basename(context.runtimePath).toLowerCase()==="libxess_fg.dll")return importComponents(context);const file=await inspect(context.runtimePath,context.signal);return withRuntimeMutation({managerId:Source.managerId,sectionId:"default",version:Source.version,sourcePath:file},()=>{
   const root=directory(context.userDataDir),current=read(context.userDataDir);
   if(current&&file===current.library)return current;
@@ -44,14 +47,14 @@ async function install(context={}){
   assertVersion(context);
   if(context.operation==="interpolate")return installComponents(context);
   const present=read(context.userDataDir);if(present)return resolve(context.userDataDir,context);
-  if(!await downloadApproved(context,{managerId:Source.managerId,version:Source.version,label:"Intel XeSS runtime",message:"Download Intel XeSS runtime?",detail:"Required for the selected Intel XeSS effect. Download size: "+Math.ceil(Source.bytes/1e6)+" MB.",downloadBytes:Source.bytes,requiresDownload:true,kind:"tool",sourceUrl:Source.sourceUrl,confirmLabel:"Download and Continue"}))return null;
+  if(!await downloadApproved(context,{managerId:Source.managerId,version:Source.version,label:"Intel XeSS runtime",message:"Download Intel XeSS runtime?",detail:"Required for the selected Intel XeSS effect. Download size: "+Math.ceil(Source.bytes/1e6)+" MB.",downloadBytes:Source.bytes,requiresDownload:true,kind:"tool",sourceUrl:sourceUrl(),confirmLabel:"Download and Continue"}))return null;
   return runDownloadTask(context.downloads,{managerId:Source.managerId,sectionId:"default",version:Source.version,label:"Intel XeSS runtime",kind:"download",dedupeKey:"xess-runtime:"+context.userDataDir},async task=>{
     const signal=context.signal&&task.signal?AbortSignal.any([context.signal,task.signal]):context.signal||task.signal;
     return withRuntimeMutation({managerId:Source.managerId,sectionId:"default",version:Source.version,sourcePath:path.join(directory(context.userDataDir),Source.file)},async()=>{
       const existing=read(context.userDataDir);if(existing){await inspect(existing.library,signal);return existing;}
       const root=directory(context.userDataDir);Writable.assertOwnDirectory(context.userDataDir,root);const temporary=path.join(root,".download-"+crypto.randomUUID()),limit=new AbortController(),bounded=signal?AbortSignal.any([signal,limit.signal]):limit.signal;let oversized=false;
       try{
-        await Upstream.download(Upstream.listedFile({filename:Source.file,url:Source.url}),temporary,{signal:bounded,onProgress:progress=>{if(progress.downloaded>Source.bytes||progress.total>Source.bytes){oversized=true;limit.abort();}task.onProgress?.(progress);}});
+        await Upstream.download(Upstream.listedFile({filename:Source.file,url:release(context.root).url(Source.file)}),temporary,{signal:bounded,onProgress:progress=>{if(progress.downloaded>Source.bytes||progress.total>Source.bytes){oversized=true;limit.abort();}task.onProgress?.(progress);}});
         await downloaded(temporary,bounded);await fs.promises.rename(temporary,path.join(root,Source.file));return receipt(context.userDataDir,path.join(root,Source.file),false);
       }catch(error){if(oversized&&!signal?.aborted)throw Error("The XeSS runtime download exceeds the supported release size.");throw error;}finally{await fs.promises.rm(temporary,{force:true});}
     },{userDataDir:context.userDataDir});
@@ -68,7 +71,7 @@ async function remove(context={}) {
 function componentsReceipt(userDataDir,files,external){
   const root=directory(userDataDir);Writable.assertOwnDirectory(userDataDir,root);
   try{const licenses=path.join(root,"licenses");fs.mkdirSync(licenses,{recursive:true});fs.copyFileSync(path.join(__dirname,Source.licenseFile),path.join(licenses,"xess.txt"));}catch(error){console.warn("Optional XeSS license copy skipped:",error.message);}
-  Writable.atomicWrite(path.join(root,"interpolation.json"),JSON.stringify({schema:1,version:Source.version,commit:Source.revision,files:Object.fromEntries(Components.files.map(spec=>[spec.id,{file:external?files[spec.id]:spec.file,external}]))}),{root:userDataDir});
+  Writable.atomicWrite(path.join(root,"interpolation.json"),JSON.stringify({schema:1,version:Source.version,files:Object.fromEntries(Components.files.map(spec=>[spec.id,{file:external?files[spec.id]:spec.file,external}]))}),{root:userDataDir});
   return readComponents(userDataDir);
 }
 async function inspectComponents(input,signal){
@@ -90,7 +93,7 @@ async function installComponents(context={}){
   const existing=read(context.userDataDir);
   if(existing?.external){try{return await importComponents({...context,runtimePath:path.dirname(existing.library)});}catch(error){context.signal?.throwIfAborted();if(error.name==="AbortError")throw error;}}
   const bytes=Components.files.reduce((sum,spec)=>sum+spec.bytes,0);
-  if(!await downloadApproved(context,{managerId:Source.managerId,version:Source.version,label:Components.label,message:"Download Intel XeSS frame generation?",detail:"Includes the required XeLL runtime. Download size: "+Math.ceil(bytes/1e6)+" MB.",downloadBytes:bytes,requiresDownload:true,kind:"tool",sourceUrl:Source.sourceUrl,confirmLabel:"Download and Continue"}))return null;
+  if(!await downloadApproved(context,{managerId:Source.managerId,version:Source.version,label:Components.label,message:"Download Intel XeSS frame generation?",detail:"Includes the required XeLL runtime. Download size: "+Math.ceil(bytes/1e6)+" MB.",downloadBytes:bytes,requiresDownload:true,kind:"tool",sourceUrl:sourceUrl(),confirmLabel:"Download and Continue"}))return null;
   context.signal?.throwIfAborted();
   return runDownloadTask(context.downloads,{managerId:Source.managerId,sectionId:"interpolation",version:Source.version,label:Components.label,kind:"download",dedupeKey:"xess-interpolation:"+context.userDataDir},async task=>{
     const signal=context.signal&&task.signal?AbortSignal.any([context.signal,task.signal]):context.signal||task.signal,root=directory(context.userDataDir);
@@ -101,7 +104,7 @@ async function installComponents(context={}){
         signal?.throwIfAborted();const destination=path.join(root,spec.file);
         try{files[spec.id]=await inspect(destination,signal,spec);completed+=spec.bytes;continue;}catch{signal?.throwIfAborted();}
         const temporary=path.join(root,".download-"+crypto.randomUUID()),limit=new AbortController(),bounded=signal?AbortSignal.any([signal,limit.signal]):limit.signal;let oversized=false;
-        try{await Upstream.download(Upstream.listedFile({filename:spec.file,url:"https://raw.githubusercontent.com/intel/xess/"+Source.revision+"/bin/"+spec.file}),temporary,{signal:bounded,onProgress:progress=>{if(progress.downloaded>spec.bytes||progress.total>spec.bytes){oversized=true;limit.abort();}task.onProgress?.({downloaded:completed+progress.downloaded,total:bytes});}});await downloaded(temporary,bounded,spec);await fs.promises.rename(temporary,destination);files[spec.id]=destination;completed+=spec.bytes;}
+        try{await Upstream.download(Upstream.listedFile({filename:spec.file,url:release(context.root).url(spec.file)}),temporary,{signal:bounded,onProgress:progress=>{if(progress.downloaded>spec.bytes||progress.total>spec.bytes){oversized=true;limit.abort();}task.onProgress?.({downloaded:completed+progress.downloaded,total:bytes});}});await downloaded(temporary,bounded,spec);await fs.promises.rename(temporary,destination);files[spec.id]=destination;completed+=spec.bytes;}
         catch(error){if(oversized&&!signal?.aborted)throw Error("The XeSS download exceeds the supported release size.");throw error;}
         finally{await fs.promises.rm(temporary,{force:true});}
       }
@@ -109,4 +112,4 @@ async function installComponents(context={}){
     },{userDataDir:context.userDataDir});
   },{onProgress:context.onProgress});
 }
-module.exports={Source,Components,directory,listInstalled,inspect,resolve,importRuntime,importComponents,readComponents,install,remove};
+module.exports={Source,Components,release,sourceUrl,directory,listInstalled,inspect,resolve,importRuntime,importComponents,readComponents,install,remove};
