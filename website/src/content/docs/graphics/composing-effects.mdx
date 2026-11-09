@@ -15,9 +15,9 @@ import Compare from "../../../components/graphics/Compare.astro";
 import Sample from "../../../components/graphics/Sample.astro";
 import doomOriginal from "../../../assets/graphics/doom-original.webp";
 import doomFull from "../../../assets/graphics/doom-dlss-full.webp";
-import doomLow from "../../../assets/graphics/doom-dlss-720.webp";
+import doomLow from "../../../assets/graphics/doom-dlss-540.webp";
 import doomOriginalDetail from "../../../assets/graphics/doom-original-detail.webp";
-import doomLowDetail from "../../../assets/graphics/doom-dlss-720-detail.webp";
+import doomLowDetail from "../../../assets/graphics/doom-dlss-540-detail.webp";
 
 In MacLauncher, the graphics effects for a game on macOS are combined in an effect chain, a list of up to 32 rows in which effects can go in any order and any combination. This page explains how rows interact and how sizes work, and gives a few example chains to start from.
 
@@ -88,8 +88,8 @@ The [overview page](/maclauncher/graphics/) shows this chain on Sonic the Hedgeh
   <TabItem label="DLSS, full resolution">
     <Sample src={doomFull} alt="The same frame with DLSS neural rendering at full resolution" caption="DLSS neural rendering on the full-resolution frame. It looks the part, but at this size it's far too slow to play." />
   </TabItem>
-  <TabItem label="DLSS at 720p, upscaled">
-    <Sample src={doomLow} alt="The same frame with DLSS neural rendering at 720p, upscaled with MetalFX" caption="A Downsample row hands DLSS a 720p image, and MetalFX Spatial brings the result back to full size. The model processes a fraction of the pixels, and most of the look survives." />
+  <TabItem label="DLSS at 540p, upscaled">
+    <Sample src={doomLow} alt="The same frame with DLSS neural rendering at 540p, upscaled with MetalFX" caption="A Downsample row hands DLSS a 540p image, and MetalFX Spatial brings the result back to full size. The model processes a fraction of the pixels, and most of the look survives." />
   </TabItem>
 </Tabs>
 
@@ -97,7 +97,7 @@ The [overview page](/maclauncher/graphics/) shows this chain on Sonic the Hedgeh
   before={doomOriginalDetail}
   after={doomLowDetail}
   beforeLabel="Original"
-  afterLabel="DLSS at 720p → MetalFX"
+  afterLabel="DLSS at 540p → MetalFX"
   alt="A close-up of the worker's face in DOOM 3"
   caption="The face at 1:1: the original frame, and the playable DLSS chain."
 />
@@ -105,13 +105,13 @@ The [overview page](/maclauncher/graphics/) shows this chain on Sonic the Hedgeh
 The complete chain:
 
 <Steps>
-1. **Downsample** to 720p, so DLSS has far fewer pixels to redraw.
-2. **DLSS neural rendering** on the 720p image.
+1. **Downsample** to 540p, so DLSS has far fewer pixels to redraw.
+2. **DLSS neural rendering** on the 540p image.
 3. **Upscale** with MetalFX Spatial to the window. See [Upscaling](/maclauncher/graphics/upscaling/).
 4. **Frame generation** with [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) at 4×, which fills in the frames DLSS can't produce in time. See [Frame generation](/maclauncher/graphics/frame-generation/).
 </Steps>
 
-At 720p, the model redraws a fraction of the pixels, which makes DLSS fast enough to run in real time and keeps the game far more responsive than at full resolution. MetalFX then restores the sharpness, and frame generation smooths the motion. Input follows the frame rate after step 3, plus the small delay that generated frames add. The same chain is also available as the **DLSS · 720p + LSFG 4×** preset, which sets it up in one step, and a new DLSS row starts from a 720-pixel input height as well.
+At 540p, the model redraws a sixteenth of a 4K frame's pixels, which makes DLSS fast enough to run in real time and keeps the game far more responsive than at full resolution. MetalFX then restores the sharpness. On an M2-generation MacBook, DLSS delivers about 15 frames per second at this size, and 4× frame generation turns them into 60 frames per second on screen. Input follows the frame rate after step 3, plus the small delay that generated frames add. The same chain is also available as the **DLSS · 540p + LSFG 4×** preset, which sets it up in one step, and a new DLSS row starts from a 540-pixel input height as well.
 
 ### Frame generation alone
 

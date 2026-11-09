@@ -38,7 +38,7 @@ MacLauncher has its own graphics pipeline, built natively on [Metal](https://dev
 - neural reconstruction and restoration, DLSS 5 among them;
 - any [ReShade](https://reshade.me/), [RetroArch](https://www.retroarch.com/), [mpv](https://mpv.io/)/[libplacebo](https://libplacebo.org/), [Magpie](https://github.com/Blinue/Magpie) or [ISF](https://isf.video/) shader you import, such as CRT effects, color grading, anti-aliasing and depth effects.
 
-A single chain can render a game at 720p, pass it through a neural model, upscale it to 4K, add frame generation and finish with a CRT filter, and you can edit every step while you play. A preset saves the whole chain for other games, a performance overlay shows what each step costs, and a video can be exported with the same effects applied.
+A single chain can render a game at 540p, pass it through a neural model, upscale it to 4K, add frame generation and finish with a CRT filter, and you can edit every step while you play. A preset saves the whole chain for other games, a performance overlay shows what each step costs, and a video can be exported with the same effects applied.
 
 [Graphics and effects](/maclauncher/graphics/) has examples of each kind of effect, and [Window graphics](/maclauncher/graphics/window-graphics/) covers other apps' windows and displays.
 
