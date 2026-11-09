@@ -3,5 +3,5 @@
   "profile": "xess-sr-d3d11",
   "library": "libxess_dx11.dll",
   "xess": {"license":"MIT public headers"},
-  "dxmt": {"repository":"https://github.com/3Shain/dxmt","revision":"7c8dee1c2d73415301ceb7d1fa810861cef4cd67"}
+  "dxmt": {"repository":"https://github.com/3Shain/dxmt"}
 }
