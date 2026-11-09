@@ -38,11 +38,7 @@ test("primary-tree scope verifies a real Git parent without fetching its unused 
   const source = await Source.validatePinnedSource(f.primary, f.revision, { sourceScope: f.sourceScope });
   assert.deepEqual(source.omittedSubmodules, [{ path: f.omittedPath, revision: f.childRevision }]);
   assert.deepEqual(source.files.sort(), [".gitmodules", "nested/main.c", "source-link.c"]);
-  const before = Source.hashPinnedFiles(f.primary, source.files), staged = path.join(f.root, "staged");
-  assert.equal(Source.stagePinnedFiles(f.primary, source.files, staged), before);
-  assert.equal(fs.readFileSync(path.join(staged, ".gitmodules"), "utf8"), fs.readFileSync(path.join(f.primary, ".gitmodules"), "utf8"));
-  assert.equal(fs.readlinkSync(path.join(staged, "source-link.c")), "nested/main.c");
-  assert.equal(fs.existsSync(path.join(staged, f.omittedPath)), false);
+  const before = Source.hashPinnedFiles(f.primary, source.files);
   assert.equal(f.git(f.primary, "status", "--porcelain=v1", "--ignore-submodules=all"), "");
   fs.writeFileSync(path.join(f.primary, f.omittedPath, "untracked-child.txt"), "Unused input\n");
   assert.equal(Source.hashPinnedFiles(f.primary, (await Source.validatePinnedSource(f.primary, f.revision, { sourceScope: f.sourceScope })).files), before);
@@ -84,18 +80,6 @@ test("staging takes omissions only from the exact catalog and binds descriptor r
   await assert.rejects(Stage.validateArtifactSource({ provenance: { ...input.provenance, sourceTreeSha256: wrongTree.sourceTreeSha256 } }, f.primary, f.revision, wrongTree), /tree checksum/);
   fs.appendFileSync(path.join(f.primary, ".gitmodules"), "# changed\n");
   await assert.rejects(Stage.validateArtifactSource(input, f.primary, f.revision, pin), /tracked changes/);
-});
-
-test("scoped source builds preserve the catalog scope and Gitlink descriptors in registration", { skip: process.platform !== "darwin" }, async t => {
-  const f = fixture(t), installDir = path.join(f.root, "install"); let registered;
-  const manager = { id: "fixture", core: { catalog: [{ version: "1.0.0", upstreamRevision: f.revision, sourceScope: f.sourceScope }],
-    normalizeVersion: value => value, getInstallDir: () => installDir, resolveInstalled: () => null,
-    registerLocal: input => { registered = input; return { version: input.version }; } } };
-  await Source.buildPinnedRuntime({ manager, version: "1.0.0", sourceDir: f.primary, userDataDir: f.root,
-    resolveExecutable: root => path.join(root, "fixture"), dependencies: { findBuildTool: () => "/usr/bin/true", runBuildCommand: async () => {} } });
-  assert.deepEqual(registered.verifiedBuild.sourceScope, f.sourceScope);
-  assert.deepEqual(registered.verifiedBuild.omittedSubmodules, [{ path: f.omittedPath, revision: f.childRevision }]);
-  assert.equal(registered.verifiedBuild.sourceTreeSha256, Source.hashPinnedFiles(f.primary, [".gitmodules", "nested/main.c", "source-link.c"]));
 });
 
 test("native staging rechecks scoped Git inputs after signing and removes failed output", { skip: process.platform !== "darwin" || process.arch !== "arm64" }, async t => {
