@@ -63,7 +63,6 @@ test("input metadata stays in owned session files and refuses linked or mismatch
   assert.deepEqual(fs.readFileSync(original), before);
   fs.unlinkSync(first.file); fs.rmdirSync(path.join(session, "patches")); fs.symlinkSync(root, path.join(session, "patches"));
   assert.throws(() => Session.writeInputMetadata(session, metadata), /linked/);
-  assert.equal(require("../src/modules/mages/native/adapter").hash(Session.PROFILE_SOURCE), Session.PROFILE_SHA256);
 });
 
 test("the file reader uses a bounded regular original and leaves it unchanged", t => {
@@ -95,7 +94,7 @@ test("ordinary Windows session setup loads original input descriptors without co
   fs.writeFileSync(path.join(runtime, "Impacto.app", "Contents", "MacOS", "Impacto"), "not executed");
   const input = Session.prepareWindowsInputSession({ gamePath: game, runtimeRoot: runtime, sessionDir });
   assert.deepEqual(input.env, {}); assert.equal(input.args.includes("--diagnostic-frames"), false);
-  assert.equal(input.profileSha256, Session.PROFILE_SHA256); assert.equal(input.inputMetadata.regions, 2);
+  assert.equal(input.profileSha256, require("../src/modules/mages/native/adapter").hash(Session.PROFILE_SOURCE)); assert.equal(input.inputMetadata.regions, 2);
   assert.deepEqual(fs.readFileSync(executable), original);
   assert.match(fs.readFileSync(path.join(sessionDir, "windows-game.lua"), "utf8"), /windows-ui-input\.lua/);
   assert.match(fs.readFileSync(input.inputMetadata.file, "utf8"), /Id = 3, ParentId = 0/);

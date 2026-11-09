@@ -7,12 +7,9 @@ const Audio = require("./windows-audio-overlay");
 const Checkpoint = require("./windows-checkpoint-overlay");
 
 const PROFILE_SOURCE = path.join(__dirname, "windows-game-v9.lua");
-const PROFILE_SHA256 = "c576f79532520f17365ae6c6fa6f8e65aa6a97e742b227a1bc025a2e370e1088";
 
 function prepareWindowsSoundEffectSession(options) {
   const profileSource = options.profileSource || PROFILE_SOURCE;
-  if (Adapter.hash(profileSource) !== PROFILE_SHA256)
-    throw new Error("Windows sound-effect profile checksum changed.");
   const { game } = Adapter.validateWindowsData(options.gamePath);
   if (!game.originalRunnerPath)
     throw new Error("The original Windows executable is required for its input layout.");
@@ -22,4 +19,4 @@ function prepareWindowsSoundEffectSession(options) {
     audioAbi: Audio.ABI, checkpointAbi: Checkpoint.ABI, soundEffectAbi: ABI };
 }
 
-module.exports = { ABI, PROFILE_SOURCE, PROFILE_SHA256, prepareWindowsSoundEffectSession };
+module.exports = { ABI, PROFILE_SOURCE, prepareWindowsSoundEffectSession };

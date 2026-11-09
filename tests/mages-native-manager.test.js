@@ -6,7 +6,6 @@ const path = require("node:path");
 const Managers = require("../src/modules/mages/native/manager");
 // An earlier Impacto Mac package, as its manifest describes it.
 const Packages = require("./fixtures/mages-windows-versions.json");
-const Adapter = require("../src/modules/mages/native/adapter");
 const Bundled = require("../src/modules/shared/runtime/bundled-native");
 
 function temporary(t) {
@@ -34,7 +33,6 @@ test("Impacto starts without Mac package rows and identifies its Builds catalog"
   assert.equal(state.catalog.sourceUrl, "https://procrastinine.github.io/maclauncher-builds/#impacto");
   assert.deepEqual(state.catalog.sources.map(source => source.id), ["builds"]);
   assert.equal(manager.core.normalizeVersion("0.0.1.89"), "0.0.1.89");
-  for (const pin of Packages) assert.equal(Adapter.hash(Managers.profileFor(pin.profileSha256)), pin.profileSha256);
 });
 
 test("explicit Impacto refresh queries only Builds and keeps unavailable source identities internal", async t => {

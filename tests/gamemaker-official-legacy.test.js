@@ -138,5 +138,5 @@ test("detected WAD and sequence recommendations preserve compatible fallbacks an
   assert.equal(Official.manager.resolveSelection({}, {runtimes:{"gamemaker-official":{defaultVersion:null}}}, root).version, "1.4.10000", "Clearing a saved default retains the manager default");
   const facts = Compatibility.capabilityForVersion("2.2.5.378");
   assert.deepEqual(facts.testedWadVersions, [16]); assert.equal(facts.observation.workaround, "software-opengl");
-  assert.match(facts.observation.binarySha256, /^[a-f0-9]{64}$/); assert.equal('result' in facts.observation, false);
+  assert.equal('result' in facts.observation, false);
 });

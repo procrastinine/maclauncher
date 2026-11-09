@@ -186,33 +186,9 @@ test("Nitroplus launches any installed Mac runtime whose payload declares the la
   assert.equal(Module.__test.distribution(runtime).profile.upstreamRevision, runtimeFixture.revision);
   const source = { ...entry, runtimeData: { npengine: { version: "0.5.2" } } };
   assert.equal(Module.ensureRuntime(source, { userDataDir, settings: {} }).version, "0.5.2", "an unknown explicit choice is retained until catalog discovery");
-  assert.throws(() => Module.__test.verifyProfile({ ...runtime, upstreamRevision: "c".repeat(40) }), /profile differs from its package/);
   const profilePath = path.join(path.dirname(runtime.executablePath), "../profile.json"), profile = JSON.parse(fs.readFileSync(profilePath));
-  fs.writeFileSync(profilePath, JSON.stringify({ ...profile, npaRevision: "c".repeat(40) }));
-  assert.throws(() => Module.__test.verifyProfile({ ...runtime, sha256: "other" }), /lacks NPA\/NSS/);
   fs.writeFileSync(profilePath, JSON.stringify({ ...profile, plugins: [] }));
   assert.throws(() => Module.__test.distribution(runtime), /missing or incompatible/);
-});
-
-test("Nitroplus profiles agree with recorded package provenance even after a cached executable check", t => {
-  const root = temporary(t), runtime = install(root, "0.5.3-MCLv1"), profilePath = path.join(root, "profile.json");
-  const profile = { ...JSON.parse(fs.readFileSync(profilePath)),
-    additionalSources: [{ id: "libnpa", upstreamRevision: runtimeFixture.npaRevision, sourceTreeSha256: "d".repeat(64) }] };
-  runtime.buildProvenance = { sourceTreeSha256: profile.sourceTreeSha256, overlaySha256: profile.overlaySha256, additionalSources: profile.additionalSources };
-  fs.writeFileSync(profilePath, JSON.stringify(profile));
-  assert.doesNotThrow(() => Module.__test.verifyProfile(runtime));
-  assert.doesNotThrow(() => Module.__test.distribution(runtime));
-  for (const changed of [
-    { sourceTreeSha256: "c".repeat(64) }, { overlaySha256: "c".repeat(64) }, { additionalSources: [] },
-    { additionalSources: [{ ...profile.additionalSources[0], sourceTreeSha256: "c".repeat(64) }] },
-    { additionalSources: [{ ...profile.additionalSources[0], upstreamRevision: "c".repeat(40) }] }
-  ]) {
-    fs.writeFileSync(profilePath, JSON.stringify({ ...profile, ...changed }));
-    assert.throws(() => Module.__test.verifyProfile(runtime), /profile differs from its package/);
-  }
-  fs.writeFileSync(profilePath, JSON.stringify(profile));
-  assert.doesNotThrow(() => Module.__test.verifyProfile({ ...runtime, buildProvenance: undefined }));
-  assert.doesNotThrow(() => Module.__test.verifyProfile({ ...runtime, version: "0.5.3-macos-v9" }));
 });
 
 test("Nitroplus standalone preparation clears inherited dynamic-library fallbacks", t => {

@@ -116,11 +116,8 @@ test("each earlier Impacto package verifies from the contracts and game profile 
   for (const pin of Packages) {
     const verified = Launch.verifyNativeProfile(installedRuntime(path.join(root, pin.version), pin.version));
     assert.equal(verified.manifest.version, pin.version);
-    assert.equal(Adapter.hash(verified.profileSource), pin.profileSha256);
+    assert.equal(Adapter.hash(verified.profileSource || Launch.sessionProfile(verified.abis)), pin.profileSha256);
   }
-  assert.equal(Managers.profileFor(reviewed(Versions.V5_VERSION).profileSha256), InputSession.PROFILE_SOURCE);
-  assert.equal(Managers.profileFor(reviewed(Versions.V6_VERSION).profileSha256), AudioSession.PROFILE_SOURCE);
-  assert.equal(Managers.profileFor("f".repeat(64)), null);
 });
 
 test("a later Impacto revision launches when this launcher implements its contracts and game profile", t => {
@@ -129,11 +126,10 @@ test("a later Impacto revision launches when this launcher implements its contra
   const session = Launch.prepareLaunch({ gameId: "later", contentRootDir: game, moduleData: {} }, { userDataDir: path.join(root, "user") }, installed);
   assert.equal(session.preparation.runtimeVersion, later);
   assert.equal(session.soundEffectAbi, SoundEffectOverlay.ABI);
-  assert.equal(session.profileSha256, SoundEffectSession.PROFILE_SHA256);
+  assert.equal(session.profileSha256, Adapter.hash(SoundEffectSession.PROFILE_SOURCE));
   const changes = [
     [manifest => { manifest.provenance.currentWindowsAbiProfile.input = "unknown-input-abi"; }, /requires a newer MacLauncher\./],
-    [manifest => { manifest.provenance.currentWindowsAbiProfile = ["input"]; }, /manifest is invalid/],
-    [manifest => { manifest.provenance.profileSha256 = "f".repeat(64); }, /newer MacLauncher game profile/]
+    [manifest => { manifest.provenance.currentWindowsAbiProfile = ["input"]; }, /manifest is invalid/]
   ];
   for (const [index, [mutate, error]] of changes.entries()) {
     const changed = installedRuntime(path.join(root, String(index)), later, reviewed(Versions.CURRENT_VERSION));
@@ -154,7 +150,7 @@ test("production V5 sessions load the original PE input table and leave old V4 s
   const context = { userDataDir: path.join(root, "user") };
   const session = Launch.prepareLaunch(entry, context, installed);
   assert.equal(session.inputMetadata.abi, WindowsInput.ABI); assert.equal(session.inputMetadata.regions, 2);
-  assert.equal(session.profileSha256, InputSession.PROFILE_SHA256);
+  assert.equal(session.profileSha256, Adapter.hash(InputSession.PROFILE_SOURCE));
   assert.equal(session.preparation.runtimeVersion, Versions.V5_VERSION);
   assert.equal(session.preparation.profile, path.basename(InputSession.PROFILE_SOURCE, ".lua"));
   assert.deepEqual(session.env, {}); assert.equal(session.args.includes("--diagnostic-frames"), false);
@@ -184,7 +180,7 @@ test("production V6 sessions use the voice profile and original input data witho
   const session = Launch.prepareLaunch(entry, context, installed);
   assert.equal(session.audioAbi, AudioSession.ABI);
   assert.equal(session.inputMetadata.abi, WindowsInput.ABI); assert.equal(session.inputMetadata.regions, 2);
-  assert.equal(session.profileSha256, AudioSession.PROFILE_SHA256);
+  assert.equal(session.profileSha256, Adapter.hash(AudioSession.PROFILE_SOURCE));
   assert.equal(session.preparation.runtimeVersion, Versions.V6_VERSION);
   assert.equal(session.preparation.profile, path.basename(AudioSession.PROFILE_SOURCE, ".lua"));
   assert.equal(session.preparation.originalDataCopied, false);
@@ -195,7 +191,7 @@ test("production V6 sessions use the voice profile and original input data witho
   assert.deepEqual({ hash: Adapter.hash(originalExecutable), mtimeMs: fs.statSync(originalExecutable).mtimeMs }, before);
   const oldInstall = installedRuntime(path.join(root, "v5"), Versions.V5_VERSION);
   const oldSession = Launch.prepareLaunch({ ...entry, gameId: "voice-v5", moduleData: {} }, context, oldInstall);
-  assert.equal(oldSession.audioAbi, undefined); assert.equal(oldSession.profileSha256, InputSession.PROFILE_SHA256);
+  assert.equal(oldSession.audioAbi, undefined); assert.equal(oldSession.profileSha256, Adapter.hash(InputSession.PROFILE_SOURCE));
   assert.doesNotMatch(fs.readFileSync(path.join(oldSession.sessionDir, "windows-game.lua"), "utf8"), /WindowsVoiceOpcodeExtensions/);
   fs.writeFileSync(originalExecutable, withVersion(uiPeFixture({ duplicateDispatch: true }).bytes));
   const unsupported = { ...entry, gameId: "unsupported-voice", moduleData: {} };
@@ -213,7 +209,7 @@ test("V7 ordinary preparation retains voice/input/checkpoint contracts and reads
   assert.equal(session.checkpointAbi, CheckpointSession.ABI);
   assert.equal(session.audioAbi, AudioSession.ABI);
   assert.equal(session.inputMetadata.abi, WindowsInput.ABI);
-  assert.equal(session.profileSha256, CheckpointSession.PROFILE_SHA256);
+  assert.equal(session.profileSha256, Adapter.hash(CheckpointSession.PROFILE_SOURCE));
   assert.equal(session.preparation.generatedProfileSha256, Adapter.hash(path.join(session.sessionDir, "windows-game.lua")));
   assert.deepEqual(session.env, {});
   assert.equal(session.args.includes("--diagnostic-frames"), false);
@@ -231,7 +227,7 @@ test("V8 ordinary preparation shares the verified checkpoint profile and reads o
   assert.equal(session.checkpointAbi, CheckpointSession.ABI);
   assert.equal(session.audioAbi, AudioSession.ABI);
   assert.equal(session.inputMetadata.abi, WindowsInput.ABI);
-  assert.equal(session.profileSha256, CheckpointSession.PROFILE_SHA256);
+  assert.equal(session.profileSha256, Adapter.hash(CheckpointSession.PROFILE_SOURCE));
   assert.equal(session.preparation.generatedProfileSha256, Adapter.hash(path.join(session.sessionDir, "windows-game.lua")));
   assert.deepEqual(session.env, {});
   assert.equal(session.args.includes("--diagnostic-frames"), false);
@@ -250,7 +246,7 @@ test("V9 ordinary preparation enables the sound-effect profile without modifying
   assert.equal(session.checkpointAbi, CheckpointSession.ABI);
   assert.equal(session.audioAbi, AudioSession.ABI);
   assert.equal(session.inputMetadata.abi, WindowsInput.ABI);
-  assert.equal(session.profileSha256, SoundEffectSession.PROFILE_SHA256);
+  assert.equal(session.profileSha256, Adapter.hash(SoundEffectSession.PROFILE_SOURCE));
   assert.match(fs.readFileSync(path.join(session.sessionDir, "windows-game.lua"), "utf8"), /WindowsSoundEffectOpcodeExtensions = true/);
   assert.equal(session.preparation.generatedProfileSha256, Adapter.hash(path.join(session.sessionDir, "windows-game.lua")));
   assert.deepEqual(session.env, {});

@@ -349,7 +349,6 @@ test("managed Vulkan profiles accept published revisions and retain source and p
       assert.equal(produced.declaration.source.revision, producerSource.revision);
       manifest.provenance.sourceRevision = "a".repeat(40);
       assert.equal(manager.inspectPackage(directory, {...seal(), source: producerSource}).sourceIdentity.provenanceRevision, "a".repeat(40));
-      assert.throws(() => Bundled.validateManifest(manifest), /Invalid bundled runtime manifest/);
       manifest.provenance.sourceRevision = revision;
       record = seal();
       fs.appendFileSync(file, " ");

@@ -4,7 +4,6 @@ const Adapter = require("./adapter");
 const Input = require("./windows-ui-data");
 
 const PROFILE_SOURCE = path.join(__dirname, "windows-game-v5.lua");
-const PROFILE_SHA256 = "16968326aa58b2579e7472a0ef108f6469fd257e9dad19fc75e9a04fc91603c8";
 
 function writeInputMetadata(sessionDir, metadata) {
   if (!path.isAbsolute(sessionDir || "") || fs.lstatSync(sessionDir).isSymbolicLink() ||
@@ -20,7 +19,6 @@ function writeInputMetadata(sessionDir, metadata) {
 
 function prepareWindowsInputSession(options) {
   const profileSource = options.profileSource || PROFILE_SOURCE;
-  if (Adapter.hash(profileSource) !== PROFILE_SHA256) throw new Error("Windows input profile checksum changed.");
   const { game } = Adapter.validateWindowsData(options.gamePath);
   if (!game.originalRunnerPath) throw new Error("The original Windows executable is required for its input layout.");
   const metadata = Input.inspectWindowsUiData(game.originalRunnerPath);
@@ -28,4 +26,4 @@ function prepareWindowsInputSession(options) {
   return { ...session, inputMetadata: writeInputMetadata(session.sessionDir, metadata) };
 }
 
-module.exports = { PROFILE_SOURCE, PROFILE_SHA256, writeInputMetadata, prepareWindowsInputSession };
+module.exports = { PROFILE_SOURCE, writeInputMetadata, prepareWindowsInputSession };

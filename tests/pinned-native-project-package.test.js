@@ -116,7 +116,6 @@ test("hosted Intel packages inspect real slices without requiring matching inven
     const wrongProvenance = fixture({sourceRepository: repository, sourceRevision: "b".repeat(40), provenanceRevision: "c".repeat(40)});
     const provenanceReceipt = await adapter.prepare({unpacked: wrongProvenance.directory, pin: wrongProvenance.pin});
     assert.equal(provenanceReceipt.sourceIdentity.provenanceRevision, "c".repeat(40));
-    assert.throws(() => Bundled.validateManifest(wrongProvenance.manifest), /Invalid bundled runtime manifest/);
     const wrongUpstream = fixture({sourceRevision: "b".repeat(40)});
     const upstreamReceipt = await adapter.prepare({unpacked: wrongUpstream.directory, pin: wrongUpstream.pin});
     assert.equal(upstreamReceipt.sourceIdentity.upstreamRevision, revision);

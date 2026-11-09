@@ -11,7 +11,6 @@ const Binary = {version:"2026-01-01T00-00-00Z_"+"a".repeat(40),appName:"Publishe
   executableRelative:"PublisherFixture.app/Contents/MacOS/bundle_mkxp-z",upstreamRevision:"a".repeat(40),
   executableSha256:"b".repeat(64),treeSha256:"c".repeat(64),sourceUrl:"https://github.com/mkxp-z/mkxp-z",retained:[]};
 const Builds = require("../src/modules/rgss/runtime/mkxpz-builds");
-const Owned = require("../src/modules/rgss/runtime/mkxpz-owned-builds");
 const ADAPTED_VERSION = "2.0.0-fixture";
 const { DownloadManager } = require("../src/modules/shared/runtime/download-manager");
 
@@ -52,29 +51,6 @@ test("MKXP-Z defaults prefer ready installations and fall back to listed release
   installed=[];
   assert.equal(Manager.resolveSelection({}, {}, userDataDir).version,"4.0.0");
   assert.equal(Manager.resolveSelection({}, {}, userDataDir).ready,false);
-});
-
-test("owned NFC builds bind the full source adaptation and executable without claiming publisher bytes", () => {
-  const source = { id: "fixture-nfc", patch: { sha256: "1".repeat(64) }, addedFiles: [{ sha256: "2".repeat(64) }, { sha256: "3".repeat(64) }], upstream: { revision: "4".repeat(40) } };
-  const pin = { version: "owned-nfc-fixture", sourceKind: "owned-source-adaptation", adaptationId: source.id,
-    patchSha256: source.patch.sha256, headerSha256: source.addedFiles[0].sha256, implementationSha256: source.addedFiles[1].sha256,
-    upstreamRevision: source.upstream.revision, executableRelative: "mkxp-z.aarch64.app/Contents/MacOS/bundle_mkxp-z",
-    arch: "arm64", minimumMacOS: "11.0", executableSha256: "a".repeat(64) };
-  const manifest = { version: pin.version, arch: pin.arch, minimumMacOS: pin.minimumMacOS,
-    upstreamRevision: pin.upstreamRevision, executableRelative: pin.executableRelative,
-    files: [{ path: pin.executableRelative, sha256: pin.executableSha256 }], provenance: {
-      sourceKind: pin.sourceKind, verifiedBuild: true, sourceRevision: pin.upstreamRevision,
-      adaptationId: source.id, patchSha256: source.patch.sha256,
-      headerSha256: source.addedFiles[0].sha256, implementationSha256: source.addedFiles[1].sha256 } };
-  assert.equal(Owned.validate(manifest, pin), manifest);
-  for (const [key, value] of [["sourceKind", "publisher-binary"], ["verifiedBuild", false],
-    ["implementationSha256", "b".repeat(64)], ["patchSha256", "b".repeat(64)]]) {
-    const changed = structuredClone(manifest); changed.provenance[key] = value;
-    assert.throws(() => Owned.validate(changed, pin), /source adaptation/);
-  }
-  const changed = structuredClone(manifest); changed.files[0].sha256 = "b".repeat(64);
-  assert.throws(() => Owned.validate(changed, pin), /source adaptation/);
-  assert.throws(() => Owned.validate(manifest, { ...pin, version: "other" }), /source adaptation/);
 });
 
 function createInstall(userDataDir, version) {

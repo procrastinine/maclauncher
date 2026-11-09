@@ -78,7 +78,8 @@ function validateWindowsData(gamePath) {
   return { game, movieDir };
 }
 
-function prepareWindowsSession({ gamePath, runtimeRoot, sessionDir, diagnosticFrames, diagnosticConfirmFrame, profileSource = path.join(__dirname, "windows-game.lua"), logLevel = "Info" }) {
+const PROFILE_SOURCE = path.join(__dirname, "windows-game.lua");
+function prepareWindowsSession({ gamePath, runtimeRoot, sessionDir, diagnosticFrames, diagnosticConfirmFrame, profileSource = PROFILE_SOURCE, logLevel = "Info" }) {
   if (diagnosticFrames !== undefined && (!Number.isInteger(diagnosticFrames) || diagnosticFrames < 1 || diagnosticFrames > 3600))
     throw new Error("Diagnostic frames must be an integer from 1 to 3600.");
   if (diagnosticConfirmFrame !== undefined && (!Number.isInteger(diagnosticConfirmFrame) || diagnosticConfirmFrame < 1 ||
@@ -119,4 +120,4 @@ function prepareWindowsSession({ gamePath, runtimeRoot, sessionDir, diagnosticFr
     qualification: "Windows HD beta; story and save compatibility varies." };
 }
 
-module.exports = { SOURCES, hash, futureRealPath, separateStorage, luaString, requireOwnedFile, writeOwnedFile, validateWindowsData, prepareWindowsSession };
+module.exports = { SOURCES, PROFILE_SOURCE, hash, futureRealPath, separateStorage, luaString, requireOwnedFile, writeOwnedFile, validateWindowsData, prepareWindowsSession };

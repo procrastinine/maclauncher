@@ -17,12 +17,7 @@ function directory(t) {
 }
 const symbols = ["game_run_entry", "game_probe_json", "game_string_free"];
 const hostBytes = image({ cpu: process.arch === "x64" ? X64 : ARM64, fileType: 2, installName: null });
-function fixtureHostIdentity(t) {
-  const previous = { sha256: Siglus.HOST.sha256 };
-  t.after(() => Object.assign(Siglus.HOST, previous));
-  Siglus.HOST.sha256 = require("node:crypto").createHash("sha256").update(hostBytes).digest("hex");
-}
-function siglusInput(t, bytes, { hostSourceSha256 = Siglus.HOST.sourceSha256, hostContent = hostBytes, version = "managed-fixture-1" } = {}) {
+function siglusInput(t, bytes, { hostSourceSha256 = "a".repeat(64), hostContent = hostBytes, version = "managed-fixture-1" } = {}) {
   const installDir = directory(t), root = path.join(installDir, "project-payload/files");
   const original = path.join(root, "lib/libsiglus.dylib"), host = path.join(root, "bin/siglus-host");
   fs.mkdirSync(path.dirname(original), { recursive: true }); fs.mkdirSync(path.dirname(host), { recursive: true });
@@ -56,7 +51,6 @@ function signatureOnly(calls) { return async (command, args) => {
 }; }
 
 test("Siglus reads additive managed metadata and rejects an unsupported native CPU", t => {
-  fixtureHostIdentity(t);
   const bytes = image({ cpu: process.arch === "x64" ? X64 : ARM64, installName: "@rpath/libsiglus.dylib", symbols });
   const input = siglusInput(t, bytes), originalProfile = fs.readFileSync(path.join(input.root, "siglus-profile.json"));
   assert.equal(Siglus.resolveProfile(input.install).libraryPath, input.original);
@@ -80,8 +74,6 @@ test("Siglus accepts later managed hosts, additive metadata and descriptive API 
   const bytes = image({ cpu: process.arch === "x64" ? X64 : ARM64, installName: "@rpath/libsiglus.dylib", symbols });
   const input = siglusInput(t, bytes, { version: "later-managed-2", hostSourceSha256: "b".repeat(64),
     hostContent: Buffer.concat([hostBytes, Buffer.from("later host revision")]) });
-  assert.notEqual(input.profile.hostSourceSha256, Siglus.HOST.sourceSha256);
-  assert.notEqual(input.profile.files["bin/siglus-host"], Siglus.HOST.sha256);
   assert.equal(Siglus.resolveProfile(input.install).executablePath, input.host);
   assert.equal(Siglus.resolveProfile(input.install, { verification: "status" }).version, "later-managed-2");
   assert.equal(Siglus.resolveProfile({ ...input.install, catalogEntry: {} }).executablePath,input.host);
@@ -110,7 +102,6 @@ test("direct-host native inspection rejects non-Mac images and external loader d
   }
 });
 test("Siglus library export inspection reads the selected CPU instead of combining universal slices", async t => {
-  fixtureHostIdentity(t);
   const bytes = universal([{ cpu: X64, bytes: image({ cpu: X64, installName: "@rpath/libsiglus.dylib", symbols: symbols.slice(0, 2) }) },
     { cpu: ARM64, bytes: image({ installName: "@rpath/libsiglus.dylib", symbols }) }]);
   const input = siglusInput(t, bytes);

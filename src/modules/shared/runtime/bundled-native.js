@@ -189,7 +189,7 @@ function validateManifest(manifest, { managerId, version, upstreamRevision, arch
       manifest.platform !== "darwin" || !["arm64", "x64", "universal"].includes(manifest.arch) ||
       !/^\d+\.\d+(?:\.\d+)?$/.test(manifest.minimumMacOS || "") ||
       !Array.isArray(manifest.files) || !manifest.files.length || manifest.files.length > LIMITS.files ||
-      checkSourceIdentity && manifest.provenance?.sourceRevision !== manifest.upstreamRevision || !Array.isArray(manifest.dependencies)) throw new Error("Invalid bundled runtime manifest.");
+      !Array.isArray(manifest.dependencies)) throw new Error("Invalid bundled runtime manifest.");
   if (managerId && manifest.managerId !== managerId || version && manifest.version !== version ||
       checkSourceIdentity && upstreamRevision && manifest.upstreamRevision !== upstreamRevision || arch && manifest.arch !== arch) throw new Error("Bundled runtime version, source pin or architecture differs from the selected catalog entry.");
   relativeFile(manifest.executableRelative);

@@ -78,21 +78,20 @@ function readProfile(install) {
   const stat = fs.lstatSync(file);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 64 * 1024) throw new Error("Minori profile metadata is invalid.");
   const profile = JSON.parse(fs.readFileSync(file, "utf8"));
-  if (profile.upstreamRevision !== install.upstreamRevision || typeof profile.profileRevision !== "string" || !profile.profileRevision ||
-      ![...PROFILES].every(value => profile.dataProfiles?.includes(value)) || !/^[a-f0-9]{64}$/.test(profile.sourceTreeSha256 || "") ||
-      !profile.nativeFeatures?.includes("private-saves") || !profile.nativeFeatures?.includes("coretext-fonts") ||
-      profile.executables?.eden !== install.sha256) throw new Error("The selected Minori interpreter lacks its matching native distribution.");
+  // The package archive was verified once when it was downloaded; the profile names its capabilities and files.
+  if (typeof profile.profileRevision !== "string" || !profile.profileRevision ||
+      ![...PROFILES].every(value => profile.dataProfiles?.includes(value)) ||
+      !profile.nativeFeatures?.includes("private-saves") || !profile.nativeFeatures?.includes("coretext-fonts"))
+    throw new Error("The selected Minori interpreter lacks its matching native distribution.");
   const probe = Bundle.resolveInstalledAsset(install, "pazProbe") || path.join(directory, "bin/maclauncher-minori-probe");
-  if (Native.hashFile(probe) !== profile.executables["maclauncher-minori-probe"]) throw new Error("Minori runtime companion checksum changed.");
   const movieDecoder = profile.movieDecoder && (Bundle.resolveInstalledAsset(install, "movieDecoder") || path.join(directory, "bin/maclauncher-minori-movie"));
-  if (movieDecoder && Native.hashFile(movieDecoder) !== profile.movieDecoder.sha256) throw new Error("The Minori movie decoder differs from its profile.");
   if (movieDecoder) {
     if (!Array.isArray(profile.movieDecoder.files) || profile.movieDecoder.files.length !== 6) throw new Error("Minori movie dependency inventory is incomplete.");
     for (const file of profile.movieDecoder.files) {
-      if (!/^(?:bin\/maclauncher-minori-movie|lib\/lib(?:avformat|avcodec|avutil|swscale|swresample)\.\d+\.dylib)$/.test(file.path || "") ||
-          !/^[a-f0-9]{64}$/.test(file.sha256 || "")) throw new Error("Minori movie dependency metadata is invalid.");
-      const target = path.join(directory, file.path), stat = fs.lstatSync(target);
-      if (!stat.isFile() || stat.isSymbolicLink() || Native.hashFile(target) !== file.sha256) throw new Error("A Minori movie dependency differs from its profile.");
+      if (!/^(?:bin\/maclauncher-minori-movie|lib\/lib(?:avformat|avcodec|avutil|swscale|swresample)\.\d+\.dylib)$/.test(file.path || ""))
+        throw new Error("Minori movie dependency metadata is invalid.");
+      const stat = fs.lstatSync(path.join(directory, file.path));
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("A Minori movie dependency is missing.");
     }
   }
   return { directory, profile, probe, movieDecoder };

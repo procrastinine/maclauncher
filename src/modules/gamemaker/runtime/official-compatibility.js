@@ -9,11 +9,11 @@ const GENERATIONS = Object.freeze([
   Object.freeze({ id: "studio-2.3", minimum: "2.3", maximumExclusive: null, formatCandidates: Object.freeze([17]) })
 ]);
 const OBSERVATIONS = Object.freeze({
-  "1.4.9999": Object.freeze({ testedWadVersions: Object.freeze([16]), binarySha256: "dd8395d9dcdb5eb6e58641a730b22640d1909e72a55a48c3450cf6d0231040fa",
+  "1.4.9999": Object.freeze({ testedWadVersions: Object.freeze([16]),
     architectures: Object.freeze(["x86_64"]), workaround: "software-opengl", steamApiVersion: "0.5.0" }),
-  "2.2.5.378": Object.freeze({ testedWadVersions: Object.freeze([16]), binarySha256: "054debab706e5fd42ce73df6c4739ce86c31804e00e039b9e78c16dfaffc265a",
+  "2.2.5.378": Object.freeze({ testedWadVersions: Object.freeze([16]),
     architectures: Object.freeze(["x86_64"]), workaround: "software-opengl" }),
-  "2024.13.1.242": Object.freeze({ testedWadVersions: Object.freeze([17]), binarySha256: "4871c81c7425b18cb8aa0650c82019f75dde504ca2d1d7e61d14aa5f1e874ffe",
+  "2024.13.1.242": Object.freeze({ testedWadVersions: Object.freeze([17]),
     architectures: Object.freeze(["arm64", "x86_64"]), workaround: "software-opengl" }),
   "2026.0.0.23": Object.freeze({ testedWadVersions: Object.freeze([17]), rejectedLayouts: Object.freeze(["legacy-name-only-or-null-path"]), workaround: "software-opengl" })
 });

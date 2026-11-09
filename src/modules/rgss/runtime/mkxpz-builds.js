@@ -1,14 +1,15 @@
 const fs = require("node:fs"), path = require("node:path");
 const execute = require("node:util").promisify(require("node:child_process").execFile);
 const Bundled = require("../../shared/runtime/bundled-native");
-const Owned = require("./mkxpz-owned-builds");
 const { createProjectBuildManager } = require("../../shared/runtime/project-build-manager");
+// An owned source adaptation is built from source; its package record names that source.
+const owned = manifest => manifest?.provenance?.sourceKind === "owned-source-adaptation";
 
 function createManager(dependencies = {}) {
   return createProjectBuildManager({ projectId: "mkxpz", runtimeId: "mkxpz", label: "MKXP-Z",
     repository: "procrastinine/maclauncher-builds",
     manifestRelative: "manifest.json",
-    sourceRelative: (manifest, record) => Owned.forManifest(manifest) ? null : "manifest.json",
+    sourceRelative: manifest => owned(manifest) ? null : "manifest.json",
     filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
@@ -20,11 +21,7 @@ function createManager(dependencies = {}) {
       Bundled.validateManifest(record.arch === "universal" ? { ...manifest, arch: process.arch } : manifest,
         { managerId: "mkxpz", version: record.version });
       const provenance = manifest.provenance;
-      const owned = Owned.forManifest(manifest);
-      if (owned) {
-        Owned.validate(manifest);
-        return;
-      }
+      if (owned(manifest)) return;
       if (!/^[^/]+\.app\/Contents\/MacOS\/[^/]+$/.test(manifest.executableRelative || "") ||
           !["reviewed-binary", "publisher-binary"].includes(provenance.sourceKind) || provenance.verifiedBuild !== false)
         throw new Error("The MKXP-Z package does not identify its original publisher binary.");

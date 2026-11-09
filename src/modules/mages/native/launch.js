@@ -1,7 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Adapter = require("./adapter");
-const Managers = require("./manager");
 const WindowsInput = require("./windows-ui-data");
 const InputSession = require("./windows-ui-session");
 const AudioSession = require("./windows-audio-session");
@@ -43,8 +42,7 @@ function verifyNativeProfile(install) {
     const relative=install.declaration?.manifestRelative || install.catalogEntry?.projectPackage?.manifestRelative;
     const manifest=install.manifest || JSON.parse(Bundle.readRegular(path.join(install.installDir,'project-payload',Bundle.relativeFile(relative)),Bundle.LIMITS.manifestBytes).bytes);
     const profile=manifest.runtimeFiles?.windowsGameProfile;
-    const profileSource=profile ? path.join(runtimeRoot,Bundle.relativeFile(profile)) :
-      Managers.profileFor(manifest.provenance?.profileSha256) || path.join(__dirname,'windows-game.lua');
+    const profileSource=profile ? path.join(runtimeRoot,Bundle.relativeFile(profile)) : null;
     return {runtimeRoot,manifest,abis:declaredAbis(manifest.provenance,{managed:true}),profileSource};
   }
   if (!install || !/^[a-f0-9]{40}$/.test(install.upstreamRevision || "") ||
@@ -59,12 +57,16 @@ function verifyNativeProfile(install) {
   if (stored.sha256 !== expectedManifestSha256)
     throw new Error("The Impacto runtime manifest changed. Reinstall the selected version.");
   const abis = declaredAbis(stored.manifest.provenance);
-  const profileSource = Managers.profileFor(stored.manifest.provenance?.profileSha256);
-  if (!profileSource) throw new Error("This Impacto runtime requires a newer MacLauncher game profile. Choose another version.");
   const executable = path.join(runtimeRoot, stored.manifest.executableRelative);
   if (executable !== install.executablePath || stored.manifest.executableRelative !== "Impacto.app/Contents/MacOS/Impacto")
     throw new Error("The Impacto runtime files differ from the selected package.");
-  return { runtimeRoot, manifest: stored.manifest, abis, profileSource };
+  return { runtimeRoot, manifest: stored.manifest, abis, profileSource: null };
+}
+
+// The declared ABIs select the session and, unless the package ships its own, that session's game profile.
+function sessionProfile(abis) {
+  return (abis.soundEffect ? SoundEffectSession : abis.checkpoint ? CheckpointSession :
+    abis.audio ? AudioSession : abis.input ? InputSession : Adapter).PROFILE_SOURCE;
 }
 
 function inspectEntry(entry) {
@@ -72,9 +74,10 @@ function inspectEntry(entry) {
 }
 
 function prepareLaunch(entry, context, install) {
-  const { runtimeRoot, manifest, abis, profileSource } = verifyNativeProfile(install);
+  const { runtimeRoot, manifest, abis, profileSource: shipped } = verifyNativeProfile(install);
   if (manifest.provenance?.codecProbe?.bink2Decoder !== true)
     throw new Error("This Impacto runtime lacks the Bink 2 decoder. Choose a version with Bink 2 playback.");
+  const profileSource = shipped || sessionProfile(abis);
   const prepareSession = abis.soundEffect ? SoundEffectSession.prepareWindowsSoundEffectSession :
     abis.checkpoint ? CheckpointSession.prepareWindowsCheckpointSession :
     abis.audio ? AudioSession.prepareWindowsAudioSession :
@@ -104,4 +107,4 @@ function prepareLaunch(entry, context, install) {
   return { ...session, preparation };
 }
 
-module.exports = { sessionDirectory, verifyNativeProfile, inspectEntry, prepareLaunch };
+module.exports = { sessionDirectory, verifyNativeProfile, sessionProfile, inspectEntry, prepareLaunch };
