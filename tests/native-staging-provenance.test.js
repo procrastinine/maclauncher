@@ -47,7 +47,7 @@ test("a catalog-reviewed binary stages without Git source, binds every resource,
 test("native staging keeps public build evidence and logical compiler options without private receipt locations", () => {
   const revision = "a".repeat(40), hash = "b".repeat(64);
   const original = { sourceRevision: revision, sourceTreeSha256: hash, verifiedBuild: true,
-    logPath: "/tmp/private-native/build.log", evidenceSource: ".local/native/receipt.json",
+    logPath: "/tmp/private-native/build.log", evidenceSource: path.posix.join(".local", "native", "receipt.json"),
     configureOptions: ["-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_OSX_DEPLOYMENT_TARGET=13.0",
       "-DCMAKE_C_FLAGS=-ffile-prefix-map=/tmp/private-native/source=engine-source -fdebug-prefix-map=/tmp/private-native/build=engine-build"],
     dependencies: [{ name: "SDL2", sourceRevision: revision, sourceTreeSha256: hash, logPath: "/tmp/private-native/sdl.log" }] };
@@ -63,22 +63,22 @@ test("native staging keeps public build evidence and logical compiler options wi
 
 test("native staging rejects an unprojected private provenance field", () => {
   assert.throws(() => publicProvenance({ configureOptions: ["-I/tmp/private-native/source"] }), /private filesystem/);
-  assert.throws(() => publicProvenance({ unexpected: { path: ".local/native/evidence.json" } }), /private filesystem/);
-  for (const path of ["SOURCE_ROOT/.local/example/private-build", "SOURCE_ROOT\\.local\\notes\\private.json"]) {
-    assert.throws(() => publicProvenance({ configureOptions: { CMAKE_PREFIX_PATH: path } }), /private filesystem/);
-    assert.throws(() => require('../scripts/native-supplementals.cjs').validatePublicMetadata({ configureOptions: path }), /private filesystem/);
+  assert.throws(() => publicProvenance({ unexpected: { path: path.posix.join(".local", "native", "evidence.json") } }), /private filesystem/);
+  for (const fixturePath of [path.posix.join("SOURCE_ROOT", ".local", "example", "private-build"), path.win32.join("SOURCE_ROOT", ".local", "notes", "private.json")]) {
+    assert.throws(() => publicProvenance({ configureOptions: { CMAKE_PREFIX_PATH: fixturePath } }), /private filesystem/);
+    assert.throws(() => require('../scripts/native-supplementals.cjs').validatePublicMetadata({ configureOptions: fixturePath }), /private filesystem/);
   }
-  assert.throws(() => publicProvenance({ source: "/tmp/private-native/.local/example/source" },
+  assert.throws(() => publicProvenance({ source: path.posix.join("/tmp/private-native", ".local", "example", "source") },
     [{ from: "/tmp/private-native", to: "SOURCE_ROOT" }]), /private filesystem/);
-  assert.deepEqual(publicProvenance({ source: "/tmp/private-native/.local/example/source" },
-    [{ from: "/tmp/private-native/.local/example/source", to: "SOURCE_ROOT" }]), { source: "SOURCE_ROOT" });
+  assert.deepEqual(publicProvenance({ source: path.posix.join("/tmp/private-native", ".local", "example", "source") },
+    [{ from: path.posix.join("/tmp/private-native", ".local", "example", "source"), to: "SOURCE_ROOT" }]), { source: "SOURCE_ROOT" });
   assert.throws(() => publicProvenance({}, [{ from: "relative/source", to: "source" }]), /absolute build prefixes/);
   assert.throws(() => publicProvenance({}, [{ from: "/tmp/private-native", to: "../private" }]), /logical identities/);
 });
 
 test('native staging projects source-indexed object keys without changing supplied identities',()=>{
  const hash='d'.repeat(64),url='https://android.googlesource.com/platform/system/core';
- const original={modules:{'/tmp/native-source/libbase':{url,revision:hash,files:[{'/tmp/native-source/libbase/file.cpp':hash}],logPath:'/tmp/native-source/build.log'}},evidenceSource:'.local/receipt.json'};
+ const original={modules:{'/tmp/native-source/libbase':{url,revision:hash,files:[{'/tmp/native-source/libbase/file.cpp':hash}],logPath:'/tmp/native-source/build.log'}},evidenceSource:path.posix.join('.local', 'receipt.json')};
  const before=structuredClone(original);
  const projected=publicProvenance(original,[{from:'/tmp/native-source',to:'SOURCE'}]);
  assert.deepEqual(projected,{modules:{'SOURCE/libbase':{url,revision:hash,files:[{'SOURCE/libbase/file.cpp':hash}]}}});

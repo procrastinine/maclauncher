@@ -276,7 +276,7 @@ const GOG_REDIRECT = "https://embed.gog.com/on_login_success?origin=client";
 const AUTH_URLS = { epic: "https://legendary.gl/epiclogin", gog: `https://auth.gog.com/auth?${new URLSearchParams({ client_id: GOG_CLIENT_ID, redirect_uri: GOG_REDIRECT, response_type: "code", layout: "client2" })}` };
 function findSession(store, homeDir) {
   const files = store === "epic" ? [".config/legendary/user.json", "Library/Application Support/heroic/legendaryConfig/legendary/user.json", "Library/Application Support/heroic/legendaryConfig/user.json", ".config/heroic/legendaryConfig/legendary/user.json"] :
-    [".local/share/gog-cli/session.json", "Library/Application Support/gog-cli/session.json", "Library/Application Support/heroic/gog_store/auth.json", ".config/heroic/gog_store/auth.json"];
+    [path.join(".local", "share", "gog-cli", "session.json"), "Library/Application Support/gog-cli/session.json", "Library/Application Support/heroic/gog_store/auth.json", ".config/heroic/gog_store/auth.json"];
   const locate = (value, depth = 0) => {
     if (!value || typeof value !== "object" || depth > 3) return null;
     if (typeof value.refresh_token === "string" && typeof value.access_token === "string") return value;
