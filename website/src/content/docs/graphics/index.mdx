@@ -20,6 +20,10 @@ The same layer serves native Mac apps, [Godot](https://github.com/godotengine/go
 
 The graphics layer works on Intel and Apple Silicon Macs, though some effects need more: MLX models and Metal 4 features need Apple Silicon and a newer macOS, and libplacebo and ISF shaders follow the requirements of the graphics package included with MacLauncher. MetalFX support depends on your GPU, which MacLauncher checks directly. An effect your Mac can't run is switched off without affecting the others. [Macs and macOS versions](/maclauncher/macs-and-macos/#graphics-features-by-macos-version) lists which features need which macOS version, and the [requirements reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SYSTEM_REQUIREMENTS.md#graphics) has the complete tables.
 
+<video src="/maclauncher/videos/graphics.mp4" poster="/maclauncher/videos/graphics.jpg" controls preload="metadata" playsinline></video>
+
+*The DOOM 3 demo running natively through [dhewm3](https://github.com/dhewm/dhewm3). A CRT filter and grayscale in the Simple view, with the split and difference views, then a DLSS chain in the Advanced view: downsample to 540p, DLSS 5, MetalFX back up to the window, and Lossless Scaling frame generation at 4x. The performance overlay shows about 15 fps coming out of DLSS turning into 60 fps on screen, and DLSS and frame generation are switched off and on again live.*
+
 <Compare
   before={plain}
   after={styled}

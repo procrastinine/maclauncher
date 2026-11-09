@@ -13,6 +13,10 @@ Many games built for Windows can run without it, because their engine also exist
 
 Every game in MacLauncher has a game type, such as Ren'Py, Unity or PlayStation 5, and each game type has one or more runtimes that can play it. [Choosing a runtime](/maclauncher/background/choosing-a-runtime/#game-types-and-runtimes) explains the two terms. The pages in this section group related game types and describe what runs them. In the repository, the [game type reference](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/README.md) has a page for every game type with its exact formats, versions, settings, tools and runtimes.
 
+<video src="/maclauncher/videos/runtime-compatibility.mp4" poster="/maclauncher/videos/runtime-compatibility.jpg" controls preload="metadata" playsinline></video>
+
+*The Penjikent Creature, a [Godot](https://github.com/godotengine/godot) game packaged for Windows, dragged in as its `.exe`. MacLauncher detects Godot 3.5.2, downloads the matching runtime after asking and plays the game natively, without WINE. The installed Godot versions are then managed in **Runtimes**.*
+
 ## The game types
 
 | Page | Game types |
