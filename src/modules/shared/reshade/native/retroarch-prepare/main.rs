@@ -62,7 +62,7 @@ fn metadata(pack: &ShaderPresetPack) -> Value {
         params.insert(name.to_string(), json!({"name":name.as_str(),"label":p.description,"type":"float","default":[initial],"min":p.minimum,"max":p.maximum,"step":p.step}));
     }}
     let subframes=pack.passes.iter().any(|pass|uses_subframes(&pass.data.vertex)||uses_subframes(&pass.data.fragment));
-    json!({"schema":1,"format":"slangp","parameters":params.into_values().collect::<Vec<_>>(),"passes":pack.pass_count,"displaySubframes":subframes,"upstream":{"version":"0.12.1","commit":"07ac790cdb9826f37cf8e1daf5011f03e3c4daa7"}})
+    json!({"schema":1,"format":"slangp","parameters":params.into_values().collect::<Vec<_>>(),"passes":pack.pass_count,"displaySubframes":subframes})
 }
 fn write_file(root: &Path, name: &str, bytes: &[u8], files: &mut Vec<Value>) -> Result<()> {
     fs::write(root.join(name), bytes)?;
