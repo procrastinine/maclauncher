@@ -27,6 +27,10 @@ You can also run [from source](#development), and everything should be the same.
 
 # MacLauncher as a native runtime system
 
+https://github.com/user-attachments/assets/d0f2913b-7791-46a8-84be-d416e9f121dd
+
+Shown: The Penjikent Creature, a [Godot](https://godotengine.org/) game packaged for Windows, dragged in as its `.exe`. MacLauncher detects Godot 3.5.2, downloads the matching runtime after asking, and plays it natively, without WINE. The installed Godot versions are then managed in **Runtimes**.
+
 ## Idea
 
 A surprising number of games have runtimes that are available on macOS (and Linux) even though the games themselves are packaged for Windows and don't work out of the box. These games don't require WINE or emulation, and running natively can gain you higher performance and (sometimes) better compatibility. One of the purposes of MacLauncher is to configure these native runtimes automatically, with version management, so you can just drag in a game directory or exe and start playing with the maximally compatible version (or choose one yourself).
@@ -109,6 +113,10 @@ Most of the above runtimes are existing tools with MacLauncher managing them. Ho
 - [MacLauncher KosmicKrisp](src/modules/shared/vulkan/README.md), our own build of KosmicKrisp that adds the Vulkan features upstream is missing (transform feedback, wireframe/point fill, single-texel buffer alignment and variable multisample rate), implemented on Metal rather than stubbed. This lets ANGLE do OpenGL ES 3.2 for Android games, and lets DXVK and vkd3d-proton (the translators behind Proton on Linux) run on KosmicKrisp in CrossOver and Sikarugir, so Direct3D 12 games can run through vkd3d-proton at feature level 12_1.
 
 # MacLauncher as a graphics and effects layer
+
+https://github.com/user-attachments/assets/74954512-3589-40db-859f-c9ecd0a157d0
+
+Shown: the DOOM 3 demo running natively through [dhewm3](https://github.com/dhewm/dhewm3). First a CRT filter and grayscale in the Simple view, with the split and difference views, then the DLSS chain described below, in the Advanced view: downsample to 540p, DLSS 5, MetalFX back up to the window, and Lossless Scaling frame generation at 4x. The performance overlay shows the ~15fps coming out of DLSS turning into 60fps on screen, and DLSS and frame generation are switched off and on again live.
 
 Maybe _the_ most useful thing about MacLauncher is that it provides a very powerful graphics postprocessing system where you can control _exactly what_ graphics/effects you apply, with very broad support. All of these effects run on native Metal, **not** WINE, and work across **any** runtime you want to use inside MacLauncher. i.e., you could literally drag Microsoft Word into MacLauncher and apply GFX to it lmao. Here is what's included:
 - **Upscaling:**

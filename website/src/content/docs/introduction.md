@@ -11,6 +11,10 @@ MacLauncher plays games on macOS, and it does that in three roles at once: it's 
 
 ## A native runtime system
 
+<video src="/maclauncher/videos/runtime-compatibility.mp4" poster="/maclauncher/videos/runtime-compatibility.jpg" controls preload="metadata" playsinline></video>
+
+*The Penjikent Creature, a [Godot](https://github.com/godotengine/godot) game packaged for Windows, dragged in as its `.exe`. MacLauncher detects Godot 3.5.2, downloads the matching runtime after asking and plays the game natively, without WINE. The installed Godot versions are then managed in **Runtimes**.*
+
 Many games packaged for Windows don't need Windows at all. They're built on engines such as [Ren'Py](https://www.renpy.org/), [RPG Maker](https://www.rpgmakerweb.com/), [Godot](https://github.com/godotengine/godot) or [GameMaker](https://gamemaker.io/), and those engines, or faithful open-source reimplementations of them, run natively on macOS. The Mac version of the engine can read the game's data directly, so the game runs without [WINE](https://www.winehq.org/) and without emulation.
 
 Doing that by hand means identifying the engine, finding a build of the exact version the game needs and configuring it. MacLauncher automates these steps. When you drag in a game folder or `.exe`, it detects the engine and its version and picks the runtime most likely to work. Pressing Play downloads that runtime after asking and launches the game. You can always choose a different runtime or version yourself.
@@ -22,6 +26,10 @@ Runtimes aren't limited to Windows games. Android and iOS apps, PlayStation 5 an
 [How games run on a Mac](/maclauncher/background/how-games-run/) explains the ideas behind these runtimes, and [Games and runtimes](/maclauncher/games/) shows what's supported.
 
 ## A graphics and effects layer
+
+<video src="/maclauncher/videos/graphics.mp4" poster="/maclauncher/videos/graphics.jpg" controls preload="metadata" playsinline></video>
+
+*The DOOM 3 demo running natively through [dhewm3](https://github.com/dhewm/dhewm3). A CRT filter and grayscale in the Simple view, with the split and difference views, then a DLSS chain in the Advanced view: downsample to 540p, DLSS 5, MetalFX back up to the window, and Lossless Scaling frame generation at 4x. The performance overlay shows about 15 fps coming out of DLSS turning into 60 fps on screen, and DLSS and frame generation are switched off and on again live.*
 
 MacLauncher has its own graphics pipeline, built natively on [Metal](https://developer.apple.com/metal/), and it works with every runtime: native engines, WINE games, Android apps, consoles, videos and ordinary Mac apps. It can even process another app's window, or a whole display, that isn't running inside MacLauncher at all. You can stack effects in any order and change them while the game runs. The effects include:
 

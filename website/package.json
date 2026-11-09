@@ -8,8 +8,8 @@
     "node": ">=22.22.0"
   },
   "scripts": {
-    "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
-    "build": "node check-samples.mjs && vite build --config demo/vite.config.mjs && ASTRO_TELEMETRY_DISABLED=1 astro build && node demo/check.mjs && node check-markdown.mjs",
+    "dev": "node fetch-media.mjs && ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "build": "node fetch-media.mjs && node check-samples.mjs && vite build --config demo/vite.config.mjs && ASTRO_TELEMETRY_DISABLED=1 astro build && node demo/check.mjs && node check-markdown.mjs",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
     "check": "tsc -p demo/tsconfig.json",
     "demo:data": "NODE_PATH=node_modules node --require ./demo/data/host.cjs demo/data/generate.cjs"

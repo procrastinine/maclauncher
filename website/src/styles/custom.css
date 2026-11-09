@@ -171,3 +171,9 @@ html:has(.demoEmbed) .sl-markdown-content > p:first-child {
   content: " (this Mac)";
   font-weight: normal;
 }
+
+.sl-markdown-content video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
