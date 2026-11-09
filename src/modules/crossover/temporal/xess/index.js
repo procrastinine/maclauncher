@@ -1,12 +1,12 @@
 const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypto");
-const Writable=require("../../../shared/writable-input"),Profile=require("./export-profile"),PE=Profile,Source=require("./source.json");
+const Writable=require("../../../shared/writable-input"),Profile=require("./export-profile"),PE=Profile,Source=require("./source.json"),XeSS=require("../../../shared/reshade/xess/source.json");
 const ORIGINAL="maclauncher_xess_dx11_original.dll",RECORD=".maclauncher-xess-d3d11.json";
 const hash=file=>crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 const same=(a,b)=>Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((row,index)=>row.name===b[index].name&&row.ordinal===b[index].ordinal);
 function provider(root) {
   try {
     const record=JSON.parse(fs.readFileSync(path.join(root,"provider.json"))),library=path.join(root,Source.library),stat=fs.lstatSync(library);
-    if(record.schema!==1||record.profile!==Source.profile||record.library!==Source.library||record.sources?.xess?.revision!==Source.xess.revision||record.sources?.dxmt?.revision!==Source.dxmt.revision||!stat.isFile()||stat.isSymbolicLink()||hash(library)!==record.sha256||!same(PE.inspect(library),record.exports))return null;
+    if(record.schema!==1||record.profile!==Source.profile||record.library!==Source.library||record.sources?.xess?.revision!==XeSS.revision||record.sources?.dxmt?.revision!==Source.dxmt.revision||!stat.isFile()||stat.isSymbolicLink()||hash(library)!==record.sha256||!same(PE.inspect(library),record.exports))return null;
     return {...record,library};
   }catch{return null;}
 }

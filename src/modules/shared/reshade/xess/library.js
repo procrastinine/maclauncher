@@ -18,7 +18,7 @@ function readComponents(userDataDir){try{
   const file=path.join(root,"interpolation.json"),stat=fs.lstatSync(file);
   if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16384)return null;
   const record=JSON.parse(fs.readFileSync(file,"utf8"));
-  if(record.schema!==1||record.version!==Source.version||record.commit!==Components.revision||Components.revision!==Source.revision)return null;
+  if(record.schema!==1||record.version!==Source.version||record.commit!==Source.revision)return null;
   const libraries={};let external=false;
   for(const spec of Components.files){const row=record.files?.[spec.id];if(!row||typeof row.external!=="boolean")return null;const library=row.external?row.file:path.join(root,spec.file);if(!path.isAbsolute(library||""))return null;const item=fs.lstatSync(library);if(!item.isFile()||item.isSymbolicLink()||item.size!==spec.bytes)return null;libraries[spec.id]=library;external||=row.external;}
   return {version:Source.version,versionLabel:"Intel XeSS",operation:"interpolate",library:libraries.frameGeneration,runtimePath:libraries.frameGeneration,sourcePath:libraries.frameGeneration,libraries,installDir:root,external,ready:true,sourceUrl:Source.sourceUrl};
@@ -68,7 +68,7 @@ async function remove(context={}) {
 function componentsReceipt(userDataDir,files,external){
   const root=directory(userDataDir);Writable.assertOwnDirectory(userDataDir,root);
   try{const licenses=path.join(root,"licenses");fs.mkdirSync(licenses,{recursive:true});fs.copyFileSync(path.join(__dirname,Source.licenseFile),path.join(licenses,"xess.txt"));}catch(error){console.warn("Optional XeSS license copy skipped:",error.message);}
-  Writable.atomicWrite(path.join(root,"interpolation.json"),JSON.stringify({schema:1,version:Source.version,commit:Components.revision,files:Object.fromEntries(Components.files.map(spec=>[spec.id,{file:external?files[spec.id]:spec.file,external}]))}),{root:userDataDir});
+  Writable.atomicWrite(path.join(root,"interpolation.json"),JSON.stringify({schema:1,version:Source.version,commit:Source.revision,files:Object.fromEntries(Components.files.map(spec=>[spec.id,{file:external?files[spec.id]:spec.file,external}]))}),{root:userDataDir});
   return readComponents(userDataDir);
 }
 async function inspectComponents(input,signal){
@@ -101,7 +101,7 @@ async function installComponents(context={}){
         signal?.throwIfAborted();const destination=path.join(root,spec.file);
         try{files[spec.id]=await inspect(destination,signal,spec);completed+=spec.bytes;continue;}catch{signal?.throwIfAborted();}
         const temporary=path.join(root,".download-"+crypto.randomUUID()),limit=new AbortController(),bounded=signal?AbortSignal.any([signal,limit.signal]):limit.signal;let oversized=false;
-        try{await Upstream.download(Upstream.listedFile({filename:spec.file,url:"https://raw.githubusercontent.com/intel/xess/"+Components.revision+"/bin/"+spec.file}),temporary,{signal:bounded,onProgress:progress=>{if(progress.downloaded>spec.bytes||progress.total>spec.bytes){oversized=true;limit.abort();}task.onProgress?.({downloaded:completed+progress.downloaded,total:bytes});}});await downloaded(temporary,bounded,spec);await fs.promises.rename(temporary,destination);files[spec.id]=destination;completed+=spec.bytes;}
+        try{await Upstream.download(Upstream.listedFile({filename:spec.file,url:"https://raw.githubusercontent.com/intel/xess/"+Source.revision+"/bin/"+spec.file}),temporary,{signal:bounded,onProgress:progress=>{if(progress.downloaded>spec.bytes||progress.total>spec.bytes){oversized=true;limit.abort();}task.onProgress?.({downloaded:completed+progress.downloaded,total:bytes});}});await downloaded(temporary,bounded,spec);await fs.promises.rename(temporary,destination);files[spec.id]=destination;completed+=spec.bytes;}
         catch(error){if(oversized&&!signal?.aborted)throw Error("The XeSS download exceeds the supported release size.");throw error;}
         finally{await fs.promises.rm(temporary,{force:true});}
       }
