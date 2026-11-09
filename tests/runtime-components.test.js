@@ -17,6 +17,27 @@ function temporary(t) {
 const sha256 = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 const offline = t => t.mock.method(globalThis, "fetch", () => assert.fail("Components read local files only"));
 
+// The folders whose components.js the registry reads: each module folder and
+// every folder under shared, at any depth.
+function declarationFiles() {
+  const modules = path.join(__dirname, "../src/modules"), files = [];
+  const folders = dir => fs.readdirSync(dir, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && !entry.name.startsWith(".")).map(entry => path.join(dir, entry.name));
+  const shared = dir => { for (const folder of folders(dir)) { files.push(path.join(folder, "components.js")); shared(folder); } };
+  for (const folder of folders(modules)) if (path.basename(folder) !== "shared") files.push(path.join(folder, "components.js"));
+  shared(path.join(modules, "shared"));
+  return files.filter(file => fs.existsSync(file));
+}
+
+test("every module and shared components.js loads, and each declaration it exports is listed", () => {
+  const files = declarationFiles(), listed = new Set(registry.listComponents().map(component => component.id));
+  assert.ok(files.length > 0);
+  for (const file of files) {
+    const declared = require(file), name = path.relative(path.join(__dirname, ".."), file);
+    for (const component of Array.isArray(declared) ? declared : []) assert.ok(listed.has(component?.id), `${name}: ${component?.id}`);
+  }
+});
+
 test("every declaration follows the contract and lists an empty profile offline", async t => {
   offline(t);
   const root = temporary(t), declared = registry.listComponents(), all = Service.declarations(registry);
