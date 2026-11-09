@@ -14,36 +14,80 @@ html, body { margin: 0; height: 100%; background: var(--demo-bg); color: var(--d
 .demoBar p { margin: 0; color: var(--demo-muted); font-size: 14px; }
 .demoHome { color: var(--demo-text); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .demo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 30%); height: calc(100% - 49px); }
-.launcherPane { position: relative; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--demo-line); }
-/* The launcher's menus, drawn as the macOS menu bar with its dropdown menus. */
-.demoMenu { position: relative; z-index: 3; display: flex; align-items: center; height: 28px; padding: 0 10px;
-  border-bottom: 1px solid rgb(0 0 0 / 55%); background: #2a2c32;
-  font: 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; user-select: none; }
-.menuApple { display: flex; align-items: center; padding: 0 12px 0 6px; color: var(--demo-text); }
-.menuApple svg { width: 14px; height: 17px; fill: currentColor; }
-.menuTitle { position: relative; }
-.menuName { height: 22px; border: 0; border-radius: 5px; background: none; color: var(--demo-text); font: inherit; padding: 0 9px; cursor: default; }
+.launcherPane { position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; border-right: 1px solid var(--demo-line); }
+/* The menu bar and menus follow macOS in dark mode: a 24-pixel bar with the
+   Apple menu, the bold app menu, status icons and the clock, and translucent
+   menus with a checkmark column, shortcut columns and the accent highlight. */
+.demoMenu { position: relative; z-index: 3; display: flex; align-items: center; flex: none; height: 24px; padding: 0 10px 0 8px;
+  background: #232427; box-shadow: inset 0 -1px rgb(0 0 0 / 50%); color: rgb(255 255 255 / 92%); white-space: nowrap;
+  font: 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  user-select: none; -webkit-user-select: none; cursor: default; }
+.menuScrim { position: fixed; inset: 0; z-index: 2; }
+.menuScrim[hidden] { display: none; }
+.menuTitle { position: relative; flex: none; }
+.menuName { display: flex; align-items: center; height: 22px; padding: 0 9px; border: 0; border-radius: 5px; background: none;
+  color: inherit; font: inherit; letter-spacing: 0.01em; cursor: default; }
 .appMenu .menuName { font-weight: 700; }
-.menuName[aria-expanded="true"], .menuName:focus-visible { background: rgb(255 255 255 / 16%); outline: none; }
-.menuList { position: absolute; top: calc(100% + 3px); left: 0; min-width: 220px; padding: 5px; border-radius: 9px;
-  border: 1px solid rgb(255 255 255 / 14%); background: rgb(44 46 52 / 86%); backdrop-filter: blur(24px) saturate(160%);
-  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 70%), 0 12px 32px rgb(0 0 0 / 50%); }
+.appleMenu .menuName { padding: 0 12px; }
+.appleMenu svg { width: 13px; height: 16px; margin-top: -2px; fill: currentColor; }
+.menuTitle.open .menuName, .menuName:focus-visible { background: rgb(255 255 255 / 18%); outline: none; }
+.menuList { position: absolute; top: calc(100% + 1px); left: 0; min-width: 240px; padding: 5px; border-radius: 7px; outline: none;
+  background: rgb(38 39 43 / 80%); backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 85%), inset 0 0 0 0.5px rgb(255 255 255 / 18%), 0 10px 32px rgb(0 0 0 / 45%); }
 .menuList[hidden] { display: none; }
-.menuList button { display: flex; align-items: center; justify-content: space-between; gap: 28px; width: 100%; height: 24px;
-  padding: 0 10px; border: 0; border-radius: 5px; background: none; color: var(--demo-text); font: inherit; text-align: left; cursor: default; }
-.menuList button:hover, .menuList button:focus-visible { background: #2f6fde; color: #fff; outline: none; }
-.menuList kbd { font: inherit; color: var(--demo-muted); }
-.menuList button:hover kbd, .menuList button:focus-visible kbd { color: rgb(255 255 255 / 85%); }
-.menuList hr { height: 1px; margin: 5px 10px; border: 0; background: rgb(255 255 255 / 14%); }
+.menuList.closing { opacity: 0; transition: opacity 0.2s ease-out; pointer-events: none; }
+.menuItem { display: flex; align-items: center; height: 22px; padding-right: 10px; border-radius: 4px; outline: none;
+  color: rgb(255 255 255 / 88%); }
+.menuMark { flex: none; display: grid; place-items: center; width: 22px; }
+.menuMark svg { width: 10px; height: 10px; }
+.menuLabel { flex: 1; padding-right: 28px; }
+.menuShortcut { display: flex; color: rgb(255 255 255 / 45%); }
+.menuModifiers { letter-spacing: 1px; text-align: right; }
+.menuKey { min-width: 1.2em; padding-left: 1px; }
+.menuChevron { display: flex; color: rgb(255 255 255 / 45%); }
+.menuChevron svg { width: 6px; height: 10px; }
+.menuItem.active { background: #0a5fd8; color: #fff; }
+.menuItem.active .menuShortcut, .menuItem.active .menuChevron { color: rgb(255 255 255 / 85%); }
+.menuItem[aria-disabled="true"], .menuItem[aria-disabled="true"] .menuShortcut,
+.menuItem[aria-disabled="true"] .menuChevron { color: rgb(255 255 255 / 26%); }
+.menuSeparator { height: 1px; margin: 5px 10px; background: rgb(255 255 255 / 11%); }
+.menuStatus { display: flex; flex: none; align-items: center; gap: 17px; margin-left: auto; padding-left: 16px; }
+.statusIcon { display: block; height: 13px; width: auto; fill: currentColor; }
+.menuClock { display: flex; gap: 7px; }
+.demoMenu.hideStatus .statusIcon, .demoMenu.hideClock .menuClock, .demoMenu.hideExtra .extraMenu { display: none; }
+
+/* Launcher windows: macOS window chrome with the traffic lights. */
+.launcherPane.draggingWindow iframe { pointer-events: none; }
 .launcherPane iframe, .articlePreview { border: 0; width: 100%; background: var(--demo-bg); }
 .libraryFrame { flex: 1; min-height: 0; }
-.utilityWindow { position: absolute; inset: 52px 24px 24px; display: flex; flex-direction: column; border: 1px solid var(--demo-line);
-  border-radius: 10px; overflow: hidden; background: var(--demo-panel); box-shadow: 0 18px 60px rgb(0 0 0 / 55%); }
+.utilityWindow { position: absolute; z-index: 1; inset: 52px 24px 24px; display: flex; flex-direction: column; overflow: hidden;
+  border-radius: 10px; background: var(--demo-panel); transform: translate(var(--window-x, 0px), var(--window-y, 0px));
+  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 90%), inset 0 0 0 0.5px rgb(255 255 255 / 16%), 0 22px 70px rgb(0 0 0 / 55%), 0 4px 16px rgb(0 0 0 / 30%);
+  animation: windowOpen 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes windowOpen { from { opacity: 0; transform: translate(var(--window-x, 0px), var(--window-y, 0px)) scale(0.96); } }
 .utilityWindow[hidden] { display: none; }
-.utilityBar { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px 6px 16px;
-  border-bottom: 1px solid var(--demo-line); font-weight: 600; }
-.utilityClose { border: 0; background: none; color: var(--demo-muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 8px; }
-.utilityClose:hover { color: var(--demo-text); }
+.utilityWindow.zoomed { inset: 24px 0 0; transform: none; }
+.utilityWindow.minimizing { opacity: 0; transform-origin: 50% 100%; transition: transform 0.24s ease-in, opacity 0.24s ease-in;
+  transform: translate(var(--window-x, 0px), calc(var(--window-y, 0px) + 45%)) scale(0.12); }
+.utilityBar { position: relative; display: flex; flex: none; align-items: center; height: 28px; padding: 0 12px; touch-action: none;
+  background: #2c2d31; box-shadow: inset 0 -1px rgb(0 0 0 / 55%); user-select: none; -webkit-user-select: none; cursor: default; }
+.utilityTitle { position: absolute; left: 84px; right: 84px; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap;
+  color: rgb(255 255 255 / 85%); font: 600 13px/28px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  pointer-events: none; }
+.trafficLights { position: relative; z-index: 1; display: flex; gap: 8px; }
+.light { display: grid; place-items: center; width: 12px; height: 12px; padding: 0; border: 0; border-radius: 50%; cursor: default; }
+.light svg { width: 8px; height: 8px; opacity: 0; fill: none; stroke-width: 1.2; stroke-linecap: round; }
+.trafficLights:hover .light svg, .light:focus-visible svg { opacity: 1; }
+.light:focus-visible { outline: none; }
+.light.close { background: #ff5f57; box-shadow: inset 0 0 0 0.5px #e0443e; }
+.light.close svg { stroke: #4d0000; }
+.light.minimize { background: #febc2e; box-shadow: inset 0 0 0 0.5px #dea123; }
+.light.minimize svg { stroke: #985700; stroke-width: 1.4; }
+.light.zoom { background: #28c840; box-shadow: inset 0 0 0 0.5px #1aab29; }
+.light.zoom svg { fill: #006500; stroke: none; }
+.light:active { filter: brightness(0.8); }
+.utilityWindow.inactive .trafficLights:not(:hover) .light { background: rgb(255 255 255 / 15%); box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 35%); }
+.utilityWindow.inactive .utilityTitle { color: rgb(255 255 255 / 40%); }
 .utilityFrame { flex: 1; }
 .articlePane { display: flex; flex-direction: column; min-width: 0; padding: 16px 16px 0; background: var(--demo-bg); color: var(--demo-text); }
 /* The article column follows the site's theme; the launcher stays dark. */
@@ -76,5 +120,5 @@ html, body { margin: 0; height: 100%; background: var(--demo-bg); color: var(--d
 }
 @media (max-width: 640px) {
   .demoBar p { display: none; }
-  .utilityWindow { inset: 76px 8px 8px; }
+  .utilityWindow { inset: 36px 8px 8px; }
 }

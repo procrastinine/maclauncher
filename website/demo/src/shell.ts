@@ -8,6 +8,7 @@ import type { LauncherState } from "../../../src/renderer/src/ui/types";
 import { ARTICLES, articlesFor, type Article } from "./articles";
 import { createStore, type DemoTopic, type DemoWindow } from "./mock/store";
 import { NEED_LABELS, NOTHING_EXTRA, needsFor } from "./needs";
+import { createMenuBar, type MenuEntry, type MenuItem } from "./menubar";
 
 const siteRoot = new URL("../", window.location.href);
 const element = <T extends Element>(selector: string) => document.querySelector(selector) as T;
@@ -22,6 +23,8 @@ const open = element<HTMLAnchorElement>(".articleOpen");
 const needs = element<HTMLElement>(".needs");
 const needsList = element<HTMLUListElement>(".needsList");
 const menu = element<HTMLElement>(".demoMenu");
+const launcherPane = element<HTMLElement>(".launcherPane");
+const utilityBar = element<HTMLElement>(".utilityBar");
 
 // Embedded in the site's home page, the demo drops its own bar, and articles
 // open in the page around it.
@@ -169,114 +172,142 @@ function topic(value: DemoTopic) {
   show(articlesFor(value), LEADS[`${value.kind}:${value.id}`] || LEADS[value.kind] || "This is part of the full launcher.");
 }
 
+// Launcher windows open over the library as macOS windows: the traffic
+// lights close, minimize and zoom, the title bar drags the window, and a
+// double click on it zooms. A window minimized and opened again returns where
+// it was. The library is the key window after a click inside it, and the
+// window's controls then turn gray as in macOS.
+let minimized = false, keyWindow: "library" | "utility" = "library", offset = { x: 0, y: 0 };
+function setKey(which: "library" | "utility") {
+  keyWindow = which;
+  utility.classList.toggle("inactive", which === "library");
+}
+function place(x: number, y: number) {
+  offset = { x, y };
+  utility.style.setProperty("--window-x", `${x}px`);
+  utility.style.setProperty("--window-y", `${y}px`);
+}
+
 function openWindow({ title, search }: DemoWindow) {
   const src = `launcher.html?${new URLSearchParams(search)}`;
   utilityTitle.textContent = title;
-  if (utility.hidden || utilityFrame.getAttribute("src") !== src) utilityFrame.src = src;
+  if (utilityFrame.getAttribute("src") !== src) utilityFrame.src = src;
+  if (utility.hidden && !minimized) { utility.classList.remove("zoomed"); place(0, 0); }
+  minimized = false;
   utility.hidden = false;
+  setKey("utility");
 }
 
 function closeWindow() {
   utility.hidden = true;
+  minimized = false;
   utilityFrame.removeAttribute("src");
+  setKey("library");
 }
-element<HTMLButtonElement>(".utilityClose").addEventListener("click", closeWindow);
+function minimizeWindow() {
+  utility.classList.add("minimizing");
+  window.setTimeout(() => {
+    utility.classList.remove("minimizing");
+    utility.hidden = true;
+    minimized = true;
+    setKey("library");
+  }, 240);
+}
+const zoomWindow = () => utility.classList.toggle("zoomed");
+element<HTMLButtonElement>(".light.close").addEventListener("click", closeWindow);
+element<HTMLButtonElement>(".light.minimize").addEventListener("click", minimizeWindow);
+element<HTMLButtonElement>(".light.zoom").addEventListener("click", zoomWindow);
+utility.addEventListener("pointerdown", () => setKey("utility"));
+utilityBar.addEventListener("dblclick", event => { if (!(event.target as Element).closest(".trafficLights")) zoomWindow(); });
+// The title bar stays below the menu bar and inside the screen.
+let drag: { id: number; x: number; y: number; from: { x: number; y: number } } | null = null;
+utilityBar.addEventListener("pointerdown", event => {
+  if (event.button !== 0 || (event.target as Element).closest(".trafficLights") || utility.classList.contains("zoomed")) return;
+  event.preventDefault();
+  drag = { id: event.pointerId, x: event.clientX, y: event.clientY, from: offset };
+  utilityBar.setPointerCapture(event.pointerId);
+  launcherPane.classList.add("draggingWindow");
+});
+utilityBar.addEventListener("pointermove", event => {
+  if (!drag || event.pointerId !== drag.id) return;
+  const pane = launcherPane.getBoundingClientRect(), rect = utility.getBoundingClientRect();
+  const left = rect.left - offset.x, top = rect.top - offset.y, menuBottom = menu.getBoundingClientRect().bottom;
+  const x = drag.from.x + event.clientX - drag.x, y = drag.from.y + event.clientY - drag.y;
+  place(Math.min(Math.max(x, pane.left + 80 - rect.width - left), pane.right - 80 - left),
+    Math.min(Math.max(y, menuBottom - top), pane.bottom - 28 - top));
+});
+const endDrag = () => { drag = null; launcherPane.classList.remove("draggingWindow"); };
+utilityBar.addEventListener("pointerup", endDrag);
+utilityBar.addEventListener("pointercancel", endDrag);
+// A click in the library or a window moves focus into its frame.
+window.addEventListener("blur", () => window.setTimeout(() => {
+  if (document.activeElement === library) setKey("library");
+  else if (document.activeElement === utilityFrame) setKey("utility");
+}));
 
-// The launcher's own menu commands, grouped as in its macOS menu bar: the app
-// menu's Check for Updates…, Credits and Settings…, File → Open… and Apply
-// Graphics…, and View → External and Runtimes. Their topics go through the
+// The menu bar holds the Apple menu and the launcher's own macOS menus, with
+// the items and shortcuts the launcher has. The commands the demo carries out
+// are the app menu's Check for Updates…, Credits and Settings…, File → Open…,
+// Apply Graphics… and Close Window, View → Library, External and Runtimes,
+// and Window → Minimize, Zoom and the window list. Their topics go through the
 // store, as the launcher's own do, so the store's record of the latest topic
-// stays current.
+// stays current. The other items are dimmed.
 const utilityWindow = (view: string, title: string, search: Record<string, string> = {}) => () => {
   store.topic({ kind: "window", id: view, ...(search.moduleId ? { moduleId: search.moduleId } : {}) });
   openWindow({ title, search: { view, ...search } });
 };
-type MenuItem = [label: string, run: () => void, shortcut?: string] | null;
-const MENUS: Array<[string, MenuItem[]]> = [
-  ["MacLauncher", [
-    ["Check for Updates…", () => store.topic({ kind: "action", id: "appUpdate" })],
-    ["Credits", utilityWindow("credits", "Credits")],
-    null,
-    ["Settings…", utilityWindow("settings", "Settings"), "⌘,"]
-  ]],
-  ["File", [
-    ["Open…", () => store.topic({ kind: "add", id: "dialog" }), "⌘O"],
-    ["Apply Graphics…", utilityWindow("appAction", "Apply Graphics", { moduleId: "window", actionId: "applyGraphics" })]
-  ]],
-  ["View", [
-    ["External", utilityWindow("external", "External")],
-    ["Runtimes", utilityWindow("runtimes", "Runtimes")]
-  ]]
-];
+const dimmed = (label: string, shortcut?: string, submenu?: boolean): MenuItem => ({ label, shortcut, submenu });
+const windowOpen = () => !utility.hidden;
+const focusLibrary = () => { library.focus(); setKey("library"); };
 const APPLE_LOGO = '<svg viewBox="0 0 814 1000" aria-hidden="true"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57-155.5-127C46.7 790.7 0 663 0 541.8c0-194.4 126.4-297.5 250.8-297.5 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z"/></svg>';
-
-// One menu is open at a time. While one is open, pointing at another title
-// opens that one instead, and a click elsewhere or Escape closes it.
-let openTitle: HTMLElement | null = null;
-const setOpen = (title: HTMLElement | null, focusFirst = false) => {
-  for (const each of menu.querySelectorAll<HTMLElement>(".menuTitle")) {
-    each.querySelector(".menuName")!.setAttribute("aria-expanded", String(each === title));
-    each.querySelector<HTMLElement>(".menuList")!.hidden = each !== title;
-  }
-  openTitle = title;
-  if (title && focusFirst) title.querySelector<HTMLButtonElement>(".menuList button")?.focus();
-};
-const apple = document.createElement("span");
-apple.className = "menuApple";
-apple.innerHTML = APPLE_LOGO;
-menu.append(apple, ...MENUS.map(([name, items], index) => {
-  const title = document.createElement("div");
-  title.className = index === 0 ? "menuTitle appMenu" : "menuTitle";
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "menuName";
-  button.textContent = name;
-  button.setAttribute("aria-haspopup", "menu");
-  button.addEventListener("click", () => setOpen(openTitle === title ? null : title));
-  button.addEventListener("pointerenter", () => { if (openTitle && openTitle !== title) setOpen(title); });
-  button.addEventListener("keydown", event => {
-    if (event.key === "ArrowDown") { event.preventDefault(); setOpen(title, true); }
-  });
-  const list = document.createElement("div");
-  list.className = "menuList";
-  list.setAttribute("role", "menu");
-  list.setAttribute("aria-label", name);
-  for (const item of items) {
-    if (!item) {
-      const separator = document.createElement("hr");
-      separator.setAttribute("role", "separator");
-      list.append(separator);
-      continue;
-    }
-    const [label, run, shortcut] = item;
-    const entry = document.createElement("button");
-    entry.type = "button";
-    entry.setAttribute("role", "menuitem");
-    entry.append(label);
-    if (shortcut) entry.append(Object.assign(document.createElement("kbd"), { textContent: shortcut }));
-    entry.addEventListener("click", () => { setOpen(null); run(); });
-    list.append(entry);
-  }
-  list.addEventListener("keydown", event => {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    event.preventDefault();
-    const entries = [...list.querySelectorAll<HTMLButtonElement>("button")];
-    const at = entries.indexOf(document.activeElement as HTMLButtonElement);
-    entries[(at + (event.key === "ArrowDown" ? 1 : entries.length - 1)) % entries.length]?.focus();
-  });
-  title.append(button, list);
-  return title;
-}));
-setOpen(null);
-document.addEventListener("pointerdown", event => { if (openTitle && !menu.contains(event.target as Node)) setOpen(null); });
-// A click inside the library or a window frame moves focus out of this page.
-window.addEventListener("blur", () => setOpen(null));
-document.addEventListener("keydown", event => {
-  if (event.key !== "Escape" || !openTitle) return;
-  const name = openTitle.querySelector<HTMLButtonElement>(".menuName");
-  setOpen(null);
-  name?.focus();
-});
+createMenuBar(menu, [
+  { title: "Apple", className: "appleMenu", icon: APPLE_LOGO, entries: () => [
+    dimmed("About This Mac"), "separator", dimmed("System Settings…"), dimmed("App Store"), "separator",
+    dimmed("Recent Items", undefined, true), "separator", dimmed("Force Quit…", "⌥⌘⎋"), "separator",
+    dimmed("Sleep"), dimmed("Restart…"), dimmed("Shut Down…"), "separator", dimmed("Lock Screen", "⌃⌘Q"), dimmed("Log Out…", "⇧⌘Q")
+  ] },
+  { title: "MacLauncher", className: "appMenu", entries: () => [
+    dimmed("About MacLauncher"),
+    { label: "Check for Updates…", run: () => store.topic({ kind: "action", id: "appUpdate" }) },
+    { label: "Credits", run: utilityWindow("credits", "Credits") },
+    "separator",
+    { label: "Settings…", shortcut: "⌘,", run: utilityWindow("settings", "Settings") },
+    "separator", dimmed("Services", undefined, true), "separator",
+    dimmed("Hide MacLauncher", "⌘H"), dimmed("Hide Others", "⌥⌘H"), dimmed("Show All"), "separator",
+    dimmed("Quit MacLauncher", "⌘Q")
+  ] },
+  { title: "File", entries: () => [
+    { label: "Open…", shortcut: "⌘O", run: () => store.topic({ kind: "add", id: "dialog" }) },
+    { label: "Apply Graphics…", run: utilityWindow("appAction", "Apply Graphics", { moduleId: "window", actionId: "applyGraphics" }) },
+    "separator",
+    { label: "Close Window", shortcut: "⌘W", run: windowOpen() ? closeWindow : undefined }
+  ] },
+  { title: "Edit", className: "extraMenu", entries: () => [
+    dimmed("Undo", "⌘Z"), dimmed("Redo", "⇧⌘Z"), "separator", dimmed("Cut", "⌘X"), dimmed("Copy", "⌘C"), dimmed("Paste", "⌘V"),
+    dimmed("Paste and Match Style", "⌥⇧⌘V"), dimmed("Delete"), dimmed("Select All", "⌘A"), "separator", dimmed("Speech", undefined, true)
+  ] },
+  { title: "View", entries: () => [
+    { label: "Library", run: focusLibrary },
+    { label: "External", run: utilityWindow("external", "External") },
+    { label: "Runtimes", run: utilityWindow("runtimes", "Runtimes") },
+    "separator", dimmed("Reload", "⌘R"), dimmed("Force Reload", "⇧⌘R"), "separator",
+    dimmed("Actual Size", "⌘0"), dimmed("Zoom In", "⌘+"), dimmed("Zoom Out", "⌘−"), "separator", dimmed("Enter Full Screen", "⌃⌘F")
+  ] },
+  { title: "Tools", className: "extraMenu", entries: () => [
+    dimmed("Toggle Tools Panel", "⇧⌘T"), dimmed("Open Tools Panel"), dimmed("Close Tools Panel")
+  ] },
+  { title: "Window", className: "extraMenu", entries: (): MenuEntry[] => [
+    { label: "Minimize", shortcut: "⌘M", run: windowOpen() ? minimizeWindow : undefined },
+    { label: "Zoom", run: windowOpen() ? zoomWindow : undefined },
+    "separator", dimmed("Bring All to Front"), "separator",
+    { label: "MacLauncher", run: focusLibrary, mark: keyWindow === "library" || utility.hidden ? "check" : undefined },
+    ...(windowOpen() || minimized ? [{ label: utilityTitle.textContent || "", run: () => {
+      if (minimized) { minimized = false; utility.hidden = false; }
+      setKey("utility");
+    }, mark: minimized ? "diamond" as const : keyWindow === "utility" ? "check" as const : undefined }] : [])
+  ] },
+  { title: "Help", entries: () => [dimmed("Show Log in Finder")] }
+]);
 
 const store = createStore((demoData as unknown as { state: LauncherState }).state, { topic, openWindow, closeWindow });
 window.MacLauncherDemo = { store, host: { topic, openWindow, closeWindow } };
