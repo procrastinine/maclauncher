@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const {setImmediate: yieldTurn} = require('node:timers/promises');
-const Spec = require('./nvidia-weight-spec.json');
+const Spec = require('./nvidia-weight-spec.json'), SourcePins = require('../runtime/source-pins');
 
 const maximumBytes = 128 * 1024 * 1024;
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -111,7 +111,7 @@ async function convert(source, destination, {signal} = {}) {
     await yieldTurn();
   }
   header.__metadata__ = {source_sha256: inputHash, source: path.basename(source.file), layout: 'OIHW',
-    adapter: source.adapter, extractor_repository: Spec.source.repository, extractor_commit: Spec.source.revision};
+    adapter: source.adapter, extractor_repository: Spec.source.repository, extractor_commit: SourcePins.sourceRevision('third_party/MLX-DLSS')};
   const json = Buffer.from(JSON.stringify(header)), length = Buffer.alloc(8);
   length.writeBigUInt64LE(BigInt(json.length));
   const output = Buffer.concat([length, json, ...parts]);
@@ -126,7 +126,7 @@ async function convert(source, destination, {signal} = {}) {
   } catch (error) { await fs.promises.unlink(destination); throw error; }
   return {architecture: source.architecture, operation: source.operation, tensors, sha256: sha256(output),
     sourceFiles: [{file: path.basename(source.file), sha256: inputHash, adapter: source.adapter,
-      extractorRepository: Spec.source.repository, extractorCommit: Spec.source.revision}]};
+      extractorRepository: Spec.source.repository, extractorCommit: SourcePins.sourceRevision('third_party/MLX-DLSS')}]};
 }
 
 module.exports = {inspect, convert};

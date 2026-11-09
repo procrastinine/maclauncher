@@ -1,5 +1,5 @@
 // Copyright (c) MacLauncher contributors. Apache-2.0.
-// Exact local-resource conversion from MLX-DLSS 7870371e8bf6c03967213f1a5d40db6c5a3bee38.
+// Exact local-resource conversion from MLX-DLSS at the revision the graphics package records.
 // Captured model parameters remain NVIDIA material. No CUDA code is executed.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {setImmediate:yieldTurn}=require('node:timers/promises');

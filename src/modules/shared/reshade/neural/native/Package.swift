@@ -5,7 +5,7 @@ import PackageDescription
 guard let path = ProcessInfo.processInfo.environment["MACLAUNCHER_MLX_DLSS_SOURCE"],
   let data = FileManager.default.contents(atPath: path + "/maclauncher-adaptation.json"),
   let metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-  metadata["upstreamCommit"] as? String == "7870371e8bf6c03967213f1a5d40db6c5a3bee38",
+  metadata["upstreamCommit"] is String,
   let adaptations = metadata["adaptations"] as? [[String: Any]],
   adaptations.contains(where: { $0["id"] as? String == "kernel-parameters-cache-lock-v2" }) else {
   fatalError("Use native/build.sh to prepare the synchronized MLX-DLSS source before building this provider.")

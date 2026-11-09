@@ -1,8 +1,8 @@
-// Packed NR resource decoding derived from MLX-DLSS (Apache-2.0),
-// commit 7870371e8bf6c03967213f1a5d40db6c5a3bee38. Vendor code is never executed.
+// Packed NR resource decoding derived from MLX-DLSS (Apache-2.0) at the revision
+// the graphics package records. Vendor code is never executed.
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const {setImmediate: yieldTurn} = require('node:timers/promises');
-const NR = require('./nr-models');
+const NR = require('./nr-models'), SourcePins = require('../runtime/source-pins');
 const MAXIMUM = 512 * 1024 * 1024;
 const RESOURCES = ['WEIGHTS_CC_SMALL_FP8', 'WEIGHTS_HT'];
 const STANDARD = {32: [0x50c0, 0x58c0, 0x5900], 64: [0xf140, 0x11130, 0x111a0], 128: [0x30240, 0x38230, 0x38320], 256: [0xa8450, 0xc8440, 0xc8630]};
@@ -227,7 +227,7 @@ async function convert(source, directory, {signal} = {}) {
     signal?.throwIfAborted();await fs.promises.writeFile(file, output, {flag: 'wx'});
     outputs.push({file, name: model.name, topology: model.spec, architecture: NR.ARCHITECTURE, operation: 'mlx-dlss', sha256: digest(output),
       sourceFiles: [{file: path.basename(source.file), sha256: sourceHash, resource, resourceSHA256: digest(payload), adapter: source.adapter,
-        extractorRepository: 'https://github.com/iamwavecut/MLX-DLSS', extractorCommit: '7870371e8bf6c03967213f1a5d40db6c5a3bee38'}]});
+        extractorRepository: 'https://github.com/iamwavecut/MLX-DLSS', extractorCommit: SourcePins.sourceRevision('third_party/MLX-DLSS')}]});
   }
   if (!unchanged(source.stat, await fs.promises.lstat(source.file))) throw new Error('The NR library changed during conversion.');
   return outputs;

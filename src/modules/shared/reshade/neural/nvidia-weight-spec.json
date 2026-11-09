@@ -2,7 +2,6 @@
   "schema": 1,
   "source": {
     "repository": "https://github.com/iamwavecut/MLX-DLSS",
-    "revision": "7870371e8bf6c03967213f1a5d40db6c5a3bee38",
     "license": "Apache-2.0",
     "files": {
       "python/mlxdlss/tools/extract_dlssg_weights.py": "d4ded5e7bac46ec3ed7438f1a89581324a29c9c2612bb0ad7f1994e974b82dc5",

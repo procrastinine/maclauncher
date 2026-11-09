@@ -1,6 +1,6 @@
 // Copyright (c) MacLauncher contributors. Apache-2.0.
-// Restricted scalar PTX translation from MLX-DLSS, commit
-// 7870371e8bf6c03967213f1a5d40db6c5a3bee38, tools/ptx_metal.py.
+// Restricted scalar PTX translation from MLX-DLSS tools/ptx_metal.py, at the
+// revision the graphics package records.
 // Used only while converting an exact local model library; never executes PTX.
 function compileKernel(source){
  if(typeof source!=='string'||source.length>1<<20)throw Error('The scalar shader source is invalid.');

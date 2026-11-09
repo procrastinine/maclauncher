@@ -1,5 +1,5 @@
-// Topology and tensor contracts derived from MLX-DLSS (Apache-2.0),
-// commit 7870371e8bf6c03967213f1a5d40db6c5a3bee38.
+// Topology and tensor contracts derived from MLX-DLSS (Apache-2.0) at the
+// revision the graphics package records as third_party/MLX-DLSS.
 const ARCHITECTURE = 'mlxdlss.neural-rendering-transformer.v1';
 const CHANNELS = [32, 64, 128, 256];
 const HEADS = {32: 1, 64: 2, 128: 4, 256: 8, 512: 16, 1024: 32};
