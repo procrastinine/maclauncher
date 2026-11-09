@@ -248,10 +248,11 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
    if(displayDrawable!=drawable){displayDrawable=nil;displayDrawable=drawables.adopt(output,drawable);}}
   schedule();
  }
- // While display timing is paused, no display-link update supplies a drawable; presentation acquires its
- // drawables from the layer until timing resumes.
+ // A CAMetalDisplayLink, paused or running, keeps its layer from supplying -nextDrawable. While display
+ // timing is not needed the link is released and presentation acquires drawables from the layer;
+ // start() creates a new link.
  void pauseGenerationTiming(){
-  if(metalLink){metalTiming=false;metalLink->pause();}
+  if(metalLink){metalTiming=false;++timingEpoch;metalLink->invalidate();metalLink.reset();}
   if(link&&CVDisplayLinkIsRunning(link))CVDisplayLinkStop(link);
   std::lock_guard lock(displayDrawableMutex);displayDrawable=nil;
  }
