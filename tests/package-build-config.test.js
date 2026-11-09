@@ -160,8 +160,7 @@ test('source-only helper producers and Python SDK inputs are omitted while consu
   const matchers = getMainFileMatchers(projectRoot, '/stage', value => value, build.mac, { info }, path.join(projectRoot, build.directories.output), false);
   for (const file of ['src/modules/rgss/overlays/mkxpz-config.c', 'src/modules/rgss/overlays/mkxpz-identity.m',
     'src/modules/shared/runtime/steamworks/native/offline-0.5.0/source/offline.cpp', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/source/ticket.cpp',
-    'src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs',
-    'src/modules/mages/native/ffmpeg-probe.c'])
+    'src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs'])
     assert.equal(matchers.some(m => selectedBy(m, file)), false, file);
   for (const file of ['src/modules/siglus/native/adapter.m', 'src/modules/siglus/native-host/host.m',
     'src/modules/nscripter/runtime/portable-native/CMakeLists.txt', 'src/modules/shared/runtime/steamworks/native/offline-0.5.0/contracts.json',

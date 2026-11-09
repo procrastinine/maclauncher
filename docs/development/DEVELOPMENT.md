@@ -159,7 +159,7 @@ Small integration helpers ship inside the app with fixed versions. Their sources
 | --- | --- |
 | Offline Steam API library | `node src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs /absolute/new-output` |
 | Steam encrypted-ticket loader | `node src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs /absolute/new-output` |
-| Java steamworks4j bridges | `node src/modules/java/runtime/steamworks/stage-bridge.cjs <publisher-archives> <jdk-bin> <empty-resource-directory>`, with the publisher archives from the catalog and the `bin` directory of a JDK 17 |
+| Java steamworks4j bridges | [Java Steamworks recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/tools/build-java-steamworks.mjs) in MacLauncher Builds |
 | LÖVE LuaSteam bridge | [`luasteam-build.js`](../../src/modules/love/runtime/luasteam-build.js) with the inputs listed in [LÖVE](../game-types/LOVE.md#bridge-source); [`luasteam-package.js`](../../src/modules/love/runtime/luasteam-package.js) stages the packaged bridge profile |
 | MKXP-Z configuration helper | [MKXP-Z configuration helper recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/scripts/stage-mkxpz-config-helper.cjs) in MacLauncher Builds |
 | CatSystem2 KIF cipher | `node src/modules/catsystem2/runtime/stage-crypto.cjs <empty-resource-directory>` |

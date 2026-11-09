@@ -9,7 +9,8 @@ const Classes = require("../src/modules/java/runtime/steamworks/class-file");
 const Runtime = require("../src/modules/java/runtime/steamworks/runtime");
 const Java = require("../src/modules/java/main");
 const JavaCore = require("../src/modules/java/runtime/java-runtime");
-const { jar } = require("../src/modules/java/runtime/steamworks/build-agent.cjs");
+const { writeZipArchive } = require("./helpers/zip-fixture");
+const jar = (file, entries) => writeZipArchive(file, entries.sort((a, b) => a[0].localeCompare(b[0], "en")).map(([name, data]) => ({ name, data })));
 
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 const u2 = value => { const buffer = Buffer.alloc(2); buffer.writeUInt16BE(value); return buffer; };
@@ -41,7 +42,7 @@ function fixture(t, options = {}) {
   const jarPath = path.join(root, "Game.jar");
   const entries = [["META-INF/MANIFEST.MF", Buffer.from("Manifest-Version: 1.0\r\nMain-Class: Game\r\n" + (options.classpath ? "Class-Path: " + options.classpath + "\r\n" : "") + "\r\n")],
     ["Game.class", javaClass(options)], ...(options.noWrapper ? [] : [[wrapperName, wrapper]])];
-  fs.writeFileSync(jarPath, jar(entries));
+  jar(jarPath, entries);
   const entry = { gameId: "java-one", gamePath: jarPath, contentRootDir: root, moduleData: { jarPath, requiredJava: 8, runtimeLine: 8 }, runtimeData: {} };
   return { root, jarPath, entry, pin, wrapper, wrapperName, entries, options: { catalog: [pin] } };
 }
@@ -52,12 +53,12 @@ test("Java Steam requires an executable call and exact wrapper bytes, rather tha
   const ordinary = Consumer.inspect(source.entry, source.options);
   assert.equal(ordinary.required, false);
   assert.equal(Consumer.requirement(source.entry, source.options), null);
-  fs.writeFileSync(source.jarPath, jar(source.entries.map(([name, bytes]) => [name, name === "Game.class" ? javaClass({ appId: 480 }) : bytes])));
+  jar(source.jarPath, source.entries.map(([name, bytes]) => [name, name === "Game.class" ? javaClass({ appId: 480 }) : bytes]));
   const required = Consumer.requirement(source.entry, source.options);
   assert.equal(required.pin.version, "1.9.0");
   assert.equal(required.evidence.appId.value, 480);
   assert.deepEqual(required.evidence.architectures, ["x86_64"]);
-  fs.writeFileSync(source.jarPath, jar(source.entries.map(([name, bytes]) => [name, name === "Game.class" ? javaClass() : Buffer.concat([bytes, Buffer.from([0])])] )));
+  jar(source.jarPath, source.entries.map(([name, bytes]) => [name, name === "Game.class" ? javaClass() : Buffer.concat([bytes, Buffer.from([0])])] ));
   assert.throws(() => Consumer.requirement(source.entry, source.options), { code: "JAVA_STEAM_VERSION_UNKNOWN" });
 });
 
@@ -99,7 +100,7 @@ test("Java Steam caches source facts and invalidates them when dependency or ID 
 
 test("Java warm facts retain dependency and missing metadata observations for the host cache", async t => {
   const source = fixture(t, { appId: 480, classpath: "wrapper.jar", noWrapper: true });
-  fs.writeFileSync(path.join(source.root, "wrapper.jar"), jar([[source.wrapperName, source.wrapper]]));
+  jar(path.join(source.root, "wrapper.jar"), [[source.wrapperName, source.wrapper]]);
   Consumer.inspect(source.entry, source.options);
   const root = fs.realpathSync(source.root), Observations = require("../src/core/file-observations");
   const recorded = await Observations.recordReads({ roots: [root] }, () => Consumer.inspect(source.entry, source.options));
@@ -113,16 +114,16 @@ test("Java warm facts retain dependency and missing metadata observations for th
 test("Java Steam handles a bounded local manifest classpath and rejects escape, duplicate and missing dependencies", t => {
   const source = fixture(t, { appId: 480, classpath: "libs/wrapper.jar", noWrapper: true });
   fs.mkdirSync(path.join(source.root, "libs"));
-  fs.writeFileSync(path.join(source.root, "libs/wrapper.jar"), jar([[source.wrapperName, source.wrapper]]));
+  jar(path.join(source.root, "libs/wrapper.jar"), [[source.wrapperName, source.wrapper]]);
   assert.equal(Consumer.requirement(source.entry, source.options).pin.version, "1.9.0");
   fs.rmSync(path.join(source.root, "libs/wrapper.jar"));
   assert.throws(() => Consumer.requirement(source.entry, source.options), { code: "JAVA_STEAM_INSPECTION_INCOMPLETE" });
-  fs.writeFileSync(path.join(source.root, "libs/wrapper.jar"), jar([[source.wrapperName, source.wrapper]]));
+  jar(path.join(source.root, "libs/wrapper.jar"), [[source.wrapperName, source.wrapper]]);
   assert.equal(Consumer.requirement(source.entry, source.options).pin.version, "1.9.0");
   const escaped = fixture(t, { appId: 480, classpath: "../wrapper.jar" });
   assert.throws(() => Consumer.requirement(escaped.entry, escaped.options), { code: "JAVA_STEAM_INSPECTION_INCOMPLETE" });
   const duplicate = fixture(t, { appId: 480 });
-  fs.writeFileSync(duplicate.jarPath, jar([...duplicate.entries, ["Game.class", javaClass()]]));
+  jar(duplicate.jarPath, [...duplicate.entries, ["Game.class", javaClass()]]);
   assert.throws(() => Consumer.inspectArchives(duplicate.jarPath, duplicate.root, duplicate.options), { code: "JAVA_STEAM_ARCHIVE_INVALID" });
 });
 

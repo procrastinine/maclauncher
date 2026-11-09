@@ -11,8 +11,6 @@
       "includedPackage": "steam-api-helper"
     },
     "sourceRevision": "33ae54e87657afe8464eb01845e62b79403f5bfa",
-    "sourceUrl": "https://github.com/code-disaster/steamworks4j/tree/1.9.0",
-    "publisherUrl": "https://repo.maven.apache.org/maven2/com/code-disaster/steamworks4j/steamworks4j/1.9.0/steamworks4j-1.9.0.jar",
     "publisherJarSha256": "f5e70a648f77d09b3a665af5f8b110495b14f7e568280313b8a56903a4740379",
     "jniSha256": "86326f197fa7f502f9fb122ce0753e315f7fa220712cbd81c6b29b7c97e7b42f",
     "jniSize": 407344,
@@ -210,8 +208,6 @@
       "includedPackage": "steam-api-helper"
     },
     "sourceRevision": "84790acfcb16f4ee25f25f5725bd0df39c527f6d",
-    "sourceUrl": "https://github.com/code-disaster/steamworks4j/tree/1.10.0",
-    "publisherUrl": "https://repo.maven.apache.org/maven2/com/code-disaster/steamworks4j/steamworks4j/1.10.0/steamworks4j-1.10.0.jar",
     "publisherJarSha256": "2da3d053f0405b6aeb68f94ab281f8eb827e7a9fc66230b7efb077be8aec2d64",
     "jniSha256": "f596487a0edce464c21c551c1a29a29aedaf4965d0a21b6d58ab3a55bce5c97e",
     "jniSize": 681280,
