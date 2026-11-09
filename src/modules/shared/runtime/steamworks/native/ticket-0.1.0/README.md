@@ -8,8 +8,6 @@ The independent implementation uses standard C++ fixed-width types and system li
 
 ## Build
 
-Building from source requires Node.js and the macOS command line compiler. The compiler is installed through `xcode-select --install`; Node.js is available from [nodejs.org](https://nodejs.org/). These tools are needed only to rebuild the supplied native library.
-
-`node build.cjs /absolute/path/to/new/output` builds the library on macOS. The output directory must be new. The script explicitly compiles ARM64 and Intel for deployment target13.0, uses only system SDK/libraries, combines slices, signs ad hoc and writes build.json. No Steam SDK, Homebrew, gh or network request is used.
+[MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/steam-ticket-loader.json) compiles the [source](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/src/modules/shared/runtime/steamworks/native/ticket-0.1.0/source/ticket.cpp) for ARM64 and Intel with deployment target 13.0, uses only system SDK libraries, combines the slices and signs the result ad hoc. No Steam SDK or network request is used.
 
 The loader contract is used by [Greenworks](https://github.com/greenheartgames/greenworks). The loader is an independent implementation and contains no Greenworks code.

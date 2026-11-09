@@ -57,7 +57,7 @@ The adapter also makes a small number of changes to the private script copies. S
 
 KiriKiri SDL2 needs an SDL version of the KAG3 scripts, the KAG3 polyfill, together with its font. These come from [krkrsdl2/kag3](https://github.com/krkrsdl2/kag3/tree/fe6d40e9a1667293ebb053af7f06374b7dac9292) at `fe6d40e9a1667293ebb053af7f06374b7dac9292`. When an installed krkrsdl2 package already contains these resources, they are reused from it. Preparation verifies the package and resource manifests and records the selected resource revision and manifest hash, and each prepared game then refers to those files. The Ume Gothic O5 font carries its embedded license notice.
 
-If the selected engine version lacks these resources, preparation takes them from a compatible installed package or uses the KAG3 scripts bundled with MacLauncher. The bundled scripts come without the font, so on first Play, after consent, MacLauncher downloads the Ume Gothic O5 font from the same krkrsdl2/kag3 commit, checks its size and SHA-256 and prepares the shared resource folder in permanent Application Support. The original resource manifest and file hashes remain unchanged. Resource folders that were already verified remain usable offline, and the engine selection and defaults stay unchanged.
+If the selected engine version lacks these resources, preparation takes them from a compatible installed package, and Play installs one that carries them after consent. Resource folders that earlier MacLauncher versions verified in permanent Application Support remain usable offline, and the engine selection and defaults stay unchanged.
 
 ## Saves
 

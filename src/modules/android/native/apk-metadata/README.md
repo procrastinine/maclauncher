@@ -20,8 +20,4 @@ Requests and responses are limited to 1 MiB, source lists to 1024 APKs and encod
 
 ## Build
 
-`build.mjs` accepts `--aim-source`, `--dependencies`, `--rustc` and `--output`. It copies the original AIM parser sources, applies `adapt.mjs`, compiles the parser and executable, sets the macOS 13 deployment target and signs the result. The dependency JSON supplies checksum-pinned `aim_android_xml`, `android_image_extract`, `libc` and `serde_json` Rust archives plus `searchDirectories` for their transitive archives. The two AIM dependency libraries use their original source files; `android-image-extract` uses the pinned `crc32fast`, `flate2` Rust backend and `sha2` dependencies.
-
-`dependencies.mjs --aim-source ... --archives ... --rustc ... --output ...` compiles those two original AIM libraries and emits the dependency JSON. Its archive input supplies checksum-pinned `libc`, `serde_json`, `crc32fast`, `flate2` and `sha2` archives plus their dependency search directories. Both producers remap source paths and retain source checksums.
-
-`source.mjs` creates the corresponding-source archive and notices from the pinned AIM tree, its resolved Cargo lockfile, the supplied crate source cache. These are developer build inputs; ordinary imports execute the included helper directly.
+[MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds/blob/main/tools/build-apk-metadata.mjs) copies the original AIM parser sources, applies the [owned adaptation](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/src/modules/android/native/apk-metadata/adapt.mjs), compiles the [executable](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/src/modules/android/native/apk-metadata/main.rs) for the macOS 13 deployment target and signs the result.

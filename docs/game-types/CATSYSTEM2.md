@@ -53,4 +53,4 @@ MacLauncher's archive, script and text readers follow the [KIF](https://github.c
 
 The [HG-3 reader](../../src/modules/catsystem2/image-hg3.js) is written for Node and keeps the [MIT notice](../../src/modules/catsystem2/resources/TriggersTools-MIT.txt) of the code it adapts.
 
-The cipher helper's C source is [kif-crypto.c](../../src/modules/catsystem2/runtime/kif-crypto.c), and its [build script](../../src/modules/catsystem2/runtime/stage-crypto.cjs) uses Apple's Command Line Tools. Both files are part of the matching MacLauncher release commit. [Runtime distribution](../runtimes/RUNTIME_DISTRIBUTION.md) describes the included helpers.
+The cipher helper's C source is [kif-crypto.c](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/src/modules/catsystem2/runtime/kif-crypto.c). MacLauncher Builds compiles it with Apple's Command Line Tools from its [helper profile](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/catsystem2-kif-crypto.json). [Runtime distribution](../runtimes/RUNTIME_DISTRIBUTION.md) describes the included helpers.

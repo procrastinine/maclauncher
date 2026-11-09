@@ -2,8 +2,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { randomUUID } = require("node:crypto");
-const { cloneOrCopySync } = require("../shared/copy-file");
-const Font = require("./font");
 const Native = require("../shared/runtime/local-native");
 const Bundled = require("../shared/runtime/bundled-native");
 const GameData = require("../shared/game-data");
@@ -69,27 +67,10 @@ function resources(userRoot, install) {
   return { root, manifest, manifestSha256 };
 }
 function needsResources(entry) { return Boolean(entry.moduleData?.archivePath && /^3\./.test(entry.moduleData.kagVersion || "")); }
-function bundledResourcesAvailable() {
-  return Object.keys(require("./kag3-profile.json").files).filter(name => name !== "font.ttf")
-    .every(name => fs.existsSync(path.join(__dirname, "resources/kag3-polyfill", name)));
-}
 async function ensureResources(context, install) {
+  // The krkrsdl2 package carries the KAG3 resources; verified resource folders remain usable.
   const existing = resources(context.userDataDir, install); if (existing) return existing;
-  const font = await Font.ensure(context), manifest = require("./kag3-profile.json");
-  const parent = path.join(context.userDataDir, "runtimes", "kag3-polyfill");
-  Bundled.realDirectory(parent, { create: true });
-  const root = path.join(parent, POLYFILL_PIN), staging = fs.mkdtempSync(path.join(parent, ".prepare-"));
-  try {
-    for (const [name, expected] of Object.entries(manifest.files)) {
-      const source = name === "font.ttf" ? font : path.join(__dirname, "resources/kag3-polyfill", name);
-      const stored = Bundled.readRegular(source, expected.size);
-      if (stored.size !== expected.size || stored.sha256 !== expected.sha256) throw Error(`KAG3 resource checksum differs: ${name}`);
-      cloneOrCopySync(source, path.join(staging, name));
-    }
-    context.signal?.throwIfAborted();
-    if (!fs.existsSync(root)) fs.renameSync(staging, root);
-    return resources(context.userDataDir);
-  } finally { fs.rmSync(staging, { recursive: true, force: true }); }
+  throw new Error("The selected KiriKiri SDL2 version has no KAG3 compatibility resources. Install a version that includes them in Runtimes.");
 }
 function guardUnavailableAudio(text) {
   // Match the stock KAG3 class definitions, then bound their complete bodies.
@@ -308,4 +289,4 @@ function prepareGame(entry, context, install) {
     return { ...record, preparedRoot: destination, cached: false };
   } finally { fs.rmSync(staging, { recursive: true, force: true }); }
 }
-module.exports = { PROFILE, POLYFILL_PIN, resources, needsResources, ensureResources, bundledResourcesAvailable, prepareGame, selectLanguageArchives, hostPrelude, decode, guardUnavailableAudio, skipLegacyOpeningWait, silenceLegacyMidiTags, disambiguateMessageDrawFace };
+module.exports = { PROFILE, POLYFILL_PIN, resources, needsResources, ensureResources, prepareGame, selectLanguageArchives, hostPrelude, decode, guardUnavailableAudio, skipLegacyOpeningWait, silenceLegacyMidiTags, disambiguateMessageDrawFace };

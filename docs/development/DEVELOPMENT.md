@@ -153,16 +153,16 @@ The packaged app registers the input formats that modules declare for Finder's *
 
 ## Included helpers
 
-Small integration helpers ship inside the app with fixed versions. Their sources and build recipes are in this repository, while [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds) builds the downloadable game runtimes and tools. Rebuilding a helper requires Node.js and Apple's Command Line Tools (`xcode-select --install`), which install under `/Library/Developer/CommandLineTools`. Each builder writes to a new, empty output directory, sets its deployment targets explicitly, signs native output ad hoc and records source and binary checksums. A changed helper gets a new version and a new recorded content checksum.
+Small integration helpers ship inside the app with fixed versions. Their sources and build recipes are in this repository or, where the table names it, in [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds), which also builds the downloadable game runtimes and tools. Rebuilding a helper requires Node.js and Apple's Command Line Tools (`xcode-select --install`), which install under `/Library/Developer/CommandLineTools`. Each builder writes to a new, empty output directory, sets its deployment targets explicitly, signs native output ad hoc and records source and binary checksums. A changed helper gets a new version and a new recorded content checksum.
 
 | Helper | Builder |
 | --- | --- |
-| Offline Steam API library | `node src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs /absolute/new-output` |
-| Steam encrypted-ticket loader | `node src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs /absolute/new-output` |
+| Offline Steam API library | [Offline Steam API helper profile](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/steam-api-helper.json) in MacLauncher Builds |
+| Steam encrypted-ticket loader | [Encrypted-ticket loader helper profile](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/steam-ticket-loader.json) in MacLauncher Builds |
 | Java steamworks4j bridges | [Java Steamworks recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/tools/build-java-steamworks.mjs) in MacLauncher Builds |
 | LÖVE LuaSteam bridge | [`luasteam-build.js`](../../src/modules/love/runtime/luasteam-build.js) with the inputs listed in [LÖVE](../game-types/LOVE.md#bridge-source); [`luasteam-package.js`](../../src/modules/love/runtime/luasteam-package.js) stages the packaged bridge profile |
-| MKXP-Z configuration helper | [MKXP-Z configuration helper recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/scripts/stage-mkxpz-config-helper.cjs) in MacLauncher Builds |
-| CatSystem2 KIF cipher | `node src/modules/catsystem2/runtime/stage-crypto.cjs <empty-resource-directory>` |
+| MKXP-Z configuration helper | [MKXP-Z configuration helper profile](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/mkxpz-config-helper.json) in MacLauncher Builds |
+| CatSystem2 KIF cipher | [KIF cipher helper profile](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/catsystem2-kif-crypto.json) in MacLauncher Builds |
 | iOS PlayTools storage adapter | `node scripts/stage-ios-helper.mjs` |
 | Android account control | [Android launcher recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/android-launcher/build.mjs) in MacLauncher Builds, shipped in an attested included package |
 

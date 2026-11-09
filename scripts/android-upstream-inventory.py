@@ -38,66 +38,8 @@ def parse_blueprints(documents):
         return []
     executable = os.environ.get("ANDROID_BLUEPRINT_PARSER")
     if not executable:
-        raise RuntimeError("Set ANDROID_BLUEPRINT_PARSER to the original Blueprint parser, or acquire the pinned release to build it automatically")
+        raise RuntimeError("Set ANDROID_BLUEPRINT_PARSER or --blueprint-parser to the android-blueprint-parser package executable")
     return json.loads(subprocess.check_output([executable], input=json.dumps(documents).encode(), timeout=120))
-
-
-def refresh_blueprint_parser(output, go="go"):
-    """Let Go's cache rebuild the transport over the existing pinned package."""
-    output = output.resolve()
-    identity_file = output / "parser-sources.json"
-    identity = json.loads(identity_file.read_text())
-    executable = output / "bin/android-blueprint-parser"
-    executable.parent.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ, GOPATH=str(output), GOCACHE=str(output / "cache"), GO111MODULE="off", GOWORK="off")
-    driver = ROOT / "scripts/android-blueprint/main.go"
-    subprocess.run([go, "build", "-o", str(executable), str(driver)], env=env, check=True)
-    identity["driverSha256"] = hashlib.sha256(driver.read_bytes()).hexdigest()
-    identity_file.write_text(json.dumps(identity, indent=2) + "\n")
-    blueprint_parser_identity.cache_clear()
-    return str(executable)
-
-
-def bootstrap_blueprint_parser(manifest, cache, output, go="go"):
-    """Bootstrap the original Go package before parsing any build declaration.
-
-    The driver imports the original parser package, whose own Go source files
-    and standard-library imports are selected by Go. No Blueprint grammar is
-    needed to compile the parser itself.
-    """
-    project = next(project for project in manifest["projects"] if project["name"] == "platform/build/blueprint")
-    directory, repository, revision = acquire_release_checkout(project, cache, "https://android.googlesource.com")
-    output = output.resolve()
-    destination = output / "src/github.com/google/blueprint"
-    listing = git(directory, "ls-tree", "-r", "-z", revision, "--", "parser", "LICENSE", "NOTICE")
-    entries = []
-    for raw in listing.split(b"\0"):
-        if not raw:
-            continue
-        metadata, filename = raw.split(b"\t", 1)
-        mode, kind, oid = metadata.decode().split()
-        if kind == "blob":
-            entries.append((filename.decode(), mode, oid))
-    hashes = list(dict.fromkeys(oid for _, _, oid in entries))
-    present = subprocess.check_output(["git", "-C", str(directory), "cat-file", "--batch-check"], env=ENV,
-        input=("\n".join(hashes) + "\n").encode(), timeout=30).decode().splitlines()
-    fetch_metadata_objects(directory, [line.split()[0] for line in present if line.endswith(" missing")])
-    files = []
-    for filename, mode, oid in entries:
-        data = git(directory, "cat-file", "blob", oid)
-        target = destination / filename
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if mode == "120000":
-            if target.is_symlink():
-                target.unlink()
-            target.symlink_to(data.decode())
-        else:
-            target.write_bytes(data)
-            target.chmod(0o755 if mode == "100755" else 0o644)
-        files.append({"path": filename, "gitObject": oid, "sha256": hashlib.sha256(data).hexdigest()})
-    (output / "parser-sources.json").write_text(json.dumps({"project": project["name"], "repository": repository,
-        "revision": revision, "files": files}, indent=2) + "\n")
-    return refresh_blueprint_parser(output, go)
 
 
 def git(directory, *args):
@@ -834,8 +776,6 @@ def main():
     parser.add_argument("--manifest-revision")
     parser.add_argument("--checkout-root", type=Path, action="append", default=[])
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--refresh-blueprint-parser", type=Path, help="Rebuild the parser transport over its existing pinned package")
-    parser.add_argument("--go", default="go")
     parser.add_argument("--framework", type=Path)
     parser.add_argument("--build", type=Path)
     parser.add_argument("--staged", type=Path)
@@ -843,14 +783,11 @@ def main():
     parser.add_argument("--acquire-release-cache", type=Path,
         help="Explicitly acquire every manifest project's recursive Git tree and build metadata into this private bare-repository cache")
     parser.add_argument("--metadata-jobs", type=int, default=4)
-    parser.add_argument("--blueprint-parser", type=Path, help="Original Blueprint parser executable; otherwise acquired releases bootstrap it automatically")
+    parser.add_argument("--blueprint-parser", type=Path, help="Executable from the android-blueprint-parser package, which builds the original Blueprint parser; ANDROID_BLUEPRINT_PARSER also names it")
     parser.add_argument("--refresh-blueprints", action="store_true", help="Refresh every cached Blueprint declaration from --base-inventory with the original parser")
     parser.add_argument("--base-inventory", type=Path,
         help="Retain an existing consumed-source/artifact scan while independently enumerating the full same-release source universe")
     args = parser.parse_args()
-    if args.refresh_blueprint_parser:
-        refresh_blueprint_parser(args.refresh_blueprint_parser, args.go)
-        return
     if not all((args.manifest, args.manifest_revision, args.output)):
         parser.error("--manifest, --manifest-revision and --output are required for inventory generation")
     if not re.fullmatch(r"[0-9a-f]{40}", args.manifest_revision):
@@ -862,8 +799,6 @@ def main():
     manifest = manifest_projects(args.manifest, args.manifest_revision)
     if args.blueprint_parser:
         os.environ["ANDROID_BLUEPRINT_PARSER"] = str(args.blueprint_parser.resolve())
-    elif not os.environ.get("ANDROID_BLUEPRINT_PARSER") and args.acquire_release_cache:
-        os.environ["ANDROID_BLUEPRINT_PARSER"] = bootstrap_blueprint_parser(manifest, args.acquire_release_cache, args.output / "blueprint-parser")
     available = checkouts(args.checkout_root + [ROOT / p["path"] for p in consumed if (ROOT / p["path"] / ".git").exists()])
     base = json.loads(args.base_inventory.read_text()) if args.base_inventory else None
     if base and base["manifest"]["revision"] != args.manifest_revision:

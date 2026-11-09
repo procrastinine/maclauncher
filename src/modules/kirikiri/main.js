@@ -90,7 +90,6 @@ function getRuntimeRequirements(entry, context) {
   if (context.runtimeId !== "krkrsdl2" || !Preparation.needsResources(entry)) return [];
   const selected = selection(entry, context);
   if (Preparation.resources(context.userDataDir, selected.install) || preparationInstall(entry, context, selected)) return [];
-  if (Preparation.bundledResourcesAvailable()) return [];
   if (!selected.install && selected.discoveryRequired) return [];
   // A missing selected host carrying the resource contract installs both at once.
   if (manager.core.listCatalog({ userDataDir: context.userDataDir }).some(pin => pin.version === selected.version && pin.kag3Resources === 1)) return [];

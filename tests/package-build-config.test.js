@@ -158,10 +158,6 @@ test('source-only helper producers and Python SDK inputs are omitted while consu
   const build = Content.applyBuildPolicy(doMergeConfigs([packageConfig().build]));
   const info = { projectDir: projectRoot, buildResourcesDir: 'build', config: build, isPrepackedAppAsar: false, debugLogger: { isEnabled: false } };
   const matchers = getMainFileMatchers(projectRoot, '/stage', value => value, build.mac, { info }, path.join(projectRoot, build.directories.output), false);
-  for (const file of ['src/modules/rgss/overlays/mkxpz-config.c', 'src/modules/rgss/overlays/mkxpz-identity.m',
-    'src/modules/shared/runtime/steamworks/native/offline-0.5.0/source/offline.cpp', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/source/ticket.cpp',
-    'src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs'])
-    assert.equal(matchers.some(m => selectedBy(m, file)), false, file);
   for (const file of ['src/modules/siglus/native/adapter.m', 'src/modules/siglus/native-host/host.m',
     'src/modules/nscripter/runtime/portable-native/CMakeLists.txt', 'src/modules/shared/runtime/steamworks/native/offline-0.5.0/contracts.json',
     'src/modules/minori/runtime/probe.rs'])
@@ -233,7 +229,7 @@ test("first-party fixtures and managed engines stay out of ASAR while declared h
     assert.equal(selected(file),true,`Runtime or developer input unintentionally excluded: ${file}`);
   for(const file of ['src/modules/android/providers/aim/resources/maclauncher-aim',
     'src/modules/siglus/resources/native-host/macos-universal/siglus-host','src/modules/siglus/resources/rlvm-adapter/rlvm-adapter.dylib',
-    'src/modules/vnds/resources/0.0.13-838e47b-mac-v1/main.lua','src/modules/kirikiri/resources/kag3-polyfill/KAGParser.tjs'])
+    'src/modules/vnds/resources/0.0.13-838e47b-mac-v1/main.lua'])
     assert.equal(selected(file),false,'Managed adaptation included in ASAR: '+file);
   const distribution=require('../scripts/distribution-model.cjs'),plan=distribution.createPlan({arch:'arm64',maximumMacOS:'26.0'});
   const resource=distribution.resourceRules(plan).find(item=>item.from==='src/resources');
@@ -309,7 +305,7 @@ test("application packaging preserves code and artwork while excluding local fil
   for (const file of ["src/main/bootstrap.js", "src/modules/core/launcher.js", "src/runtime/electron-game.js",
     "src/modules/bgi/main.js", "src/modules/bgi/archive.js", "src/modules/bgi/inspect.js",
     "src/modules/rgss/resources/icon.png", "src/modules/rgss/runtime/mkxpz-builds.js",
-    "src/modules/rgss/soundfont.js", "src/modules/nscripter/font.js", "src/modules/kirikiri/font.js",
+    "src/modules/rgss/soundfont.js", "src/modules/nscripter/font.js",
     "src/modules/shared/runtime/pinned-file.js", "src/modules/rgss/assets.js", "src/modules/rgss/rtp.js",
     "dist/renderer/index.html", "package.json", "LICENSE"])
     assert.equal(selected(file), true, `Application file excluded: ${file}`);
