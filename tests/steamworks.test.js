@@ -134,7 +134,7 @@ test("GameMaker Steam preflight prefers matching native libraries and blocks unk
   fs.writeFileSync(dataPath, "original game bytes");
   const nativeLibrary = libraryFixture(path.join(app, "Contents/MacOS"), "x86_64");
   const inspection = { steamFunctions: true, steamAppId: -480 };
-  const install = { version: "1.4.9999", binarySha256: GameMakerSteam.LEGACY_SHA256, runnerAppPath: app, architectures: ["x86_64"] };
+  const install = { version: "1.4.9999", runnerAppPath: app, architectures: ["x86_64"] };
   const result = GameMakerSteam.resolveDependency(inspection, dataPath, install, { offline: false });
   assert.equal(result.mode, "native");
   assert.equal(result.libraryPath, nativeLibrary.file, "an ARM game library cannot satisfy an Intel legacy runner");

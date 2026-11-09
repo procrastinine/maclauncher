@@ -5,14 +5,10 @@
     "helperVersion": {
       "includedPackage": "steam-api-helper"
     },
-    "helperSourceRevision": null,
-    "helperLibrarySha256": "6a9ce700bf002fb817518221ebe093213ad84e093cb5d63d7a3315f004e74cae",
     "bridgeVersion": {
       "includedPackage": "love-luasteam"
     },
-    "bridgeLibrarySha256": "d9c0bb486e268d79dfcb2b7641159badcb016c5504f5eb3d9b6d859a7623e81a",
     "sdkVersion": "1.63",
-    "sdkSourceRevision": "494c2d680b9e47bbc369496b57568f44ef2f6796",
     "architectures": [
       "arm64",
       "x86_64"
@@ -61,9 +57,7 @@
       "SteamInternal_GameServer_Init_V2",
       "SteamInternal_SteamAPI_Init"
     ],
-    "qualification": "Local identity, language, bounded callbacks, local leaderboard handles and shutdown. Other service methods, online authentication, servers, overlay and multiplayer are unavailable.",
-    "helperSourceKind": "owned",
-    "helperSourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e"
+    "qualification": "Local identity, language, bounded callbacks, local leaderboard handles and shutdown. Other service methods, online authentication, servers, overlay and multiplayer are unavailable."
   },
   {
     "schemaVersion": 1,
@@ -71,16 +65,10 @@
     "helperVersion": {
       "includedPackage": "steam-api-helper"
     },
-    "helperSourceRevision": null,
-    "helperLibrarySha256": "6a9ce700bf002fb817518221ebe093213ad84e093cb5d63d7a3315f004e74cae",
     "bridgeVersion": {
       "includedPackage": "java-steamworks",
       "arch": "x64"
     },
-    "bridgeLibrarySha256": "86326f197fa7f502f9fb122ce0753e315f7fa220712cbd81c6b29b7c97e7b42f",
-    "bridgeSourceRevision": "33ae54e87657afe8464eb01845e62b79403f5bfa",
-    "bridgePublisherJarSha256": "f5e70a648f77d09b3a665af5f8b110495b14f7e568280313b8a56903a4740379",
-    "loaderAgentSha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
     "architectures": [
       "x86_64"
     ],
@@ -109,9 +97,7 @@
       "SteamInternal_FindOrCreateGameServerInterface",
       "SteamInternal_FindOrCreateUserInterface"
     ],
-    "qualification": "Local identity, language, application values, typed player-count unavailable callbacks and shutdown. Other service methods, online authentication, servers, overlay and multiplayer are unavailable.",
-    "helperSourceKind": "owned",
-    "helperSourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e"
+    "qualification": "Local identity, language, application values, typed player-count unavailable callbacks and shutdown. Other service methods, online authentication, servers, overlay and multiplayer are unavailable."
   },
   {
     "schemaVersion": 1,
@@ -119,16 +105,10 @@
     "helperVersion": {
       "includedPackage": "steam-api-helper"
     },
-    "helperSourceRevision": null,
-    "helperLibrarySha256": "6a9ce700bf002fb817518221ebe093213ad84e093cb5d63d7a3315f004e74cae",
     "bridgeVersion": {
       "includedPackage": "java-steamworks",
       "arch": "universal"
     },
-    "bridgeLibrarySha256": "f596487a0edce464c21c551c1a29a29aedaf4965d0a21b6d58ab3a55bce5c97e",
-    "bridgeSourceRevision": "84790acfcb16f4ee25f25f5725bd0df39c527f6d",
-    "bridgePublisherJarSha256": "2da3d053f0405b6aeb68f94ab281f8eb827e7a9fc66230b7efb077be8aec2d64",
-    "loaderAgentSha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
     "architectures": [
       "x86_64",
       "arm64"
@@ -158,9 +138,7 @@
       "SteamInternal_FindOrCreateUserInterface",
       "SteamInternal_SteamAPI_Init"
     ],
-    "qualification": "Local identity, language, application values, typed player-count unavailable callbacks and shutdown. Other service methods, online authentication, servers, overlay and multiplayer are unavailable.",
-    "helperSourceKind": "owned",
-    "helperSourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e"
+    "qualification": "Local identity, language, application values, typed player-count unavailable callbacks and shutdown. Other service methods, online authentication, servers, overlay and multiplayer are unavailable."
   },
   {
     "schemaVersion": 1,
@@ -168,21 +146,13 @@
     "helperVersion": {
       "includedPackage": "steam-api-helper"
     },
-    "helperSourceRevision": null,
-    "helperLibrarySha256": "6a9ce700bf002fb817518221ebe093213ad84e093cb5d63d7a3315f004e74cae",
     "bridgeVersion": "greenworks-0.22.0-nw0.103.1",
-    "bridgeLibrarySha256": "3e0b7ad7a00f9517829e2595817e99614350860f5d982b5616dc89f4cfadf146",
-    "bridgeJavascriptSha256": "df6afbf4c9fc43cfa457f49c9977095e3686d7ead5810d56f8edff28a2aaa557",
-    "bridgeSourceRevision": "f4441f60b10e8e6e163e5c6c0d5ac1a2d87578df",
     "bridgePublisherSource": "https://github.com/greenheartgames/greenworks/releases/tag/v0.22.0",
     "hostVersion": "0.103.1",
     "hostVariant": "sdk",
-    "hostExecutableSha256": "081f4d6deef664ba04164634df573d1de8522f870c7f380f46079c02b022f9c7",
-    "hostArchiveSha256": "c2fdcc52932b8f287866c7d2cd07624d012d4edd4bfa6cb181b9ba3d75947206",
     "hostPublisherSource": "https://dl.nwjs.io/v0.103.1/nwjs-sdk-v0.103.1-osx-arm64.zip",
     "sdkVersion": "1.63",
     "sdkSourceRevision": "494c2d680b9e47bbc369496b57568f44ef2f6796",
-    "encryptedTicketLibrarySha256": "6bbc5615b6d02465b9ccb858cf1cfe944d401cb6192dd6e2712d78b77a41eb2c",
     "architectures": [
       "arm64"
     ],
@@ -228,19 +198,14 @@
       "SteamAPI_RunCallbacks"
     ],
     "qualification": "Client initialization, local application identity, statistics callbacks, and shutdown. Encrypted tickets and online APIs are unavailable.",
-    "helperSourceKind": "owned",
-    "helperSourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e",
     "ticketHelperVersion": {
       "includedPackage": "steam-ticket-loader"
     },
-    "ticketHelperSha256": "6bbc5615b6d02465b9ccb858cf1cfe944d401cb6192dd6e2712d78b77a41eb2c",
-    "ticketHelperSourceSha256": "5b5604323f8d6a016efb50056403fe504271ddbd70ba738b268eb3b4dc223f00",
     "ticketOperations": "unavailable",
     "encryptedTicketSourceKind": "owned",
     "encryptedTicketVersion": {
       "includedPackage": "steam-ticket-loader"
     },
-    "encryptedTicketSourceSha256": "5b5604323f8d6a016efb50056403fe504271ddbd70ba738b268eb3b4dc223f00",
     "encryptedTicketPolicy": "unavailable"
   },
   {
@@ -249,12 +214,6 @@
     "helperVersion": {
       "includedPackage": "steam-api-helper"
     },
-    "helperSourceRevision": null,
-    "helperSourceKind": "owned",
-    "helperSourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e",
-    "helperLibrarySha256": "6a9ce700bf002fb817518221ebe093213ad84e093cb5d63d7a3315f004e74cae",
-    "consumerVersion": "1.4.9999",
-    "consumerSha256": "dd8395d9dcdb5eb6e58641a730b22640d1909e72a55a48c3450cf6d0231040fa",
     "architectures": [
       "x86_64"
     ],
@@ -305,10 +264,6 @@
     "helperVersion": {
       "includedPackage": "steam-api-helper"
     },
-    "helperSourceKind": "owned",
-    "helperSourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e",
-    "helperSourceRevision": null,
-    "helperLibrarySha256": "6a9ce700bf002fb817518221ebe093213ad84e093cb5d63d7a3315f004e74cae",
     "architectures": [
       "arm64"
     ],

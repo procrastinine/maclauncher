@@ -43,7 +43,6 @@ function profileFixture(t) {
   const f = environment(t), pin = f.dependencies.catalog[0];
   pin.sourceRevision = "a".repeat(40); pin.librarySha256 = f.sha256;
   const profile = { schemaVersion: 1, id: "fixture-sdk1.63-v1", helperVersion: pin.version,
-    helperSourceRevision: pin.sourceRevision, helperLibrarySha256: pin.librarySha256,
     architectures: ["arm64"], interfaces: ["SteamClient023", "SteamUser023", "SteamNetworkingUtils004", "SteamInput006"] };
   f.dependencies.profiles = [profile];
   return { ...f, pin, profile };
@@ -99,9 +98,8 @@ test("unknown profiles and unqualified interface versions fail before native set
   assert.equal(fs.existsSync(f.request().ownedDirectory), false);
 });
 
-test("ABI qualification cannot relabel another helper source, binary, version or CPU", async t => {
-  const changes = [{ helperSourceRevision: "b".repeat(40) }, { helperLibrarySha256: "f".repeat(64) },
-    { helperVersion: "another-build" }, { architectures: ["x86_64"] }];
+test("ABI qualification cannot relabel another helper version or CPU", async t => {
+  const changes = [{ helperVersion: "another-build" }, { architectures: ["x86_64"] }];
   for (const change of changes) {
     const f = profileFixture(t);
     Object.assign(f.profile, change);

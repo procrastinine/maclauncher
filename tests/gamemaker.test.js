@@ -548,7 +548,8 @@ test("Steam is detected from format fields and missing native support fails befo
   const info = Inspect.inspectStudio(file);
   assert.equal(info.steamEnabled, true); assert.equal(info.steamAppId, 480);
   assert.equal(detect(file).moduleData.steamEnabled, true);
-  const selected = { version: "1.4.9999", install: { launchReady: true, runnerAppPath: path.join(root, "missing.app") } };
+  // 1.4.9999 has the offline legacy helper; a runner without one needs the game's native Steam API.
+  const selected = { version: "2.2.5.378", install: { launchReady: true, runnerAppPath: path.join(root, "missing.app") } };
   await assert.rejects(OfficialLaunch.launchOfficial({ ...detect(file), gameId: "steam-fixture" }, { userDataDir: path.join(root, "launcher") }, selected),
     error => error.code === "GAMEMAKER_STEAM_DEPENDENCY_REQUIRED" && error.fallbackRuntimeId === "butterscotch");
   assert.equal(fs.existsSync(path.join(root, "launcher")), false);
@@ -572,7 +573,7 @@ test("legacy GEN8 Steam function classification requires native support even wit
   assert.equal(info.functionClassifications, "0x2000000000000000");
   assert.equal(detect(file).moduleData.steamRequired, true);
   await assert.rejects(OfficialLaunch.launchOfficial({ ...detect(file), gameId: "legacy-functions" },
-    { userDataDir: path.join(root, "launcher") }, { version: "1.4.9999", install: {
+    { userDataDir: path.join(root, "launcher") }, { version: "2.2.5.378", install: {
       launchReady: true, runnerAppPath: path.join(root, "missing.app") } }),
     { code: "GAMEMAKER_STEAM_DEPENDENCY_REQUIRED" });
   assert.equal(fs.existsSync(path.join(root, "launcher")), false, "must reject before runner copies/private saves");

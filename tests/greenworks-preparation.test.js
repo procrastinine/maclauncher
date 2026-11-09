@@ -63,7 +63,6 @@ function availableNativeSdk(t, root) {
   t.mock.method(Ticket, "resolveBundledTicket", () => ticket);
   const pin = SteamCatalog.find(pin => pin.version === HelperVersion);
   t.mock.method(SteamProfiles, "selectProfile", () => ({ pin, profile: { id: Contract.helperAbiProfile, helperVersion: pin.version,
-    bridgeLibrarySha256: Contract.nativeSha256, bridgeJavascriptSha256: Contract.javascriptSha256,
     hostVersion: Contract.nwVersion, sdkVersion: Sdk.PIN.sdkVersion,
     encryptedTicketSourceKind: "owned", encryptedTicketVersion: ticket.version,
     encryptedTicketSourceSha256: ticket.sourceSha256, encryptedTicketLibrarySha256: ticket.sha256, encryptedTicketPolicy: ticket.policy } }));
@@ -104,7 +103,7 @@ test("ready exact bridges retain a source lease; newer unrelated installations n
   t.mock.method(Runtime, "listInstalled", userDataDir => ["0.80.0", "0.103.1", "0.117.0"].filter(version =>
     fs.existsSync(path.join(userDataDir, "runtimes", "greenworks", version))).map(version => ({ version, ready: true,
     installDir: path.join(userDataDir, "runtimes", "greenworks", version), files: [
-      { path: "greenworks.js", sha256: Contract.javascriptSha256 }, { path: "lib/greenworks-osx.node", sha256: Contract.nativeSha256 }
+      { path: "greenworks.js" }, { path: "lib/greenworks-osx.node" }
     ] })));
   ctx.recordRuntimeUse = identity => uses.push(identity);
   assert.deepEqual(await Preparation.getRuntimeRequirements(entry, ctx), []);
@@ -151,7 +150,7 @@ test("missing encrypted-ticket and explicit native SDK roles fail before host or
 test("automatic Greenworks uses its exact included API profile and optional native Steam remains explicit", async t => {
   const root = temporary(t), entry = originalGame(root), ctx = context(root), sdk = availableNativeSdk(t, root), calls = [];
   const installed = { version: "0.103.1", ready: true, files: [
-    { path: "greenworks.js", sha256: Contract.javascriptSha256 }, { path: "lib/greenworks-osx.node", sha256: Contract.nativeSha256 }
+    { path: "greenworks.js" }, { path: "lib/greenworks-osx.node" }
   ] };
   write(path.join(entry.gamePath, "steam_appid.txt"), "480\n");
   const baseEnvironment = { CUSTOM: "retained", DYLD_INSERT_LIBRARIES: "/graphics/helper.dylib" };
@@ -178,12 +177,11 @@ test("automatic Greenworks uses its exact included API profile and optional nati
   assert.deepEqual(calls[1][0].nativeLibraryPaths, [sdk.apiLibraryPath]);
   assert.equal(Sdk.resolveQualifiedTicket.mock.callCount(), 1);
   assert.equal(calls[1][0].abiProfile, undefined); assert.equal(calls[1][0].preferOffline, undefined);
-  assert.throws(() => Preparation.selectedContract("0.103.1", { ready: true, files: [] }), error => error.code === "GREENWORKS_ABI_UNVERIFIED");
 });
 
-test("automatic Greenworks refuses a ticket loader outside its exact version, source, checksum or policy", t => {
+test("automatic Greenworks refuses a ticket loader outside its exact version or policy", t => {
   const root = temporary(t), sdk = availableNativeSdk(t, root), ctx = context(root);
-  for (const patch of [{ version: "other" }, { sourceSha256: "c".repeat(64) }, { sha256: Sdk.PIN.sha256 }, { policy: "decrypt" }]) {
+  for (const patch of [{ version: "other" }, { policy: "decrypt" }]) {
     t.mock.method(Ticket, "resolveBundledTicket", () => ({ ...sdk.ticket, ...patch }));
     assert.throws(() => Preparation.resolveApiRoute({ contract: Contract, context: ctx, architecture: "arm64" }),
       error => error.code === "GREENWORKS_ABI_UNVERIFIED");
@@ -210,16 +208,11 @@ test("ticket-only automatic preparation requires its helper and real game applic
   assert.deepEqual(events, []); assert.equal(fs.existsSync(ctx.userDataDir), false);
 });
 
-test("the qualified offline route rejects a changed host and remains ARM-only", async t => {
+test("the qualified offline route remains ARM-only", async t => {
   const root = temporary(t), entry = originalGame(root), ctx = context(root), sdk = availableNativeSdk(t, root);
   assert.equal(Preparation.resolveApiRoute({ contract: Contract, sdk, context: ctx, architecture: "x86_64" }).mode, "native");
   assert.throws(() => Preparation.resolveApiRoute({ contract: Contract, sdk: { ...sdk, apiLibraryPath: undefined }, context: ctx, architecture: "x86_64" }),
     error => error.code === "GREENWORKS_NATIVE_API_UNAVAILABLE");
-  const executablePath = write(path.join(root, "unqualified-host"), "changed host bytes");
-  t.mock.method(Nwjs.core, "resolveBestInstalled", () => ({ executablePath, platformKey: "osx-arm64" }));
-  ctx.confirmRuntimeInstall = () => assert.fail("Unqualified hosts cannot ask for downloads");
-  await assert.rejects(Preparation.getRuntimeRequirements(entry, ctx), error => error.code === "GREENWORKS_HOST_CHANGED");
-  assert.equal(fs.existsSync(ctx.userDataDir), false);
 });
 
 test("the native bridge's actual macOS floor is enforced before preparation", async () => {

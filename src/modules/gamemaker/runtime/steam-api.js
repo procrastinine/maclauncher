@@ -8,7 +8,6 @@ const Exports = require("../export");
 // Observed from the exact native runner and corresponding Windows Steam API.
 // It is a legacy ABI profile, not a promise about every Steam service or game.
 const LEGACY_RUNNER = "1.4.9999";
-const LEGACY_SHA256 = "dd8395d9dcdb5eb6e58641a730b22640d1909e72a55a48c3450cf6d0231040fa";
 const LEGACY_HELPER_PROFILE = "gamemaker-legacy-1.4.9999-offline-abi0.5.0";
 const LEGACY_INTERFACES = Object.freeze([
   "SteamClient017", "STEAMAPPLIST_INTERFACE_VERSION001", "STEAMAPPS_INTERFACE_VERSION007",
@@ -26,7 +25,8 @@ function required(inspection) {
 
 function resolveDependency(inspection, dataPath, install, { runnerVersion = install?.version, resourcesRoot, offline = true } = {}) {
   if (!required(inspection)) return null;
-  const legacy = runnerVersion === LEGACY_RUNNER && (!install || install.binarySha256 === LEGACY_SHA256);
+  // The runner is a download, identified by its version; its archive is verified once when it is fetched.
+  const legacy = runnerVersion === LEGACY_RUNNER;
   // Steam ABI selection follows the selected runner, defaulting to the launcher CPU for native runners.
   const architecture = legacy ? "x86_64" : install?.architectures?.includes(process.arch === "x64" ? "x86_64" : process.arch)
     ? (process.arch === "x64" ? "x86_64" : process.arch) : install?.architectures?.[0];
@@ -46,8 +46,6 @@ function resolveDependency(inspection, dataPath, install, { runnerVersion = inst
   }
   if (offline && legacy) {
     const { pin, profile } = Profiles.selectProfile({ id: LEGACY_HELPER_PROFILE, architecture, requiredInterfaces: LEGACY_INTERFACES });
-    if (profile.consumerVersion !== LEGACY_RUNNER || profile.consumerSha256 !== LEGACY_SHA256)
-      throw Object.assign(new Error("The selected GameMaker Steam API profile does not match this runner."), { code: "STEAM_API_PROFILE_CHANGED" });
     const library = Steam.resolveBundledLibrary({ resourcesRoot, architecture, interfaces: pin.qualifiedInterfaces, catalog: [pin] });
     if (library.ready) {
       // GEN8 stores a signed ID; preserve that raw detection value. Only this
@@ -68,9 +66,8 @@ function resolveDependency(inspection, dataPath, install, { runnerVersion = inst
 async function prepareDependency(dependency, entry, context, baseEnvironment) {
   if (!dependency) return null;
   let symbols = [...(dependency.symbols || [])];
-  if (dependency.abiProfile === LEGACY_HELPER_PROFILE &&
-      (!dependency.consumerPath || Native.hashFile(dependency.consumerPath) !== LEGACY_SHA256))
-    throw Object.assign(new Error("The GameMaker runner checksum does not match its Steam API profile."), { code: "STEAM_API_CONSUMER_CHANGED" });
+  if (dependency.abiProfile === LEGACY_HELPER_PROFILE && !dependency.consumerPath)
+    throw Object.assign(new Error("The GameMaker runner for this Steam API profile is missing."), { code: "STEAM_API_CONSUMER_CHANGED" });
   if (dependency.consumerPath) {
     const consumer = await require("../../shared/runtime/steamworks/native-consumer-probe")
       .inspectNativeSteamConsumer(dependency.consumerPath, { architecture: dependency.architecture });
@@ -89,5 +86,5 @@ async function prepareDependency(dependency, entry, context, baseEnvironment) {
   return prepared;
 }
 
-module.exports = { LEGACY_RUNNER, LEGACY_SHA256, LEGACY_HELPER_PROFILE,
+module.exports = { LEGACY_RUNNER, LEGACY_HELPER_PROFILE,
   LEGACY_INTERFACES, required, resolveDependency, prepareDependency };

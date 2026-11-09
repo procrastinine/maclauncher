@@ -88,7 +88,7 @@ Shared graphics follows the same installed JRE and its native CPU, including Int
 
 ### Offline Steam API
 
-The [offline Steam API helper](../runtimes/STEAM_API.md#offline-steam-api-helper) has its own version history. For steamworks4j, it records the checksum of each original JNI and loader. It supports the client interfaces for initialization, apps, friends, utils, user, user stats, callback delivery and shutdown. Other Steam interface families, online services and other wrapper versions need their own native implementations.
+The [offline Steam API helper](../runtimes/STEAM_API.md#offline-steam-api-helper) has its own version history. For steamworks4j, each profile names the included bridge, whose package record holds the checksum of each original JNI and loader. It supports the client interfaces for initialization, apps, friends, utils, user, user stats, callback delivery and shutdown. Other Steam interface families, online services and other wrapper versions need their own native implementations.
 
 ### Bridge contents
 

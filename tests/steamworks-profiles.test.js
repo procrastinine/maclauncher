@@ -35,17 +35,12 @@ test('Java bridge versions retain their distinct qualified CPU and interface req
       const pin = pinForProfile(bridge.abiProfile);
       const profile = resolveProfile({ id: bridge.abiProfile, pin, architecture, requiredInterfaces: bridge.interfaces });
       assert.equal(profile.bridgeVersion, bridge.bridgeVersion);
-      assert.equal(profile.bridgeLibrarySha256, bridge.jniSha256);
-      assert.equal(profile.bridgePublisherJarSha256, bridge.publisherJarSha256);
-      assert.equal(profile.loaderAgentSha256, bridge.agentSha256);
       assert.deepEqual(profile.symbols, bridge.symbols);
       const successorPin = pinForProfile(bridge.helperAbiProfile);
       const successor = resolveProfile({ id: bridge.helperAbiProfile, pin: successorPin, architecture,
         requiredInterfaces: bridge.interfaces });
       assert.equal(successorPin.version, bridge.helperVersion);
-      for (const key of ['bridgeVersion', 'bridgeLibrarySha256', 'bridgePublisherJarSha256', 'loaderAgentSha256']) {
-        assert.equal(successor[key], profile[key]);
-      }
+      assert.equal(successor.bridgeVersion, profile.bridgeVersion);
       assert.equal(profile.id, bridge.helperAbiProfile);
       assert.equal(successor.helperVersion, profile.helperVersion);
     }
@@ -65,31 +60,22 @@ test('Greenworks offline qualification retains its exact bridge, host, ticket an
   const profile = resolveProfile({ id: contract.offlineAbiProfile, pin, architecture: 'arm64',
     requiredInterfaces: contract.interfaces });
   assert.equal(profile.bridgeVersion, `greenworks-${contract.greenworksVersion}-nw${contract.nwVersion}`);
-  assert.equal(profile.bridgeLibrarySha256, contract.nativeSha256);
-  assert.equal(profile.bridgeJavascriptSha256, contract.javascriptSha256);
   assert.equal(profile.hostVersion, contract.nwVersion);
   assert.equal(profile.hostVariant, 'sdk');
   assert.equal(profile.sdkVersion, sdk.sdkVersion);
-  assert.equal(profile.sdkSourceRevision, '494c2d680b9e47bbc369496b57568f44ef2f6796');
   assert.equal(profile.minimumMacOS, contract.minimumMacOS);
   assert.deepEqual(profile.symbols, contract.symbols);
   assert.deepEqual(profile.architectures, ['arm64']);
   const successor = resolveProfile({ id: contract.helperAbiProfile, pin: pinForProfile(contract.helperAbiProfile),
     architecture: 'arm64', requiredInterfaces: contract.interfaces });
   assert.equal(successor.helperVersion, selectProfile({ id: contract.helperAbiProfile, architecture: 'arm64' }).pin.version);
-  assert.equal(successor.bridgeLibrarySha256, profile.bridgeLibrarySha256);
-  assert.equal(successor.bridgeJavascriptSha256, profile.bridgeJavascriptSha256);
+  assert.equal(successor.bridgeVersion, profile.bridgeVersion);
   const ticket = require("../src/modules/shared/runtime/included-package-metadata").resolve(require('../src/modules/shared/runtime/steamworks/ticket-versions.json'))
     .find(pin => pin.version === successor.encryptedTicketVersion);
   assert.ok(ticket);
-  assert.equal(successor.encryptedTicketLibrarySha256, ticket.librarySha256);
-  assert.equal(successor.encryptedTicketSourceSha256, ticket.sourceSha256);
   assert.equal(successor.encryptedTicketPolicy, 'unavailable');
   assert.equal(successor.id, profile.id);
-  assert.equal(successor.encryptedTicketLibrarySha256, profile.encryptedTicketLibrarySha256);
   assert.throws(() => resolveProfile({ id: profile.id, pin, architecture: 'x86_64' }),
-    { code: 'STEAM_API_PROFILE_CHANGED' });
-  assert.throws(() => resolveProfile({ id: profile.id, pin: { ...pin, librarySha256: '0'.repeat(64) }, architecture: 'arm64' }),
     { code: 'STEAM_API_PROFILE_CHANGED' });
 });
 
@@ -111,7 +97,7 @@ test('profile selection follows declared helper facts and preserves explicit old
   assert.equal(saved.abiProfile, legacy);
 });
 
-test('every published ABI profile is tied to its exact sealed helper and consumer identity', () => {
+test('every published ABI profile resolves against its helper and names its bridge or consumer', () => {
   assert.equal(new Set(catalog.map(profile => profile.id)).size, catalog.length);
   for (const profile of catalog) {
     const pin = pinForProfile(profile.id);
@@ -122,12 +108,6 @@ test('every published ABI profile is tied to its exact sealed helper and consume
       assert.match(consumer.assemblySha256, /^[a-f0-9]{64}$/);
       continue;
     }
-    if (profile.consumerVersion) {
-      assert.equal(profile.consumerVersion, '1.4.9999');
-      assert.match(profile.consumerSha256, /^[a-f0-9]{64}$/);
-      continue;
-    }
-    assert.match(profile.bridgeVersion, /^[A-Za-z0-9_.-]+$/);
-    assert.match(profile.bridgeLibrarySha256, /^[a-f0-9]{64}$/);
+    if (profile.bridgeVersion !== undefined) assert.match(profile.bridgeVersion, /^[A-Za-z0-9_.-]+$/);
   }
 });

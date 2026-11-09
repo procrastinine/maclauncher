@@ -18,8 +18,7 @@ function fixture(t, options = {}) {
   const pin = { version: "independent-helper-1", sourceKind: "owned", sourceSha256: "a".repeat(64), sourceRevision: null,
     librarySha256: "b".repeat(64), qualifiedInterfaces: ["SteamClient021"], architectures: ["arm64", "x86_64"] };
   const profile = { schemaVersion: 1, id: "portable-managed-1", helperVersion: pin.version,
-    helperSourceKind: pin.sourceKind, helperSourceSha256: pin.sourceSha256, helperSourceRevision: null,
-    helperLibrarySha256: pin.librarySha256, interfaces: pin.qualifiedInterfaces, architectures: ["arm64"],
+    interfaces: pin.qualifiedInterfaces, architectures: ["arm64"],
     managedConsumer: { schemaVersion: 1, assemblySha256: hash(bytes), assemblyBytes: bytes.length,
       assemblyName: "PortableWrapper", assemblyVersion: "1.2.3.4", nativeImportsSha256: Managed.importIdentity(imported),
       requiredSymbols: ["SteamAPI_Init", "SteamAPI_Shutdown"] } };
@@ -71,9 +70,9 @@ test("embedded managed selection needs an exact byte range and never extracts th
   assert.deepEqual(fs.readdirSync(f.root).sort(), ["Game.exe", "UnrelatedFileName.dll"]);
 });
 
-test("managed selection preserves exact helper/source bindings and cancellation", async t => {
+test("managed selection preserves its exact helper binding and cancellation", async t => {
   const f = fixture(t);
-  for (const patch of [{ helperVersion: "other" }, { helperSourceSha256: "c".repeat(64) }, { helperLibrarySha256: "c".repeat(64) }]) {
+  for (const patch of [{ helperVersion: "other" }]) {
     await assert.rejects(Selector.selectManagedProfile({ ...f.options, profiles: [{ ...f.profile, ...patch }] }), { code: "STEAM_API_PROFILE_CHANGED" });
   }
   const controller = new AbortController(); controller.abort();

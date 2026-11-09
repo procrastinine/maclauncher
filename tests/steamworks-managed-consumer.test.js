@@ -105,8 +105,7 @@ test("automatic shared launch validates the assembly before selecting lazy nativ
   const pin = { version: "owned-test-1", sourceKind: "owned", sourceSha256, sourceRevision: null,
     librarySha256: sha256, architectures: ["arm64"], qualifiedInterfaces: ["SteamClient021"] };
   const profile = { schemaVersion: 1, id: "managed-test-1", helperVersion: pin.version,
-    helperSourceKind: "owned", helperSourceSha256: sourceSha256, helperSourceRevision: null,
-    helperLibrarySha256: sha256, interfaces: pin.qualifiedInterfaces, architectures: ["arm64"],
+    interfaces: pin.qualifiedInterfaces, architectures: ["arm64"],
     managedConsumer: value.profile.managedConsumer };
   const request = { required: true, arch: "arm64", appId: 480, abiProfile: profile.id,
     symbols: value.symbols, managedConsumers: value.sources, aliases: ["steam_api"], preferOffline: true,

@@ -51,7 +51,7 @@ function resolveBundle(pin, { resourcesRoot, verification = "full", native = Nat
     const { directory, manifest, item } = included;
     const record = JSON.parse(manifest.bytes);
     if (record.id !== "java-steamworks" || record.version !== pin.bridgeVersion || record.wrapperVersion !== pin.version ||
-        record.sourceRevision !== pin.sourceRevision || record.librarySha256 !== pin.jniSha256 || record.abiProfile !== pin.abiProfile ||
+        record.librarySha256 !== pin.jniSha256 || record.abiProfile !== pin.abiProfile ||
         record.agentSha256 !== pin.agentSha256 || record.agentClassMajor !== 52)
       throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam bridge source or ABI changed.");
     const libraryPath = path.join(directory, "libsteamworks4j.dylib"), agentPath = path.join(directory, "steam-agent.jar");

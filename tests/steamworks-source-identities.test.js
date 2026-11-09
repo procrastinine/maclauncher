@@ -81,14 +81,12 @@ test("legacy Git-source payload identities remain valid and cannot acquire an ow
   assert.equal(Steam.resolveBundledLibrary(f.options).ready, false);
 });
 
-test("consumer profiles bind owned source, native bytes and CPU without changing old profile IDs", t => {
+test("consumer profiles bind their helper version and CPU without changing old profile IDs", t => {
   const f = fixture(t), profile = { schemaVersion: 1, id: "consumer-owned-v1", helperVersion: f.pin.version,
-    helperSourceKind: "owned", helperSourceSha256: SHA, helperLibrarySha256: f.pin.librarySha256,
     architectures: ["arm64"], interfaces: f.interfaces };
   const options = { id: profile.id, pin: f.pin, architecture: "arm64", requiredInterfaces: f.interfaces, profiles: [profile] };
   assert.equal(Profiles.resolveProfile(options).id, profile.id);
-  for (const changes of [{ helperSourceSha256: "c".repeat(64) }, { helperSourceRevision: REVISION },
-    { helperLibrarySha256: "d".repeat(64) }, { helperSourceKind: "git" }, { architectures: ["x86_64"] }]) {
+  for (const changes of [{ helperVersion: "other" }, { architectures: ["x86_64"] }]) {
     assert.throws(() => Profiles.resolveProfile({ ...options, profiles: [{ ...profile, ...changes }] }), error => error.code === "STEAM_API_PROFILE_CHANGED");
   }
   assert.throws(() => Profiles.resolveProfile({ ...options, requiredInterfaces: ["SteamUser999"] }), error => error.code === "STEAM_API_INTERFACES_UNAVAILABLE");

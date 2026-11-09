@@ -19,7 +19,7 @@ function fixture(t) {
   fs.mkdirSync(path.dirname(consumerPath), { recursive: true }); fs.writeFileSync(consumerPath, "changed native fixture");
   const profile = Profiles.find(item => item.id === GameMaker.LEGACY_HELPER_PROFILE);
   const pin = Catalog.find(item => item.version === profile.helperVersion);
-  const install = { version: GameMaker.LEGACY_RUNNER, runnerAppPath, binarySha256: GameMaker.LEGACY_SHA256, architectures: ["x86_64"] };
+  const install = { version: GameMaker.LEGACY_RUNNER, runnerAppPath, architectures: ["x86_64"] };
   t.mock.method(Steam, "resolveBundledLibrary", options => {
     assert.deepEqual(options.catalog, [pin]); assert.deepEqual(options.interfaces, pin.qualifiedInterfaces);
     return { ready: true, version: pin.version, mode: "offline", libraryPath: path.join(root, "shared", "libsteam_api.dylib"), sha256: pin.librarySha256 };
@@ -37,7 +37,6 @@ test("legacy GameMaker selects an explicit successor helper without changing its
 
 test("legacy GameMaker passes dynamically loaded APIs and the exact runner profile to the shared service", async t => {
   const f = fixture(t), dependency = GameMaker.resolveDependency({ steamRequired: true, steamAppId: 480 }, f.data, f.install);
-  t.mock.method(Native, "hashFile", () => GameMaker.LEGACY_SHA256);
   t.mock.method(Probe, "inspectNativeSteamConsumer", () => ({ symbols: [] }));
   let request;
   const userDataDir = path.join(f.root, "data"), baseEnvironment = { PATH: "/usr/bin", DYLD_INSERT_LIBRARIES: "/graphics/helper.dylib" };
@@ -53,14 +52,12 @@ test("legacy GameMaker passes dynamically loaded APIs and the exact runner profi
   assert.deepEqual(baseEnvironment, { PATH: "/usr/bin", DYLD_INSERT_LIBRARIES: "/graphics/helper.dylib" });
 });
 
-test("a changed or unidentified legacy consumer fails before Steam setup", async t => {
+test("a legacy consumer without its runner fails before Steam setup", async t => {
   const f = fixture(t), dependency = GameMaker.resolveDependency({ steamRequired: true, steamAppId: 480 }, f.data, f.install);
   const context = { userDataDir: path.join(f.root, "data"), prepareSteamApi: () => assert.fail("A changed runner cannot prepare Steam state") };
-  for (const patch of [{}, { consumerPath: null }]) {
+  for (const patch of [{ consumerPath: null }]) {
     await assert.rejects(GameMaker.prepareDependency({ ...dependency, ...patch }, { gameId: "original" }, context), { code: "STEAM_API_CONSUMER_CHANGED" });
   }
-  assert.throws(() => GameMaker.resolveDependency({ steamRequired: true, steamAppId: 480 }, f.data,
-    { ...f.install, binarySha256: "a".repeat(64) }), error => error.code === "GAMEMAKER_STEAM_DEPENDENCY_REQUIRED");
   assert.throws(() => GameMaker.resolveDependency({ steamRequired: true }, f.data, f.install),
     error => error.code === "GAMEMAKER_STEAM_APP_ID_REQUIRED" && error.fallbackRuntimeId === "butterscotch");
   assert.equal(fs.existsSync(context.userDataDir), false);
@@ -72,7 +69,7 @@ test("legacy GameMaker resolves the real included helper selected by its consume
   const profile = Profiles.find(item => item.id === GameMaker.LEGACY_HELPER_PROFILE);
   const pin = Catalog.find(item => item.version === profile.helperVersion);
   const dependency = GameMaker.resolveDependency({ steamRequired: true, steamAppId: 480 }, path.join(root, "data.win"),
-    { version: GameMaker.LEGACY_RUNNER, binarySha256: GameMaker.LEGACY_SHA256, architectures: ["x86_64"] });
+    { version: GameMaker.LEGACY_RUNNER, architectures: ["x86_64"] });
   assert.equal(dependency.ready, true);
   assert.equal(dependency.version, profile.helperVersion);
   assert.equal(Native.hashFile(dependency.libraryPath), pin.librarySha256);

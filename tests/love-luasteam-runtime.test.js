@@ -10,7 +10,6 @@ const Bridge = require("../src/modules/love/runtime/luasteam-runtime");
 const Manager = require("../src/modules/love/runtime/love-runtime-manager");
 const Detect = require("../src/modules/love/detect");
 const Probe = require("../src/modules/shared/runtime/steamworks/native-consumer-probe");
-const Overlay = require("../src/modules/love/runtime/luasteam-source-overlay");
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
 function temporary(t) {

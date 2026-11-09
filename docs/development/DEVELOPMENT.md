@@ -160,7 +160,7 @@ Small integration helpers ship inside the app with fixed versions. Their sources
 | Offline Steam API library | [Offline Steam API helper profile](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/steam-api-helper.json) in MacLauncher Builds |
 | Steam encrypted-ticket loader | [Encrypted-ticket loader helper profile](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/steam-ticket-loader.json) in MacLauncher Builds |
 | Java steamworks4j bridges | [Java Steamworks recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/tools/build-java-steamworks.mjs) in MacLauncher Builds |
-| LÖVE LuaSteam bridge | [`luasteam-build.js`](../../src/modules/love/runtime/luasteam-build.js) with the inputs listed in [LÖVE](../game-types/LOVE.md#bridge-source); [`luasteam-package.js`](../../src/modules/love/runtime/luasteam-package.js) stages the packaged bridge profile |
+| LÖVE LuaSteam bridge | [LuaSteam bridge recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/tools/build-luasteam.mjs) in MacLauncher Builds, with the inputs listed in [LÖVE](../game-types/LOVE.md#bridge-source) |
 | MKXP-Z configuration helper | [MKXP-Z configuration helper profile](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/mkxpz-config-helper.json) in MacLauncher Builds |
 | CatSystem2 KIF cipher | [KIF cipher helper profile](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/catsystem2-kif-crypto.json) in MacLauncher Builds |
 | iOS PlayTools storage adapter | `node scripts/stage-ios-helper.mjs` |

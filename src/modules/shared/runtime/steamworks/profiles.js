@@ -1,7 +1,6 @@
 const Environment = require("./environment");
 const Catalog = require("../included-package-metadata").resolve(require("./profiles.json"));
 const Pins = require("../included-package-metadata").resolve(require("./versions.json"));
-const Source = require("./source-identity");
 const Contract = require("../package-contract.cjs");
 
 const invalid = (code, message) => Object.assign(new Error(message), { code });
@@ -33,11 +32,8 @@ function resolveProfile({ id, pin, architecture, requiredInterfaces = [], profil
   const matches = profiles.filter(profile => profile.id === id);
   if (matches.length !== 1) throw invalid("STEAM_API_PROFILE_UNKNOWN", "This Steam API compatibility profile is not available.");
   const profile = matches[0];
+  // The helper's source and library digests are declared once, in its package record.
   if (profile.schemaVersion !== 1 || profile.helperVersion !== pin?.version ||
-      !Source.sameSourceIdentity({ sourceKind: profile.helperSourceKind,
-        sourceRevision: profile.helperSourceRevision, sourceSha256: profile.helperSourceSha256 }, pin) ||
-      profile.helperLibrarySha256 !== pin?.librarySha256 ||
-      !/^[a-f0-9]{64}$/.test(profile.helperLibrarySha256 || "") ||
       !profile.architectures?.includes(architecture)) {
     throw invalid("STEAM_API_PROFILE_CHANGED", "The selected Steam API profile does not match this helper version or CPU.");
   }

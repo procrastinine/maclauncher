@@ -73,8 +73,7 @@ test("explicit interfaces and hash-bound profiles retain their own client select
   const explicit = await Automatic.prepareAutomaticLaunch({ ...value.request, interfaces: modern }, value.context, value.dependencies);
   assert.deepEqual(explicit.interfaces, modern);
   const profile = { schemaVersion: 1, id: "modern-default-fixture", helperVersion: value.pin.version,
-    helperSourceKind: "owned", helperSourceSha256: value.pin.sourceSha256, helperSourceRevision: null,
-    helperLibrarySha256: value.pin.librarySha256, architectures: ["arm64"], interfaces: modern };
+    architectures: ["arm64"], interfaces: modern };
   const selected = await Automatic.prepareAutomaticLaunch({ ...value.request, abiProfile: profile.id }, value.context,
     { ...value.dependencies, profiles: [profile] });
   assert.deepEqual(selected.interfaces, modern); assert.equal(selected.abiProfile, profile.id);

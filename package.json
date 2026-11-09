@@ -158,7 +158,6 @@
       "!node_modules/protobufjs/dist{,/**}",
       "!node_modules/steam-user/protobufs/**/*.proto",
       "!src/modules/shared/runtime/steamworks/{build,source-overlay}.js",
-      "!src/modules/love/runtime/luasteam-build.js",
       "!src/modules/ios/native{,/**}",
       "!src/modules/siglus/resources/{native-host,rlvm-adapter}{,/**}",
       "!src/modules/vnds/{resources/0.0.13-838e47b-mac-v1,overlays}{,/**}",

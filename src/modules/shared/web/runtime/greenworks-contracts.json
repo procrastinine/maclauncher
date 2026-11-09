@@ -3,8 +3,6 @@
     "nwVersion": "0.103.1",
     "greenworksVersion": "0.22.0",
     "sdkVersion": "1.63",
-    "nativeSha256": "3e0b7ad7a00f9517829e2595817e99614350860f5d982b5616dc89f4cfadf146",
-    "javascriptSha256": "df6afbf4c9fc43cfa457f49c9977095e3686d7ead5810d56f8edff28a2aaa557",
     "architectures": [
       "arm64",
       "x86_64"
