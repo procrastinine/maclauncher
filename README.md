@@ -29,7 +29,7 @@ You can also run [from source](#development), and everything should be the same.
 
 https://github.com/user-attachments/assets/d0f2913b-7791-46a8-84be-d416e9f121dd
 
-Shown: The Penjikent Creature, a [Godot](https://godotengine.org/) game packaged for Windows, dragged in as its `.exe`. MacLauncher detects Godot 3.5.2, downloads the matching runtime after asking, and plays it natively, without WINE. The installed Godot versions are then managed in **Runtimes**.
+*Shown: The Penjikent Creature, a [Godot](https://godotengine.org/) game packaged for Windows, dragged in as its `.exe`. MacLauncher detects Godot 3.5.2, downloads the matching runtime after asking, and plays it natively, without WINE. The installed Godot versions are then managed in **Runtimes**.*
 
 ## Idea
 
@@ -116,7 +116,7 @@ Most of the above runtimes are existing tools with MacLauncher managing them. Ho
 
 https://github.com/user-attachments/assets/74954512-3589-40db-859f-c9ecd0a157d0
 
-Shown: the DOOM 3 demo running natively through [dhewm3](https://github.com/dhewm/dhewm3). First a CRT filter and grayscale in the Simple view, with the split and difference views, then the DLSS chain described below, in the Advanced view: downsample to 540p, DLSS 5, MetalFX back up to the window, and Lossless Scaling frame generation at 4x. The performance overlay shows the ~15fps coming out of DLSS turning into 60fps on screen, and DLSS and frame generation are switched off and on again live.
+*Shown: the DOOM 3 demo running natively through [dhewm3](https://github.com/dhewm/dhewm3). First a CRT filter and grayscale in the Simple view, with the split and difference views, then the DLSS chain described below, in the Advanced view: downsample to 540p, DLSS 5, MetalFX back up to the window, and Lossless Scaling frame generation at 4x. The performance overlay shows the ~15fps coming out of DLSS turning into 60fps on screen, and DLSS and frame generation are switched off and on again live.*
 
 Maybe _the_ most useful thing about MacLauncher is that it provides a very powerful graphics postprocessing system where you can control _exactly what_ graphics/effects you apply, with very broad support. All of these effects run on native Metal, **not** WINE, and work across **any** runtime you want to use inside MacLauncher. i.e., you could literally drag Microsoft Word into MacLauncher and apply GFX to it lmao. Here is what's included:
 - **Upscaling:**
