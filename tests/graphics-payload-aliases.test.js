@@ -45,10 +45,9 @@ test('staging stores identical resolved provider files once per payload and the 
 
 test('every provider that declares resolved paths opens them through the shared payload resolver',()=>{
  const reshade=path.join(__dirname,'../src/modules/shared/reshade');
- const providers={'temporal/asr':['build.mjs','backend.mm'],'temporal/fsr':['build.mjs','backend.mm'],'generation/fsr3':['build.mjs','metal-backend.hpp'],
-  'temporal/fsr4':['build.mjs','provider.mm']};
- for(const [directory,[build,loader]]of Object.entries(providers)){
-  assert.match(fs.readFileSync(path.join(reshade,directory,build),'utf8'),/resolvedPaths/,directory);
+ // MacLauncher Builds owns the recipes that declare resolved paths; the loaders here read them.
+ const providers={'temporal/asr':'backend.mm','temporal/fsr':'backend.mm','generation/fsr3':'metal-backend.hpp','temporal/fsr4':'provider.mm'};
+ for(const [directory,loader]of Object.entries(providers)){
   const source=fs.readFileSync(path.join(reshade,directory,loader),'utf8');
   assert.match(source,/#include "(?:\.\.\/)+(?:temporal\/)?payload-files\.hpp"/,directory);
   assert.doesNotMatch(source,/ContentsOfFile:\[base stringByAppendingString/,directory);

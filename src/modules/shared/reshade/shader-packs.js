@@ -2,8 +2,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const Providers = require("./shader-providers");
 // The native collection's effects are the methods its provider describes.
-const Catalog = (catalog => ({...catalog, packs: catalog.packs.map(pack => pack.format === "native" && !pack.effects ?
-  {...pack, effects: require("./native-filter").collection} : pack)}))(require("./shader-packs.json"));
+// A pack taken from an upstream revision is keyed by that revision's 12-character prefix.
+const Catalog = (catalog => ({...catalog, packs: catalog.packs.map(pack => pack.revision && !pack.version ? {...pack, version: pack.revision.slice(0, 12)} : pack)
+  .map(pack => pack.format === "native" && !pack.effects ? {...pack, effects: require("./native-filter").collection} : pack)}))(require("./shader-packs.json"));
 const Traits = require("./shader-traits"), Items = require("../item-results");
 
 function effectId(pack, effect) { return `shader:${pack.id}:${effect.id}`; }

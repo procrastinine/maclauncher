@@ -21,11 +21,6 @@
       "use": "MIT FSR 4.1.1 shader reimplementation"
     }
   ],
-  "release": {
-    "url": "https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos/releases/download/crossover-v1.7/fsr4-mac-v1.7-crossover.zip",
-    "sha256": "38b35cd56055399267e48065914d58ca46a8a1de8c924740be51eefe80655c18",
-    "contents": "Source, model weights and shader translation tools"
-  },
   "supportedProfiles": [
     "exact-fast",
     "lite",
@@ -73,13 +68,5 @@
       "ultraPerformanceModel": "lite",
       "inferenceReuse": true
     }
-  ],
-  "lite2": {
-    "repository": "https://github.com/zgauthier2000/fsr4-shader-performance-overrides",
-    "revision": "69cc9b9979a8fe90b97b1ed2f20e94487df261e2",
-    "path": "research/lossy2/weights_lossy2.npz",
-    "url": "https://raw.githubusercontent.com/zgauthier2000/fsr4-shader-performance-overrides/69cc9b9979a8fe90b97b1ed2f20e94487df261e2/research/lossy2/weights_lossy2.npz",
-    "sha256": "9a458f65812848b273dace03edcbd346d66364d5d41a99d0963adaa601a3c93c",
-    "license": "GPL-2.0-or-later"
-  }
+  ]
 }

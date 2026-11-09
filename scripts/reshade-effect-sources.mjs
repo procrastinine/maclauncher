@@ -1,4 +1,18 @@
+import fs from "node:fs";
 import Supplementals from "./native-supplementals.cjs";
+
+// An adapted effect names the bundled shader pack it was taken from and the file
+// within it; the pack declares the upstream repository and revision once.
+export function resolveEffectSources(
+    sources = JSON.parse(fs.readFileSync(new URL("../src/modules/shared/reshade/effect-sources.json", import.meta.url), "utf8")),
+    packs = JSON.parse(fs.readFileSync(new URL("../src/modules/shared/reshade/shader-packs.json", import.meta.url), "utf8")).packs) {
+  return sources.map(({pack, file, ...row}) => {
+    const source = packs.find(entry => entry.id === pack);
+    if (!source?.revision || !source.sourceUrl) throw new Error("An adapted effect names an unknown shader pack: " + pack);
+    return {name: row.name, license: row.license, path: row.path, sourceUrl: source.sourceUrl + "/blob/" + source.revision + "/" + file,
+      revision: source.revision, sourceSha256: row.sourceSha256, sha256: row.sha256, adaptation: row.adaptation};
+  });
+}
 
 // Third-party presets carry their complete source and notice in the effect file.
 // Their identities are independent of the unchanged native compiler sources.

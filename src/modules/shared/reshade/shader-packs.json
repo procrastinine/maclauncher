@@ -57,7 +57,6 @@
         }
       ],
       "revision": "93ddf39b357f5da534ed6d34ba4ec8cc7dcfa361",
-      "version": "93ddf39b357f",
       "sourceUrl": "https://github.com/CeeJayDK/SweetFX",
       "bundledPath": "shader-collection/sweetfx"
     },
@@ -105,7 +104,6 @@
         }
       ],
       "revision": "73dc21fcc9f1e1d6e4bf0f1c5c95b882078d474d",
-      "version": "73dc21fcc9f1",
       "sourceUrl": "https://github.com/Matsilagi/RSRetroArch",
       "bundledPath": "shader-collection/retroarch"
     },
@@ -129,7 +127,6 @@
         }
       ],
       "revision": "7ca7f7cbb7e7d016ca1756d0855879c3b7d0cc05",
-      "version": "7ca7f7cbb7e7",
       "sourceUrl": "https://github.com/akgunter/crt-royale-reshade",
       "bundledPath": "shader-collection/crt-royale"
     },
@@ -207,7 +204,6 @@
       "label": "SSIM SuperRes",
       "license": "LGPL-3.0-or-later",
       "description": "Original structural-similarity refinement of the selected spatial upscale, retaining its pre-kernel reference and multi-pass variance analysis.",
-      "version": "15d93440d0a2",
       "revision": "15d93440d0a24fc4b8770070be6a9fa2af6f200b",
       "sourceUrl": "https://gist.github.com/igv/2364ffa6e81540f29cb7ab4c9bc05b6b",
       "bundledPath": "shader-collection/ssim-superres",

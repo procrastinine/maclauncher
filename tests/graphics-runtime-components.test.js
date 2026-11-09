@@ -17,7 +17,7 @@ function fixture(t) {
     fs.mkdirSync(path.join(root, "temporal/fsr", method));
   }
   file("temporal/fsr4/provider.json", JSON.stringify({ providerABI: 1, complete: true, commit: "installed-build", library: "libmaclauncher-fsr4.dylib", model: FSR4.model,
-    profilesAPI: 1, resourcePreparation: 1, supportedProfiles: FSR4.supportedProfiles, profiles: FSR4.profiles, lite2: FSR4.lite2 }));
+    profilesAPI: 1, resourcePreparation: 1, supportedProfiles: FSR4.supportedProfiles, profiles: FSR4.profiles }));
   file("temporal/fsr4/libmaclauncher-fsr4.dylib", "provider");
   file("temporal/fsr4/third_party/fsr411/initializers.bin", "model");
   file("temporal/fsr4/third_party/fsr411/LICENSE.Lite2.txt", "license");
