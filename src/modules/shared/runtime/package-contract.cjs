@@ -331,4 +331,4 @@ function validateDeclaration(item) {
   return item;
 }
 
-module.exports = { packageDependencies, packageAliases, logicalFiles, packageRecord, compatibilityMetadata, sourceMetadata, validatePublicMetadata, validateSourceArtifact, validateDeclaration, object, checksum, identity, version, relativeFile, contract, selectPackageRecord, manifestPayload };
+module.exports = { packageDependencies, packageAliases, logicalFiles, packageRecord, validatePublicMetadata, validateDeclaration, object, checksum, identity, version, relativeFile, contract, selectPackageRecord, manifestPayload };
