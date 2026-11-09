@@ -13,7 +13,7 @@ function inspect(root) {
         metadata.model !== SOURCE.model)
       return null;
     const legacy =
-        SOURCE.legacyPayloads.find(value => value.commit === metadata.commit &&
+        SOURCE.legacyPayloads.find(value => value.revision === metadata.commit &&
                                             value.model === metadata.model);
     let profiles;
     if (legacy) {

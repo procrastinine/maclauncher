@@ -18,7 +18,7 @@ function fixture(t) {
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const root = path.join(directory, 'runtime');
   fs.mkdirSync(path.join(root, 'godot'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'godot', 'provider.json'), JSON.stringify({ abi: 1, complete: true, sourceCommit: source.commit }));
+  fs.writeFileSync(path.join(root, 'godot', 'provider.json'), JSON.stringify({ abi: 1, complete: true, sourceCommit: source.revision }));
   fs.writeFileSync(path.join(root, 'godot', 'libmaclauncher-godot-camera.dylib'), 'library');
   for (const script of ['autoload.gd', 'camera-effect.gd']) fs.writeFileSync(path.join(root, 'godot', script), 'extends Node\n');
   const userDataDir = path.join(directory, 'data');

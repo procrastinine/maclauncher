@@ -7,7 +7,7 @@
       "label": "DLSSMac 0.1.6 \u00b7 HT71 neural rendering model",
       "repository": "https://github.com/Mappsnet7/DLSSMac",
       "releaseUrl": "https://github.com/Mappsnet7/DLSSMac/releases/tag/v0.1.6",
-      "commit": "f47a05b7f11e2d02c43bfa5337984fe2cee546f2",
+      "revision": "f47a05b7f11e2d02c43bfa5337984fe2cee546f2",
       "url": "https://github.com/Mappsnet7/DLSSMac/releases/download/v0.1.6/DLSSMac-0.1.6-macos.zip",
       "fileName": "DLSSMac-0.1.6-macos.zip",
       "bytes": 320194134,
@@ -27,7 +27,7 @@
       "label": "Real-ESRGAN Anime 4\u00d7",
       "repository": "https://github.com/xocialize/realesrgan-mlx-swift",
       "releaseUrl": "https://github.com/xocialize/realesrgan-mlx-swift/tree/22032b7467f92ada44df8551a89a9a6924aac598",
-      "commit": "22032b7467f92ada44df8551a89a9a6924aac598",
+      "revision": "22032b7467f92ada44df8551a89a9a6924aac598",
       "kind": "weights",
       "entry": "model.safetensors",
       "files": [
@@ -62,7 +62,7 @@
       "label": "Real-ESRGAN General 4\u00d7 + denoising",
       "repository": "https://github.com/xocialize/realesrgan-mlx-swift",
       "releaseUrl": "https://github.com/xocialize/realesrgan-mlx-swift/tree/22032b7467f92ada44df8551a89a9a6924aac598",
-      "commit": "22032b7467f92ada44df8551a89a9a6924aac598",
+      "revision": "22032b7467f92ada44df8551a89a9a6924aac598",
       "kind": "weights",
       "entry": "model.safetensors",
       "files": [
@@ -103,7 +103,7 @@
       "label": "RIFE 4.6 interpolation",
       "repository": "https://github.com/nihui/rife-ncnn-vulkan",
       "releaseUrl": "https://github.com/nihui/rife-ncnn-vulkan/tree/a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7/models/rife-v4.6",
-      "commit": "a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7",
+      "revision": "a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7",
       "kind": "ncnn-rife",
       "files": [
         {
@@ -145,7 +145,7 @@
       "entry": "nvngx_dlssg.dll",
       "repository": "https://github.com/NVIDIA/DLSS",
       "releaseUrl": "https://github.com/NVIDIA/DLSS/tree/9981c6350dc58c0ce21f024fd65e31e851c31689",
-      "commit": "9981c6350dc58c0ce21f024fd65e31e851c31689",
+      "revision": "9981c6350dc58c0ce21f024fd65e31e851c31689",
       "files": [
         {
           "file": "nvngx_dlssg.dll",
@@ -280,7 +280,7 @@
       "entry": "up2x-latest-conservative.pth",
       "repository": "https://github.com/bilibili/ailab",
       "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
-      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
       "files": [
         {
           "file": "up2x-latest-conservative.pth",
@@ -317,7 +317,7 @@
       "entry": "up2x-latest-no-denoise.pth",
       "repository": "https://github.com/bilibili/ailab",
       "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
-      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
       "files": [
         {
           "file": "up2x-latest-no-denoise.pth",
@@ -354,7 +354,7 @@
       "entry": "up2x-latest-denoise1x.pth",
       "repository": "https://github.com/bilibili/ailab",
       "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
-      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
       "files": [
         {
           "file": "up2x-latest-denoise1x.pth",
@@ -391,7 +391,7 @@
       "entry": "up2x-latest-denoise2x.pth",
       "repository": "https://github.com/bilibili/ailab",
       "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
-      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
       "files": [
         {
           "file": "up2x-latest-denoise2x.pth",
@@ -428,7 +428,7 @@
       "entry": "up2x-latest-denoise3x.pth",
       "repository": "https://github.com/bilibili/ailab",
       "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
-      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
       "files": [
         {
           "file": "up2x-latest-denoise3x.pth",
@@ -465,7 +465,7 @@
       "entry": "up3x-latest-conservative.pth",
       "repository": "https://github.com/bilibili/ailab",
       "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
-      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
       "files": [
         {
           "file": "up3x-latest-conservative.pth",
@@ -502,7 +502,7 @@
       "entry": "up3x-latest-no-denoise.pth",
       "repository": "https://github.com/bilibili/ailab",
       "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
-      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
       "files": [
         {
           "file": "up3x-latest-no-denoise.pth",
@@ -539,7 +539,7 @@
       "entry": "up3x-latest-denoise3x.pth",
       "repository": "https://github.com/bilibili/ailab",
       "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
-      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
       "files": [
         {
           "file": "up3x-latest-denoise3x.pth",
@@ -576,7 +576,7 @@
       "entry": "up4x-latest-conservative.pth",
       "repository": "https://github.com/bilibili/ailab",
       "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
-      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
       "files": [
         {
           "file": "up4x-latest-conservative.pth",
@@ -613,7 +613,7 @@
       "entry": "up4x-latest-no-denoise.pth",
       "repository": "https://github.com/bilibili/ailab",
       "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
-      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
       "files": [
         {
           "file": "up4x-latest-no-denoise.pth",
@@ -650,7 +650,7 @@
       "entry": "up4x-latest-denoise3x.pth",
       "repository": "https://github.com/bilibili/ailab",
       "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
-      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
       "files": [
         {
           "file": "up4x-latest-denoise3x.pth",
@@ -687,7 +687,7 @@
       "entry": "NAFNet-SIDD-width64.pth",
       "repository": "https://github.com/megvii-research/NAFNet",
       "releaseUrl": "https://github.com/megvii-research/NAFNet/tree/2b4af71ebe098a92a75910c233a3965a3e93ede4",
-      "commit": "2b4af71ebe098a92a75910c233a3965a3e93ede4",
+      "revision": "2b4af71ebe098a92a75910c233a3965a3e93ede4",
       "files": [
         {
           "file": "NAFNet-SIDD-width64.pth",
@@ -717,7 +717,7 @@
       "entry": "NAFNet-GoPro-width64.pth",
       "repository": "https://github.com/megvii-research/NAFNet",
       "releaseUrl": "https://github.com/megvii-research/NAFNet/tree/2b4af71ebe098a92a75910c233a3965a3e93ede4",
-      "commit": "2b4af71ebe098a92a75910c233a3965a3e93ede4",
+      "revision": "2b4af71ebe098a92a75910c233a3965a3e93ede4",
       "files": [
         {
           "file": "NAFNet-GoPro-width64.pth",
@@ -747,7 +747,7 @@
       "entry": "model.safetensors",
       "repository": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf",
       "releaseUrl": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/tree/5426e4f0f36572d16453bbda7a8389317b1bef99",
-      "commit": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+      "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
       "files": [
         {
           "file": "model.safetensors",

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repository": "https://github.com/mj-ehsan/NiceGuy-Shaders",
-  "commit": "2fa6bfc15a8baea5f20224ce42cdaafb8d7f7a86",
+  "revision": "2fa6bfc15a8baea5f20224ce42cdaafb8d7f7a86",
   "license": "CC0-1.0",
   "files": {
     "Shaders/NGLighting.fx": "065247456e08b8eace87a18127363efe0fe668c596c89716c736e01c2a6e6750",

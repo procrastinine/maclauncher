@@ -7,7 +7,7 @@ const ownedFiles=["collection-overlay.js","source.json","SceneProjection.fxh"];
 function replace(text,before,after){if(text.split(before).length!==2)throw Error("The original shader boundary changed.");return text.replace(before,after);}
 function range(text,start,end,replacement){const a=text.indexOf(start),b=text.indexOf(end,a);if(a<0||b<=a||text.indexOf(start,a+start.length)>=0)throw Error("The original shader boundary changed.");return text.slice(0,a)+replacement+text.slice(b);}
 function apply(directory,identity){
-  if(identity.commit!==source.commit)throw Error("This shader scene binding recipe requires its declared source revision.");
+  if(identity.commit!==source.revision)throw Error("This shader scene binding recipe requires its declared source revision.");
   const original=new Map();for(const[file,expected]of Object.entries(source.files)){
     const target=path.join(directory,file),stat=fs.lstatSync(target);if(!stat.isFile()||stat.isSymbolicLink())throw Error("A shader recipe requires regular original files.");
     const bytes=fs.readFileSync(target);if(hash(bytes)!==expected)throw Error("The original shader source changed: "+file);original.set(file,bytes.toString("utf8").replace(/\r\n/g,"\n"));
@@ -46,6 +46,6 @@ function apply(directory,identity){
   const helper=fs.readFileSync(path.join(__dirname,"SceneProjection.fxh"));
   for(const[file,text]of writes)fs.writeFileSync(path.join(directory,file),text);
   fs.writeFileSync(path.join(directory,"Shaders/MLSceneProjection.fxh"),helper);
-  return {version:1,files:Object.fromEntries(ownedFiles.map(file=>[file,hash(fs.readFileSync(path.join(__dirname,file)))])),source:{repository:source.repository,commit:source.commit,license:source.license}};
+  return {version:1,files:Object.fromEntries(ownedFiles.map(file=>[file,hash(fs.readFileSync(path.join(__dirname,file)))])),source:{repository:source.repository,commit:source.revision,license:source.license}};
 }
 module.exports={apply,ownedFiles,sourceFiles:Object.keys(source.files)};

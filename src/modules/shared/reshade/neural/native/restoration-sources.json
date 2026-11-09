@@ -14,19 +14,19 @@
       "sources": [
         {
           "repository": "https://github.com/xinntao/Real-ESRGAN",
-          "commit": "fa4c8a03ae3dbc9ea6ed471a6ab5da94ac15c2ea",
+          "revision": "fa4c8a03ae3dbc9ea6ed471a6ab5da94ac15c2ea",
           "path": "realesrgan/archs/srvgg_arch.py",
           "license": "BSD-3-Clause"
         },
         {
           "repository": "https://github.com/xocialize/realesrgan-mlx",
-          "commit": "52c0fc1044277900b995308095a1f3cc484a3581",
+          "revision": "52c0fc1044277900b995308095a1f3cc484a3581",
           "path": "realesrgan_mlx/archs/srvgg_arch.py",
           "license": "BSD-3-Clause"
         },
         {
           "repository": "https://github.com/xocialize/mlx-realesrgan-swift",
-          "commit": "d586e13a2c2a5514db05cda351dbdb9afab9ff6b",
+          "revision": "d586e13a2c2a5514db05cda351dbdb9afab9ff6b",
           "path": "Sources/RealESRGANMLX/SRVGGNetCompact.swift",
           "license": "MIT"
         }
@@ -53,19 +53,19 @@
       "sources": [
         {
           "repository": "https://github.com/xocialize/nafnet-mlx",
-          "commit": "9a03831949ea95d2f0d03e3606b34504f3ba76b8",
+          "revision": "9a03831949ea95d2f0d03e3606b34504f3ba76b8",
           "path": "nafnet_mlx/model.py",
           "license": "MIT"
         },
         {
           "repository": "https://github.com/xocialize/mlx-nafnet-swift",
-          "commit": "07d37f8a7a1ce61bacb36710c3139d4f99e6dfa9",
+          "revision": "07d37f8a7a1ce61bacb36710c3139d4f99e6dfa9",
           "path": "Sources/NAFNetMLXCore/NAFNet.swift",
           "license": "MIT"
         },
         {
           "repository": "https://github.com/megvii-research/NAFNet",
-          "commit": "2b4af71ebe098a92a75910c233a3965a3e93ede4",
+          "revision": "2b4af71ebe098a92a75910c233a3965a3e93ede4",
           "path": "LICENSE",
           "license": "MIT"
         }
@@ -97,7 +97,7 @@
       "sources": [
         {
           "repository": "https://github.com/bilibili/ailab",
-          "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+          "revision": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
           "path": "Real-CUGAN/upcunet_v3.py",
           "license": "MIT"
         }
@@ -126,19 +126,19 @@
       "sources": [
         {
           "repository": "https://github.com/nihui/rife-ncnn-vulkan",
-          "commit": "a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7",
+          "revision": "a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7",
           "path": "models/rife-v4.6/flownet.param",
           "license": "MIT"
         },
         {
           "repository": "https://github.com/hzwer/Practical-RIFE",
-          "commit": "bbfd2ea90910789a860ea3e2b32a240cd577b75e",
+          "revision": "bbfd2ea90910789a860ea3e2b32a240cd577b75e",
           "path": "README.md",
           "license": "MIT"
         },
         {
           "repository": "https://github.com/Tencent/ncnn",
-          "commit": "b4ba207c18d3103d6df890c0e3a97b469b196b26",
+          "revision": "b4ba207c18d3103d6df890c0e3a97b469b196b26",
           "path": "src/modelbin.cpp; src/layer/deconvolution.cpp",
           "license": "BSD-3-Clause"
         }

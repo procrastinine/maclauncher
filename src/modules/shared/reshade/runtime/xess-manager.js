@@ -1,6 +1,6 @@
 const Library=require("../xess/library"),{downloadApproved,approveDownloads}=require("../../runtime/tool-install");
 const {Source,Components}=Library;
-const versionLabel="Intel XeSS SDK · "+Source.commit.slice(0,8);
+const versionLabel="Intel XeSS SDK · "+Source.revision.slice(0,8);
 function normalizeSettings(value){const version=typeof value?.defaultVersion==="string"?value.defaultVersion.trim():"";return {defaultVersion:version&&version!=="auto"?version:null};}
 function support(context){return require("../xess").state(context.root||require("..").runtimeRoot(context.app),context);}
 function requiredOperations(selected){return ["superresolution",...(selected?.generation?["interpolate"]:[])];}

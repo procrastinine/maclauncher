@@ -7,7 +7,7 @@ const hash=bytes=>crypto.createHash("sha256").update(bytes).digest("hex");
 function section(text,start,end){const a=text.indexOf(start),b=text.indexOf(end,a);if(a<0||b<=a||text.indexOf(start,a+start.length)>=0)throw Error("The original visibility-bitmask shader boundary changed.");return text.slice(a,b);}
 function replace(text,before,after){if(text.split(before).length!==2)throw Error("The original visibility-bitmask shader expression changed.");return text.replace(before,after);}
 function apply(directory,identity){
-  if(identity.commit!==source.commit)throw Error("This shader recipe requires its declared source revision.");
+  if(identity.commit!==source.revision)throw Error("This shader recipe requires its declared source revision.");
   const originals=new Map();for(const[file,expected]of Object.entries(source.files)){
     const target=path.join(directory,file),stat=fs.lstatSync(target);if(!stat.isFile()||stat.isSymbolicLink())throw Error("A shader recipe requires regular original files.");
     const bytes=fs.readFileSync(target);if(hash(bytes)!==expected)throw Error("The original shader source changed: "+file);originals.set(file,bytes.toString("utf8").replace(/\r\n/g,"\n"));
@@ -38,6 +38,6 @@ function apply(directory,identity){
   // The original remains in its pinned source repository. Only the translated,
   // consumed production shader belongs to this adapted installed collection.
   fs.unlinkSync(path.join(directory,"HDRP/Shaders/Resources/SSRTCS.compute"));
-  return {version:1,files:Object.fromEntries(ownedFiles.map(file=>[file,hash(fs.readFileSync(path.join(__dirname,file)))])),source:{repository:source.repository,commit:source.commit,license:source.license}};
+  return {version:1,files:Object.fromEntries(ownedFiles.map(file=>[file,hash(fs.readFileSync(path.join(__dirname,file)))])),source:{repository:source.repository,commit:source.revision,license:source.license}};
 }
 module.exports={apply,ownedFiles,sourceFiles:Object.keys(source.files)};

@@ -16,7 +16,7 @@ function resolve(root) {
     const directory = path.join(root, 'godot');
     const metadata = JSON.parse(fs.readFileSync(path.join(directory, 'provider.json'), 'utf8'));
     const library = path.join(directory, 'libmaclauncher-godot-camera.dylib');
-    if (metadata.abi !== 1 || metadata.complete !== true || metadata.sourceCommit !== SOURCE.commit || !fs.statSync(library).isFile()) return null;
+    if (metadata.abi !== 1 || metadata.complete !== true || metadata.sourceCommit !== SOURCE.revision || !fs.statSync(library).isFile()) return null;
     for (const script of ['autoload.gd', 'camera-effect.gd']) if (!fs.statSync(path.join(directory, script)).isFile()) return null;
     let sourceResolutionLiveAPI = 0;
     if (metadata.sourceResolutionAPI === 1 && metadata.sourceResolutionLiveAPI === 1) {

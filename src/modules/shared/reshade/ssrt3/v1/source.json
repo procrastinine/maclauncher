@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repository": "https://github.com/cdrinmatane/SSRT3",
-  "commit": "b38d82140acf646ee485f9ab16a5fa84906f2231",
+  "revision": "b38d82140acf646ee485f9ab16a5fa84906f2231",
   "license": "MIT",
   "paper": "https://arxiv.org/abs/2301.11376",
   "files": {

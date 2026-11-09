@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "commit": "de0fb9c1c510661c571164e1418ceca8101dab69",
+  "revision": "de0fb9c1c510661c571164e1418ceca8101dab69",
   "operation": "interpolate",
   "label": "Intel XeSS frame generation",
   "files": [
