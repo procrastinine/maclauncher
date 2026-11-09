@@ -15,9 +15,26 @@ html, body { margin: 0; height: 100%; background: var(--demo-bg); color: var(--d
 .demoHome { color: var(--demo-text); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .demo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 30%); height: calc(100% - 49px); }
 .launcherPane { position: relative; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--demo-line); }
-.demoMenu { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 8px; border-bottom: 1px solid var(--demo-line); background: var(--demo-panel); }
-.demoMenu button { border: 0; border-radius: 5px; background: none; color: var(--demo-text); font: inherit; font-size: 13px; padding: 3px 9px; cursor: pointer; }
-.demoMenu button:hover, .demoMenu button:focus-visible { background: var(--demo-line); outline: none; }
+/* The launcher's menus, drawn as the macOS menu bar with its dropdown menus. */
+.demoMenu { position: relative; z-index: 3; display: flex; align-items: center; height: 28px; padding: 0 10px;
+  border-bottom: 1px solid rgb(0 0 0 / 55%); background: #2a2c32;
+  font: 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; user-select: none; }
+.menuApple { display: flex; align-items: center; padding: 0 12px 0 6px; color: var(--demo-text); }
+.menuApple svg { width: 14px; height: 17px; fill: currentColor; }
+.menuTitle { position: relative; }
+.menuName { height: 22px; border: 0; border-radius: 5px; background: none; color: var(--demo-text); font: inherit; padding: 0 9px; cursor: default; }
+.appMenu .menuName { font-weight: 700; }
+.menuName[aria-expanded="true"], .menuName:focus-visible { background: rgb(255 255 255 / 16%); outline: none; }
+.menuList { position: absolute; top: calc(100% + 3px); left: 0; min-width: 220px; padding: 5px; border-radius: 9px;
+  border: 1px solid rgb(255 255 255 / 14%); background: rgb(44 46 52 / 86%); backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 70%), 0 12px 32px rgb(0 0 0 / 50%); }
+.menuList[hidden] { display: none; }
+.menuList button { display: flex; align-items: center; justify-content: space-between; gap: 28px; width: 100%; height: 24px;
+  padding: 0 10px; border: 0; border-radius: 5px; background: none; color: var(--demo-text); font: inherit; text-align: left; cursor: default; }
+.menuList button:hover, .menuList button:focus-visible { background: #2f6fde; color: #fff; outline: none; }
+.menuList kbd { font: inherit; color: var(--demo-muted); }
+.menuList button:hover kbd, .menuList button:focus-visible kbd { color: rgb(255 255 255 / 85%); }
+.menuList hr { height: 1px; margin: 5px 10px; border: 0; background: rgb(255 255 255 / 14%); }
 .launcherPane iframe, .articlePreview { border: 0; width: 100%; background: var(--demo-bg); }
 .libraryFrame { flex: 1; min-height: 0; }
 .utilityWindow { position: absolute; inset: 52px 24px 24px; display: flex; flex-direction: column; border: 1px solid var(--demo-line);
