@@ -199,16 +199,19 @@ async function restoreMirrorOrigins(root, mirrors, run, signal) {
   }
 }
 
-async function initSubmodules({ repoRoot = ROOT, paths = [], all = false, jobs = 4, dryRun = false,
+// select limits initialization to those planned source paths, each with its planned recursion.
+async function initSubmodules({ repoRoot = ROOT, paths = [], all = false, select, jobs = 4, dryRun = false,
   run = runGit, signal, onProgress } = {}) {
   if (!Number.isInteger(jobs) || jobs < 1 || jobs > 16) throw new Error('Submodule jobs must be an integer from 1 to 16.');
   const plan = await readPlan({ repoRoot, paths, all, run, signal });
   if (dryRun) return plan;
   const cwd = fs.realpathSync(repoRoot);
-  const mirrorConfig = [...new Map(plan.mirrors.map(item => [item.repository, item.checkoutOrigin]))]
+  const modules = select ? plan.modules.filter(item => select.includes(item.path)) : plan.modules;
+  const mirrors = plan.mirrors.filter(mirror => modules.some(item => mirror.path === item.path || mirror.path.startsWith(item.path + '/')));
+  const mirrorConfig = [...new Map(mirrors.map(item => [item.repository, item.checkoutOrigin]))]
     .flatMap(([repository, checkoutOrigin]) => ['-c', 'url.' + checkoutOrigin + '.insteadOf=' + repository]);
   for (const recursive of [false, true]) {
-    const selected = plan.modules.filter(item => item.recursive === recursive);
+    const selected = modules.filter(item => item.recursive === recursive);
     if (!selected.length) continue;
     const recursion = recursive ? ['--recursive'] : [];
     onProgress?.({ recursive, paths: selected.map(item => item.path) });
@@ -216,7 +219,7 @@ async function initSubmodules({ repoRoot = ROOT, paths = [], all = false, jobs =
     await run([...mirrorConfig, 'submodule', 'update', '--init', '--checkout', '--jobs', String(jobs), ...recursion,
       '--', ...selected.map(item => item.path)], { cwd, mutation: true, signal });
   }
-  await restoreMirrorOrigins(cwd, plan.mirrors, run, signal);
+  await restoreMirrorOrigins(cwd, mirrors, run, signal);
   return plan;
 }
 

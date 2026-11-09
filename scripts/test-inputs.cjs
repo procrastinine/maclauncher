@@ -23,10 +23,12 @@ async function prepareSources(repoRoot) {
   const plan = await Sources.readPlan({ repoRoot });
   const primary = git(repoRoot, ['worktree', 'list', '--porcelain']).split('\n').find(line => line.startsWith('worktree ')).slice(9);
   // A linked app checkout can share the existing exact source repositories.
-  // No source checkout, index or branch in the primary worktree is changed.
+  // No source checkout, index, branch or configuration of the primary worktree is changed:
+  // a source with nested sources is initialized in this checkout instead, and only sources
+  // not yet at their pins are initialized, never a shared worktree.
   if (fs.realpathSync(primary) !== fs.realpathSync(repoRoot)) {
     for (const source of plan.modules) {
-      if (sourceReady(repoRoot, source)) continue;
+      if (source.recursive || sourceReady(repoRoot, source)) continue;
       const target = path.join(repoRoot, source.path), existing = path.join(primary, source.path);
       if (fs.existsSync(target) && fs.readdirSync(target).length) continue;
       try {
@@ -38,7 +40,8 @@ async function prepareSources(repoRoot) {
       git(existing, ['worktree', 'add', '--detach', target, source.revision]);
     }
   }
-  if (plan.modules.some(source => !sourceReady(repoRoot, source))) await Sources.initSubmodules({ repoRoot });
+  const pending = plan.modules.filter(source => !sourceReady(repoRoot, source)).map(source => source.path);
+  if (pending.length) await Sources.initSubmodules({ repoRoot, select: pending });
   return plan;
 }
 
@@ -96,7 +99,7 @@ async function setup({ repoRoot = ROOT } = {}) {
   return check({ repoRoot });
 }
 
-module.exports = { check, setup };
+module.exports = { check, setup, prepareSources };
 if (require.main === module) {
   const action = process.argv[2];
   Promise.resolve().then(() => {
