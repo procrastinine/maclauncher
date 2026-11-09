@@ -10,8 +10,6 @@
     "helperVersion": {
       "includedPackage": "steam-api-helper"
     },
-    "jniSha256": "86326f197fa7f502f9fb122ce0753e315f7fa220712cbd81c6b29b7c97e7b42f",
-    "jniSize": 407344,
     "architectures": [
       "x86_64"
     ],
@@ -189,9 +187,6 @@
       "com/codedisaster/steamworks/SteamUtilsNative.class": "2add395543a223d596775e854610e3e022afa87f4d5c99f5fce354e2bb1b89f8",
       "com/codedisaster/steamworks/Version.class": "d8e3155501e0e86c3cf20cc14a0adb0f26cb1ce734987e70b80bf904dfd11acf"
     },
-    "agentSha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
-    "agentSourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
-    "agentCompilerRuntime": "javac 21.0.12.1",
     "minimumMacOS": "10.9"
   },
   {
@@ -205,8 +200,6 @@
     "helperVersion": {
       "includedPackage": "steam-api-helper"
     },
-    "jniSha256": "f596487a0edce464c21c551c1a29a29aedaf4965d0a21b6d58ab3a55bce5c97e",
-    "jniSize": 681280,
     "architectures": [
       "x86_64",
       "arm64"
@@ -384,9 +377,6 @@
       "com/codedisaster/steamworks/SteamUtilsNative.class": "eebe5aaea2ee33bce84fa2fb79ad44771a9c4239dae221b9d653de644817a070",
       "com/codedisaster/steamworks/Version.class": "7b1006e22cec724e36ae409db22b950b160c6e618dd8bf4bf4a7ea5bae00be1d"
     },
-    "agentSha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
-    "agentSourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
-    "agentCompilerRuntime": "javac 21.0.13",
     "minimumMacOS": "11.0"
   }
 ]

@@ -18,7 +18,7 @@ const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 // The publisher's LC_ID_DYLIB identifies the library; it is not an input path.
 function nativeHostDependencies() {
   return Catalog.map(pin => ({ id: "java-steamworks", version: pin.bridgeVersion,
-    file: "libsteamworks4j.dylib", sha256: pin.jniSha256, dependency: "@loader_path/libsteam_api.dylib",
+    file: "libsteamworks4j.dylib", dependency: "@loader_path/libsteam_api.dylib",
     provider: { id: "steam-api-helper", version: pin.helperVersion, file: "libsteam_api.dylib" },
     installNames: pin.version === "1.9.0" ? ["/usr/local/lib/libsteamworks4j.dylib"]
       : pin.architectures.map(architecture => `/usr/local/lib/libsteamworks4j-${architecture}.dylib`) }));
@@ -50,21 +50,19 @@ function resolveBundle(pin, { resourcesRoot, verification = "full", native = Nat
   if (included) {
     const { directory, manifest, item } = included;
     const record = JSON.parse(manifest.bytes);
+    // The included package record is the one exact record of the bridge files.
     if (record.id !== "java-steamworks" || record.version !== pin.bridgeVersion || record.wrapperVersion !== pin.version ||
-        record.librarySha256 !== pin.jniSha256 || record.abiProfile !== pin.abiProfile ||
-        record.agentSha256 !== pin.agentSha256 || record.agentClassMajor !== 52)
+        record.abiProfile !== pin.abiProfile || record.agentClassMajor !== 52)
       throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam bridge source or ABI changed.");
     const libraryPath = path.join(directory, "libsteamworks4j.dylib"), agentPath = path.join(directory, "steam-agent.jar");
     if (verification === "full") {
       Bundle.verifyPayload(directory, { ...record, files: [...record.files,
         { path: item.manifestRelative, size: manifest.size, sha256: item.manifestSha256, mode: 0o644 }] });
-      const library = Bundle.readRegular(libraryPath, 2 * 1024 * 1024), agent = Bundle.readRegular(agentPath, 128 * 1024);
-      if (library.sha256 !== pin.jniSha256 || library.size !== pin.jniSize || agent.sha256 !== pin.agentSha256 ||
-          JSON.stringify(native.readMachOArchitectures(libraryPath, { allowLibrary: true }).sort()) !== JSON.stringify(pin.architectures.slice().sort()))
-        throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam JNI or loader agent changed.");
+      if (JSON.stringify(native.readMachOArchitectures(libraryPath, { allowLibrary: true }).sort()) !== JSON.stringify(pin.architectures.slice().sort()))
+        throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam JNI has a different CPU.");
     } else if (![libraryPath, agentPath].every(file => (fs.lstatSync(file).isFile() || Boolean(Bundle.appAlias(file)))))
       throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam bridge files are invalid.");
-    return { ...pin, ready: true, directory, libraryPath, agentPath, source: "bundled", bundledExecution: "direct" };
+    return { ...pin, jniSha256: record.librarySha256, ready: true, directory, libraryPath, agentPath, source: "bundled", bundledExecution: "direct" };
   }
   throw failure("JAVA_STEAM_BRIDGE_UNAVAILABLE", "This app build does not include this game's exact Java Steam bridge.");
 }

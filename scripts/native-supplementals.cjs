@@ -4,7 +4,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { isDeepStrictEqual } = require('node:util');
 const B = require('../src/modules/shared/runtime/bundled-native');
-const { validatePublicMetadata, validateDeclaration, checksum } = require("../src/modules/shared/runtime/package-contract.cjs");
+const { validatePublicMetadata, validateDeclaration } = require("../src/modules/shared/runtime/package-contract.cjs");
 
 // Each backend module with a manifest and entry point, read as data. Reading
 // declarations runs no module code, so a module whose code needs included
@@ -85,7 +85,7 @@ function nativeHostDependencies(dependencies) {
   if (!Array.isArray(rows) || rows.length > 128) throw new Error('Invalid native host dependency declarations.');
   for (const row of rows) {
     if (!row || !/^[a-z0-9-]+$/.test(row.id || '') || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(row.version || '') ||
-        !checksum(row.sha256) || B.relativeFile(row.file) !== row.file ||
+        B.relativeFile(row.file) !== row.file ||
         typeof row.dependency !== 'string' || !row.dependency.startsWith('@loader_path/') ||
         B.relativeFile(row.dependency.slice(13)) !== row.dependency.slice(13) ||
         !/^[a-z0-9-]+$/.test(row.provider?.id || '') || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(row.provider?.version || '') ||
@@ -133,7 +133,7 @@ function verifySupplementals({ resourceRoot, arch, maximumMacOS, items, dependen
           const file = files.get(full);
           linked.set(key, links(full, architecture).filter(link => !ids.includes(link)).map(link => {
             const host = hostDependencies.find(row => row.id === item.id && row.version === item.version &&
-              row.file === file.path && row.sha256 === file.sha256 && row.dependency === link);
+              row.file === file.path && row.dependency === link);
             if (host) {
               const provider = selected.find(row => row.id === host.provider.id && row.version === host.provider.version);
               const library = provider?.files.find(row => row.path === host.provider.file);

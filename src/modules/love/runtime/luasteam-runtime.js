@@ -13,7 +13,7 @@ const Custom = require("../../shared/runtime/custom-runtime");
 const SECTION_ID = "luasteam";
 function nativeHostDependencies() {
   return Catalog.map(pin => ({ id: "love-luasteam", version: pin.version,
-    file: "luasteam.so", sha256: pin.librarySha256, dependency: "@loader_path/libsteam_api.dylib",
+    file: "luasteam.so", dependency: "@loader_path/libsteam_api.dylib",
     provider: { id: "steam-api-helper", version: pin.helperVersion, file: "libsteam_api.dylib" },
     installNames: ["@loader_path/luasteam.so"] }));
 }
@@ -29,23 +29,23 @@ function resolveBundle({ version, resourcesRoot, verification = "full", userData
     if (included) {
       const { directory, manifest, item } = included;
       const record = JSON.parse(manifest.bytes);
-      if (record.id !== "love-luasteam" || record.version !== pin.version || record.sourceRevision !== pin.sourceRevision ||
-          record.librarySha256 !== pin.librarySha256 || record.abiProfile !== pin.abiProfile || record.hostLuaAbi !== "Lua 5.1 C API")
-        throw new Error("The included LuaSteam source or API profile changed.");
+      // The included package record is the one exact record of the bridge files.
+      if (record.id !== "love-luasteam" || record.version !== pin.version ||
+          record.abiProfile !== pin.abiProfile || record.hostLuaAbi !== "Lua 5.1 C API")
+        throw new Error("The included LuaSteam API profile changed.");
       const libraryPath = path.join(directory, "luasteam.so");
       if (verification === "full") {
         Bundle.verifyPayload(directory, { ...record, files: [...record.files,
           { path: item.manifestRelative, size: manifest.size, sha256: item.manifestSha256, mode: 0o644 }] });
-        const library = Bundle.readRegular(libraryPath, 4 * 1024 * 1024);
-        if (library.sha256 !== pin.librarySha256 || !["arm64", "x86_64"].every(arch => Native.readMachOArchitectures(libraryPath, { allowLibrary: true }).includes(arch)))
-          throw new Error("The included LuaSteam library changed or has an incompatible CPU.");
+        if (!["arm64", "x86_64"].every(arch => Native.readMachOArchitectures(libraryPath, { allowLibrary: true }).includes(arch)))
+          throw new Error("The included LuaSteam library has an incompatible CPU.");
         // Release staging verifies the code signature. The exact sealed bytes
         // are verified again here without spawning a signature tool on Play.
       } else {
         const stat = fs.lstatSync(libraryPath);
         if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("The included LuaSteam library is not a regular file.");
       }
-      return { ...pin, ready: true, directory, installDir: directory, libraryPath, source: "bundled", bundledExecution: "direct",
+      return { ...pin, librarySha256: record.librarySha256, ready: true, directory, installDir: directory, libraryPath, source: "bundled", bundledExecution: "direct",
         readOnly: true, removable: false, architectures: ["arm64", "x86_64"], reason: null };
     }
   } catch (error) { return { ...pin, ready: false, present: true, reason: error.message }; }

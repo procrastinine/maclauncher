@@ -378,7 +378,7 @@ test('native plugins use only their exact declared runtime host library and comp
   fs.mkdirSync(path.dirname(path.join(f.resourceRoot, provider.directoryRelative)), { recursive: true });
   fs.cpSync(path.join(f.resourceRoot, item.directoryRelative), path.join(f.resourceRoot, provider.directoryRelative), { recursive: true });
   let selected = [item, provider];
-  const contract = { id: item.id, version: item.version, file: file.path, sha256: file.sha256,
+  const contract = { id: item.id, version: item.version, file: file.path,
     dependency: '@loader_path/provided.dylib', provider: { id: provider.id, version: provider.version, file: file.path }, installNames: [] };
   f.dependencies.supplementals = () => selected;
   f.dependencies.nativeHostDependencies = () => [contract];
@@ -389,7 +389,6 @@ test('native plugins use only their exact declared runtime host library and comp
   selected = [item]; assert.throws(verify, /host dependency is missing/); selected = [item, provider];
   const providerFile = provider.files.find(row => row.path === file.path), architectures = providerFile.architectures;
   providerFile.architectures = ['arm64']; assert.throws(verify, /architecture does not cover its launcher CPUs/); providerFile.architectures = architectures;
-  contract.sha256 = 'f'.repeat(64); assert.throws(verify, /Unresolved ordinary/); contract.sha256 = file.sha256;
   f.dependencies.links = () => ['@loader_path/unrelated.dylib']; assert.throws(verify, /Unresolved ordinary/);
 });
 test('missing, modified or omitted supplemental resources cannot produce an incomplete release', async t => {

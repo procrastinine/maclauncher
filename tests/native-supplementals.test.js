@@ -90,13 +90,12 @@ test('declared custom helpers are included while managed helpers and other versi
   assert.equal(selected('7zip/7zz'), true);
 });
 
-test('native host dependencies use the shared checksum contract and preserve declared loader identities', () => {
-  const row = { id: 'fixture-bridge', version: '1.0', sha256: 'a'.repeat(64), file: 'bridge.dylib',
+test('native host dependencies preserve declared loader identities', () => {
+  const row = { id: 'fixture-bridge', version: '1.0', file: 'bridge.dylib',
     dependency: '@loader_path/libsteam_api.dylib', provider: { id: 'steam-api-helper', version: '0.5.0', file: 'libsteam_api.dylib' },
     installNames: ['@loader_path/bridge.dylib'] };
   assert.deepEqual(S.nativeHostDependencies({ nativeHostDependencies: () => [row] }), [row]);
   const registered = S.nativeHostDependencies(); assert.ok(registered.length);
-  assert.ok(registered.every(item => typeof item.sha256 === 'string' && /^[a-f0-9]{64}$/.test(item.sha256)));
-  for (const change of [{ sha256: 'invalid' }, { sha256: ['a'.repeat(64)] }, { file: '../outside' }, { dependency: '/outside/libsteam_api.dylib' }])
+  for (const change of [{ file: '../outside' }, { dependency: '/outside/libsteam_api.dylib' }])
     assert.throws(() => S.nativeHostDependencies({ nativeHostDependencies: () => [{ ...row, ...change }] }), /Invalid native host|Unsafe bundled/);
 });
