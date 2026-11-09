@@ -9,7 +9,8 @@ const ID = "graphics-neural-models", MAX_MANIFEST = 1024 * 1024, MAX_WEIGHTS = 8
 const architectures = new Set(["mlxdlss.neural-rendering-transformer.v1", "nrk.neural-rendering-transformer.v1"]);
 const VSR_ARCHITECTURE = "mlxdlss.rtx-vsr-1.8.2.mode16.v1", FG_ARCHITECTURE = "mlxdlss.video-frame-generation.v1";
 const SR_ARCHITECTURE = "mlxdlss.super-resolution.preset-k.ldr2x.v1";
-const SR_POSTPROCESS = "1bd949170193f077f75f9c08f8a4a9a6abf21088efbd7795ad8cd463be3517ae";
+// The DLSS SR reconstruction shader is the one the SR capture conversion produces.
+const SR_POSTPROCESS = require("./nvidia-sr-capture").constants.METAL;
 const PACKAGE_EXTENSIONS=Object.freeze(["dlssmodel","vsrmodel","fgmodel","srmodel","restorationmodel","depthmodel"]);
 const packagePattern = new RegExp("\\.(?:"+PACKAGE_EXTENSIONS.join("|")+")$","i");
 function vsrShapes() {

@@ -11,8 +11,7 @@
   "interpolation": {
     "architecture": "mlxdlss.video-frame-generation.v1",
     "operation": "mlx-interpolation",
-    "sourceSHA256": "8d59d49b36410dd6b62fef2503a5871d347415bd85d943fa0848563a95dd50c7",
-    "sourceBytes": 7506544,
+    "source": {"model": "mlx-interpolation-310.9.16-9981c635", "file": "nvngx_dlssg.dll"},
     "weightImageSHA256": "4ee053756689bbcf925e7bbc36fe40e7c572b5e2188bba7951e6d57e44b500d6",
     "layers": {
       "block0.stem0": {
@@ -356,7 +355,7 @@
   "vsr": {
     "architecture": "mlxdlss.rtx-vsr-1.8.2.mode16.v1",
     "operation": "mlx-vsr",
-    "sourceSHA256": "c7f2387a565e41b77a624634c102c2254d5285d28f886bd5db7491df8b1b037e",
+    "source": {"model": "mlx-vsr-1.8.2-vfx-0.1.0.1", "file": "libnvidia-ngx-vsr.so.1.8.2"},
     "layers": {
       "decoder0.conv0": {
         "output": 64,

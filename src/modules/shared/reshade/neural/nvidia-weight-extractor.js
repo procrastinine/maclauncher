@@ -7,6 +7,14 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const {setImmediate: yieldTurn} = require('node:timers/promises');
 const Spec = require('./nvidia-weight-spec.json'), SourcePins = require('../runtime/source-pins');
+// Each profile's NVIDIA library is the file the model catalog downloads and verifies.
+const Catalog = require('./model-source.json');
+function sourceFile(profile) {
+  const {model, file} = Spec[profile].source;
+  const row = Catalog.sources.find(entry => entry.version === model)?.files?.find(entry => entry.file === file);
+  if (!row) throw new Error('The NVIDIA weight profile names no catalog file: ' + profile);
+  return row;
+}
 
 const maximumBytes = 128 * 1024 * 1024;
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -25,7 +33,7 @@ function inspect(file) {
   } finally { fs.closeSync(descriptor); }
   // Inspection identifies a candidate format only. Conversion verifies the
   // complete source digest before any packed offset is admitted.
-  const profile = bytes.subarray(0, 2).toString() === 'MZ' && stat.size === Spec.interpolation.sourceBytes
+  const profile = bytes.subarray(0, 2).toString() === 'MZ' && stat.size === sourceFile('interpolation').bytes
     ? 'interpolation' : bytes.readUInt32LE(0) === 0x464c457f ? 'vsr' : null;
   if (!profile) throw new Error('Choose the supported NVIDIA 310.9.16 frame-generation DLL or RTX VSR 1.8.2 library.');
   const model = Spec[profile];
@@ -53,7 +61,7 @@ async function convert(source, destination, {signal} = {}) {
   } finally { await input.close(); }
   signal?.throwIfAborted();
   const inputHash = sha256(bytes);
-  if (inputHash !== model.sourceSHA256)
+  if (inputHash !== sourceFile(source.profile).sha256)
     throw new Error('The selected NVIDIA library differs from the exact supported model source.');
   let base = 0;
   if (source.profile === 'interpolation') {
