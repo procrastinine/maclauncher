@@ -244,12 +244,14 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   }
   if(std::isfinite(target)&&target>0)refreshTime.store(target);if(rate>=20&&rate<=1000)displayHz.store(rate);
   CAMetalLayer *output=layerSnapshot();if(!output)return;
-  {std::lock_guard lock(displayDrawableMutex);if(stopping.load()||epoch!=timingEpoch)return;
+  {std::lock_guard lock(displayDrawableMutex);if(stopping.load()||epoch!=timingEpoch||!metalTiming.load())return;
    if(displayDrawable!=drawable){displayDrawable=nil;displayDrawable=drawables.adopt(output,drawable);}}
   schedule();
  }
+ // While display timing is paused, no display-link update supplies a drawable; presentation acquires its
+ // drawables from the layer until timing resumes.
  void pauseGenerationTiming(){
-  if(metalLink)metalLink->pause();
+  if(metalLink){metalTiming=false;metalLink->pause();}
   if(link&&CVDisplayLinkIsRunning(link))CVDisplayLinkStop(link);
   std::lock_guard lock(displayDrawableMutex);displayDrawable=nil;
  }
@@ -282,9 +284,9 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
      if(!metalLink){
       const auto epoch=++timingEpoch;const std::weak_ptr<Impl>weak=shared_from_this();
       metalLink=std::make_unique<PresentationDisplayLink>(layer,[weak,epoch](id<CAMetalDrawable> drawable,double target,unsigned rate){if(auto self=weak.lock())self->displayUpdate(epoch,drawable,target,rate);});
-      metalLink->setDisplay(currentDisplay);metalTiming=true;
+      metalLink->setDisplay(currentDisplay);
      }
-     metalLink->resume();return true;
+     metalTiming=true;metalLink->resume();return true;
     }catch(const std::exception&){metalLink.reset();metalTiming=false;metalTimingUnavailable=true;}}
     @catch(NSException*){metalLink.reset();metalTiming=false;metalTimingUnavailable=true;}
     // Keep the existing timing route when the optional Metal driver is unavailable.
