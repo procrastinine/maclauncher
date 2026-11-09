@@ -134,7 +134,6 @@
       "!src/modules/godot/graphics/{build.mjs,bridge.cpp,*.gd,*.glsl}",
       "!src/modules/shared/reshade/{blur,cacao,cmaa2,dof,kuwahara,ssr,xegtao}/{build.mjs,*.hlsl}",
       "!src/modules/shared/reshade/dof/generated/*.{hpp,json}",
-      "!src/modules/shared/reshade/{lens,libplacebo}{,/**}",
       "!src/modules/shared/reshade/{stage-royale.mjs,shaderc-offline.cpp}",
       "!src/modules/shared/reshade/temporal/*.{h,hpp}",
       "!src/modules/shared/reshade/temporal/*/{build.mjs,adapt-runtime.mjs,*.mm,*.hpp}",
