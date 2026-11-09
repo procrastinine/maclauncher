@@ -123,7 +123,6 @@
       "!src/modules/shared/reshade/native{,/**}",
       "!src/modules/shared/reshade/neural/native{,/**}",
       "!src/modules/shared/reshade/neural/build.mjs",
-      "!src/modules/shared/reshade/libplacebo-build.mjs",
       "!src/modules/shared/reshade/compiler-isolation.mjs",
       "!src/modules/shared/reshade/xess/native{,/**}",
       "!src/modules/shared/reshade/isf/{CMakeLists.txt,build.mjs,isolate-compiler.mjs,provider.mm}",

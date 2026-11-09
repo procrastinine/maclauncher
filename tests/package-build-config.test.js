@@ -214,7 +214,6 @@ test("first-party fixtures and managed engines stay out of ASAR while declared h
     "src/modules/crossover/temporal/streamline/test-forwarders.mjs","src/modules/crossover/temporal/streamline/camera-test.cpp",
     "src/modules/shared/reshade/native/effects-plan.mm","src/modules/shared/reshade/native/build.mjs",
     "src/modules/shared/reshade/neural/native/Package.swift","src/modules/shared/reshade/neural/build.mjs",
-    "src/modules/shared/reshade/libplacebo-build.mjs",
     "src/modules/shared/reshade/xess/native/host.cpp","src/modules/shared/reshade/xess/native/host-vulkan.cpp",
     "src/modules/shared/reshade/isf/CMakeLists.txt","src/modules/shared/reshade/isf/build.mjs",
     "src/modules/shared/reshade/isf/isolate-compiler.mjs","src/modules/shared/reshade/isf/provider.mm",
