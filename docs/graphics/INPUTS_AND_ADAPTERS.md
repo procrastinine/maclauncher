@@ -85,6 +85,16 @@ Color, depth, motion and output are required. An exposure texture is optional, a
 
 This route does not expose NVIDIA DLSS Frame Generation or Ray Reconstruction. Forwarded Super Resolution frames enter the same ordered graph as other scene producers, where a shared frame-generation row still needs its own matching inputs and presentation contract. The original API name does not establish those requirements.
 
+#### Wine scene transport
+
+For CrossOver and Sikarugir, launch preparation reads the actual used Direct3D 12 translator and selected Wine layout. The scene connection is enabled only when the translator carries the typed resource/command exports and the selected Wine module carries the scene transport exports. The native context handshake performs final admission. Missing exports preserve the ordinary renderer route; executable names, driver labels and downloadable version numbers do not establish this capability.
+
+The additive `MacLauncherWineVulkanRecordScene2` export carries fixed-width metadata beside the original scene request. The original export and context calls keep their layouts. Before using the additive Unix selector, the PE export probes the matched Unix module. Only the Unix owner unwraps Wine devices and command buffers; the native driver resolves images on that device. Metadata contains no native resource pointers or callbacks.
+
+The optional preparation calls negotiate separate Unix selectors before transporting a reconstruction request. Preparation returns an opaque native operation identity on the same request; it records no commands. A prepared request is accepted only by its matching native owner and exact resource/frame metadata. A separate optional query carries the declared creation dimensions and flags, without commands, images or frame identity. The matched native driver retains its actual Metal device while the selected provider checks that shape. Supported shape, resource admission and encoded output are separate results.
+
+The native encoding contract remains `RSVulkanSceneEncodingV2`, including its actual queue and per-flight retain/release callbacks. Provider choice and preparation belong to the shared graph. The transport selects no algorithm and creates no command queue or presentation scheduler.
+
 ### D3DMetal camera handoff
 
 D3DMetal's native MetalFX call supplies the scene textures and scaling values. To add a game's Streamline camera without native texture interop, the Streamline adapter forwards successful `slSetConstants` calls to the `maclauncher-temporal-camera` builtin, whose native half forwards to `rsSetTemporalCameraForNextScale`. The complete export table, including ordinals, selects a compatible Streamline adapter. A later Streamline DLSS evaluation does not repeat a camera already handed to this builtin. The next application scaler encode consumes this camera once. Its frame duration takes precedence when supplied; otherwise the scaler adapter uses elapsed time. This route carries camera parameters rather than full view and projection matrices, and it adds no HUD-less or UI textures.

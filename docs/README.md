@@ -53,7 +53,7 @@ The same chain applies to video playback, including processed video exports. Wit
 - [Graphics providers](graphics/PROVIDERS.md): every upscaler, frame generator, neural method and image or scene effect, with its inputs.
 - [Graphics pipeline](graphics/PIPELINE.md): architecture overview and code map.
 - [Renderer integrations](graphics/SHARED_PROCESSING.md): frame adapters, scene depth and temporal inputs for Godot, CrossOver and Sikarugir.
-- [Frame sources and adapters](graphics/INPUTS_AND_ADAPTERS.md), including [DLSS through Vulkan translators](graphics/INPUTS_AND_ADAPTERS.md#dlss-through-vulkan-translators), and [DLSS scene transport](graphics/NGX_SCENE_TRANSPORT.md): how games' frames and DLSS inputs reach the chain.
+- [Frame sources and adapters](graphics/INPUTS_AND_ADAPTERS.md), including [DLSS through Vulkan translators](graphics/INPUTS_AND_ADAPTERS.md#dlss-through-vulkan-translators): how games' frames and DLSS inputs reach the chain.
 - [Neural models and packages](graphics/NEURAL_RESTORATION.md): neural restoration models and how they are imported.
 - Pipeline references: [effects plans](graphics/EFFECT_PLANS.md), [frame APIs](graphics/FRAME_API.md), [live updates](graphics/LIVE_UPDATES.md), [shaders and media](graphics/SHADERS_AND_MEDIA.md) and [status and delivery](graphics/STATUS_AND_DELIVERY.md).
 - [Window](game-types/WINDOW.md): graphics on other apps' windows and on displays, with capture permissions, output placement, scaling and saved chains.
