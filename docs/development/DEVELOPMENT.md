@@ -163,7 +163,7 @@ Small integration helpers ship inside the app with fixed versions. Their sources
 | LÖVE LuaSteam bridge | [LuaSteam bridge recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/tools/build-luasteam.mjs) in MacLauncher Builds, with the inputs listed in [LÖVE](../game-types/LOVE.md#bridge-source) |
 | MKXP-Z configuration helper | [MKXP-Z configuration helper profile](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/mkxpz-config-helper.json) in MacLauncher Builds |
 | CatSystem2 KIF cipher | [KIF cipher helper profile](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/package-support/helper-builds/catsystem2-kif-crypto.json) in MacLauncher Builds |
-| iOS PlayTools storage adapter | `node scripts/stage-ios-helper.mjs` |
+| iOS PlayTools storage adapter | [PlayTools path helper recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/tools/build-ios-helper.mjs) in MacLauncher Builds |
 | Android account control | [Android launcher recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/android-launcher/build.mjs) in MacLauncher Builds, shipped in an attested included package |
 
 ## Generated test inputs
