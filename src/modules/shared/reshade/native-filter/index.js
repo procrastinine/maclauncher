@@ -27,22 +27,22 @@ const methods=Object.freeze({
   {name:"AdaptationSpeed",label:"Adaptation speed",description:"Exposure adaptation per second. Zero applies the measured exposure immediately.",type:"float",default:[3],min:0,max:60},
   {name:"CutThreshold",label:"Cut threshold",description:"EV change for an image-derived histogram cut reset. Zero disables this estimate.",type:"float",default:[4],min:0,max:16}
  ])}),
- "local-laplacian":Object.freeze({label:"Local Laplacian",purpose:"Colour and tone",license:"MIT",sourceUrl:"https://github.com/halide/Halide",revision:"d62903bbf5166e05841e1346837c8367e2296a83",inputPolicy:"srgb-sdr",parameters:Object.freeze([
+ "local-laplacian":Object.freeze({label:"Local Laplacian",purpose:"Colour and tone",license:"MIT",sourceUrl:"https://github.com/halide/Halide",inputPolicy:"srgb-sdr",parameters:Object.freeze([
   {name:"Detail",label:"Detail",type:"float",default:[1],min:-1,max:4},
   {name:"Contrast",label:"Contrast",type:"float",default:[1],min:0,max:4},
   {name:"Samples",label:"Intensity samples",type:"int",default:[8],min:2,max:16}
  ])}),
- "cmaa2":Object.freeze({label:"CMAA2",purpose:"Anti-aliasing and blur",license:"Apache-2.0 and MIT",sourceUrl:"https://github.com/GameTechDev/CMAA2",revision:"071c6b0857559f4e36f614362e6d2aab1b61938a",inputPolicy:"source",parameters:Object.freeze([
+ "cmaa2":Object.freeze({label:"CMAA2",purpose:"Anti-aliasing and blur",license:"Apache-2.0 and MIT",sourceUrl:"https://github.com/GameTechDev/CMAA2",inputPolicy:"source",parameters:Object.freeze([
   {name:"Quality",label:"Quality",type:"int",default:[2],min:0,max:3,options:[{value:0,label:"Low"},{value:1,label:"Medium"},{value:2,label:"High"},{value:3,label:"Ultra"}]},
   {name:"ExtraSharpness",label:"Preserve detail",type:"bool",default:[0],min:0,max:1}
  ])}),
- "xegtao":Object.freeze({label:"XeGTAO",license:"MIT",sourceUrl:"https://github.com/GameTechDev/XeGTAO",revision:"a5b1686c7ea37788eeb3576b5be47f7c03db532c",inputPolicy:"source",requirements:Object.freeze({depth:true,motion:false,projectionMatrix:true}),sceneInputs:Object.freeze(["depth","projectionMatrix"]),parameters:Object.freeze([
+ "xegtao":Object.freeze({label:"XeGTAO",license:"MIT",sourceUrl:"https://github.com/GameTechDev/XeGTAO",inputPolicy:"source",requirements:Object.freeze({depth:true,motion:false,projectionMatrix:true}),sceneInputs:Object.freeze(["depth","projectionMatrix"]),parameters:Object.freeze([
   {name:"Radius",label:"Radius",type:"float",default:[.5],min:.0001,max:100000},
   {name:"Strength",label:"Strength",type:"float",default:[1],min:0,max:1},
   {name:"Quality",label:"Quality",type:"int",default:[2],min:0,max:3,options:[{value:0,label:"Low"},{value:1,label:"Medium"},{value:2,label:"High"},{value:3,label:"Ultra"}]},
   {name:"DenoisePasses",label:"Denoising",type:"int",default:[1],min:0,max:3,options:[{value:0,label:"Off"},{value:1,label:"Sharp"},{value:2,label:"Medium"},{value:3,label:"Soft"}]}
  ])}),
- "cacao":Object.freeze({label:"CACAO",license:"MIT",sourceUrl:"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",revision:"c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",inputPolicy:"source",requirements:Object.freeze({depth:true,motion:false,projectionMatrix:true}),sceneInputs:Object.freeze(["depth","projectionMatrix"]),parameters:Object.freeze([
+ "cacao":Object.freeze({label:"CACAO",license:"MIT",sourceUrl:"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",inputPolicy:"source",requirements:Object.freeze({depth:true,motion:false,projectionMatrix:true}),sceneInputs:Object.freeze(["depth","projectionMatrix"]),parameters:Object.freeze([
   {name:"Radius",label:"Radius",type:"float",default:[1.2],min:.0001,max:100000},
   {name:"Strength",label:"Strength",type:"float",default:[1],min:0,max:5},
   {name:"Quality",label:"Quality",type:"int",default:[4],min:0,max:4,options:[{value:0,label:"Lowest"},{value:1,label:"Low"},{value:2,label:"Medium"},{value:3,label:"High"},{value:4,label:"Adaptive"}]},
@@ -51,18 +51,18 @@ const methods=Object.freeze({
   {name:"HalfResolution",label:"Half resolution",type:"bool",default:[0],min:0,max:1},
   {name:"FadeDistance",label:"Fade distance",type:"float",default:[300],min:.0001,max:100000}
  ])}),
- "depth-fog":Object.freeze({label:"Depth fog",license:"MIT",sourceUrl:"https://github.com/luluco250/FXShaders",revision:"76365e35c48e30170985ca371e67d8daf8eb9a98",inputPolicy:"source",requirements:Object.freeze({depth:true,motion:false,projectionMatrix:true}),sceneInputs:Object.freeze(["depth","projectionMatrix"]),parameters:fogParameters}),
- "depth-outlines":Object.freeze({label:"Depth outlines",license:"MIT",sourceUrl:"https://github.com/luluco250/FXShaders",revision:"76365e35c48e30170985ca371e67d8daf8eb9a98",inputPolicy:"source",requirements:Object.freeze({depth:true,motion:false,projectionMatrix:true}),sceneInputs:Object.freeze(["depth","projectionMatrix"]),parameters:Object.freeze([
+ "depth-fog":Object.freeze({label:"Depth fog",license:"MIT",sourceUrl:"https://github.com/luluco250/FXShaders",inputPolicy:"source",requirements:Object.freeze({depth:true,motion:false,projectionMatrix:true}),sceneInputs:Object.freeze(["depth","projectionMatrix"]),parameters:fogParameters}),
+ "depth-outlines":Object.freeze({label:"Depth outlines",license:"MIT",sourceUrl:"https://github.com/luluco250/FXShaders",inputPolicy:"source",requirements:Object.freeze({depth:true,motion:false,projectionMatrix:true}),sceneInputs:Object.freeze(["depth","projectionMatrix"]),parameters:Object.freeze([
   {name:"Threshold",label:"Threshold",type:"float",default:[.9],min:0,max:1},
   {name:"Strength",label:"Strength",type:"float",default:[1],min:0,max:1}
  ])}),
- "ffx-dof":Object.freeze({label:"FidelityFX DoF",license:"MIT",sourceUrl:"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",revision:"c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",inputPolicy:"source",requirements:Object.freeze({depth:true,motion:false,projectionMatrix:true}),sceneInputs:Object.freeze(["depth","projectionMatrix"]),parameters:Object.freeze([
+ "ffx-dof":Object.freeze({label:"FidelityFX DoF",license:"MIT",sourceUrl:"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",inputPolicy:"source",requirements:Object.freeze({depth:true,motion:false,projectionMatrix:true}),sceneInputs:Object.freeze(["depth","projectionMatrix"]),parameters:Object.freeze([
   {name:"FocusDistance",label:"Focus distance",description:"Distance from the camera in scene view-space units.",type:"float",default:[10],min:.0001,max:1000000},
   {name:"BlurRadius",label:"Blur radius",description:"Maximum circle-of-confusion radius in the current image's output pixels.",type:"float",default:[12],min:0,max:256},
   {name:"Quality",label:"Quality",description:"Number of sample rings in the original depth-of-field kernel.",type:"int",default:[3],min:1,max:8},
   {name:"MergeRings",label:"Merge sample rings",type:"bool",default:[1],min:0,max:1}
  ])}),
- "screen-space-reflections":Object.freeze({label:"Screen-space reflections",license:"MIT",sourceUrl:"https://github.com/godotengine/godot",revision:"4c311cbee68c0b66ff8ebb8b0defdd9979dd2a41",inputPolicy:"source",
+ "screen-space-reflections":Object.freeze({label:"Screen-space reflections",license:"MIT",sourceUrl:"https://github.com/godotengine/godot",inputPolicy:"source",
   requirements:Object.freeze({depth:true,motion:false,projectionMatrix:true,sceneAovs:Object.freeze(["normal","roughness","resolvedRadiance","resolvedSpecular","metallic"])}),
   sceneInputs:Object.freeze(["depth","projectionMatrix","normal","roughness","resolvedRadiance","resolvedSpecular","metallic"]),parameters:Object.freeze([
    {name:"MaxSteps",label:"Ray steps",type:"int",default:[64],min:1,max:512},
@@ -72,11 +72,11 @@ const methods=Object.freeze({
    {name:"RoughnessQuality",label:"Roughness filtering",type:"int",default:[2],min:0,max:3,options:[{value:0,label:"Off"},{value:1,label:"Low"},{value:2,label:"Medium"},{value:3,label:"High"}]},
    {name:"Strength",label:"Strength",type:"float",default:[1],min:0,max:1}
   ])}),
- "estimated-depth-fog":Object.freeze({label:"Estimated depth fog",purpose:"Depth",license:"MIT",sourceUrl:"https://github.com/luluco250/FXShaders",revision:"76365e35c48e30170985ca371e67d8daf8eb9a98",inputPolicy:"source",modelOperation:"depth-anything-v2-small",parameters:Object.freeze([
+ "estimated-depth-fog":Object.freeze({label:"Estimated depth fog",purpose:"Depth",license:"MIT",sourceUrl:"https://github.com/luluco250/FXShaders",inputPolicy:"source",modelOperation:"depth-anything-v2-small",parameters:Object.freeze([
   {name:"InputSize",label:"Depth input size",description:"Short-axis size for depth estimation, in multiples of 14. Larger values increase GPU work and memory.",type:"int",default:[252],min:14,max:4088,step:14},
   ...fogParameters.filter(parameter=>parameter.name!=="Distance")
  ])}),
- "ffx-lens":Object.freeze({label:"FidelityFX Lens",purpose:"Lighting and lens",license:"MIT",sourceUrl:"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",revision:"c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",inputPolicy:"source",preservesCoordinates:false,parameters:Object.freeze([
+ "ffx-lens":Object.freeze({label:"FidelityFX Lens",purpose:"Lighting and lens",license:"MIT",sourceUrl:"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",inputPolicy:"source",preservesCoordinates:false,parameters:Object.freeze([
   {"name":"GrainScale","label":"Grain scale","type":"float","default":[1],"min":0.25,"max":64},
   {"name":"GrainAmount","label":"Grain amount","type":"float","default":[0.15],"min":0,"max":1},
   {"name":"ChromaticAberration","label":"Chromatic aberration","type":"float","default":[0.25],"min":0,"max":10},
@@ -84,7 +84,7 @@ const methods=Object.freeze({
   {"name":"GrainSeed","label":"Grain seed","type":"int","default":[0],"min":0,"max":16777215,"step":1},
   {"name":"AnimateGrain","label":"Animate grain","type":"bool","default":[1],"min":0,"max":1,"step":1}
  ])}),
- "ffx-blur":Object.freeze({label:"FidelityFX Blur",purpose:"Anti-aliasing and blur",license:"MIT",sourceUrl:"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",revision:"c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",inputPolicy:"source",preservesCoordinates:true,parameters:Object.freeze([
+ "ffx-blur":Object.freeze({label:"FidelityFX Blur",purpose:"Anti-aliasing and blur",license:"MIT",sourceUrl:"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",inputPolicy:"source",preservesCoordinates:true,parameters:Object.freeze([
   {"name":"KernelSize","label":"Kernel size","type":"int","default":[9],"min":3,"max":21,"step":2},
   {"name":"SigmaPreset","label":"Sigma","type":"int","default":[1],"min":0,"max":2,"step":1,"options":[{"value":0,"label":"1.6"},{"value":1,"label":"2.8"},{"value":2,"label":"4.0"}]}
  ])})
@@ -92,7 +92,7 @@ const methods=Object.freeze({
 // The included collection lists each method once, from this table; its pointer
 // file (<method>.mclfilter) names the method.
 const collection=Object.freeze(Object.entries(methods).map(([id,spec])=>Object.freeze({id,label:spec.label,...(spec.purpose?{purpose:spec.purpose}:{}),file:id+".mclfilter",
- requires:[...(spec.sceneInputs||[])],nativeMethod:id,...(spec.modelOperation?{modelOperation:spec.modelOperation}:{}),license:spec.license,sourceUrl:spec.sourceUrl,...(spec.revision?{revision:spec.revision}:{})})));
+ requires:[...(spec.sceneInputs||[])],nativeMethod:id,...(spec.modelOperation?{modelOperation:spec.modelOperation}:{}),license:spec.license,sourceUrl:spec.sourceUrl})));
 const hash=bytes=>crypto.createHash("sha256").update(bytes).digest("hex");
 function input(file){if(!path.isAbsolute(file||"")||!/\.mclfilter$/i.test(file)||/[\x00-\x1f]/.test(file))throw Error("Choose a .mclfilter image-effect descriptor.");const canonical=fs.realpathSync(file),stat=fs.statSync(canonical);if(!stat.isFile()||stat.size>maximum)throw Error("The image-effect descriptor must be a file of at most 64 KiB.");return canonical;}
 function parse(text){
