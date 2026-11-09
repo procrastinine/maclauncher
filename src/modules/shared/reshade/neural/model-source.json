@@ -94,7 +94,40 @@
       "bytes": 4873897,
       "sourceLicense": "MIT / BSD-3-Clause",
       "weightTerms": "Real-ESRGAN trained weights: BSD-3-Clause. Swift checkpoint conversion: MIT. Original notices are retained.",
-      "description": "Downloads pinned trained weights and notices, adapts their tensor names, and imports a shared model package. Model image processing runs on the GPU."
+      "description": "Downloads pinned trained weights and notices, adapts their tensor names, and imports a shared model package. Model image processing runs on the GPU.",
+      "graph": {
+        "architectures": [
+          "realesrgan.srvgg-16.x4.v1",
+          "realesrgan.srvgg-32.x4.v1"
+        ],
+        "operation": 5,
+        "intrinsicScale": 4,
+        "input": "RGB NHWC float, display-referred sRGB [0,1]",
+        "weights": "Independent local safetensors; excluded from provider payload",
+        "sources": [
+          {
+            "catalogFile": "LICENSE-RealESRGAN.txt",
+            "path": "realesrgan/archs/srvgg_arch.py",
+            "license": "BSD-3-Clause"
+          },
+          {
+            "repository": "https://github.com/xocialize/realesrgan-mlx",
+            "revision": "52c0fc1044277900b995308095a1f3cc484a3581",
+            "path": "realesrgan_mlx/archs/srvgg_arch.py",
+            "license": "BSD-3-Clause"
+          },
+          {
+            "repository": "https://github.com/xocialize/mlx-realesrgan-swift",
+            "revision": "d586e13a2c2a5514db05cda351dbdb9afab9ff6b",
+            "path": "Sources/RealESRGANMLX/SRVGGNetCompact.swift",
+            "license": "MIT"
+          }
+        ],
+        "notices": [
+          "REAL-ESRGAN-BSD-3-CLAUSE.txt",
+          "SRVGG-SWIFT-MIT.txt"
+        ]
+      }
     },
     {
       "version": "rife-v4.6-a7532fc3",
@@ -134,7 +167,38 @@
       "bytes": 10638426,
       "sourceLicense": "MIT / BSD-3-Clause",
       "weightTerms": "RIFE model distribution: MIT. ncnn parameter format: BSD-3-Clause. Original notices are retained.",
-      "description": "Downloads the pinned trained graph and weights, converts their floating-point tensor storage, and imports an image-pair interpolation model."
+      "description": "Downloads the pinned trained graph and weights, converts their floating-point tensor storage, and imports an image-pair interpolation model.",
+      "graph": {
+        "architectures": [
+          "rife.v4.6.ncnn.v1"
+        ],
+        "operation": 8,
+        "intrinsicScale": 1,
+        "parameterFile": "rife-v4.6.param",
+        "sources": [
+          {
+            "catalogFile": "flownet.param",
+            "path": "models/rife-v4.6/flownet.param",
+            "license": "MIT"
+          },
+          {
+            "repository": "https://github.com/hzwer/Practical-RIFE",
+            "revision": "bbfd2ea90910789a860ea3e2b32a240cd577b75e",
+            "path": "README.md",
+            "license": "MIT"
+          },
+          {
+            "catalogFile": "LICENSE-NCNN.txt",
+            "path": "src/modelbin.cpp; src/layer/deconvolution.cpp",
+            "license": "BSD-3-Clause"
+          }
+        ],
+        "notices": [
+          "RIFE-NCNN-MIT.txt",
+          "RIFE-MIT.txt",
+          "NCNN-BSD-3-CLAUSE.txt"
+        ]
+      }
     },
     {
       "version": "mlx-interpolation-310.9.16-9981c635",
@@ -306,7 +370,31 @@
       "sourceLicense": "MIT",
       "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
       "description": "Downloads the pinned author archive, extracts only its conservative 2\u00d7 checkpoint and converts floating-point tensor storage for the GPU graph.",
-      "intrinsicScale": 2
+      "intrinsicScale": 2,
+      "graph": {
+        "architectures": [
+          "realcugan.upcunet2x.v1",
+          "realcugan.upcunet3x.v1",
+          "realcugan.upcunet4x.v1"
+        ],
+        "operation": 6,
+        "intrinsicScale": 2,
+        "sources": [
+          {
+            "catalogFile": "LICENSE-REAL-CUGAN.txt",
+            "path": "Real-CUGAN/upcunet_v3.py",
+            "license": "MIT"
+          }
+        ],
+        "notices": [
+          "REAL-CUGAN-MIT.txt"
+        ],
+        "supportedScales": [
+          2,
+          3,
+          4
+        ]
+      }
     },
     {
       "version": "realcugan-2x-no-denoise-v3",
@@ -706,7 +794,39 @@
       "bytes": 464167427,
       "sourceLicense": "MIT",
       "weightTerms": "Original NAFNet MIT license accompanies the trained model.",
-      "description": "Downloads the author SIDD width64 checkpoint and converts its floating-point tensor storage for image restoration at the input size."
+      "description": "Downloads the author SIDD width64 checkpoint and converts its floating-point tensor storage for image restoration at the input size.",
+      "graph": {
+        "architectures": [
+          "nafnet.sidd-width64.v1",
+          "nafnet.gopro-width64.tlc.v1"
+        ],
+        "operation": 7,
+        "intrinsicScale": 1,
+        "sources": [
+          {
+            "repository": "https://github.com/xocialize/nafnet-mlx",
+            "revision": "9a03831949ea95d2f0d03e3606b34504f3ba76b8",
+            "path": "nafnet_mlx/model.py",
+            "license": "MIT"
+          },
+          {
+            "repository": "https://github.com/xocialize/mlx-nafnet-swift",
+            "revision": "07d37f8a7a1ce61bacb36710c3139d4f99e6dfa9",
+            "path": "Sources/NAFNetMLXCore/NAFNet.swift",
+            "license": "MIT"
+          },
+          {
+            "catalogFile": "LICENSE-NAFNET.txt",
+            "path": "LICENSE",
+            "license": "MIT"
+          }
+        ],
+        "notices": [
+          "NAFNET-SWIFT-MIT.txt",
+          "NAFNET-NOTICE.txt",
+          "NAFNET-ORIGINAL-MIT.txt"
+        ]
+      }
     },
     {
       "version": "nafnet-gopro-width64-2b4af71e",
@@ -772,7 +892,62 @@
       "bytes": 99189417,
       "sourceLicense": "Apache-2.0",
       "weightTerms": "Original Depth Anything V2 Small Apache-2.0 license and model card accompany the model.",
-      "description": "Downloads the trained Small checkpoint for image-estimated relative inverse depth. This attachment does not supply renderer scene guides."
+      "description": "Downloads the trained Small checkpoint for image-estimated relative inverse depth. This attachment does not supply renderer scene guides.",
+      "graph": {
+        "architecture": "depth-anything-v2.vits.relative.v1",
+        "source": {
+          "catalogFile": "LICENSE-DEPTH-ANYTHING.txt",
+          "paths": [
+            "depth_anything_v2/dpt.py",
+            "depth_anything_v2/dinov2.py",
+            "depth_anything_v2/dinov2_layers",
+            "depth_anything_v2/util/blocks.py",
+            "depth_anything_v2/util/transform.py"
+          ]
+        },
+        "checkpointLayout": {
+          "repository": "https://github.com/huggingface/transformers",
+          "revision": "fc35907f95459d7a6c5281dfadd680b6f7b620e3",
+          "paths": [
+            "src/transformers/models/depth_anything/convert_depth_anything_to_hf.py",
+            "src/transformers/models/depth_anything/modeling_depth_anything.py",
+            "src/transformers/models/dinov2/modeling_dinov2.py"
+          ]
+        },
+        "model": {
+          "file": "model.safetensors",
+          "parameters": 24785089,
+          "tensors": 287
+        },
+        "input": {
+          "color": "display-referred-sRGB",
+          "channels": "RGB",
+          "range": [
+            0,
+            1
+          ],
+          "mean": [
+            0.485,
+            0.456,
+            0.406
+          ],
+          "standardDeviation": [
+            0.229,
+            0.224,
+            0.225
+          ],
+          "resize": "bicubic-keep-aspect-lower-bound",
+          "multiple": 14
+        },
+        "output": {
+          "channels": 1,
+          "format": "R32Float",
+          "representation": "relative-inverse-depth",
+          "sourceSizeSampling": "bilinear-align-corners-true",
+          "provenance": "image-estimated",
+          "metric": false
+        }
+      }
     }
   ]
 }

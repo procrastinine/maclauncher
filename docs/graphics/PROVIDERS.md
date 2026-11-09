@@ -281,7 +281,7 @@ The main implementation declarations are:
 
 - the [operation contracts](../../src/modules/shared/effects/operation-contracts.mjs);
 - the [temporal provider registry](../../src/modules/shared/reshade/temporal/providers.js);
-- the [neural graph sources](../../src/modules/shared/reshade/neural/native/restoration-sources.json);
+- the [neural graph sources](../../src/modules/shared/reshade/neural/model-source.json);
 - the [shader collections](../../src/modules/shared/reshade/shader-packs.json);
 - the [native image methods](../../src/modules/shared/reshade/native-filter/index.js);
 - the [downloadable shader collections](../../src/modules/shared/reshade/managed-shader-packs.json).

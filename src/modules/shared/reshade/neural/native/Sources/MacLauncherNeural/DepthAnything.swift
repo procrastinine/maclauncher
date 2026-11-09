@@ -1,6 +1,6 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 // Depth Anything V2 and DINOv2: Apache-2.0. Exact original graph/checkpoint
-// identities accompany depth-anything-source.json and the original notices.
+// identities are the graph entry in model-source.json, with the original notices.
 import Cmlx
 import CoreVideo
 import Foundation

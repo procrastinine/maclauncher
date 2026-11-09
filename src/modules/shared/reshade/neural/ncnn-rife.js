@@ -4,8 +4,8 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const R=require('./restoration-models'),architecture='rife.v4.6.ncnn.v1';
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
-const source=require('./native/restoration-sources.json');
-function parameterHash(){const record=source.graphs.find(row=>row.id==='rife');if(!/^[a-f0-9]{64}$/.test(record?.parameterSha256||''))throw Error('The RIFE graph source is unavailable.');return record.parameterSha256;}
+const catalog=require('./model-source.json');
+function parameterHash(){const record=catalog.sources.find(row=>row.method==='rife'&&row.defaultForOperation===true)?.files?.find(file=>file.file==='flownet.param');if(!/^[a-f0-9]{64}$/.test(record?.sha256||''))throw Error('The RIFE graph source is unavailable.');return record.sha256;}
 function inspect(directory){
  if(!fs.lstatSync(directory).isDirectory()||fs.lstatSync(directory).isSymbolicLink())throw Error('Choose a local RIFE v4.6 model directory.');
  const files=['flownet.param','flownet.bin'].map(name=>{const file=path.join(directory,name),stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink()||stat.size<1||stat.size>128*1024*1024)throw Error('The RIFE source requires regular parameter and weights files.');return {name,file,stat};});

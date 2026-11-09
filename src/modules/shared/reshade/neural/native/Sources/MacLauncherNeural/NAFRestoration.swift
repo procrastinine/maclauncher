@@ -1,6 +1,6 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 // NAFNet: Copyright Megvii Research. MIT license; pinned MLX/TLC adaptation
-// identities and original notices accompany restoration-sources.json.
+// identities and original notices are the graph entry in model-source.json.
 import Foundation
 import MLX
 

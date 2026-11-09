@@ -1,6 +1,6 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 // SRVGG architecture: Real-ESRGAN, Copyright 2021 Xintao Wang, BSD-3-Clause.
-// Exact source identities and original notices accompany restoration-sources.json.
+// Exact source identities and original notices are the graph entries in model-source.json.
 import Foundation
 import MLX
 
