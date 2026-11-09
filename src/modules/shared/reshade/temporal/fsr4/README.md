@@ -41,27 +41,19 @@ a reset because queue completion belongs to the caller. Resource retirement uses
 the exact GPU completion token; missing completion does not free in-flight work.
 
 Resources live in the selected graphics payload's `temporal/fsr4` directory.
-`provider.json` records supported profiles, source/model identities, owned source
-hashes and the runtime file inventory. `FSR4_ROOT`, `FSR4_BUILD_DIR` and
-`RESHADE_FSR4_LIBRARY` bind that installed closure to the launched process. The
-provider contains arm64 and x86_64 slices. Library loading supports macOS13;
+`provider.json` records supported profiles, source/model identities and the
+runtime file inventory. `FSR4_ROOT`, `FSR4_BUILD_DIR` and `RESHADE_FSR4_LIBRARY`
+bind that installed closure to the launched process. The provider contains arm64
+and x86_64 slices. Library loading supports macOS13;
 encoding requires macOS15 and an Apple Silicon GPU, independently of process ISA.
 
-A source build uses `node build.mjs SOURCE OUTPUT --tools TOOLS --lite2-weights
-WEIGHTS --lite2-license LICENSE`. The recipe copies the pinned read-only source,
-applies owned adaptations, translates portable MSL and builds both architectures.
-An existing local `uv` Python3.12 runtime and Xcode command-line compiler are build
-dependencies. `--quick` builds one shader-input variant per profile and marks the
-output incomplete. `--base-payload` can reuse the declared earlier Exact Fast
-shader identity; native model blobs are regenerated from the pinned source.
+MacLauncher Builds builds the provider with its
+[FSR4 recipe](https://github.com/procrastinine/maclauncher-builds/tree/main/producers/package-support/src/modules/shared/reshade/temporal/fsr4).
 
-Lite2's original GPL-2.0-or-later archive remains in `OUTPUT/source-inputs` for
-source delivery. Only consumed generated model binaries and the original license
+The build keeps Lite2's original GPL-2.0-or-later archive with its source inputs
+for source delivery. Only consumed generated model binaries and the original license
 enter the runtime. AMD, shader-reimplementation and Lite2 notices retain their
 separate identities. Their exact sources are declared in `source.json`.
 
-`--repackage` rebuilds the provider from owned source while retaining an existing
-complete shader/model closure. It checks the prior file hashes, source pin,
-translation inputs and profile contracts; model or shader adaptations require a
-full build. The macOS15 floor follows the guarded shader-math API and Metal3 SIMD
+The macOS15 floor follows the guarded shader-math API and Metal3 SIMD
 path. Metal4 tensors, argument tables and residency APIs retain macOS26 guards.
