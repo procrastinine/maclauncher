@@ -393,8 +393,9 @@ body {
   color: var(--muted);
 }
 
+/* The game list and the inspector run to the window's bottom edge. */
 .content {
-  padding: 0 18px 16px;
+  padding: 0 18px;
   display: flex;
   justify-content: center;
 }
@@ -410,6 +411,14 @@ body {
 
 .libraryLayout.hasDetails {
   grid-template-columns: minmax(0, 1.5fr) minmax(440px, 1fr);
+  column-gap: 0;
+}
+
+/* The list meets the inspector at one line. The line is drawn inside the
+   list's pane, so a scrollbar, when the list has one, covers it and sits
+   directly against the inspector; without one, the list runs up to the line. */
+.libraryLayout.hasDetails > .card.libraryPane {
+  box-shadow: inset -1px 0 var(--border);
 }
 
 .card.libraryPane,
@@ -423,9 +432,6 @@ body {
   background: transparent;
 }
 
-.card.detailsPane {
-  border-left: 1px solid var(--border);
-}
 
 .detailsPane[hidden] {
   display: none;
@@ -649,13 +655,15 @@ body {
   text-wrap: balance;
 }
 
+/* No space is reserved for a scrollbar; content stays clear of the pane's
+   boundary line, which a scrollbar covers. */
 .gameList {
   display: flex;
   flex-direction: column;
   overflow: auto;
   min-height: 0;
   flex: 1;
-  scrollbar-gutter: stable;
+  padding-right: 1px;
 }
 
 .gameListItems {
@@ -1028,7 +1036,7 @@ body {
 }
 
 .gameDetails {
-  padding: 0 16px;
+  padding: 0 16px 16px;
   overflow: auto;
   min-height: 0;
   flex: 1;
@@ -2368,8 +2376,11 @@ select.input:not([multiple]) {
     overflow: auto;
   }
 
+  .libraryLayout.hasDetails > .card.libraryPane {
+    box-shadow: none;
+  }
+
   .card.detailsPane {
-    border-left: 0;
     border-top: 1px solid var(--border);
   }
 }

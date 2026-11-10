@@ -17,7 +17,7 @@ When CrossOver or Sikarugir requests activation during launch, MacLauncher coope
 
 By default the window is up to 1440 × 900, fitted to the usable desktop, and it has a minimum size of 900 × 560. At first the library uses the full width. Selecting a game opens a wide inspector on the right, and switching games keeps row heights stable. When the inspector is closed, or Details is turned off in the toolbar, its space goes back to the library; closing the inspector also returns keyboard focus to the selected row. Each pane scrolls on its own.
 
-In a window 1080 CSS pixels wide or narrower, the library stacks above the inspector, and a short window can scroll the whole layout so that every control stays reachable. Dividers separate the rows and the inspector fields, without nested rounded cards.
+In a window 1080 CSS pixels wide or narrower, the library stacks above the inspector, and a short window can scroll the whole layout so that every control stays reachable. Dividers separate the rows and the inspector fields, without nested rounded cards. The game list and the inspector meet at one divider and both run to the bottom edge of the window. The list reserves no space for a scrollbar: when it scrolls, its scrollbar sits directly against the inspector in place of the divider, and otherwise the list runs up to the divider.
 
 Common actions use icon-only buttons whose tooltip and accessible name carry the action's text: a gear opens a separate window or popup, a folder shows a file or folder in Finder, an X removes an item from a list or clears a value, a trash can deletes and a circular arrow reloads. Actions that expand controls in place, such as **Options…**, keep text labels.
 
