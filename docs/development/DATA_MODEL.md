@@ -370,7 +370,7 @@ User choices:
 
 Icons, cheats and timestamps:
 
-- `iconPath`: the absolute path to the cached or module-provided icon image.
+- `iconPath`: the absolute path to the cached or module-provided icon image. A module's default icon is stored as `null` with `iconSource: "module-default"`, and reading the record resolves it to that module's `resources/icon.png` in the running app, so the record does not change when the app runs from another location. A stored absolute path ending in `src/modules/<module>/resources/icon.png`, which earlier versions wrote, is read the same way and is not written back.
 - `iconSource`: where the icon came from: `module`, `module-default`, `app` or `exe`, or `null` when unset.
 - `cheats`: the normalized cheat payload, if the module supports cheats; see [cheats](#cheats).
 - `createdAt`, `updatedAt`: timestamps for record maintenance.

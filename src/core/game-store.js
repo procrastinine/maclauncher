@@ -4,6 +4,24 @@ const path = require("node:path");
 const GameData = require("../modules/shared/game-data");
 const { readJsonObject, readJsonDocument, writeJsonAtomic } = require("./json-files");
 const CURRENT_RECORD_SCHEMA_VERSION = 2;
+const MODULES_ROOT = path.resolve(__dirname, "../modules");
+const MODULE_DEFAULT = "module-default";
+
+// A module's default icon is stored as a reference, iconSource
+// "module-default" without a path, and resolved against the running app's
+// modules when the record is read. Records never hold a path into the app.
+function moduleDefaultIcon(moduleId) {
+  return typeof moduleId === "string" && /^[0-9A-Za-z_-]+$/.test(moduleId) ? path.join(MODULES_ROOT, moduleId, "resources", "icon.png") : null;
+}
+function readIcon(record) {
+  const former = require("./backcompat/module-icon-paths").formerModuleIcon(record.iconPath);
+  if (former) return { ...record, iconPath: moduleDefaultIcon(former), iconSource: MODULE_DEFAULT };
+  return !record.iconPath && record.iconSource === MODULE_DEFAULT ? { ...record, iconPath: moduleDefaultIcon(record.moduleId) } : record;
+}
+function storedIcon(record) {
+  const moduleIcon = record.iconSource === MODULE_DEFAULT || require("./backcompat/module-icon-paths").formerModuleIcon(record.iconPath);
+  return moduleIcon && record.iconPath !== undefined ? { ...record, iconPath: null, iconSource: MODULE_DEFAULT } : record;
+}
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -37,9 +55,10 @@ function readGameRecord(userDataDir, gameId, options = {}) {
   const record = readJsonFile(infoPath);
   if (!record) return null;
   record.gameId = String(gameId);
-  if (typeof record.schemaVersion === "number" && record.schemaVersion >= CURRENT_RECORD_SCHEMA_VERSION) return record;
-  return require("./backcompat/record-conversions").upgradeLoadedRecord(userDataDir, record, next => writeGameRecord(userDataDir, next),
+  if (typeof record.schemaVersion === "number" && record.schemaVersion >= CURRENT_RECORD_SCHEMA_VERSION) return readIcon(record);
+  const upgraded = require("./backcompat/record-conversions").upgradeLoadedRecord(userDataDir, record, next => writeGameRecord(userDataDir, next),
     {...options, currentVersion: CURRENT_RECORD_SCHEMA_VERSION});
+  return upgraded && typeof upgraded === "object" ? readIcon(upgraded) : upgraded;
 }
 
 function loadGames(userDataDir) {
@@ -61,7 +80,7 @@ function writeGameRecord(userDataDir, record) {
   const dir = GameData.resolveGameDir(userDataDir, gameId);
   ensureDir(dir);
   const infoPath = GameData.resolveGameDataPath(userDataDir, gameId);
-  const payload = { ...record, gameId: String(gameId) };
+  const payload = storedIcon({ ...record, gameId: String(gameId) });
   // An unreadable record is left out of the library, and a later import of the
   // same source can reuse its game ID. Keep a damaged record beside it before
   // it is replaced, and refuse the write after a read error.
