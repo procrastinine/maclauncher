@@ -3,7 +3,7 @@ import type { ActionIconId, IconSize } from "./types";
 
 export function ChevronIcon({ direction, size = "14" }: { direction: "left" | "right"; size?: IconSize }) {
   return <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false">
-    <path d={direction === "left" ? "m15 5-7 7 7 7" : "m9 5 7 7-7 7"} fill="none" stroke="currentColor"
+    <path d={direction === "left" ? "m15.5 5-7 7 7 7" : "m8.5 5 7 7-7 7"} fill="none" stroke="currentColor"
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>;
 }
@@ -11,7 +11,7 @@ export function ChevronIcon({ direction, size = "14" }: { direction: "left" | "r
 export function StarIcon({ filled = false }: { filled?: boolean }) {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-      <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"
+      <path d="m12 3.4 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 10l6.2-.9L12 3.4Z"
         fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
     </svg>
   );
@@ -45,7 +45,7 @@ export function DownloadIcon({ size = "1em" }: { size?: IconSize }) {
     >
       <path
         fill="currentColor"
-        d="M5 20h14v-2H5v2zm7-18v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L11 12.17V2h1z"
+        d="M5 21h14v-2H5v2zm7-18v10.17l3.59-3.58L17 11l-5 5-5-5 1.41-1.41L11 13.17V3h1z"
       />
     </svg>
   );
@@ -96,7 +96,7 @@ export function XIcon({ size = "1em" }: { size?: IconSize }) {
     >
       <path
         fill="currentColor"
-        d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.7 2.88 18.3 9.17 12 2.88 5.71 4.29 4.29 10.59 10.6 16.89 4.29z"
+        d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
       />
     </svg>
   );
@@ -111,6 +111,6 @@ export function ActionIcon({ icon, size = "1em" }: { icon: ActionIconId; size?: 
 
 export function TrashIcon({ size = "18" }: { size?: IconSize }) {
   return <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false">
-    <path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM6 7h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7z" />
+    <path fill="currentColor" d="M9 2h6l1 2h4v2H4V4h4l1-2zm1 6h2v9h-2V8zm4 0h2v9h-2V8zM6 6h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 6z" />
   </svg>;
 }

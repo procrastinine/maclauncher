@@ -414,6 +414,11 @@ body {
   column-gap: 0;
 }
 
+/* The inspector runs to the window's right edge. */
+.content.libraryLayout.hasDetails {
+  padding-right: 0;
+}
+
 /* The list meets the inspector at one line. The line is drawn inside the
    list's pane, so a scrollbar, when the list has one, covers it and sits
    directly against the inspector; without one, the list runs up to the line. */
@@ -1034,7 +1039,10 @@ body {
   color: var(--text);
 }
 
+/* One separator line sets the inspector's fixed header apart from its
+   scrolling content. */
 .gameDetails {
+  border-top: 1px solid var(--border);
   padding: 0 16px 16px;
   overflow: auto;
   min-height: 0;
@@ -2379,8 +2387,8 @@ select.input:not([multiple]) {
     box-shadow: none;
   }
 
-  .card.detailsPane {
-    border-top: 1px solid var(--border);
+  .content.libraryLayout.hasDetails {
+    padding-right: 18px;
   }
 }
 
