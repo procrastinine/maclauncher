@@ -2430,13 +2430,65 @@ select.input:not([multiple]) {
     flex: 1 0 220px;
   }
 
+  /* Stacked, the scrollbars sit in the window's right margin. The list and the
+     inspector run through the margin and keep a scrollbar column there; the
+     header and toolbar keep the same column, so the search field, the toolbar
+     and every surface end at one edge, and content inside the list and the
+     inspector sits 8px inside it. Only scrollbars paint in the column. */
+  .content.libraryLayout.hasDetails {
+    padding-right: 3px;
+  }
+
+  .header:has(~ .libraryLayout.hasDetails),
+  .workspaceToolbar:has(+ .libraryLayout.hasDetails) {
+    padding-right: 3px;
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
+
+  .libraryLayout.hasDetails .gameList {
+    scrollbar-gutter: stable;
+  }
+
+  .libraryLayout.hasDetails > .detailsPane {
+    background: transparent;
+  }
+
+  /* Each part of the inspector keeps the same gutter, and its surface is a
+     local background, which is painted inside the scrollport only. */
+  .libraryLayout.hasDetails > .detailsPane > * {
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    background-color: var(--panel);
+    background-attachment: local;
+    background-clip: padding-box;
+    padding-right: 8px;
+  }
+
+  .libraryLayout.hasDetails > .detailsPane > .gameDetails {
+    overflow: auto;
+    border-top: 0;
+  }
+
+  .libraryLayout.hasDetails > .detailsPane > .gameLaunchNotice,
+  .libraryLayout.hasDetails > .detailsPane > .gameUnavailableNotice {
+    margin: -4px 0 0;
+    padding: 0 8px 12px 16px;
+  }
+
+  /* The header separator is drawn inside the surface, above the content. */
+  .libraryLayout.hasDetails > .detailsPane > :has(+ .gameDetails) {
+    background-image: linear-gradient(var(--border), var(--border));
+    background-size: 100% 1px;
+    background-position: left bottom;
+    background-repeat: no-repeat;
+  }
+
   .libraryLayout.hasDetails > .card.libraryPane {
     box-shadow: none;
   }
 
-  .content.libraryLayout.hasDetails {
-    padding-right: 18px;
-  }
 }
 
 @media (max-width: 760px) {
