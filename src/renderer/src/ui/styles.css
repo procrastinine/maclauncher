@@ -988,6 +988,8 @@ body {
 .gameInspectionNotice { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inspectorGameActions .gameInspectionNotice { max-width: none; white-space: normal; }
 
+/* The header reserves the same scrollbar gutter as the content below it, so
+   its close button ends at the content's right edge. */
 .gameDetailsHeader {
   display: flex;
   align-items: flex-start;
@@ -997,6 +999,8 @@ body {
   border-bottom: 0;
   background: transparent;
   flex-shrink: 0;
+  overflow: hidden;
+  scrollbar-gutter: stable;
 }
 
 .gameDetailsIdentity {
@@ -1272,6 +1276,7 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .btn.small.iconOnly {
+  padding: 0;
   width: var(--icon-button-size-sm);
   height: var(--icon-button-size-sm);
   font-size: var(--icon-size-sm);
