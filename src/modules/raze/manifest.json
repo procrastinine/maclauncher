@@ -1,0 +1,29 @@
+{
+  "id": "raze",
+  "family": "engine",
+  "label": "Build engine (Raze)",
+  "shortLabel": "Build engine",
+  "gameType": "engine",
+  "icon": { "path": "resources/icon.png", "kind": "logo" },
+  "detection": {
+    "fallback": true,
+    "priority": -410,
+    "inputKinds": ["directory", "file"],
+    "fileExtensions": [".grp", ".rff", ".dat"]
+  },
+  "runtime": {
+    "default": "raze",
+    "supported": ["raze"],
+    "manager": { "raze": "raze" },
+    "managerUi": { "raze": { "tabLabel": "Raze", "order": 137, "management": "managed" } },
+    "entries": {
+      "raze": { "label": "Raze", "graphicsHost": "window", "settings": { "defaults": {}, "fields": [] } }
+    }
+  },
+  "settingsDefaults": { "defaultRuntime": "raze" },
+  "supports": { "saveLocation": false, "saveEditing": false, "cheats": false, "cheatsPatcher": false },
+  "ui": { "infoFields": [{ "key": "moduleData.gameFile", "label": "Game file" }] },
+  "acknowledgments": [
+    { "label": "Raze (GPL-2.0, Build Engine license)", "url": "https://github.com/ZDoom/Raze" }
+  ]
+}

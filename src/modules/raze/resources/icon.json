@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://github.com/ZDoom/Raze/blob/fa99ac62924d5b2cbb67f46b932bd6acf8952b63/source/platform/posix/org.zdoom.Raze.256.png",
+  "license": "GPL-2.0",
+  "attribution": "Raze contributors",
+  "changes": "None",
+  "sha256": "2465127f1fd41009bbc70432613a3d434cede42a05acaba9f0e86ab9e17677b4"
+}

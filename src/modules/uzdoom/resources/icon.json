@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://github.com/UZDoom/UZDoom/blob/7beae9a1cbd84e01ffc82bf790db66dbbdb7c9e8/branding/misc/appicon.png",
+  "license": "CC-BY-SA-4.0",
+  "attribution": "© 2025 The UZDoom Team",
+  "changes": "None",
+  "sha256": "f6df99e6d67f5ee108580c334b3436ab63e0b04fe728a2a4939bcb06100381dd"
+}

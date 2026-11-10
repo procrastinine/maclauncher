@@ -1,0 +1,29 @@
+{
+  "id": "dreamm",
+  "family": "engine",
+  "label": "LucasArts (DREAMM)",
+  "shortLabel": "DREAMM",
+  "gameType": "engine",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "detection": {
+    "fallback": true,
+    "priority": -420,
+    "inputKinds": ["directory", "file"],
+    "fileExtensions": [".gob", ".lab", ".dta", ".daw"]
+  },
+  "runtime": {
+    "default": "dreamm",
+    "supported": ["dreamm"],
+    "manager": { "dreamm": "dreamm" },
+    "managerUi": { "dreamm": { "tabLabel": "DREAMM", "order": 138, "management": "managed" } },
+    "entries": {
+      "dreamm": { "label": "DREAMM", "graphicsHost": "window", "settings": { "defaults": {}, "fields": [] } }
+    }
+  },
+  "settingsDefaults": { "defaultRuntime": "dreamm" },
+  "supports": { "saveLocation": false, "saveEditing": false, "cheats": false, "cheatsPatcher": false },
+  "ui": { "infoFields": [{ "key": "moduleData.gameFile", "label": "Game file" }] },
+  "acknowledgments": [
+    { "label": "DREAMM (proprietary freeware, Aaron Giles)", "url": "https://dreamm.aarongiles.com/" }
+  ]
+}

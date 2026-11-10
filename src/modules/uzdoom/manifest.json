@@ -1,0 +1,29 @@
+{
+  "id": "uzdoom",
+  "family": "engine",
+  "label": "Doom engine (UZDoom)",
+  "shortLabel": "Doom engine",
+  "gameType": "engine",
+  "icon": { "path": "resources/icon.png", "kind": "logo" },
+  "detection": {
+    "fallback": true,
+    "priority": -400,
+    "inputKinds": ["directory", "file"],
+    "fileExtensions": [".wad", ".ipk3", ".pk3"]
+  },
+  "runtime": {
+    "default": "uzdoom",
+    "supported": ["uzdoom"],
+    "manager": { "uzdoom": "uzdoom" },
+    "managerUi": { "uzdoom": { "tabLabel": "UZDoom", "order": 136, "management": "managed" } },
+    "entries": {
+      "uzdoom": { "label": "UZDoom", "graphicsHost": "window", "settings": { "defaults": {}, "fields": [] } }
+    }
+  },
+  "settingsDefaults": { "defaultRuntime": "uzdoom" },
+  "supports": { "saveLocation": false, "saveEditing": false, "cheats": false, "cheatsPatcher": false },
+  "ui": { "infoFields": [{ "key": "moduleData.gameFile", "label": "Game file" }] },
+  "acknowledgments": [
+    { "label": "UZDoom (GPL-3.0-or-later)", "url": "https://github.com/UZDoom/UZDoom" }
+  ]
+}
