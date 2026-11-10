@@ -351,27 +351,7 @@ export function SteamView({ api }: { api: SteamApi }) {
   const localFiltered = Boolean(query || platformFilters.size !== allExternalPlatforms().size || importFilters.size !== 2 || storeFilters.size !== Object.keys(storeNames).length || cpuFilters.size !== 3);
 
   return <main className="launcherView steamView" aria-labelledby="steam-title">
-    <header className="launcherViewHeader">
-      <h1 className="launcherViewTitle visuallyHidden" id="steam-title">External</h1>
-      <div className="steamConnection" hidden={tab !== "download"}><span className={`steamDot ${connected ? "connected" : ""}`} />
-        {snapshot.accounts?.length ? <select className="input steamAccountSelect" aria-label="Steam account" value={snapshot.activeAccountId || ""}
-          onChange={event => {
-            const account = snapshot.accounts?.find(item => item.id === event.target.value);
-            setAddingAccount(false); setPassword("");
-            if (account) { setSignInMode(account.mode); setAccountName(account.mode === "manual" ? account.accountName : ""); }
-            void api.steamSelectAccount(event.target.value).catch(showError);
-          }}>
-          {!snapshot.activeAccountId && <option value="" disabled>Select an account</option>}
-          {snapshot.accounts.map(account => <option key={account.id} value={account.id}>{account.mode === "client" ? `Steam for Mac${account.accountName ? ` · ${account.accountName}` : ""}` : `${account.accountName} · Manual sign-in`}</option>)}
-        </select> : <span>{connected ? snapshot.connection.accountName || "Connected" : connecting ? "Connecting…" : "Local library"}</span>}
-        <button className="btn small" onClick={() => {
-          accountHintInitialized.current = true; setAddingAccount(true); setSignInMode("manual"); setAccountName(""); setPassword(""); setTab("download");
-        }}>Add account</button>
-        {activeAccount?.mode === "manual" && <button className="btn small" onClick={() => { void api.steamRemoveAccount(activeAccount.id).catch(showError); }}>Remove account</button>}
-        {(connecting || snapshot.connection.status === "guard") && <button className="btn small" onClick={() => { void api.steamDisconnect().catch(showError); }}>Cancel</button>}
-      </div>
-      {browsingDownloads && <button className="btn small iconOnly" title="Open downloads in Finder" aria-label="Open downloads in Finder" onClick={() => { void api.externalOpenDownloads().catch(showError); }}><FolderIcon /></button>}
-    </header>
+    <h1 className="launcherViewTitle visuallyHidden" id="steam-title">External</h1>
     <ScrollableTabStrip label="External libraries" selectedTabId={`steam-${tab}-tab`} tabsClassName="steamTabs" className="externalTabStrip">
       {(["installed", "downloaded", "download", "epic", "gog", "itch", "google-play"] as const).map((name, index, names) => <button key={name} ref={element => { tabRefs.current[index] = element; }}
         id={`steam-${name}-tab`} role="tab" aria-selected={tab === name} aria-controls={`steam-${name}-panel`}
@@ -395,6 +375,7 @@ export function SteamView({ api }: { api: SteamApi }) {
         <LibrarySortSelect value={localSort} onChange={setLocalSort} label={browsingDownloads ? "Sort downloaded copies" : "Sort installed games"} version local />
         {localFiltered && <button className="btn small" onClick={() => { setQuery(""); setPlatformFilters(allExternalPlatforms()); setStoreFilters(new Set(Object.keys(storeNames))); setImportFilters(new Set(["new", "imported"])); setCpuFilters(new Set(["arm64", "x86", "unknown"])); }}>Clear filters</button>}
         <span className="steamToolbarSpacer" /><HelpTip label={browsingDownloads ? "About downloaded copies" : "About installed games"}><p>{browsingDownloads ? "Independent copies of selected game versions. Each copy keeps its selected version and is never updated automatically." : "Installed games from Steam, Epic, GOG, itch.io and local game managers, including CrossOver bottles. Scanning stays offline."}</p></HelpTip>
+        {browsingDownloads && <button className="btn small iconOnly" title="Open downloads in Finder" aria-label="Open downloads in Finder" onClick={() => { void api.externalOpenDownloads().catch(showError); }}><FolderIcon /></button>}
         <button className="btn small iconOnly" disabled={localScanning} aria-label={browsingDownloads ? "Reload downloaded copies" : "Rescan installed games"} title={browsingDownloads ? "Reload downloaded copies" : "Rescan installed games"} onClick={() => { void (browsingDownloads ? scanDownloaded() : scan()); }}><RefreshIcon /></button>
       </div>
       <div className="steamTableScroll">
@@ -431,6 +412,23 @@ export function SteamView({ api }: { api: SteamApi }) {
     </section>
     <section hidden id={`steam-${browsingDownloads ? "installed" : "downloaded"}-panel`} role="tabpanel" aria-labelledby={`steam-${browsingDownloads ? "installed" : "downloaded"}-tab`} />
     <section className="steamPanel" hidden={tab !== "download"} id="steam-download-panel" role="tabpanel" aria-labelledby="steam-download-tab">
+      <div className="steamConnection"><span className={`steamDot ${connected ? "connected" : ""}`} />
+        {snapshot.accounts?.length ? <select className="input steamAccountSelect" aria-label="Steam account" value={snapshot.activeAccountId || ""}
+          onChange={event => {
+            const account = snapshot.accounts?.find(item => item.id === event.target.value);
+            setAddingAccount(false); setPassword("");
+            if (account) { setSignInMode(account.mode); setAccountName(account.mode === "manual" ? account.accountName : ""); }
+            void api.steamSelectAccount(event.target.value).catch(showError);
+          }}>
+          {!snapshot.activeAccountId && <option value="" disabled>Select an account</option>}
+          {snapshot.accounts.map(account => <option key={account.id} value={account.id}>{account.mode === "client" ? `Steam for Mac${account.accountName ? ` · ${account.accountName}` : ""}` : `${account.accountName} · Manual sign-in`}</option>)}
+        </select> : <span>{connected ? snapshot.connection.accountName || "Connected" : connecting ? "Connecting…" : "Local library"}</span>}
+        <button className="btn small" onClick={() => {
+          accountHintInitialized.current = true; setAddingAccount(true); setSignInMode("manual"); setAccountName(""); setPassword(""); setTab("download");
+        }}>Add account</button>
+        {activeAccount?.mode === "manual" && <button className="btn small" onClick={() => { void api.steamRemoveAccount(activeAccount.id).catch(showError); }}>Remove account</button>}
+        {(connecting || snapshot.connection.status === "guard") && <button className="btn small" onClick={() => { void api.steamDisconnect().catch(showError); }}>Cancel</button>}
+      </div>
       {showLogin && <div className="steamLogin">
         <div className="steamLoginIntro"><SteamMark size={42} /><h2 className="externalControlHelp">Connect Steam<HelpTip label="About Steam downloads">
           <p>Download Mac, Windows and Linux game files, including older Mac builds. Choose a branch, language and depot before downloading.</p><p>Connect to load owned and shared games. Library and version results are cached.</p></HelpTip></h2>

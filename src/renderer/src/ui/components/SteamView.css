@@ -1,8 +1,7 @@
 .steamView { --steam-accent: light-dark(#315fca, #8cb8f3); }
-.steamView .launcherViewHeader { min-height: 51px; }
 .steamMark { display: inline-flex; color: var(--steam-accent); flex-shrink: 0; }
-.steamConnection { color: var(--muted); font-size: var(--font-sm); display: flex; align-items: center; gap: 7px; }
-.steamConnection[hidden] { display: none; }
+/* The Steam tab's account row sits above its sign-in form or library. */
+.steamConnection { color: var(--muted); font-size: var(--font-sm); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding: 13px 18px 0; flex-shrink: 0; }
 .steamAccountSelect { max-width: 260px; font-size: var(--font-sm); }
 .steamDot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
 .steamDot.connected { background: var(--accent2); }
@@ -155,8 +154,6 @@
   .steamJobs { max-height: 120px; }
 }
 @media (max-width: 650px) {
-  .steamView .launcherViewHeader { gap: 8px; }
-  .steamConnection { flex-wrap: wrap; justify-content: end; }
   .steamAccountSelect { max-width: 190px; }
   .steamDownloadWorkspace { display: flex; flex-direction: column; overflow: auto; }
   .steamLibraryPane { min-height: 220px; max-height: 40vh; flex-shrink: 0; }

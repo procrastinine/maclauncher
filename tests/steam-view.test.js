@@ -144,6 +144,17 @@ test("opening and rescanning Installed stay offline; Download tab uses cached st
   } finally { context.close(); }
 });
 
+test("External opens on its tabs, with the Steam account row inside the Steam tab", async () => {
+  const context = setup([game("1", "Example")]);
+  try {
+    context.view.render(); const tree = await context.view.settle();
+    assert.equal(find(tree, node => node.type === "header" || /launcherViewHeader/.test(node.props.className || "")), undefined);
+    const panel = find(tree, node => node.props.id === "steam-download-panel");
+    assert.ok(find(panel, node => node.props.className === "steamConnection"), "the account row belongs to the Steam tab");
+    assert.equal(elements(tree).filter(node => node.props.className === "steamConnection").length, 1);
+  } finally { context.close(); }
+});
+
 test("External tabs and store filtering preserve hidden selections without querying stores", async () => {
   const context = setup([{ ...game("1", "Steam game"), store: "steam" }, { ...game("2", "Epic game"), store: "epic", source: "heroic" }, { ...game("3", "GOG game"), store: "gog", source: "gog" }]);
   try {
