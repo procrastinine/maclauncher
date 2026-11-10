@@ -23,7 +23,9 @@ test('incomplete declared test sources fail offline with the explicit setup comm
   assert.equal(fs.existsSync(path.join(root, 'source')), false, 'Readiness cannot initialize or create a source checkout');
 });
 
-test('setup in a linked worktree leaves the primary checkout module configuration unchanged', async t => {
+// A primary checkout with a plain source, a source it has not checked out, and a source with a
+// nested source (recursive), plus a linked worktree of it.
+function linkedFixture(t, { deinit = [] } = {}) {
   const directory = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'test-inputs-linked-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const environment = { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(directory, 'global-config'), GIT_ALLOW_PROTOCOL: 'file',
@@ -41,18 +43,23 @@ test('setup in a linked worktree leaves the primary checkout module configuratio
     return { root, revision: git(root, ['rev-parse', 'HEAD']) };
   };
   const leaf = repository('leaf'), plain = repository('plain'), fresh = repository('fresh');
-  const nested = repository('nested', root => git(root, ['submodule', 'add', '-q', leaf.root, 'deps/leaf']));
+  const nested = repository('nested', root => git(root, ['-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', leaf.root, 'deps/leaf']));
   const primary = repository('primary', root => {
-    for (const source of [plain, fresh, nested]) git(root, ['submodule', 'add', '-q', source.root, 'src/external/' + path.basename(source.root)]);
+    for (const source of [plain, fresh, nested]) git(root, ['-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', source.root, 'src/external/' + path.basename(source.root)]);
     fs.mkdirSync(path.join(root, 'build'));
     fs.writeFileSync(path.join(root, 'build/source-dependencies.json'), JSON.stringify({ schemaVersion: 1,
       submodules: ['src/external/plain', 'src/external/fresh'], testSubmodules: ['src/external/nested'], recursiveSubmodules: ['src/external/nested'] }));
   }).root;
-  git(primary, ['submodule', 'update', '--init', '--recursive']);
+  git(primary, ['-c', 'protocol.file.allow=always', 'submodule', 'update', '--init', '--recursive']);
   // The primary checkout has not checked out every source, so setup initializes some sources itself.
-  git(primary, ['submodule', 'deinit', '-q', '-f', 'src/external/fresh']);
+  for (const location of ['src/external/fresh', ...deinit]) git(primary, ['submodule', 'deinit', '-q', '-f', location]);
   const linked = path.join(directory, 'linked');
   git(primary, ['worktree', 'add', '-q', '--detach', linked]);
+  return { git, primary, linked, leaf, plain, fresh, nested };
+}
+
+test('setup in a linked worktree leaves the primary checkout module configuration unchanged', async t => {
+  const { git, primary, linked, leaf, plain, fresh, nested } = linkedFixture(t);
   const configs = () => fs.readdirSync(path.join(primary, '.git/modules'), { recursive: true }).filter(name => path.basename(name) === 'config')
     .sort().map(name => [name, fs.readFileSync(path.join(primary, '.git/modules', name), 'utf8')]);
   const before = configs();
@@ -63,4 +70,32 @@ test('setup in a linked worktree leaves the primary checkout module configuratio
     assert.equal(git(path.join(linked, location), ['rev-parse', 'HEAD']), source.revision, location);
   for (const location of ['src/external/plain', 'src/external/nested'])
     assert.equal(fs.realpathSync(git(path.join(primary, location), ['rev-parse', '--show-toplevel'])), fs.realpathSync(path.join(primary, location)));
+});
+
+test('a linked worktree attaches a source with nested sources from the primary and never clones it', async t => {
+  const { git, primary, linked } = linkedFixture(t);
+  // Readiness asks for setup while the primary holds a checkout this worktree has not attached.
+  await assert.rejects(check({ repoRoot: linked }), /src\/external\/nested at /);
+  await prepareSources(linked);
+  // Each checkout of the recursive source and its nested source is a worktree of the primary's repository.
+  for (const [location, store] of [['src/external/nested', 'src/external/nested'], ['src/external/nested/deps/leaf', 'src/external/nested/modules/deps/leaf']])
+    assert.equal(fs.realpathSync(path.resolve(path.join(linked, location), git(path.join(linked, location), ['rev-parse', '--git-common-dir']))),
+      fs.realpathSync(path.join(primary, '.git/modules', store)), location);
+  assert.equal(fs.existsSync(path.join(primary, '.git/worktrees/linked/modules/src/external/nested')), false, 'No second repository of the recursive source');
+});
+
+test('a linked worktree leaves out a source with nested sources that the primary has not checked out', async t => {
+  const { primary, linked, plain } = linkedFixture(t, { deinit: ['src/external/nested'] });
+  const warnings = [];t.mock.method(console, 'warn', message => warnings.push(String(message)));
+  await prepareSources(linked);
+  assert.equal(fs.existsSync(path.join(linked, 'src/external/nested/.git')), false, 'The recursive source is not cloned');
+  assert.equal(fs.existsSync(path.join(primary, '.git/worktrees/linked/modules/src/external/nested')), false);
+  assert.match(warnings.join('\n'), /src\/external\/nested has nested sources .* a linked worktree does not clone it/);
+  assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: path.join(linked, 'src/external/plain'), encoding: 'utf8' }).trim(), plain.revision);
+  // Readiness leaves it out as well and goes on to the package inputs, which this fixture lacks.
+  await assert.rejects(check({ repoRoot: linked }), error => {
+    assert.doesNotMatch(error.message, /src\/external\//);
+    assert.match(error.message, /asm-binary\.json/);
+    return true;
+  });
 });

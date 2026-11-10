@@ -98,7 +98,7 @@ The launcher writes its main log to `userData/logs/main.log`. MKXP-Z writes a lo
 ## Checks
 
 - `pnpm typecheck` checks the renderer types without emitting files.
-- `npm run test:setup` prepares the declared source checkouts, publisher JARs, CP932 table, both processor builds of included packages and Android fixture tools. This explicit setup command can access the network; all downloaded inputs use their recorded commits or checksums. Linked app worktrees reuse existing source repositories without nested sources through detached worktrees when the pinned commits are available locally, initialize only sources not yet at their pins and leave the primary checkout's source configuration unchanged.
+- `npm run test:setup` prepares the declared source checkouts, publisher JARs, CP932 table, both processor builds of included packages and Android fixture tools. This explicit setup command can access the network; all downloaded inputs use their recorded commits or checksums. Linked app worktrees reuse the primary checkout's source repositories through detached worktrees when the pinned commits are available locally, and attach the nested sources of a source with nested sources the same way. A linked worktree never clones a source with nested sources: when the primary checkout has no checkout of it at its pin, setup prints a message and leaves it out, and `npm run test:setup` and the readiness check report it under `leftOut`. Other sources not yet at their pins are initialized, and the primary checkout's source configuration stays unchanged.
 - `pnpm test` runs the Node backend and UI contract tests.
 - `pnpm check` runs type checking, the unit tests and the renderer build.
 

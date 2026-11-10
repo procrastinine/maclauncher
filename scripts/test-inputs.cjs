@@ -19,28 +19,64 @@ function sourceReady(root, source) {
   } catch { return false; }
 }
 
+const primaryOf = root => git(root, ['worktree', 'list', '--porcelain']).split('\n').find(line => line.startsWith('worktree ')).slice(9);
+
+// True when `existing` is a checkout of its own repository and that repository holds `revision`.
+function holds(existing, revision) {
+  try {
+    if (fs.realpathSync(git(existing, ['rev-parse', '--show-toplevel'])) !== fs.realpathSync(existing)) return false;
+    git(existing, ['cat-file', '-e', revision + '^{commit}']);
+    return true;
+  } catch { return false; }
+}
+
+// Attach `existing`, a checkout of the primary worktree, at `target` as a detached worktree of
+// its own repository at `revision`; false when it is not a repository holding that commit.
+function attach(existing, target, revision) {
+  if (fs.existsSync(target) && fs.readdirSync(target).length || !holds(existing, revision)) return false;
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  if (fs.existsSync(target)) fs.rmdirSync(target);
+  git(existing, ['worktree', 'add', '--detach', target, revision]);
+  return true;
+}
+
+// The nested sources of an attached source, each attached from the primary's checkout of it at
+// the commit the attached tree records.
+function attachNested(existing, target, root, notAttached) {
+  for (const line of git(target, ['ls-files', '--stage']).split('\n')) {
+    const match = /^160000 ([0-9a-f]{40}) \d\t(.+)$/.exec(line);
+    if (!match) continue;
+    const [, revision, location] = match, nested = path.join(target, location);
+    if (fs.existsSync(path.join(nested, '.git'))) continue;
+    if (attach(path.join(existing, location), nested, revision)) attachNested(path.join(existing, location), nested, root, notAttached);
+    else notAttached.push(path.relative(root, nested));
+  }
+}
+
 async function prepareSources(repoRoot) {
   const plan = await Sources.readPlan({ repoRoot });
-  const primary = git(repoRoot, ['worktree', 'list', '--porcelain']).split('\n').find(line => line.startsWith('worktree ')).slice(9);
-  // A linked app checkout can share the existing exact source repositories.
-  // No source checkout, index, branch or configuration of the primary worktree is changed:
-  // a source with nested sources is initialized in this checkout instead, and only sources
-  // not yet at their pins are initialized, never a shared worktree.
-  if (fs.realpathSync(primary) !== fs.realpathSync(repoRoot)) {
+  const primary = primaryOf(repoRoot);
+  const linked = fs.realpathSync(primary) !== fs.realpathSync(repoRoot);
+  // A linked app checkout shares the primary worktree's existing source repositories. No source
+  // checkout, index, branch or configuration of the primary worktree is changed. A source with
+  // nested sources is never cloned here: it is attached from the primary's checkout together with
+  // its nested sources, or left out with a message when the primary has no checkout at its pin.
+  if (linked) {
     for (const source of plan.modules) {
-      if (source.recursive || sourceReady(repoRoot, source)) continue;
+      if (sourceReady(repoRoot, source)) continue;
       const target = path.join(repoRoot, source.path), existing = path.join(primary, source.path);
-      if (fs.existsSync(target) && fs.readdirSync(target).length) continue;
-      try {
-        if (fs.realpathSync(git(existing, ['rev-parse', '--show-toplevel'])) !== fs.realpathSync(existing)) continue;
-        git(existing, ['cat-file', '-e', source.revision + '^{commit}']);
-      } catch { continue; }
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      if (fs.existsSync(target)) fs.rmdirSync(target);
-      git(existing, ['worktree', 'add', '--detach', target, source.revision]);
+      if (!attach(existing, target, source.revision)) {
+        if (source.recursive) console.warn('test-inputs: ' + source.path + ' has nested sources and the primary checkout ' + primary +
+          ' holds no checkout of it at ' + source.revision.slice(0, 12) + '; a linked worktree does not clone it. Initialize it in the primary checkout.');
+        continue;
+      }
+      if (!source.recursive) continue;
+      const notAttached = [];
+      attachNested(existing, target, repoRoot, notAttached);
+      if (notAttached.length) console.warn('test-inputs: the primary checkout holds no checkout of ' + notAttached.join(', ') + '; a linked worktree does not clone them.');
     }
   }
-  const pending = plan.modules.filter(source => !sourceReady(repoRoot, source)).map(source => source.path);
+  const pending = plan.modules.filter(source => !(linked && source.recursive) && !sourceReady(repoRoot, source)).map(source => source.path);
   if (pending.length) await Sources.initSubmodules({ repoRoot, select: pending });
   return plan;
 }
@@ -49,7 +85,15 @@ async function check({ repoRoot = ROOT } = {}) {
   const problems = [];
   try {
     const plan = await Sources.readPlan({ repoRoot });
-    for (const source of plan.modules) if (!sourceReady(repoRoot, source)) problems.push(source.path + ' at ' + source.revision.slice(0, 12));
+    const leftOut = [];
+    for (const source of plan.modules) {
+      if (sourceReady(repoRoot, source)) continue;
+      // A linked worktree leaves out a source with nested sources that the primary worktree has
+      // not checked out at its pin.
+      const primary = source.recursive && primaryOf(repoRoot);
+      if (primary && fs.realpathSync(primary) !== fs.realpathSync(repoRoot) && !holds(path.join(primary, source.path), source.revision)) leftOut.push(source.path);
+      else problems.push(source.path + ' at ' + source.revision.slice(0, 12));
+    }
     if (problems.length) throw new Error(problems.join(', '));
     const regular = (file, expected) => {
       const stat = fs.lstatSync(file);
@@ -81,7 +125,8 @@ async function check({ repoRoot = ROOT } = {}) {
     for (const name of ['aapt2', 'android', 'r8']) {
       if (!fs.lstatSync(tools[name]).isFile()) throw new Error('Missing Android fixture tool: ' + name);
     }
-    return { ready: true, sources: plan.modules.length, packages: lock.packages.length };
+    if (leftOut.length) console.warn('test-inputs: left out ' + leftOut.join(', ') + ', which the primary checkout has not checked out.');
+    return { ready: true, sources: plan.modules.length - leftOut.length, packages: lock.packages.length, ...(leftOut.length ? { leftOut } : {}) };
   } catch (error) {
     throw new Error('Test inputs are not ready. Run `' + COMMAND + '`. ' + error.message.replace(/\s+/g, ' '), { cause: error });
   }
