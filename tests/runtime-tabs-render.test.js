@@ -1424,7 +1424,8 @@ test('per-game version menus use only the selected runtime recommendation and pr
     state, moduleInfo, actions: {}, cheatsStatus: null, libsStatus: null,
     runtimeStatusEntry: {runtimeId, status: {runtimeRecommendation: runtimeId === engine ? {managerId: 'engine-version-scope', version: engineVersion} : null}},
     runtimeAutomaticEntry: automaticVersion !== undefined
-      ? {runtimeId, value: automaticVersion ? {managerId: managerFor(runtimeId), version: automaticVersion} : null} : null,
+      ? {runtimeId, value: automaticVersion ? {managerId: managerFor(runtimeId),
+        ...(typeof automaticVersion === 'object' ? automaticVersion : {version: automaticVersion})} : null} : null,
     cheatsPatchBusy: false, libsPatchBusy: false, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null
   }));
   const versionMenu = markup => /<select aria-label="[^"]* version"[\s\S]*?<\/select>/.exec(markup)?.[0] || '';
@@ -1453,6 +1454,18 @@ test('per-game version menus use only the selected runtime recommendation and pr
   // marked as not installed, and never falls back to Automatic.
   const missing = selected(renderGame(engine, false, '4.6.1-stable', {version: '9.9.9-stable'}));
   assert.match(missing[0], /value="9\.9\.9-stable"/); assert.match(missing[1], /^v?9\.9\.9-stable \(not installed\)$/);
+  // A saved choice that Play meets with an installed build spelled otherwise,
+  // such as Godot's "4.6.3" for 4.6.3-stable, shows as that build once the
+  // launcher names it, without Install; the saved choice is not rewritten.
+  const bare = {version: '4.6.3'};
+  assert.match(selected(renderGame(engine, false, '4.6.1-stable', bare))[1], /^v?4\.6\.3 \(not installed\)$/);
+  const met = renderGame(engine, false, {version: '4.6.1-stable', choice: {requested: '4.6.3', version: engineVersion}}, bare);
+  assert.match(selected(met)[0], /value="4\.6\.3-stable"/); assert.match(selected(met)[1], /^v?4\.6\.3-stable$/);
+  assert.doesNotMatch(versionMenu(met), /not installed|value="4\.6\.3"/);
+  assert.doesNotMatch(met, /aria-label="Install recommended version"/);
+  // An answer for another choice, or a build Play would install, changes nothing.
+  for (const choice of [{requested: '4.6', version: engineVersion}, {requested: '4.6.3', version: '4.6.3-rc1'}])
+    assert.match(selected(renderGame(engine, false, {version: null, choice}, bare))[1], /^v?4\.6\.3 \(not installed\)$/);
   // (c) Architecture and variant choices stay selected beside a version choice.
   const scoped = state.runtimeManagers['engine-version-scope'];
   state.runtimeManagers['engine-version-scope'] = {...scoped, variants: [{id: 'standard', label: 'Standard'}, {id: 'mono', label: '.NET'}],

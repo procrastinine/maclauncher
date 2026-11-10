@@ -529,7 +529,9 @@ export type RuntimeStatusEntry = {
 /** The version Play uses for a game's runtime without a version choice. */
 export type RuntimeAutomaticEntry = {
   runtimeId: RuntimeId;
-  value: { managerId: string; version: string } | null;
+  /** `version` is the one Play uses without a version choice; `choice` the one
+   * it uses for the game's saved choice `requested`. */
+  value: { managerId: string; version: string | null; choice?: { requested: string; version: string } } | null;
 };
 
 export type RuntimeNoticeLine = {

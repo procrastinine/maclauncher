@@ -438,3 +438,25 @@ test("Godot major Auto, status and install reuse that major's default with the s
   assert.equal(GodotModule.automaticRuntimeVersion(missing, context), "3.5.2");
   assert.equal(GodotModule.automaticRuntimeVersion(entry, { ...context, runtimeId: "native" }), null);
 });
+
+// The inspector's Version menu shows a saved choice as the installed build Play
+// uses for it: a bare "3.5.2" that Play meets with 3.5.2-stable names that build,
+// and the saved choice stays as it is.
+test("the launcher names the installed Godot build that Play uses for a saved choice spelled otherwise", async t => {
+  const root = makeTempDir("maclauncher-godot-choice-"); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  for (const version of ["3.5.2-stable", "4.4-stable"]) createGodotApp(path.join(root, "runtimes/godot", version, "standard", "Godot.app"));
+  const { createLauncher } = require("../src/core/launcher");
+  const quiet = { log() {}, info() {}, warn() {}, error() {}, debug() {} };
+  const launcher = createLauncher({ userDataDir: root, registry: require("../src/modules/registry"), logger: quiet });
+  const entry = { gameId: "penjikent", gamePath: path.join(root, "game.pck"), moduleId: "godot", runtimeId: "godot",
+    moduleData: { detectedMajor: 3, detectedVersion: "3.5.2" }, runtimeData: { godot: { version: "3.5.2", variant: "standard" } } };
+  const before = structuredClone(entry);
+  const value = await launcher.runAction(entry, "runtimeAutomaticVersion", {}, { settings: {} });
+  assert.deepEqual(value, { managerId: GodotModule.runtimeManagers[0].id, version: "3.5.2-stable",
+    choice: { requested: "3.5.2", version: "3.5.2-stable" } });
+  assert.deepEqual(entry, before);
+  // Without a saved choice there is nothing to name for it.
+  const automatic = { ...entry, runtimeData: { godot: { variant: "standard" } } };
+  assert.deepEqual(await launcher.runAction(automatic, "runtimeAutomaticVersion", {}, { settings: {} }),
+    { managerId: GodotModule.runtimeManagers[0].id, version: "3.5.2-stable" });
+});

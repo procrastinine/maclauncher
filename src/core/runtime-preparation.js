@@ -92,25 +92,29 @@ async function managerPlan(entry, info, context, managers, { managerId, runtimeI
 
 /** The version Play uses for the game's selected runtime when the game has
  * no version choice: a compatible installed version when there is one,
- * otherwise the version Play would install. A runtime owner that selects its
- * version itself reports it through `automaticRuntimeVersion`; managers with
- * `resolveSelection` report theirs; other managers use managerSelection.
- * Null when the version is not known before Play reads a catalog. */
-async function automaticRuntimeVersion(entry, mod, info, context, managers) {
+ * otherwise the version Play would install. With `choice`, the game's saved
+ * version choice applies, so a choice that Play meets with an installed build
+ * spelled differently, such as Godot's "3.5.2" for 3.5.2-stable, names that
+ * build. A runtime owner that selects its version itself reports it through
+ * `automaticRuntimeVersion`; managers with `resolveSelection` report theirs;
+ * other managers use managerSelection. Null when the version is not known
+ * before Play reads a catalog. */
+async function automaticRuntimeVersion(entry, mod, info, context, managers, { choice = false } = {}) {
   const runtimeId = context.runtimeId, manager = managers.find(manager => manager.id === info.runtime?.manager?.[runtimeId]);
   if (!manager) return null;
-  const automatic = { ...entry, runtimeId, runtimeData: { ...entry.runtimeData, [runtimeId]: { ...entry.runtimeData?.[runtimeId], version: null } } };
+  const subject = { ...entry, runtimeId, runtimeData: { ...entry.runtimeData,
+    [runtimeId]: { ...entry.runtimeData?.[runtimeId], ...(choice ? {} : { version: null }) } } };
   const owner = mod?.getRuntimeProvider?.(runtimeId) || mod;
-  const own = await owner?.automaticRuntimeVersion?.(automatic, context);
+  const own = await owner?.automaticRuntimeVersion?.(subject, context);
   if (typeof own === "string" && own) return own;
   if (typeof manager.resolveSelection === "function") {
     // A status check of installed copies is enough to name the version; Play
     // verifies the copy it uses.
-    const selection = await manager.resolveSelection(automatic, context.settings, context.userDataDir, { verification: "status" });
+    const selection = await manager.resolveSelection(subject, context.settings, context.userDataDir, { verification: "status" });
     if (selection) return typeof selection.version === "string" && selection.version ? selection.version : null;
   }
   if (typeof owner?.ensureRuntime === "function") return null;
-  return managerSelection(automatic, info, context, manager, { runtimeId })?.version || null;
+  return managerSelection(subject, info, context, manager, { runtimeId })?.version || null;
 }
 
 async function runtimePlans(entry, mod, info, context, managers) {

@@ -57,6 +57,17 @@ function installedArchitecture(row: Record<string, any>) {
   return value === "x86_64" ? "x64" : value;
 }
 
+/** The menu entry for the game's saved version choice: the choice itself, or
+ * the installed build Play uses for it when the choice names that build in
+ * another spelling, such as Godot's "3.5.2" for 3.5.2-stable. The launcher
+ * names that build with Play's own selection; the saved choice is unchanged. */
+export function runtimeInspectorSelectedVersion(section: Record<string, any> | null, selectedVersion = "", playVersion = "") {
+  const installed = Array.isArray(section?.installed) ? section.installed : [];
+  if (!selectedVersion || !playVersion || installed.some((row: any) => row?.version === selectedVersion)) return selectedVersion;
+  return installed.some((row: any) => row?.version === playVersion && installedRuntimeAvailability(row) === "installed")
+    ? playVersion : selectedVersion;
+}
+
 /** Separate locally installed CPU copies without changing the stored version.
  * Version wording stays with the same tagger used by the other runtime menus. */
 export function runtimeInspectorVersionOptions(section: Record<string, any> | null, selectedVersion = "",
