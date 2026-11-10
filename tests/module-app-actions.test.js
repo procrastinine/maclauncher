@@ -78,13 +78,13 @@ test("a shortcut finds its available action, and sessions get a Stop submenu per
   const opened = [], asked = [];
   const unassigned = actions.stopItems([{ moduleId: "alpha", name: "Five", gamePath: "/a" }], () => {}, null,
     { shortcutLabel: name => { asked.push(name);return null; }, openShortcutSettings: () => opened.push("settings") });
-  assert.deepEqual(unassigned[0].submenu.map(row => row.label || row.type), ["Five", "separator", "Toggle Graphics for Front App"]);
+  assert.deepEqual(unassigned[0].submenu.map(row => row.label || row.type), ["Five", "separator", "Toggle graphics for front app"]);
   unassigned[0].submenu[2].click();
   assert.deepEqual([asked, opened], [["windowGraphics"], ["settings"]]);
   const assigned = actions.stopItems([{ moduleId: "alpha", name: "Five", gamePath: "/a" }], () => {}, null,
     { shortcutLabel: () => "Control+Option+Command+G", openShortcutSettings: () => opened.push("settings") });
   const command = assigned[0].submenu[2];
-  assert.equal(command.label, "Toggle Graphics for Front App");assert.equal(command.accelerator, "Control+Alt+Command+G");
+  assert.equal(command.label, "Toggle graphics for front app");assert.equal(command.accelerator, "Control+Alt+Command+G");
   assert.equal(command.registerAccelerator, false);assert.equal(command.enabled, false, "global shortcuts are references in launcher menus");
   assert.equal(command.click, undefined);
 });
@@ -189,7 +189,7 @@ test("Stop menu retains shortcut labels and native accelerators as disabled refe
     runSessionAction: (owned, action) => run.push([owned, action]), openShortcutSettings: () => settings.push(true)
   })[0].submenu;
   assert.deepEqual(menu.slice(-2).map(item => [item.label, item.accelerator, item.registerAccelerator, item.enabled]), [
-    ["Toggle Graphics for Front App", "Control+Alt+Command+G", false, false],
+    ["Toggle graphics for front app", "Control+Alt+Command+G", false, false],
     ["Toggle pointer in window graphics", "Control+Alt+Command+P", false, false]
   ]);
   for (const reference of menu.slice(-2)) assert.equal(reference.click, undefined, "foreground-dependent hotkeys have no menu click dispatch");

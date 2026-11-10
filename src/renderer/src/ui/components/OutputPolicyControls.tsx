@@ -36,7 +36,7 @@ export function SourcePolicyControls({editor}: {editor: EffectsEditor}) {
   return <>
     <SourceResolutionControls value={source} capabilities={capabilities} onChange={value => void editor.setSource(value)} />
     {source && methods.length > 0 && <div className="detailRow detailControlRow">
-      <label className="detailLabel" htmlFor="effects-source-filter">Source filter <HelpTip label="About source filtering">Selects the source renderer's scaling filter. Game original retains its existing filter. Shared effects remain separate. {capabilities?.live ? "Updates during play." : "Applies on the next launch."}{temporal && " Source filter choices require temporal stages to be off; Game original remains available."}</HelpTip></label>
+      <label className="detailLabel" htmlFor="effects-source-filter">Source filter<HelpTip label="About source filtering">Selects the source renderer's scaling filter. Game original retains its existing filter. Shared effects remain separate. {capabilities?.live ? "Updates during play." : "Applies on the next launch."}{temporal && " Source filter choices require temporal stages to be off; Game original remains available."}</HelpTip></label>
       <select id="effects-source-filter" className="input" value={source.method || ""} onChange={event => editor.setSourceFilter(event.target.value)}>
         <option value="">Game original</option>
         {source.method && !methods.includes(source.method) && <option value={source.method} disabled>{source.method} · Unavailable</option>}

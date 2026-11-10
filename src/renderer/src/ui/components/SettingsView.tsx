@@ -49,15 +49,15 @@ export function appUpdateStatus(update: AppUpdateState | undefined): { action: A
   const check = update?.lastCheck;
   const when = check ? new Date(check.checkedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
   if (update?.phase === "checking") return { action: "check", label: "Checking…", busy: true, status: "Checking GitHub for a newer release…" };
-  if (update?.phase === "downloading") return { action: "cancel", label: "Cancel Download", busy: false,
+  if (update?.phase === "downloading") return { action: "cancel", label: "Cancel download", busy: false,
     status: `Downloading MacLauncher ${update.version}…${Number.isFinite(update.progress) ? ` ${Math.floor((update.progress as number) * 100)}%` : ""}` };
-  if (update?.phase === "ready") return { action: "restart", label: "Restart to Update", busy: false, status: `MacLauncher ${update.version} is ready to install.` };
+  if (update?.phase === "ready") return { action: "restart", label: "Restart to update", busy: false, status: `MacLauncher ${update.version} is ready to install.` };
   const status = update?.error ? `The update could not be installed: ${update.error}`
     : !check ? `${update?.currentVersion ? `MacLauncher ${update.currentVersion}. ` : ""}Not checked yet.`
       : check.outcome === "available" ? `MacLauncher ${check.version} is available. Checked ${when}.`
         : check.outcome === "error" ? `The last check failed (${when}): ${check.message || "unknown reason"}`
           : `MacLauncher ${check.currentVersion} is up to date. Checked ${when}.`;
-  return { action: "check", label: "Check for Updates…", busy: false, status };
+  return { action: "check", label: "Check for updates…", busy: false, status };
 }
 
 function AppUpdateRows({ update, checkAtLaunch, onAction, onSetLauncherSettings }: {
@@ -69,12 +69,12 @@ function AppUpdateRows({ update, checkAtLaunch, onAction, onSetLauncherSettings 
     <div className="settingsRow">
       <div className="settingsLabel">Updates</div>
       <div className="settingsControl settingsUpdateControl">
-        <button type="button" className="btn" disabled={shown.busy || !onAction} onClick={() => onAction?.(shown.action)}>{shown.label}</button>
+        <button type="button" className="btn small" disabled={shown.busy || !onAction} onClick={() => onAction?.(shown.action)}>{shown.label}</button>
         <span className="settingsStatus" role="status">{shown.status}</span>
       </div>
     </div>
     <div className="settingsRow">
-      <div className="settingsLabel">Check for updates at launch <HelpTip label="About checking for updates at launch">Each start asks GitHub for a newer MacLauncher release and shows a dialog when one is available. While this is off, MacLauncher contacts GitHub for updates only through Check for Updates….</HelpTip></div>
+      <div className="settingsLabel">Check for updates at launch<HelpTip label="About checking for updates at launch">Each start asks GitHub for a newer MacLauncher release and shows a dialog when one is available. While this is off, MacLauncher contacts GitHub for updates only through Check for Updates….</HelpTip></div>
       <div className="settingsControl">
         <Toggle label="Check for updates at launch" checked={checkAtLaunch}
           onChange={checked => onSetLauncherSettings({ checkForUpdatesAtLaunch: checked })} />
@@ -135,14 +135,14 @@ export function SettingsView({
                 </div>
               </div>
               <div className="settingsRow">
-                <div className="settingsLabel">Network access <HelpTip label="About default network access">Initial setting for newly imported games. Each game's inspector has its own checkbox. Changes here do not change existing games.</HelpTip></div>
+                <div className="settingsLabel">Network access<HelpTip label="About default network access">Initial setting for newly imported games. Each game's inspector has its own checkbox. Changes here do not change existing games.</HelpTip></div>
                 <div className="settingsControl">
                   <Toggle label="Network access" checked={state.launcherSettings.networkAccess === true}
                     onChange={checked => onSetLauncherSettings({ networkAccess: checked })} />
                 </div>
               </div>
               <div className="settingsRow">
-                <div className="settingsLabel">Steam client on Play <HelpTip label="About Steam client startup">Steam games that use their own macOS Steam API can start the Steam client before launch. Ask requests permission because Steam may connect to the Internet. Don't start launches the game without starting or waiting for Steam.</HelpTip></div>
+                <div className="settingsLabel">Steam client on Play<HelpTip label="About Steam client startup">Steam games that use their own macOS Steam API can start the Steam client before launch. Ask requests permission because Steam may connect to the Internet. Don't start launches the game without starting or waiting for Steam.</HelpTip></div>
                 <div className="settingsControl">
                   <select className="input" aria-label="Steam client on Play" value={state.launcherSettings.startSteamClient || "ask"}
                     onChange={event => onSetLauncherSettings({ startSteamClient: event.target.value as "ask" | "automatic" | "never" })}>

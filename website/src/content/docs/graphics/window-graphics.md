@@ -23,7 +23,7 @@ Previews of visible windows refresh every few seconds. The list shows up to 96 w
 
 macOS lets an app see other apps' windows only with the Screen & System Audio Recording permission, so it asks for that permission the first time the Apply Graphics window opens. If you don't allow it, the window lists your running apps without previews. Choosing one of them then opens the macOS window picker for that app's windows, and since picking a window there counts as your consent, this route works without the permission. Displays, however, always need it. **Open Privacy Settings** takes you to the right page in System Settings, and once you've allowed the permission, the previews appear the next time you come back to the Apply Graphics window.
 
-A keyboard shortcut can also skip the Apply Graphics window. Once **Toggle Graphics for Front App** is assigned in [Settings → Launcher](/maclauncher/graphics/composing-effects/#shortcuts-and-screenshots), pressing it starts a session for the app in front. With the Screen & System Audio Recording permission, the session takes that app's front window right away; without it, the macOS window picker opens instead. Pressing the shortcut again while that app is in front ends its graphics.
+A keyboard shortcut can also skip the Apply Graphics window. Once **Toggle graphics for front app** is assigned in [Settings → Launcher](/maclauncher/graphics/composing-effects/#shortcuts-and-screenshots), pressing it starts a session for the app in front. With the Screen & System Audio Recording permission, the session takes that app's front window right away; without it, the macOS window picker opens instead. Pressing the shortcut again while that app is in front ends its graphics.
 
 ## While it runs
 

@@ -2225,6 +2225,7 @@ select.input:not([multiple]) {
 
 .settingsControl {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-start;
@@ -2238,7 +2239,6 @@ select.input:not([multiple]) {
 }
 
 /* The update button keeps its size; the result beside it wraps under it when narrow. */
-.settingsUpdateControl { align-items: center; }
 .settingsUpdateControl > .btn { flex-shrink: 0; }
 .settingsStatus {
   flex: 1 1 12rem;

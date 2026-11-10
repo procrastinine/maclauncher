@@ -99,7 +99,7 @@ export function EffectsPresetManager({ api: suppliedApi, status, selectedId, nav
     finally { setBusy(false); }
   }
   return <section className="settingsSection" aria-label="Graphics presets">
-    <div className="settingsTitle">Presets <HelpTip label="About graphics presets">Save ordered effects for reuse. Applying a preset creates an independent copy for each game. Save or discard changes before choosing another preset.</HelpTip></div>
+    <div className="settingsTitle">Presets<HelpTip label="About graphics presets">Save ordered effects for reuse. Applying a preset creates an independent copy for each game. Save or discard changes before choosing another preset.</HelpTip></div>
     <fieldset className="effectsEditor" disabled={busy}>
       <legend className="srOnly">Manage graphics presets</legend>
       <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="graphics-preset-selection">Preset</label>

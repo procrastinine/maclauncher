@@ -8,7 +8,7 @@ export const ACTIONS = Object.freeze({
   bypass: "Bypass graphics effects",
   screenshot: "Save processed screenshot",
   windowPointer: "Toggle pointer in window graphics",
-  windowGraphics: "Toggle Graphics for Front App"});
+  windowGraphics: "Toggle graphics for front app"});
 
 const MODIFIERS = Object.freeze({control: "Control", ctrl: "Control", option: "Option", alt: "Option", shift: "Shift", command: "Command", cmd: "Command"});
 const ORDER = ["Control", "Option", "Shift", "Command"];

@@ -146,7 +146,7 @@ function SessionShortcut({ moduleInfo, assigned }: { moduleInfo: ModuleManifest 
   return <>{shortcuts.map(shortcut => {
     const label = labels[shortcut] || shortcut, accelerator = assigned?.[shortcut];
     return <div className="detailRow" key={shortcut}>
-      <div className="detailLabel">Keyboard shortcut {help[shortcut] && <HelpTip label={"About " + label}>{help[shortcut]}</HelpTip>}</div>
+      <div className="detailLabel">Keyboard shortcut{help[shortcut] && <HelpTip label={"About " + label}>{help[shortcut]}</HelpTip>}</div>
       <div className="detailValue"><span>{label}</span>{accelerator
         ? <>: <kbd>{accelerator.split("+").map(part => glyphs[part] ?? part).join("")}</kbd></>
         : <> <button className="btn small iconOnly" title="Assign in Settings…" aria-label={"Assign " + label + " in Settings"}
@@ -529,7 +529,7 @@ export const GameDetails = memo(function GameDetails({
 
           {hasAppBundle && (
             <div className="detailRow detailToolRow">
-              <div className="detailLabel">App quarantine <HelpTip label="About app quarantine">Remove the download quarantine attribute if macOS reports this app as damaged.</HelpTip></div>
+              <div className="detailLabel">App quarantine<HelpTip label="About app quarantine">Remove the download quarantine attribute if macOS reports this app as damaged.</HelpTip></div>
               <div className="detailValue">
                 {moduleActionResults.removeAppQuarantine?.status && <div className="detailMeta">{moduleActionResults.removeAppQuarantine.status}</div>}
                 <ErrorText error={actionError("removeAppQuarantine")} inline />
@@ -617,7 +617,7 @@ export const GameDetails = memo(function GameDetails({
 
           {canLaunch && <>
           <div className="detailRow detailControlRow">
-            <div className="detailLabel">Network access <HelpTip label="About network access">{networkConfigurable
+            <div className="detailLabel">Network access<HelpTip label="About network access">{networkConfigurable
               ? "Allow Internet and local-network connections for this game. Changes apply on the next launch. New games start with the default set in Settings."
               : "This runtime runs applications offline."}</HelpTip></div>
             <div className="detailActions">
@@ -630,7 +630,7 @@ export const GameDetails = memo(function GameDetails({
           </div>
 
           {g.steamClientEligible && <div className="detailRow detailControlRow">
-            <div className="detailLabel">Steam client on Play <HelpTip label="About Steam client on Play">Starting Steam connects to the Internet. Ask requests permission at Play when Steam is not running. Don't start launches the game without starting or waiting for Steam. Default follows Settings.</HelpTip></div>
+            <div className="detailLabel">Steam client on Play<HelpTip label="About Steam client on Play">Starting Steam connects to the Internet. Ask requests permission at Play when Steam is not running. Don't start launches the game without starting or waiting for Steam. Default follows Settings.</HelpTip></div>
             <div className="detailActions"><Select className="input" aria-label="Steam client on Play" value={g.startSteamClient || "inherit"}
               onChange={event => actions.onSetSteamClientStart(g.gamePath, event.target.value === "inherit" ? null : event.target.value as "ask" | "automatic" | "never")}>
               <option value="inherit">{`Default (${steamClientStartLabels[state.launcherSettings?.startSteamClient || "ask"]})`}</option><option value="ask">Ask</option><option value="automatic">Start automatically</option><option value="never">Don't start</option>

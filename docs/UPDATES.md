@@ -4,7 +4,7 @@ MacLauncher can find, download and install newer versions of itself from the rel
 
 ## Checking for a newer release
 
-**Check for Updates…** sits in the app menu, right after **About MacLauncher**, and the same button appears in **Settings → Launcher**. Both run one check. It reads the repository's release list through the shared [GitHub metadata transport](runtimes/GITHUB_TRANSPORT.md) and compares the newest release with the running version.
+**Check for Updates…** sits in the app menu, right after **About MacLauncher**, and the same check is the **Check for updates…** button in **Settings → Launcher**. Both run one check. It reads the repository's release list through the shared [GitHub metadata transport](runtimes/GITHUB_TRANSPORT.md) and compares the newest release with the running version.
 
 Releases are tagged `v<version>`, where the version is a [semantic version](https://semver.org/). Drafts, prereleases and tags of any other form are ignored, and build metadata after `+` does not make a version newer. The result appears in a native dialog:
 
@@ -43,7 +43,7 @@ Each release archive also carries a GitHub build attestation, a signed record of
 
 **Download and Restart** downloads the archive into `updates/downloads/` in MacLauncher's data folder. The Dock icon and the download menu show its progress, and the download menu can cancel it. While it downloads, **Check for Updates…** offers **Cancel Download**, and Settings shows the progress with the same button.
 
-After verification, the archive is deleted and the new app waits in a hidden `.MacLauncher-update-*` folder beside the installed app, on the same volume. A dialog offers **Restart to Update** and **Later**. A waiting update stays ready after **Later** and after MacLauncher restarts, and both **Check for Updates…** and the Settings button then offer **Restart to Update**. **Restart to Update** first repeats checks 3 to 6 on the waiting app; if one fails, the waiting app moves to the Trash, the installed app stays as it was and the dialog names the reason. While games started from MacLauncher are running, Restart to Update is held back and its dialog says why: replacing the app would affect games that run from it.
+After verification, the archive is deleted and the new app waits in a hidden `.MacLauncher-update-*` folder beside the installed app, on the same volume. A dialog offers **Restart to Update** and **Later**. A waiting update stays ready after **Later** and after MacLauncher restarts, and both **Check for Updates…** and the Settings button then offer the restart: **Restart to Update** in the dialog, **Restart to update** in Settings. **Restart to Update** first repeats checks 3 to 6 on the waiting app; if one fails, the waiting app moves to the Trash, the installed app stays as it was and the dialog names the reason. While games started from MacLauncher are running, Restart to Update is held back and its dialog says why: replacing the app would affect games that run from it.
 
 **Restart to Update** writes a short shell script to `updates/install-update.sh`, starts it as a separate process and quits MacLauncher. The script:
 

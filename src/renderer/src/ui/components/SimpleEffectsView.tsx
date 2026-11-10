@@ -30,7 +30,7 @@ export function SimpleEffectsView({editor}: {editor: EffectsEditor}) {
   };
   const temporal = (["temporal", "generation"] as const).filter(shown);
   return <div className="simpleEffects" aria-label="Simple graphics">
-    {projection.customOrder && <div className="detailMeta">Custom order <HelpTip label="About custom effect order">The existing order is retained. Advanced shows every effect and its position.</HelpTip></div>}
+    {projection.customOrder && <div className="detailMeta">Custom order<HelpTip label="About custom effect order">The existing order is retained. Advanced shows every effect and its position.</HelpTip></div>}
     <section className="simpleEffectGroup" aria-label="Image filters"><h4>Image filters</h4>
       {images.map((node, index) => row(`image-${node.id}`, images.length > 1 ? `Filter ${index + 1}` : "Filter", [node], imageChoices, "image"))}
       {(!images.length || extraFilter) && row("image-new", images.length ? "New filter" : "Filter", [], imageChoices, "image")}

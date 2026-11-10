@@ -33,7 +33,7 @@ const launcherSection = markup => markup.slice(markup.indexOf('<div class="setti
 test('the Launcher section holds Check for Updates, its latest result and the opt-in launch check', () => {
   const markup = launcherSection(render(idle));
   assert.match(markup, /<div class="settingsLabel">Updates<\/div>/);
-  assert.match(markup, /<button type="button" class="btn">Check for Updates…<\/button>/);
+  assert.match(markup, /<button type="button" class="btn small">Check for updates…<\/button>/);
   assert.match(markup, /role="status">MacLauncher 0\.5\.1\. Not checked yet\.<\/span>/);
   assert.match(markup, /Check for updates at launch/);
   assert.match(markup, /aria-label="Check for updates at launch"/);
@@ -45,9 +45,9 @@ test('the Launcher section holds Check for Updates, its latest result and the op
 
 test('the update row follows the check, download and restart states', () => {
   const at = state => launcherSection(render({ ...idle, ...state }));
-  assert.match(at({ phase: 'checking' }), /<button type="button" class="btn" disabled="">Checking…<\/button>/);
-  assert.match(at({ phase: 'downloading', version: '0.5.2', progress: 0.45 }), /Cancel Download<\/button><span class="settingsStatus" role="status">Downloading MacLauncher 0\.5\.2… 45%/);
-  assert.match(at({ phase: 'ready', version: '0.5.2' }), /Restart to Update<\/button><span class="settingsStatus" role="status">MacLauncher 0\.5\.2 is ready to install\./);
+  assert.match(at({ phase: 'checking' }), /<button type="button" class="btn small" disabled="">Checking…<\/button>/);
+  assert.match(at({ phase: 'downloading', version: '0.5.2', progress: 0.45 }), /Cancel download<\/button><span class="settingsStatus" role="status">Downloading MacLauncher 0\.5\.2… 45%/);
+  assert.match(at({ phase: 'ready', version: '0.5.2' }), /Restart to update<\/button><span class="settingsStatus" role="status">MacLauncher 0\.5\.2 is ready to install\./);
   assert.match(at({ lastCheck: { checkedAt, currentVersion: '0.5.1', outcome: 'current' } }), /MacLauncher 0\.5\.1 is up to date\. Checked /);
   assert.match(at({ lastCheck: { checkedAt, currentVersion: '0.5.1', outcome: 'available', version: '0.5.2' } }), /MacLauncher 0\.5\.2 is available\. Checked /);
   assert.match(at({ lastCheck: { checkedAt, currentVersion: '0.5.1', outcome: 'error', message: 'GitHub could not be reached.' } }), /The last check failed \([^)]*\): GitHub could not be reached\./);

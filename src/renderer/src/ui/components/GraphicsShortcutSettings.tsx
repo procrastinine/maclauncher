@@ -55,7 +55,7 @@ export function GraphicsShortcutSettings({api, settings, onSetLauncherSettings}:
       <div className="settingsControl">
         <button type="button" className="btn small" aria-pressed={recording === item.action}
           onClick={() => {setProblem(null);setRecording(recording === item.action ? null : item.action);}}>
-          {recording === item.action ? "Press Shortcut…" : item.accelerator ? display(item.accelerator) : "Record Shortcut"}
+          {recording === item.action ? "Press shortcut…" : item.accelerator ? display(item.accelerator) : "Record shortcut"}
         </button>
         {item.accelerator && recording !== item.action && <button type="button" className="btn small iconOnly" title="Clear" aria-label={`Clear ${item.label} shortcut`} onClick={() => clear(item.action)}><XIcon /></button>}
         {problem?.action === item.action && <span className="detailMeta" role="alert">{problem.reason}</span>}

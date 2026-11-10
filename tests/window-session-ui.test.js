@@ -36,19 +36,19 @@ test('inspector keyboard shortcuts sit outside Applied to, with pointer action, 
   assert.ok(shortcut);assert.ok(nodes.indexOf(shortcut) < nodes.indexOf(applied));
   let markup = renderToStaticMarkup(shortcut);
   assert.equal((markup.match(/title="Assign in Settings…"/g) || []).length, 2);
-  assert.match(markup, /Keyboard shortcut/);assert.match(markup, /Toggle Graphics for Front App/);assert.match(markup, /Toggle pointer in window graphics/);
-  assert.match(markup, /aria-label="About Toggle Graphics for Front App"/);assert.match(markup, /does not change the saved Show pointer/);
+  assert.match(markup, /Keyboard shortcut/);assert.match(markup, /Toggle graphics for front app/);assert.match(markup, /Toggle pointer in window graphics/);
+  assert.match(markup, /aria-label="About Toggle graphics for front app"/);assert.match(markup, /does not change the saved Show pointer/);
   assert.doesNotMatch(renderToStaticMarkup(applied), /Keyboard shortcut|Assign in Settings/);
   state.launcherSettings.graphicsShortcuts = { windowGraphics: 'Control+Option+Command+G', windowPointer: 'Control+Option+Command+P' };
   nodes = elements(harness.render());shortcut = nodes.find(node => node.type?.name === 'SessionShortcut');markup = renderToStaticMarkup(shortcut);
   assert.match(markup, /<kbd>⌃⌥⌘G<\/kbd>/);assert.match(markup, /<kbd>⌃⌥⌘P<\/kbd>/);assert.doesNotMatch(markup, /title="Assign in Settings…"/);
 });
 test('window shortcut Settings rows expose help for both declared actions', async t => {
-  const actions = [{ action: 'windowGraphics', label: 'Toggle Graphics for Front App', accelerator: null },
+  const actions = [{ action: 'windowGraphics', label: 'Toggle graphics for front app', accelerator: null },
     { action: 'windowPointer', label: 'Toggle pointer in window graphics', accelerator: null }];
   const harness = componentHarness(GraphicsShortcutSettings, { settings: {}, api: { getGraphicsShortcuts: async () => actions }, onSetLauncherSettings() {} });
   t.after(() => harness.close());harness.render();await harness.settle();
   const markup = renderToStaticMarkup(harness.render());
-  assert.match(markup, /aria-label="About Toggle Graphics for Front App"/);assert.match(markup, /aria-label="About Toggle pointer in window graphics"/);
+  assert.match(markup, /aria-label="About Toggle graphics for front app"/);assert.match(markup, /aria-label="About Toggle pointer in window graphics"/);
   assert.match(markup, /drawn pointer/);assert.match(markup, /frontmost app/);
 });
