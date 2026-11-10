@@ -20,7 +20,7 @@ const { createProcessLauncher } = require("./processes");
 const Rosetta = require("../modules/shared/runtime/rosetta");
 const { readJsonObject, readJsonDocument, writeJsonAtomic } = require("./json-files");
 const { createSaveService } = require("./save-service");
-const { prepareForLaunch, listRuntimeManagers } = require("./runtime-preparation");
+const { automaticRuntimeVersion, prepareForLaunch, listRuntimeManagers } = require("./runtime-preparation");
 const { coordinatorFor } = require("./runtime-coordinator");
 const { instrumentRuntimeManagers, withRuntimeCoordinator, withRuntimeUseScope, withRuntimeMutation, createRuntimeUseScope } = require("./coordinated-runtime-managers");
 const { mergeSettingsChanges, withoutClearedDefaults } = require("./settings-merge");
@@ -931,19 +931,23 @@ function createLauncher({
       // The version, and where variants exist the variant, that the game's own
       // data recommends for its selected runtime, plus any variant the game
       // requires whatever is chosen, with its reason. Modules supply them;
-      // installation stays an explicit Runtimes action.
+      // installation stays an explicit Runtimes action. `automaticVersion` is
+      // the version Play uses when the game has no version choice.
       const effective = structuredClone(entry), moduleId = resolveModuleId(effective);
       const mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
       const selectedRuntime = resolveRuntimeForEntry(effective.runtimeId, mod, info, effective,
         resolveModuleSettings(settings, moduleId), settings);
       const managerId = info.runtime?.manager?.[selectedRuntime];
-      if (!managerId || typeof mod?.runtimeRecommendation !== "function") return null;
+      if (!managerId) return null;
       effective.runtimeId = selectedRuntime;
-      const recommendation = await mod.runtimeRecommendation(effective, getLaunchContext(effective, settings, { runtimeId: selectedRuntime }));
-      const text = key => typeof recommendation?.[key] === "string" && recommendation[key] ? { [key]: recommendation[key] } : {};
-      const recommended = { ...text("version"), ...text("variant"), ...text("requiredVariant") };
-      return Object.keys(recommended).length ? { managerId, ...recommended, ...text("sectionId"),
-        ...(recommended.requiredVariant ? text("requiredVariantReason") : {}) } : null;
+      const context = getLaunchContext(effective, settings, { runtimeId: selectedRuntime });
+      const recommendation = typeof mod?.runtimeRecommendation === "function" ? await mod.runtimeRecommendation(effective, context) : null;
+      const text = (value, key) => typeof value?.[key] === "string" && value[key] ? { [key]: value[key] } : {};
+      const recommended = { ...text(recommendation, "version"), ...text(recommendation, "variant"), ...text(recommendation, "requiredVariant") };
+      const automatic = text({ automaticVersion: await automaticRuntimeVersion(effective, mod, info, context, managedRuntimes()).catch(() => null) },
+        "automaticVersion");
+      return Object.keys(recommended).length || automatic.automaticVersion ? { managerId, ...recommended, ...text(recommendation, "sectionId"),
+        ...(recommended.requiredVariant ? text(recommendation, "requiredVariantReason") : {}), ...automatic } : null;
     }
     if (actionId === "setGameNotes") {
       const updated = GameStore.setGameNotes(userDataDir, entry.gameId, payload.notes);

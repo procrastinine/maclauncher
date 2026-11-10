@@ -5,7 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { installedRuntimeVersion } = require('../src/modules/shared/runtime/version-choices');
 const { createPinnedNativeManager } = require('../src/modules/shared/runtime/pinned-native-manager');
-const { prepareForLaunch } = require('../src/core/runtime-preparation');
+const { automaticRuntimeVersion, prepareForLaunch } = require('../src/core/runtime-preparation');
 function temporary(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-local-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root;
@@ -40,6 +40,25 @@ test("Ren'Py 8.3.4 uses installed 8.2.x for preparation and runtime use; manual 
   assert.equal(used.version, '8.2.3');
   const plan = await Renpy.ensureRuntime({...entry, runtimeData: {sdk: {version: '8.3.4'}}}, context);
   assert.equal(plan.version, '8.3.4'); assert.equal(plan.managerId, 'sdk');
+  // The inspector's Automatic entry names the SDK Play uses, even beside a game choice.
+  const info = {runtime: {manager: {sdk: 'sdk'}}};
+  assert.equal(await automaticRuntimeVersion({...entry, runtimeData: {sdk: {version: '8.3.4'}}}, Renpy, info, context, [Manager]), '8.2.3');
+});
+
+test('Automatic names the compatible installed version a shared manager plan uses, otherwise the version Play installs', async () => {
+  let installed = [{version: '1.2.0', ready: true}];
+  const manager = {id: 'fixture', versionCompatibility: 'major', installRuntime() {},
+    getState: () => ({sections: [{id: 'default', installed, catalog: {versions: ['1.3.0', '1.2.0']}, defaultVersion: '1.3.0'}]})};
+  const info = {runtime: {manager: {fixture: 'fixture'}}}, context = {runtimeId: 'fixture', settings: {}, userDataDir: '/missing'};
+  const entry = {gameId: 'g', runtimeId: 'fixture', runtimeData: {fixture: {version: '1.2.0'}}};
+  assert.equal(await automaticRuntimeVersion(entry, {}, info, context, [manager]), '1.2.0');
+  installed = [];
+  assert.equal(await automaticRuntimeVersion(entry, {}, info, context, [manager]), '1.3.0');
+  installed = [{version: '2.0.0', ready: true}];
+  assert.equal(await automaticRuntimeVersion(entry, {}, info, context, [manager]), '1.3.0');
+  // A runtime owner that selects its version itself reports it, or nothing.
+  assert.equal(await automaticRuntimeVersion(entry, {ensureRuntime: () => null}, info, context, [manager]), null);
+  assert.equal(await automaticRuntimeVersion(entry, {ensureRuntime: () => null, automaticRuntimeVersion: () => '2.0.0'}, info, context, [manager]), '2.0.0');
 });
 
 const policies = [

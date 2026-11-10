@@ -1416,15 +1416,21 @@ test('per-game version menus use only the selected runtime recommendation and pr
   const original = {...state.recents[0], nativeAppPath: null, moduleRuntimeSupport: [engine, portable],
     runtimeData: {[engine]: {version: engineVersion}, [portable]: {version: wineVersion}}};
   const before = structuredClone(original);
-  const renderGame = (runtimeId, automatic = false) => renderToStaticMarkup(React.createElement(GameDetails, {
+  const renderGame = (runtimeId, automatic = false, automaticVersion = undefined) => renderToStaticMarkup(React.createElement(GameDetails, {
     g: {...original, runtimeId, ...(automatic ? {runtimeData: {...original.runtimeData, [runtimeId]: {version: ''}}} : {})},
     state, moduleInfo, actions: {}, cheatsStatus: null, libsStatus: null,
-    runtimeStatusEntry: {runtimeId, status: {runtimeRecommendation: runtimeId === engine ? {managerId: 'engine-version-scope', version: engineVersion} : null}},
+    runtimeStatusEntry: {runtimeId, status: {runtimeRecommendation: runtimeId === engine
+      ? {managerId: 'engine-version-scope', version: engineVersion, ...(automaticVersion ? {automaticVersion} : {})} : null}},
     cheatsPatchBusy: false, libsPatchBusy: false, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null
   }));
   const automatic = renderGame(portable, true);
-  assert.match(automatic, /Default \(Wine 10\.0 \(rev 8\) · Template 1\.0\.24\)/);
-  assert.doesNotMatch(automatic, /Recommended \(v?4\.6\.3-stable\)/);
+  assert.match(automatic, /Automatic \(Wine 10\.0 \(rev 8\) · Template 1\.0\.24\)/);
+  assert.doesNotMatch(automatic, /\(v?4\.6\.3-stable\)/);
+  // Automatic names the version Play uses, such as a compatible installed
+  // version, rather than the recommended one; a game choice still selects its own.
+  const installed = renderGame(engine, true, '4.6.1-stable');
+  assert.match(installed, /<option value="" title="4\.6\.1-stable" selected="">Automatic \(v?4\.6\.1-stable\)<\/option>/);
+  assert.match(renderGame(engine, false, '4.6.1-stable'), new RegExp('Automatic \\(v?4\\.6\\.1-stable\\)[\\s\\S]*value="' + engineVersion + '" selected=""'));
   assert.match(renderGame(engine), new RegExp('value="' + engineVersion + '" selected=""'));
   assert.match(renderGame(portable), new RegExp('value="' + wineVersion + '" selected=""'));
   assert.deepEqual(original, before);

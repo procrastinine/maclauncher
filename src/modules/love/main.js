@@ -478,6 +478,10 @@ module.exports = {
   },
   cleanupGameData,
   ensureRuntime,
+  // The version Play uses without a version choice, from the same selection.
+  automaticRuntimeVersion: (entry, context = {}) =>
+    normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) === RUNTIME_ID
+      ? resolveRuntimeSelection(entry, context).resolvedVersion || null : null,
   // The release the game's configuration names, or an installed nightly build
   // with that bundle version, when the selected line's automatic version uses it.
   runtimeRecommendation: (entry, context = {}) => {

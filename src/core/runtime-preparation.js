@@ -31,27 +31,15 @@ function sectionIdFor(entry, info, runtimeId) {
   return value == null || value === false || value === "" ? null : map[String(value)] || String(value);
 }
 
-async function managerPlan(entry, info, context, managers, { managerId, runtimeId, sectionId }) {
-  const manager = managers.find(manager => manager.id === managerId);
-  if (!manager) throw new Error(`Runtime manager ${managerId} is unavailable.`);
-  if (typeof manager.resolveSelection === "function") {
-    const selectionEntry = runtimeId === context.runtimeId ? entry : { ...entry, runtimeId };
-    const selection = await manager.resolveSelection(selectionEntry, context.settings, context.userDataDir);
-    if (selection) {
-      if (selection.ready === true || (selection.install && selection.ready !== false)) return null;
-      if (!selection.version && !selection.discoveryRequired) throw new Error(selection.reason || "A compatible runtime version could not be selected.");
-      return { managerId, version: selection.version || null, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}),
-        installOptions: selection.installOptions || {} };
-    }
-  }
+// The version a manager's runtime line gives Play: the game's choice, the
+// saved default or the manager's own default, resolved against compatible
+// installed copies. Play and the inspector's Automatic entry both use it.
+function managerSelection(entry, info, context, manager, { runtimeId, sectionId }) {
   sectionId ??= sectionIdFor(entry, info, runtimeId);
-  const readSection = () => {
-    const state = manager.getState({ settings: context.settings.runtimes?.[managerId], runtimeSettings: context.settings.runtimes, userDataDir: context.userDataDir });
-    const sections = state.sections || [{ ...state, id: state.id || "default" }];
-    return (sectionId ? sections.find(section => section.id === sectionId) : sections[0]) || null;
-  };
-  let section = readSection();
-  if (!section) throw new Error("The detected game does not identify a compatible runtime line.");
+  const state = manager.getState({ settings: context.settings.runtimes?.[manager.id], runtimeSettings: context.settings.runtimes, userDataDir: context.userDataDir });
+  const sections = state.sections || [{ ...state, id: state.id || "default" }];
+  const section = (sectionId ? sections.find(section => section.id === sectionId) : sections[0]) || null;
+  if (!section) return null;
   const override = entry.runtimeData?.[runtimeId] || {};
   const variant = override.variant || section.defaultVariant;
   const selection = selectRuntimeVersion({ manual: override.version,
@@ -67,6 +55,26 @@ async function managerPlan(entry, info, context, managers, { managerId, runtimeI
   // Only the manager's own default, with no game choice or saved default,
   // is an automatic choice; see runtime-install-origins.js.
   const automatic = !selectRuntimeVersion({ manual: override.version, defaultVersion: section.defaultVersion }).version;
+  return { section, sectionId, variant, version, automatic };
+}
+
+async function managerPlan(entry, info, context, managers, { managerId, runtimeId, sectionId }) {
+  const manager = managers.find(manager => manager.id === managerId);
+  if (!manager) throw new Error(`Runtime manager ${managerId} is unavailable.`);
+  if (typeof manager.resolveSelection === "function") {
+    const selectionEntry = runtimeId === context.runtimeId ? entry : { ...entry, runtimeId };
+    const selection = await manager.resolveSelection(selectionEntry, context.settings, context.userDataDir);
+    if (selection) {
+      if (selection.ready === true || (selection.install && selection.ready !== false)) return null;
+      if (!selection.version && !selection.discoveryRequired) throw new Error(selection.reason || "A compatible runtime version could not be selected.");
+      return { managerId, version: selection.version || null, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}),
+        installOptions: selection.installOptions || {} };
+    }
+  }
+  const selected = managerSelection(entry, info, context, manager, { runtimeId, sectionId });
+  if (!selected) throw new Error("The detected game does not identify a compatible runtime line.");
+  const { section, variant, version, automatic } = selected;
+  sectionId = selected.sectionId;
   const installed = () => version && section.installed?.find(install => install.version === version && install.ready !== false && install.status !== "damaged" && (!variant || install.variant === variant));
   function useInstalled(install) {
     if (!install) return false;
@@ -80,6 +88,27 @@ async function managerPlan(entry, info, context, managers, { managerId, runtimeI
   if (!version && typeof manager.refreshCatalog !== "function") throw new Error("No compatible runtime version is available for this game.");
   return { managerId, version: version || null, ...(!version ? { discoveryRequired: true } : {}), ...(automatic ? { automatic: true } : {}),
     installOptions: { sectionId: sectionId || section.id || "default", ...(variant ? { variant } : {}) } };
+}
+
+/** The version Play uses for the game's selected runtime when the game has
+ * no version choice: a compatible installed version when there is one,
+ * otherwise the version Play would install. A runtime owner that selects its
+ * version itself reports it through `automaticRuntimeVersion`; managers with
+ * `resolveSelection` report theirs; other managers use managerSelection.
+ * Null when the version is not known before Play reads a catalog. */
+async function automaticRuntimeVersion(entry, mod, info, context, managers) {
+  const runtimeId = context.runtimeId, manager = managers.find(manager => manager.id === info.runtime?.manager?.[runtimeId]);
+  if (!manager) return null;
+  const automatic = { ...entry, runtimeId, runtimeData: { ...entry.runtimeData, [runtimeId]: { ...entry.runtimeData?.[runtimeId], version: null } } };
+  const owner = mod?.getRuntimeProvider?.(runtimeId) || mod;
+  const own = await owner?.automaticRuntimeVersion?.(automatic, context);
+  if (typeof own === "string" && own) return own;
+  if (typeof manager.resolveSelection === "function") {
+    const selection = await manager.resolveSelection(automatic, context.settings, context.userDataDir);
+    if (selection) return typeof selection.version === "string" && selection.version ? selection.version : null;
+  }
+  if (typeof owner?.ensureRuntime === "function") return null;
+  return managerSelection(automatic, info, context, manager, { runtimeId })?.version || null;
 }
 
 async function runtimePlans(entry, mod, info, context, managers) {
@@ -278,4 +307,4 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
   return true;
 }
 
-module.exports = { listRuntimeManagers, prepareForLaunch, readyFor, sectionIdFor };
+module.exports = { automaticRuntimeVersion, listRuntimeManagers, prepareForLaunch, readyFor, sectionIdFor };

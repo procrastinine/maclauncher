@@ -557,19 +557,26 @@ async function launchRuntime(runtimeId, entry, context) {
   return context.spawnDetachedChecked(install.javaPath, args, { cwd, ...(steam ? { env: steam.environment } : {}) }, install.requiresRosetta);
 }
 
-async function ensureRuntime(entry, context) {
-  if ((context.runtimeId || entry.runtimeId || manifest.runtime.default) !== "java") return null;
-  const { line, requiredLine, cfg, runtimeData } = resolveRequestedLine(entry, context.settings);
+// The Java line and version Play uses: a compatible installed copy, otherwise
+// the game's choice or the line's default.
+function playSelection(entry, context) {
+  const { line, cfg, runtimeData } = resolveRequestedLine(entry, context.settings);
   if (!Number.isFinite(line)) throw new Error("Java runtime line is unknown for this game.");
   if (!isManagedLine(line)) throw new Error(`Unsupported Java line ${line}.`);
   const lineConfig = resolveLineConfig(cfg, line, context.userDataDir);
   const installed = resolveInstalledRuntime({ userDataDir: context.userDataDir, line, runtimeData, lineConfig, entry });
+  const manual = normalizeVersionOrNull(runtimeData.version);
+  const version = selectRuntimeVersion({ manual, defaultVersion: lineConfig.defaultVersion }).version;
+  return { line, runtimeData, lineConfig, installed, manual, version };
+}
+
+async function ensureRuntime(entry, context) {
+  if ((context.runtimeId || entry.runtimeId || manifest.runtime.default) !== "java") return null;
+  const { line, runtimeData, lineConfig, installed, manual, version } = playSelection(entry, context);
   if (installed?.javaPath) {
     await ensureInstalledRosetta(installed, context);
     return null;
   }
-  const manual = normalizeVersionOrNull(runtimeData.version);
-  const version = selectRuntimeVersion({ manual, defaultVersion: lineConfig.defaultVersion }).version;
   const requiredVariant = JavaSteam.requiredVariant(entry, { explicitVariant: normalizeVariantOrNull(runtimeData.variant), preferredVariant: lineConfig.defaultVariant });
   const variant = requiredVariant || normalizeVariantOrNull(runtimeData.variant) || lineConfig.defaultVariant;
   // A default that is not installed is chosen from a list read this session,
@@ -600,6 +607,11 @@ module.exports = {
   launchRuntime,
   resolveGraphicsInputs,
   ensureRuntime,
+  automaticRuntimeVersion: (entry, context) => {
+    if ((context.runtimeId || entry.runtimeId || manifest.runtime.default) !== "java") return null;
+    const { installed, version } = playSelection(entry, context);
+    return (installed?.javaPath && installed.version) || version || null;
+  },
   cleanupGameData,
   actions: {
     runtimeStatus: (entry, _payload, context) => {

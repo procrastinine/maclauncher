@@ -781,6 +781,9 @@ module.exports = {
   resolveSaveLocations,
   normalizeRuntimeId,
   resolveGraphicsInputs,
+  // The SDK that Play uses without a version choice, from the same selector.
+  automaticRuntimeVersion: (entry, context) => context.runtimeId === "sdk"
+    ? resolveEntrySdkVersion(entry, context.settings, context.userDataDir) || null : null,
   runtimeRecommendation: entry => {
     const version = recommendedSdkVersion(entry);
     return version && entry.runtimeId === "sdk" ? { version, sectionId: resolveMajor(entry) === 7 ? "v7" : "v8" } : null;
