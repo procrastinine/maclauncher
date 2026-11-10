@@ -198,18 +198,22 @@ body {
   background: var(--panel2);
   border-right: 1px solid var(--border);
 }
-.launcherSidebarSearch { position: relative; margin: 12px 10px 8px; flex-shrink: 0; }
+.launcherSidebarSearch {
+  position: relative; padding: 12px 8px 8px; flex-shrink: 0;
+  /* Reserves the list's scrollbar width too, so the field ends where the list items end. */
+  overflow: hidden; scrollbar-gutter: stable;
+}
 .launcherSidebarSearch .input { width: 100%; min-width: 0; padding-right: 28px; font-size: var(--font-sm); }
 .launcherSidebarSearch input::-webkit-search-cancel-button { -webkit-appearance: none; }
 .launcherSidebarClear {
-  display: grid; place-items: center; position: absolute; inset: 1px 1px 1px auto; width: 26px;
+  display: grid; place-items: center; position: absolute; inset: 13px 9px 9px auto; width: 26px;
   padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); cursor: pointer;
 }
 .launcherSidebarClear:hover { color: var(--text); }
 .launcherSidebarSearch.withAccessory { display: flex; align-items: center; gap: 6px; }
 .launcherSidebarSearch.withAccessory .input { flex: 1; }
-.launcherSidebarSearch.withAccessory .launcherSidebarClear { right: calc(var(--icon-button-size) + 7px); }
-.launcherSidebarChoices { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 12px; overscroll-behavior: contain; }
+.launcherSidebarSearch.withAccessory .launcherSidebarClear { right: calc(var(--icon-button-size) + 15px); }
+.launcherSidebarChoices { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 0 8px 12px; overscroll-behavior: contain; }
 .launcherSidebarList { margin: 0; padding: 0; list-style: none; }
 .launcherSidebarSection + .launcherSidebarSection { margin-top: 8px; }
 /* A section without a visible heading is set apart by a rule. */
@@ -2213,6 +2217,8 @@ select.input:not([multiple]) {
   grid-template-columns: minmax(var(--field-label), 15rem) minmax(0, 26rem);
   gap: 12px;
   align-items: center;
+  /* Every row is as tall as a select row, so checkbox rows keep the same pitch. */
+  min-height: calc(18px + 2 * var(--control-padding-y) + 2px);
 }
 
 .settingsLabel {
@@ -2388,6 +2394,9 @@ select.input:not([multiple]) {
 .settingsToggle {
   color: var(--text);
 }
+
+/* The checkbox starts at the control column's edge, like buttons and selects. */
+.settingsToggle input { margin-left: 0; }
 
 @media (max-width: 1080px) {
   .header .librarySearch { order: 3; flex-basis: 100%; }
