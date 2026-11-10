@@ -1739,6 +1739,9 @@ input[type="checkbox"], input[type="radio"] {
   overflow: hidden;
 }
 
+/* The card's bottom rule already separates it from the Installed list. */
+.runtimeSectionCard + .saveSection { border-top: 0; }
+
 .runtimeSectionHeader {
   display: flex;
   justify-content: space-between;
@@ -2207,7 +2210,7 @@ select.input:not([multiple]) {
    every control starts at the same edge and inputs and menus end at the same line. */
 .settingsRow {
   display: grid;
-  grid-template-columns: minmax(var(--field-label), 14rem) minmax(0, 26rem);
+  grid-template-columns: minmax(var(--field-label), 15rem) minmax(0, 26rem);
   gap: 12px;
   align-items: center;
 }

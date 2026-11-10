@@ -384,7 +384,7 @@ Official GameMaker offers **Import runtime directory** and an optional, independ
 
 Info callouts describe the selected runtime's dependencies, such as Rosetta for compatible Intel Java builds, or the two MKXP-Z download sources. The MKXP-Z and native NScripter packages need no Homebrew or `gh` setup for ordinary Play.
 
-The download manager menu (the down arrow) shows active downloads with progress bars and cancel actions, and closes on an outside click or Escape.
+The download manager menu (the down arrow at the end of the runtime search field) shows active downloads with progress bars and cancel actions, and closes on an outside click or Escape.
 
 #### Local applications and custom runtimes
 
