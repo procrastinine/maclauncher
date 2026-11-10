@@ -142,6 +142,8 @@
       "!src/modules/renpy/resources/unren{,/**}",
       "!src/modules/renpy/resources/universal-renpy-walkthrough{,/**}",
       "!src/modules/android/native{,/**}",
+      "!src/main/native{,/**}",
+      "!src/modules/shared/runtime/native{,/**}",
       "!src/modules/android/art/{native,java,adapters,licenses,tools,composer,graphics,sensors}{,/**}",
       "!src/modules/android/art/boot-image-driver.rs",
       "!src/modules/android/art/*-source.mjs",
