@@ -25,7 +25,7 @@
   --surface-1: rgba(255, 255, 255, 0.02);
   --surface-2: rgba(255, 255, 255, 0.03);
   --surface-3: rgba(255, 255, 255, 0.06);
-  --surface-drop: rgba(11, 15, 23, 0.78);
+  --surface-drop: rgb(11, 15, 23);
   --surface-overlay: rgba(0, 0, 0, 0.55);
   --surface-code: rgba(0, 0, 0, 0.25);
   --surface-danger: rgba(255, 93, 93, 0.12);
@@ -82,7 +82,7 @@
     --surface-1: rgba(0, 0, 0, 0.02);
     --surface-2: rgba(0, 0, 0, 0.03);
     --surface-3: rgba(0, 0, 0, 0.06);
-    --surface-drop: rgba(245, 246, 248, 0.92);
+    --surface-drop: rgb(245, 246, 248);
     --surface-code: rgba(0, 0, 0, 0.05);
     --surface-danger: rgba(197, 48, 48, 0.08);
     --surface-accent: rgba(49, 95, 202, 0.12);
@@ -332,23 +332,30 @@ body {
 .implementationActions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 7px 2px 2px; border-top: 1px solid var(--border); flex: none; }
 .shaderLibraryTabs { margin-bottom: 10px; }
 
+/* The drop layer covers the whole window; its dashed frame stays 14px inside. */
 .dropOverlay {
   position: fixed;
-  inset: 14px;
+  inset: 0;
   z-index: 9999;
   pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 20px;
-  border-radius: var(--radius-xl);
-  border: 2px dashed var(--border-accent-strong);
+  padding: 34px;
   background: var(--surface-drop);
-  box-shadow: var(--shadow-drop);
   color: var(--text);
   font-weight: 600;
   letter-spacing: 0.2px;
+}
+
+.dropOverlay::before {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  z-index: -1;
+  border-radius: var(--radius-xl);
+  border: 2px dashed var(--border-accent-strong);
 }
 
 .header {
@@ -1127,6 +1134,18 @@ body {
 
 .detailControlRow .detailActions.menuWithIcon .input {
   min-width: 0;
+}
+
+/* Buttons after a menu stay on its line when they fit beside it at its
+   minimum width, which shows an entry such as "Automatic (v3.5.2-stable)";
+   otherwise they wrap under it, and the label stays on the menu's line. */
+.detailControlRow .detailActions.menuWithButtons > .input {
+  flex: 1 1 0;
+  min-width: min(100%, 13rem);
+}
+
+.detailControlRow:has(> .detailActions.menuWithButtons) {
+  align-items: baseline;
 }
 
 /* A control placed directly after its label ends at the same right edge as wrapped controls. */

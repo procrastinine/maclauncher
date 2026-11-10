@@ -669,7 +669,7 @@ export const GameDetails = memo(function GameDetails({
 
               <div className="detailRow detailControlRow">
                 <div className="detailLabel">Version</div>
-                <div className="detailActions">
+                <div className="detailActions menuWithButtons">
                   <Select aria-label={runtimeVersionLabelText}
                     className="input"
                     value={runtimeVersionOption?.value || runtimeVersionOverride}

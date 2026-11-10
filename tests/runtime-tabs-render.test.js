@@ -1462,5 +1462,8 @@ test('per-game version menus use only the selected runtime recommendation and pr
   assert.match(selected(both)[0], /value="\[&quot;4\.6\.3-stable&quot;,&quot;x64&quot;\]"/);
   assert.match(both, /<select aria-label="Runtime variant"[\s\S]*?<option value="mono" selected="">\.NET<\/option>/);
   state.runtimeManagers['engine-version-scope'] = scoped;
+  // The Version menu's buttons stay on its line when they fit, and the Runtime menu keeps its gear on its line.
+  assert.match(renderGame(engine), /<div class="detailActions menuWithButtons"><select aria-label="[^"]* version"/);
+  assert.match(renderGame(engine), /<div class="detailActions menuWithIcon"><select aria-label="Runtime"/);
   assert.deepEqual(original, before);
 });
