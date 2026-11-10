@@ -63,11 +63,15 @@ test('Python app selection excludes installation, SDK and demo files while prese
     'lib/libtcl9.0.dylib', 'lib/libtcl9tk9.0.dylib', 'lib/tcl9.0/init.tcl', 'lib/tk9.0/tk.tcl',
     'lib/itcl4.3.8/libtcl9itcl4.3.8.dylib', 'lib/thread3.0.6/libthread3.0.6.dylib',
     'lib/python3.12/tkinter/__init__.py', 'lib/python3.12/lib-dynload/_tkinter.cpython-312-darwin.so',
-    'lib/python3.12/idlelib/__init__.py', 'lib/python3.12/lib2to3/refactor.py', 'lib/python3.12/pydoc_data/topics.py'])
+    'lib/python3.12/idlelib/__init__.py', 'lib/python3.12/lib2to3/refactor.py', 'lib/python3.12/pydoc_data/topics.py',
+    'lib/python3.12/email/architecture.rst', 'lib/python3.12/site-packages/README.txt', 'lib/python3.12/ctypes/macholib/README.ctypes'])
     assert.equal(selected(file), false, file);
+  for (const file of ['lib/python3.12/email/architecture.rst', 'lib/python3.12/ctypes/macholib/README.ctypes'])
+    assert.equal(Python.excluded(file), true, file);
   for (const file of ['bin/python3', 'LICENSE', 'lib/python3.12/ctypes/__init__.py', 'lib/python3.12/venv/__init__.py',
     'lib/python3.12/unittest/__init__.py', 'lib/python3.12/threading.py', 'lib/python3.12/pydoc.py',
-    'lib/python3.12/site-packages/packaging/licenses/__init__.py']) assert.equal(selected(file), true, file);
+    'lib/python3.12/site-packages/packaging/licenses/__init__.py', 'lib/python3.12/LICENSE.txt',
+    'lib/python3.12/site-packages/aplib-0.6.dist-info/LICENSE']) assert.equal(selected(file), true, file);
 });
 
 

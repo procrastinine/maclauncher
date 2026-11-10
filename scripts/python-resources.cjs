@@ -21,15 +21,22 @@ function configuration() {
   policy.exclude.forEach(relative);
   return policy;
 }
+// Documentation that the interpreter never reads: README files and reStructuredText.
+// Licence and notice files are not documentation and stay in the app.
+const DOCUMENTATION = ['**/README*', '**/*.rst'];
+function documentation(file) {
+  return /(?:^|\/)README[^/]*$/.test(file) || /\.rst$/.test(file);
+}
 function excluded(file) {
-  return configuration().exclude.some(pattern => {
+  return documentation(file) || configuration().exclude.some(pattern => {
     const expression = pattern.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*');
     return new RegExp('^' + expression + '(?:/|$)').test(file);
   });
 }
 function resourceExclusions() {
   const selected = configuration();
-  return [...selected.exclude, ...Object.keys(selected.aliases)].flatMap(file => ['!python/' + file, '!python/' + file + '/**']);
+  return [...[...selected.exclude, ...Object.keys(selected.aliases)].flatMap(file => ['!python/' + file, '!python/' + file + '/**']),
+    ...DOCUMENTATION.map(pattern => '!python/' + pattern)];
 }
 function directory(root) {
   if (!fs.lstatSync(root).isDirectory() || fs.lstatSync(root).isSymbolicLink()) throw new Error('Embedded Python needs a real resource directory.');
