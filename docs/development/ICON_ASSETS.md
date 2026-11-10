@@ -36,6 +36,8 @@ The artwork comes from these sources:
 | Flash | Ruffle application artwork, MIT or Apache 2.0 |
 | RPG Maker MV/MZ/RGSS, FNA/XNA, Unity, Java, NScripter, Tyrano, Ikemen/MUGEN, AI5, Siglus, Nitroplus, Minori, FAVORITE/FVP, BGI, CatSystem2, VNDS, web, video and generic app | A distinct category symbol for each, made for MacLauncher |
 
+The Steam logo in the External view is the `steam` glyph from [Simple Icons](https://github.com/simple-icons/simple-icons) 13.21.0, CC0, drawn in a single color; its source is noted beside the path in `SteamView.tsx`.
+
 Licenses and source attribution are stored next to the assets. The names and marks identify the underlying engine or runtime and imply no endorsement, and runtime version selection in the backend does not depend on icon artwork.
 
 MacLauncher's own SVG assets are rendered to the PNG files checked into the repository with this command:

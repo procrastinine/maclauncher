@@ -187,30 +187,32 @@ test('Credits merges shared and module metadata without mutating sources or dupl
   assert.equal(JSON.stringify([shared, modules]), before);
   assert.deepEqual(components.collectAcknowledgments([], shared).map(item => item.label), ['https://example.com/runtime/', 'Tool 10']);
 });
-test('Credits opens projects and game port resources only through their explicit Open controls', () => {
-  const opened = [];
-  const acknowledgments = [{ label: 'Runtime', url: 'https://example.com/runtime' }];
-  const element = components.CreditsView({ acknowledgments, canOpenExternal: true, onOpenLink: url => opened.push(url) });
-  assert.deepEqual(opened, []);
-  const body = element.props.children.find(child => child.props.className === 'launcherViewBody');
-  const credits = body.props.children.find(child => child.props.className === 'ackTable');
-  const row = credits.props.children[1][0];
-  const control = row.props.children[2].props.children;
-  assert.equal(control.props.disabled, false);
-  assert.equal(control.props.children, 'Open');
-  control.props.onClick();
-  assert.deepEqual(opened, ['https://example.com/runtime']);
-  const resources = body.props.children.find(child => child.props['aria-labelledby'] === 'credits-resources-title');
-  const resourceControl = resources.props.children[1].props.children.props.children[2].props.children;
-  assert.equal(resourceControl.props.disabled, false);
-  assert.equal(resourceControl.props['aria-label'], 'Open Awesome Decomp Games');
-  resourceControl.props.onClick();
+test('Credits opens projects and game port resources through their own links, without Open buttons', () => {
+  const opened = [], link = (url, canOpen = true) => {
+    const element = components.CreditsView({ acknowledgments: [{ label: 'Runtime', url: 'https://example.com/runtime' }], canOpenExternal: canOpen, onOpenLink: url => opened.push(url) });
+    const found = [], visit = node => {
+      if (!React.isValidElement(node)) return;
+      if (typeof node.type === 'function') return visit(node.type(node.props));
+      if (node.type === 'a' && node.props.href === url) found.push(node);
+      React.Children.forEach(node.props.children, visit);
+    };
+    visit(element);
+    assert.equal(found.length, 1);
+    return found[0];
+  };
+  let prevented = 0;
+  for (const url of ['https://example.com/runtime', 'https://github.com/SubmitGame/awesome-decomp-games']) link(url).props.onClick({ preventDefault() { prevented++; } });
   assert.deepEqual(opened, ['https://example.com/runtime', 'https://github.com/SubmitGame/awesome-decomp-games']);
-  const markup = renderToStaticMarkup(React.createElement(components.CreditsView, { acknowledgments, canOpenExternal: false, onOpenLink() {} }));
-  assert.match(markup, /Runtime/);
-  assert.match(markup, /https:\/\/example\.com\/runtime/);
-  assert.match(markup, /<button[^>]+disabled=""[^>]*>Open<\/button>/);
-  assert.match(markup, /<button[^>]+disabled=""[^>]+aria-label="Open Awesome Decomp Games"[^>]*>Open<\/button>/);
+  assert.equal(prevented, 2);
+  const unavailable = link('https://example.com/runtime', false);
+  assert.equal(unavailable.props['aria-disabled'], true);
+  unavailable.props.onClick({ preventDefault() {} });
+  assert.equal(opened.length, 2);
+  const markup = renderToStaticMarkup(React.createElement(components.CreditsView, { acknowledgments: [{ label: 'Runtime', url: 'https://example.com/runtime' }], canOpenExternal: true, onOpenLink() {} }));
+  assert.match(markup, /<a class="ackLink" href="https:\/\/example\.com\/runtime"[^>]*>https:\/\/example\.com\/runtime<\/a>/);
+  assert.match(markup, />Awesome Decomp Games<\/a>/);
+  assert.doesNotMatch(markup, /<button/);
+  assert.doesNotMatch(markup, />Credits<\/h1>.*launcherViewHeader|class="launcherViewHeader"/);
   assert.match(markup, /Platforms and game data requirements vary by project/);
 });
 test('row and inspector icons share artwork without initial-letter boxes', () => {

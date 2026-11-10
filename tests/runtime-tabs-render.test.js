@@ -188,7 +188,8 @@ test('current module presentations repair cached Android and shader metadata wit
 test('Runtimes is a plain native-window view while version controls remain reachable', () => {
   const markup = render([manager('included', {}, { versions: ['1.2.3'] }, [{ version: '1.2.3', source: 'bundled', readOnly: true }])]);
   assert.match(markup, /<main class="launcherView runtimesView" aria-labelledby="runtimes-title">/);
-  assert.match(markup, /<h1 class="launcherViewTitle" id="runtimes-title">Runtimes<\/h1>/);
+  // The window title names the view; the heading is read but not drawn.
+  assert.match(markup, /<h1 class="launcherViewTitle visuallyHidden" id="runtimes-title">Runtimes<\/h1>/);
   assert.match(markup, /aria-label="Reload versions"/);
   assert.match(markup, /<option value="1.2.3" selected="">/);
   assert.doesNotMatch(markup, /modalBackdrop|aria-modal|role="dialog"|aria-label="Close"|Back to Library/);

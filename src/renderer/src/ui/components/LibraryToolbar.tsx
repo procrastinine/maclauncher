@@ -1,6 +1,6 @@
 import React from "react";
 import type { LibrarySort, LibrarySortMode } from "../../../../core/library-view.mjs";
-import { XIcon } from "../icons";
+import { InspectorIcon, XIcon } from "../icons";
 import { PopoverButton } from "./Popover";
 
 export type LibraryScope = "all" | "favorites" | "running";
@@ -57,8 +57,8 @@ export function LibraryToolbar({ sort, onSortChange, scope, onScopeChange, count
           aria-label="Reverse sort direction" onClick={() => onSortChange({ ...sort, direction: sort.direction === "asc" ? "desc" : "asc" })}>
           <span aria-hidden="true">{sort.direction === "asc" ? "↑" : "↓"}</span>
         </button>}
-        {hasSelection && <button className="btn small inspectorToggle" aria-controls="game-details"
-          aria-expanded={inspectorOpen} onClick={onToggleInspector}>Details</button>}
+        {hasSelection && <button className="btn small iconOnly inspectorToggle" title="Details" aria-label="Details" aria-controls="game-details"
+          aria-expanded={inspectorOpen} onClick={onToggleInspector}><InspectorIcon /></button>}
       </div>
     </div>
   );

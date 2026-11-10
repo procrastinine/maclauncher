@@ -1,6 +1,5 @@
 .steamView { --steam-accent: light-dark(#315fca, #8cb8f3); }
 .steamView .launcherViewHeader { min-height: 51px; }
-.steamViewTitle { display: flex; align-items: center; gap: 9px; }
 .steamMark { display: inline-flex; color: var(--steam-accent); flex-shrink: 0; }
 .steamConnection { color: var(--muted); font-size: var(--font-sm); display: flex; align-items: center; gap: 7px; }
 .steamConnection[hidden] { display: none; }

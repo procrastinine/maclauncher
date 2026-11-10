@@ -170,6 +170,8 @@ body {
   flex-shrink: 0;
 }
 .launcherViewTitle { margin: 0; font-size: var(--font-lg); font-weight: 650; }
+/* Read by assistive technology, not drawn. */
+.visuallyHidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .launcherViewActions { display: flex; justify-content: flex-end; align-items: center; min-width: 0; }
 .launcherViewBody {
   flex: 1;
@@ -2010,7 +2012,7 @@ select.input:not([multiple]) {
 
 .ackRow {
   display: grid;
-  grid-template-columns: minmax(180px, 3fr) minmax(0, 2fr) auto;
+  grid-template-columns: minmax(180px, 3fr) minmax(0, 2fr);
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
@@ -2042,13 +2044,18 @@ select.input:not([multiple]) {
   margin-top: 20px;
 }
 
-.ackActionCell {
-  display: flex;
-  justify-content: flex-end;
+.ackLink {
+  color: var(--accent);
+  text-decoration: none;
 }
 
-.ackActionSpacer {
-  visibility: hidden;
+.ackLink:hover {
+  text-decoration: underline;
+}
+
+.ackLink[aria-disabled="true"] {
+  color: var(--muted);
+  pointer-events: none;
 }
 
 .saveRow {

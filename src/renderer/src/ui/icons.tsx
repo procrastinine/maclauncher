@@ -114,3 +114,12 @@ export function TrashIcon({ size = "18" }: { size?: IconSize }) {
     <path fill="currentColor" d="M9 2h6l1 2h4v2H4V4h4l1-2zm1 6h2v9h-2V8zm4 0h2v9h-2V8zM6 6h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 6z" />
   </svg>;
 }
+
+// A window with a right-hand panel: shows or hides the inspector in place.
+export function InspectorIcon({ size = "1em" }: { size?: IconSize }) {
+  return <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false">
+    <rect x="3" y="4.5" width="18" height="15" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    <path d="M14.5 5.4h5.6v13.2h-5.6z" fill="currentColor" opacity="0.35" />
+    <path d="M14.5 4.5v15" stroke="currentColor" strokeWidth="1.8" />
+  </svg>;
+}
