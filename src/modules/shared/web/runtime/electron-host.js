@@ -316,7 +316,10 @@ function createElectronGameHost({ electron, userDataDir, logger = console, regis
       const partitionId = CleanupUtils.stablePartitionId(entry.gameId, enableProtections ? "protected" : "unrestricted");
       const partition = CleanupUtils.ensurePartitionSymlink({ userDataDir, gameId: entry.gameId, partitionId, logger });
       if (!partition.ok) throw new Error("Failed to prepare per-game storage partition.");
-      const netSession = session.fromPartition(partitionId, { cache: true });
+      // Assets come from the local server, so an HTTP disk cache would only hold a second copy
+      // of the game's files.
+      require("../../../../core/backcompat/web-http-cache").removeFormerHttpCache(partition.targetDir, logger);
+      const netSession = session.fromPartition(partitionId, { cache: false });
       if (!networkAllowed) cleanupRestriction = await applyRestrictions(netSession, origin);
       const config = windowConfig(rootDir);
       if (hooks.applyDockIdentity) await hooks.applyDockIdentity(entry);

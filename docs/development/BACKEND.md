@@ -204,7 +204,7 @@ Electron waits for the main frame to stop loading after `loadURL` resolves, and 
 
 A packaged app serves as both the launcher and the web-game host: `src/main/bootstrap.js` selects either the launcher entry or the `--maclauncher-runtime-host` entry. `src/runtime/electron-game.js` initializes the game host without importing `src/main/main.js`. `electron-host.js` receives the Electron APIs as arguments instead of importing them when the module loads, so registry discovery still works in plain Node.
 
-The host keeps per-game partitions, the existing preloads and cheats, window configuration, keyboard, menu and IPC support, offline restrictions and opt-in fallback prompts. MV and MZ opt into save-directory injection through their manifests. The host's local server streams assets, handles byte ranges and HEAD requests correctly and checks every path against the real game root. A module can declare `getContentReadRoots(entry, context)` for original, immutable assets that a private view links to; undeclared paths keep the policy of serving only from the contained root.
+The host keeps per-game partitions without an HTTP disk cache, the existing preloads and cheats, window configuration, keyboard, menu and IPC support, offline restrictions and opt-in fallback prompts. MV and MZ opt into save-directory injection through their manifests. The host's local server streams assets, handles byte ranges and HEAD requests correctly and checks every path against the real game root. A module can declare `getContentReadRoots(entry, context)` for original, immutable assets that a private view links to; undeclared paths keep the policy of serving only from the contained root.
 
 ## Graphics effects
 

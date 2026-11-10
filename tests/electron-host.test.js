@@ -250,6 +250,9 @@ test("core context preserves hosted configuration, metadata save override, cheat
   entry.saveDirOverride = path.join(root, "Custom Saves");
   entry.defaultSaveDir = path.join(root, "Default Saves");
   entry.cheats = { enabled: true };
+  const httpCache = path.join(require("../src/modules/shared/game-data").resolveGamePartitionDir(userDataDir, entry.gameId), "Cache");
+  fs.mkdirSync(path.join(httpCache, "Cache_Data"), { recursive: true });
+  fs.writeFileSync(path.join(httpCache, "Cache_Data", "data_1"), "cached asset copy");
   const cheatsFilePath = path.join(userDataDir, "cheats.json");
   const { win, saveDir, origin } = await host.createGameWindow(entry, { runtimeId: "electron", context: {
     settings: {}, moduleSettings: {}, runtimeSettings: { enableProtections: false },
@@ -267,6 +270,8 @@ test("core context preserves hosted configuration, metadata save override, cheat
   assert.equal(win.config.webPreferences.preload, path.resolve(__dirname, "../src/modules/shared/web/preload/game.js"));
   assert.equal(win.config.webPreferences.session.partitionId, "persist:maclauncher-game-unrestricted-game-1");
   assert.equal(win.config.webPreferences.session.listener, null);
+  assert.deepEqual(win.config.webPreferences.session.options, { cache: false });
+  assert.equal(fs.existsSync(httpCache), false);
   assert.equal(saveDir, entry.saveDirOverride);
   assert.equal(preloadValue(win, "save-dir"), entry.saveDirOverride);
   assert.equal(preloadValue(win, "content-root"), root);
