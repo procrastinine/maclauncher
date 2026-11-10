@@ -430,4 +430,11 @@ test("Godot major Auto, status and install reuse that major's default with the s
   assert.equal(unknownPlan, null);
   const unknownStatus = GodotModule.actions.runtimeStatus(unknown, {}, context);
   assert.equal(unknownStatus.installed, true); assert.equal(unknownStatus.resolvedVersion, "4.4-stable");
+  // The inspector's Automatic entry names the same version Play uses: the ready
+  // install that meets the requirement, otherwise the version Play installs.
+  assert.equal(GodotModule.automaticRuntimeVersion(entry, context), "4.4-stable");
+  assert.equal(GodotModule.automaticRuntimeVersion(unknown, context), "4.4-stable");
+  const missing = { moduleData: { detectedMajor: 3, detectedVersion: "3.5.2" }, runtimeData: { godot: { variant: "standard" } } };
+  assert.equal(GodotModule.automaticRuntimeVersion(missing, context), "3.5.2");
+  assert.equal(GodotModule.automaticRuntimeVersion(entry, { ...context, runtimeId: "native" }), null);
 });

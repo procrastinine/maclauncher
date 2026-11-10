@@ -1174,6 +1174,19 @@ module.exports = {
   mergeEntry,
   cleanupGameData,
   ensureRuntime,
+  // The version Play uses when the game has no version choice: the installed
+  // copy that meets the game's requirement, otherwise the version Play
+  // installs for it, from the same selection as `ensureRuntime`.
+  automaticRuntimeVersion: (entry, context) => {
+    if ((context.runtimeId || entry.runtimeId || manifest.runtime.default) !== "godot") return null;
+    const required = resolveRequiredRuntime(entry, { settings: context.settings, userDataDir: context.userDataDir });
+    const variant = resolveRuntimeVariant(context.settings, entry.runtimeData?.godot, entry, context.userDataDir);
+    const install = resolveGodotInstall(context.userDataDir, required.version, variant, required.major);
+    if (install?.version) return install.version;
+    if (!required.version && !Number.isFinite(required.major)) return null;
+    return resolveAvailableVersion(context.settings, context.userDataDir, required.version, required.major,
+      { allowMajorFallback: !required.version, variant }) || required.version || null;
+  },
   // The exact engine version in the game's data, spelled as the catalog lists it,
   // the variant Play uses when the game has no variant override, and the .NET
   // variant that a game with C# content uses whatever variant is chosen.

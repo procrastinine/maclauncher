@@ -29,6 +29,8 @@ module.exports = {
     const locations = Preparation.saveLocations(entry, context); entry.defaultSaveDir = locations.primaryDirectory; entry.saveLocations = locations.directories;
   },
   ensureRuntime: (entry, context) => Love.ensureRuntime(hostEntry(entry), { ...context, runtimeId: "love" }),
+  // Play runs the interpreter on LÖVE, so the Automatic version is LÖVE's for the host entry.
+  automaticRuntimeVersion: (entry, context) => Love.automaticRuntimeVersion(hostEntry(entry), { ...context, runtimeId: "love" }),
   getRuntimeRequirements: (entry, context) => {
     const interpreter = Interpreter.resolveSelection(entry, context.settings, context.userDataDir);
     return interpreter.ready ? [] : [{ managerId: Interpreter.id, version: interpreter.version, ...(interpreter.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: true, installOptions: {} }];
