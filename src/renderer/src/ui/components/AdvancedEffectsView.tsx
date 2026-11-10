@@ -1,4 +1,5 @@
 import React from "react";
+import { XIcon } from "../icons";
 import type {EffectCatalogRow, VideoEffectNode} from "../types";
 import type {EffectsEditor} from "../useEffectsEditor";
 import {implementationsFor, orderImplementations, type GraphicsType} from "../../../../modules/shared/effects/contracts.mjs";
@@ -49,7 +50,7 @@ export function AdvancedEffectsView({editor}: {editor: EffectsEditor}) {
   const close = () => {editor.setAdding(false);editor.setQuery("");editor.addButton.current?.focus();};
   return <><ol className="effectsList" aria-label="Video effects">
     {plan.video.map((node, index) => isolatedItem(node.id, {label: "This effect", as: "li", reset: node,
-      action: <button className="btn small" onClick={() => void editor.remove(node.id)}>Remove</button>}, () => advancedRow(editor, node, index)))}
+      action: <button className="btn small iconOnly" title="Remove effect" aria-label="Remove effect" onClick={() => void editor.remove(node.id)}><XIcon /></button>}, () => advancedRow(editor, node, index)))}
   </ol>
   {plan.video.length === 0 && <p className="detailMeta">No effects.</p>}
   <button ref={editor.addButton} className="btn small" aria-expanded={adding} aria-controls="add-video-effect" disabled={!editor.info || plan.video.length >= MAX_NODES}
@@ -135,7 +136,7 @@ function advancedRow(editor: EffectsEditor, node: VideoEffectNode, index: number
       <div className="effectNodeActions" onClick={event => event.stopPropagation()}>
         <button className="btn small" aria-label={`Move ${name} up`} title="Move up" disabled={index === 0} onClick={() => moveBy(-1)}>↑</button>
         <button className="btn small" aria-label={`Move ${name} down`} title="Move down" disabled={index === plan.video.length - 1} onClick={() => moveBy(1)}>↓</button>
-        <button className="btn small" aria-label={`Remove ${name}`} title="Remove effect" onClick={() => void editor.remove(node.id)}>×</button>
+        <button className="btn small iconOnly" aria-label={`Remove ${name}`} title="Remove effect" onClick={() => void editor.remove(node.id)}><XIcon /></button>
       </div>
     </summary>
     <div className="effectNodeSettings">

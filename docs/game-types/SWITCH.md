@@ -20,7 +20,7 @@ Encrypted input needs a `prod.keys` file, whose path is held by the **prod.keys*
 
 - **Choose file…** opens the macOS file picker. Dropping a single local file on the control also registers it.
 - The control shows **Registered**, **Missing** or **Invalid**, with a short reason and the file name.
-- **Replace…** and **Remove** change only the registration.
+- **Replace…** and the X button, **Remove**, change only the registration.
 
 This setting works at two levels: the module setting supplies the default, and each game can override it or reset to that default. For games that need keys, the inspector also shows **Choose prod.keys…**.
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { XIcon } from "../icons";
 import type { LauncherApi, LauncherSettings } from "../types";
 import { fromKeyboardEvent, validate, ACTION_HELP } from "../../../../modules/shared/graphics-shortcuts.mjs";
 import { HelpTip } from "./HelpTip";
@@ -56,7 +57,7 @@ export function GraphicsShortcutSettings({api, settings, onSetLauncherSettings}:
           onClick={() => {setProblem(null);setRecording(recording === item.action ? null : item.action);}}>
           {recording === item.action ? "Press Shortcut…" : item.accelerator ? display(item.accelerator) : "Record Shortcut"}
         </button>
-        {item.accelerator && recording !== item.action && <button type="button" className="btn small" onClick={() => clear(item.action)}>Clear</button>}
+        {item.accelerator && recording !== item.action && <button type="button" className="btn small iconOnly" title="Clear" aria-label={`Clear ${item.label} shortcut`} onClick={() => clear(item.action)}><XIcon /></button>}
         {problem?.action === item.action && <span className="detailMeta" role="alert">{problem.reason}</span>}
         {!problem && item.reason && <span className="detailMeta" role="status">{item.reason}</span>}
       </div>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DownloadIcon, RefreshIcon } from "../icons";
+import { DownloadIcon, FolderIcon, RefreshIcon } from "../icons";
 import { LibrarySearch } from "./LibraryToolbar";
 import { HelpTip } from "./HelpTip";
 import { formatUserError } from "../ui-helpers";
@@ -562,7 +562,7 @@ function ExternalVersionOptions({ store, game, versions: initialVersions, api, d
     </details>}
     <section className="steamVersionSection externalDestination"><h3 className="steamVersionSectionTitle externalControlHelp">Download location <HelpTip label="About downloaded copies"><p>A separate folder is created for this edition. Downloaded copies keep their selected version independently of store installations.</p></HelpTip></h3><div className="steamDestination"><div className="steamDestinationPath" title={destination || versions.defaultDirectory || downloadRoot}>{destination || versions.defaultDirectory || downloadRoot || `MacLauncher Application Support · ${providerName} downloads`}</div>
       <div className="steamDestinationActions"><button className="btn small" onClick={() => { void api.steamChooseDirectory().then(folder => { if (folder) setDestination(folder); }).catch(onError); }}>Choose folder…</button>
-        <button className="btn small" onClick={() => { void api.externalOpenDownloads(downloadStore).catch(onError); }}>Open default in Finder</button>{destination && <button className="btn small" onClick={() => setDestination(undefined)}>Use managed location</button>}</div>
+        <button className="btn small iconOnly" title="Open default in Finder" aria-label="Open default in Finder" onClick={() => { void api.externalOpenDownloads(downloadStore).catch(onError); }}><FolderIcon /></button>{destination && <button className="btn small" onClick={() => setDestination(undefined)}>Use managed location</button>}</div>
       </div></section>
     <button className="btn small iconOnly" disabled={profileBusy} aria-label={`Reload ${providerName} versions`} title={`Reload ${providerName} versions`} onClick={() => { if (store === "google-play") void loadProfile(activeArchitecture, language, androidSdk, true); else onRefresh(); }}><RefreshIcon /></button>
   </div><div className="steamDownloadActions"><label className="steamInlineCheck"><input type="checkbox" checked={autoImport} onChange={event => setAutoImport(event.target.checked)} />Import into MacLauncher when the download finishes</label>

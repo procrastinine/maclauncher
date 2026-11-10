@@ -89,7 +89,7 @@ test('shared file control routes picker/drop through module validation and remov
   tree = await harness.settle(); tree = await harness.settle();
   assert.deepEqual(changes, [file]); assert.match(renderToStaticMarkup(tree), /Registered/);
   assert.doesNotMatch(renderToStaticMarkup(tree), new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  find(tree, row => row.type === 'button' && row.props.children === 'Remove').props.onClick();
+  find(tree, row => row.type === 'button' && row.props['aria-label'] === 'Remove file').props.onClick();
   tree = await harness.settle(); tree = await harness.settle();
   assert.equal(changes[1], ''); assert.ok(fs.existsSync(file));
   global.window = { MacLauncher: { launcher: { getPathForFile: () => file } } }; t.after(() => { delete global.window; });

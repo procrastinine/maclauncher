@@ -78,9 +78,9 @@ export function ModuleTools({ game, groups, actions, results, busy, cancelling =
       {fields.map(field => <React.Fragment key={field.key}><dt>{field.label}{field.help && <HelpTip label={`About ${field.label.toLowerCase()}`}>{field.help}</HelpTip>}</dt>
         <dd className={field.format === "path" ? "moduleResultPath" : undefined}>
           {field.format === "path" && typeof field.value === "string" && field.value.startsWith("/") && onRevealPath ?
-            <button className="btn small" type="button" title="Reveal in Finder"
+            <button className="btn small iconOnly" type="button" title="Reveal in Finder"
               aria-label={`Reveal ${field.label.toLowerCase() || "output"}`}
-              onClick={() => void onRevealPath(game.gamePath, field.value)}><ActionIcon icon="folder" />Reveal</button>
+              onClick={() => void onRevealPath(game.gamePath, field.value)}><ActionIcon icon="folder" /></button>
             : <span className={field.format === "path" ? "mono" : undefined}>{field.value}</span>}
         </dd></React.Fragment>)}
     </dl>;

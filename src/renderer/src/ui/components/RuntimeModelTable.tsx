@@ -1,4 +1,5 @@
 import React from "react";
+import { TrashIcon } from "../icons";
 import {HelpTip} from "./HelpTip";
 import {availabilityLabel,formatRuntimeVersionTag,formatUserError} from "../ui-helpers";
 import {runtimeRemovalPresentation} from "./runtime-tabs-model";
@@ -34,8 +35,8 @@ export function RuntimeModelTable({actions,installed,section,busy,onInstall,onRe
               onChange={()=>onDefault(model!,scope.id)}/>{scope.label}
           </label>):<span className="dim">—</span>}</td>
           <td><div className="detailActions">{!present&&action&&<button type="button" className="btn small" disabled={busy||action.available===false} onClick={()=>onInstall(action.id)}>Install</button>}
-            {model&&model.removable!==false&&<button type="button" className="btn small" disabled={busy}
-              title={runtimeRemovalPresentation(model,section).label} onClick={()=>onRemove(model)}>Remove</button>}
+            {model&&model.removable!==false&&<button type="button" className="btn small iconOnly" disabled={busy}
+              title={runtimeRemovalPresentation(model,section).label} aria-label={runtimeRemovalPresentation(model,section).label} onClick={()=>onRemove(model)}><TrashIcon /></button>}
           </div></td>
         </tr>;
       })}{hidden>0&&<tr><td colSpan={5}><button type="button" className="implementationMore" aria-expanded="false" onClick={()=>setExpanded(true)}>More downloads ({hidden})…</button></td></tr>}

@@ -59,9 +59,9 @@ test('failures from several imports share one banner with one Dismiss, and a dam
   assert.match(html,/Added 1 of 3/);assert.match(html,/Added 1 of 1/);
   assert.equal((html.match(/>Dismiss</g)||[]).length,2,'one Dismiss for all failures');
   const [damaged,other]=html.split('<li').slice(1);
-  assert.match(damaged,/missing RomFS/);assert.match(damaged,/>Show in Finder</);assert.match(damaged,/>Remove</);
+  assert.match(damaged,/missing RomFS/);assert.match(damaged,/title="Show in Finder"/);assert.match(damaged,/title="Remove from this list"/);
   assert.doesNotMatch(damaged,/Choose game file|>Retry</);
-  assert.match(other,/Choose game file/);assert.match(other,/>Retry</);assert.match(other,/>Remove</);
+  assert.match(other,/Choose game file/);assert.match(other,/>Retry</);assert.match(other,/title="Remove from this list"/);
   // The import keeps the code it was rejected with; Remove clears one row and Show in Finder reveals the input.
   const {componentHarness}=require('./helpers/renderer-component'),revealed=[];
   const h=componentHarness(()=>component.useImportBatches({openGameDialog:async()=>[],revealInFinder:async p=>{revealed.push(p);return true;},

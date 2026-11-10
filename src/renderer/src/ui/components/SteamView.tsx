@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DownloadIcon, RefreshIcon, XIcon } from "../icons";
+import { DownloadIcon, FolderIcon, RefreshIcon, XIcon } from "../icons";
 import { LibrarySearch } from "./LibraryToolbar";
 import { ExternalStoreView, gameVersionLabel, useDownloadQueueExpansion, PlatformTagFilter, TagCheckboxFilter, LibrarySortSelect, sortExternalGames, allExternalPlatforms, VersionFilterTools, filterGameVersions } from "./ExternalStoreView";
 import type { ExternalStoreApi, ExternalLibrarySort, ExternalPlatform } from "./ExternalStoreView";
@@ -371,7 +371,7 @@ export function SteamView({ api }: { api: SteamApi }) {
         {activeAccount?.mode === "manual" && <button className="btn small" onClick={() => { void api.steamRemoveAccount(activeAccount.id).catch(showError); }}>Remove account</button>}
         {(connecting || snapshot.connection.status === "guard") && <button className="btn small" onClick={() => { void api.steamDisconnect().catch(showError); }}>Cancel</button>}
       </div>
-      {browsingDownloads && <button className="btn small" onClick={() => { void api.externalOpenDownloads().catch(showError); }}>Open downloads in Finder</button>}
+      {browsingDownloads && <button className="btn small iconOnly" title="Open downloads in Finder" aria-label="Open downloads in Finder" onClick={() => { void api.externalOpenDownloads().catch(showError); }}><FolderIcon /></button>}
     </header>
     <ScrollableTabStrip label="External libraries" selectedTabId={`steam-${tab}-tab`} tabsClassName="steamTabs" className="externalTabStrip">
       {(["installed", "downloaded", "download", "epic", "gog", "itch", "google-play"] as const).map((name, index, names) => <button key={name} ref={element => { tabRefs.current[index] = element; }}
@@ -634,7 +634,7 @@ function SteamVersionOptions({ api, game, versions, downloadRoot, onError, onQue
     </section>
     <section className="steamVersionSection"><h3 className="steamVersionSectionTitle externalControlHelp">Download location <HelpTip label="About Steam download locations"><p>A separate folder is created for this version. Changing the folder applies to this download.</p></HelpTip></h3><div className="steamDestination"><div className="steamDestinationPath" title={destination || downloadRoot}>
       {destination || downloadRoot || "MacLauncher Application Support · Steam downloads"}</div><div className="steamDestinationActions"><button className="btn small" onClick={() => { void api.steamChooseDirectory().then(folder => { if (folder) setDestination(folder); }).catch(onError); }}>Choose folder…</button>
-      <button className="btn small" onClick={() => { void api.externalOpenDownloads("steam").catch(onError); }}>Open default in Finder</button>
+      <button className="btn small iconOnly" title="Open default in Finder" aria-label="Open default in Finder" onClick={() => { void api.externalOpenDownloads("steam").catch(onError); }}><FolderIcon /></button>
       {destination && <button className="btn small" onClick={() => setDestination(undefined)}>Use managed location</button>}</div></div></section>
     <button className="btn small iconOnly" aria-label="Reload Steam versions" title="Reload Steam versions" onClick={onRefresh}><RefreshIcon /></button>
   </div><div className="steamDownloadActions"><label className="steamInlineCheck"><input type="checkbox" checked={autoImport} onChange={event => setAutoImport(event.target.checked)} />Import into MacLauncher when the download finishes</label>

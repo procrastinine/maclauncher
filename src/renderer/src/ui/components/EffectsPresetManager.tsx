@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { TrashIcon } from "../icons";
 import type { EffectsPreset, GameEffectsInfo, GameEffectsPlan, GraphicsNotice, ReShadeState } from "../types";
 import { EffectsControls } from "./EffectsControls";
 import { HelpTip } from "./HelpTip";
@@ -115,7 +116,7 @@ export function EffectsPresetManager({ api: suppliedApi, status, selectedId, nav
         {selected && <button className="btn small" disabled={!name.trim() || name.trim() === selected.name} onClick={() => void save(true)}>Save copy</button>}
         <button className="btn small" disabled={!dirty} onClick={() => choose(selected || undefined)}>Discard</button>
         <button className="btn small" onClick={() => void reload()}>{dirty ? "Discard and reload" : "Reload"}</button>
-        {selected && <button className="btn small danger" onClick={() => void remove()}>Delete…</button>}
+        {selected && <button className="btn small danger iconOnly" title="Delete…" aria-label="Delete preset…" onClick={() => void remove()}><TrashIcon /></button>}
       </div>
       {dirty && <p className="detailMeta" role="status">Unsaved changes.</p>}
       {!dirty && selected?.measuredCost && <p className="detailMeta">Last measured while its rows ran in a game: {presetCostLabel(selected)}.</p>}

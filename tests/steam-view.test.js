@@ -171,7 +171,7 @@ test("Downloaded copies stay separate from installations, keep independent selec
     assert.equal(checkbox(context.view.render(), "Select Pinned release").props.checked, false);
     checkbox(context.view.render(), "Select Pinned release").props.onClick({ shiftKey: true, stopPropagation() {} });
     assert.equal(checkbox(context.view.render(), "Select Second copy").props.checked, false);
-    button(context.view.render(), "Open downloads in Finder").props.onClick();
+    buttonByLabel(context.view.render(), "Open downloads in Finder").props.onClick();
     assert.deepEqual(context.calls.at(-1), ["open-downloads", undefined]);
     buttonByLabel(context.view.render(), "Reload downloaded copies").props.onClick(); await context.view.settle();
     assert.deepEqual(context.calls.at(-1), ["copies"]);
@@ -269,7 +269,7 @@ test("Epic and GOG downloads retain platform, edition, destination and explicit 
       const versionComponent = find(provider.render(), node => node.props.versions && node.props.game);
       options = harness(versionComponent.type, versionComponent.props);
       const download = () => find(options.render(), node => node.type === "button" && node.props.className === "btn primary");
-      button(options.render(), "Open default in Finder").props.onClick();
+      buttonByLabel(options.render(), "Open default in Finder").props.onClick();
       assert.deepEqual(context.calls.at(-1), ["open-downloads", store]);
       download().props.onClick(); await options.settle();
       assert.equal(context.calls.at(-1)[2].autoImport, true);
@@ -452,7 +452,7 @@ test("download selection defaults to auto import and preserves custom destinatio
     const child = find(context.view.render(), node => node.props.versions && node.props.game);
     options = harness(child.type, child.props);
     const download = () => find(options.render(), node => node.type === "button" && node.props.className === "btn primary");
-    button(options.render(), "Open default in Finder").props.onClick();
+    buttonByLabel(options.render(), "Open default in Finder").props.onClick();
     assert.deepEqual(context.calls.at(-1), ["open-downloads", "steam"]);
     download().props.onClick(); await options.settle();
     assert.equal(context.calls.at(-1)[1].autoImport, true);
@@ -1053,7 +1053,7 @@ test("Android F-Droid versions preserve exact APK builds and use source-specific
     assert.equal(button(options.render(), "Add to library"), undefined);
     assert.equal(find(options.render(), node => node.props.className === "externalControlHelp externalAndroidExtras"), undefined);
     assert.ok(find(options.render(), node => node.props.className === "steamDestinationPath" && node.props.children === "/Profile/external/downloads/fdroid"));
-    button(options.render(), "Open default in Finder").props.onClick(); assert.deepEqual(context.calls.at(-1), ["open-downloads", "fdroid"]);
+    buttonByLabel(options.render(), "Open default in Finder").props.onClick(); assert.deepEqual(context.calls.at(-1), ["open-downloads", "fdroid"]);
     find(options.render(), node => node.type === "button" && node.props.className === "btn primary").props.onClick(); await options.settle();
     const selection = context.calls.at(-1)[2]; assert.equal(selection.appId, app.appId); assert.equal(selection.branch, "apk-sha256"); assert.equal(selection.architecture, "armv7"); assert.equal(selection.androidSdk, 34); assert.equal(selection.includeExtras, undefined); assert.equal(selection.autoImport, true);
   } finally { options?.close(); provider?.close(); context.close(); }

@@ -1,4 +1,4 @@
-import { RefreshIcon } from "../icons";
+import { RefreshIcon, XIcon } from "../icons";
 import React, { useEffect, useMemo, useState } from "react";
 import type { SaveActionRunner, StructuredSaveInspection } from "../types";
 import { draftChanges, structuredFields, valueDraft } from "./save-tools-model";
@@ -94,7 +94,7 @@ export function StructuredSaveEditor({ fileName, actions, runAction, busy, onClo
     <div className="editorHeader"><div className="editorTitle">Values: {fileName}</div><div className="editorActions">
       <button className="btn iconOnly" title="Reload save" aria-label="Reload save" disabled={disabled} onClick={reload}><RefreshIcon /></button>
       <button className="btn primary" disabled={disabled || !inspection || !Object.keys(drafts).length} onClick={save}>Save changes</button>
-      <button className="btn" disabled={disabled} onClick={onClose}>Close editor</button>
+      <button className="btn iconOnly" title="Close editor" aria-label="Close editor" disabled={disabled} onClick={onClose}><XIcon /></button>
     </div></div>
     {error && <div className="error" role="alert">{formatUserError(error)}</div>}
     {status && <div className="dim" role="status">{status}</div>}

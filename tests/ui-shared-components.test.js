@@ -361,7 +361,7 @@ test('deleting a preset asks for confirmation first', async t => {
     const harness = componentHarness(ui.EffectsPresetManager, { api, status: { available: true, presets: [] }, selectedId: preset.id });
     try {
       harness.render(); await harness.settle();
-      const remove = () => elements(harness.render()).find(node => node.type === 'button' && textOf(node) === 'Delete…');
+      const remove = () => elements(harness.render()).find(node => node.type === 'button' && node.props.title === 'Delete…');
       assert.match(remove().props.className, /danger/);
       remove().props.onClick(); await harness.settle();
       assert.deepEqual(deletes, []);

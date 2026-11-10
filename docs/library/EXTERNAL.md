@@ -21,7 +21,7 @@ Search, sorting and filters for store, platform and import status narrow the tab
 
 **Downloaded** lists the separately stored versions that MacLauncher recorded, including those in custom locations. This view works offline, remains available after the app restarts, and has its own selection and import controls. These copies are separate from store-managed installations and are not updated automatically. Each download records exactly which content it holds, and downloading another edition creates a new folder.
 
-**Open downloads in Finder** opens the default collection, and each store's destination controls offer **Open default in Finder** for that store's folder.
+A folder button, **Open downloads in Finder**, opens the default collection, and each store's destination controls have a folder button, **Open default in Finder**, for that store's folder.
 
 ## Download tabs
 

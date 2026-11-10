@@ -1,4 +1,5 @@
 import React from "react";
+import { XIcon } from "../icons";
 import type {EffectCatalogRow, VideoEffectNode} from "../types";
 import type {EffectsEditor} from "../useEffectsEditor";
 import {graphicsType, implementationsFor, type GraphicsType} from "../../../../modules/shared/effects/contracts.mjs";
@@ -83,7 +84,7 @@ function simpleRow(editor: EffectsEditor, key: string, label: string, nodes: Vid
       : node?.enabled && <button type="button" className="btn small" aria-expanded={simpleOptions === key}
         onClick={() => setSimpleOptions(simpleOptions === key ? null : key)}>Options…</button>}
     {category === "image" && node && <button type="button" className="btn small iconOnly" aria-label={`Remove ${selected?.label || label}`} title="Remove filter"
-      onClick={() => void editor.remove(node.id)}>×</button>}</div>
+      onClick={() => void editor.remove(node.id)}><XIcon /></button>}</div>
     {attention && <span className="graphicsState simpleEffectAttention"><StatusBadge tone="warning">Needs attention</StatusBadge>
       <HelpTip label={`Why ${label.toLowerCase()} needs attention`}>{attention}</HelpTip></span>}
     {!custom && node && <InactiveEffectNotice editor={editor} node={node} choice={selected} className="simpleEffectInactive" />}

@@ -148,8 +148,8 @@ function SessionShortcut({ moduleInfo, assigned }: { moduleInfo: ModuleManifest 
       <div className="detailLabel">Keyboard shortcut {help[shortcut] && <HelpTip label={"About " + label}>{help[shortcut]}</HelpTip>}</div>
       <div className="detailValue"><span>{label}</span>{accelerator
         ? <>: <kbd>{accelerator.split("+").map(part => glyphs[part] ?? part).join("")}</kbd></>
-        : <> <button className="btn small" aria-label={"Assign " + label + " in Settings"}
-          onClick={() => void window.MacLauncher?.launcher.openUtilityWindow({ view: "settings", sectionId: "launcher" }).catch(() => {})}>Assign in Settings…</button></>}</div>
+        : <> <button className="btn small iconOnly" title="Assign in Settings…" aria-label={"Assign " + label + " in Settings"}
+          onClick={() => void window.MacLauncher?.launcher.openUtilityWindow({ view: "settings", sectionId: "launcher" }).catch(() => {})}><SettingsIcon /></button></>}</div>
     </div>;
   })}</>;
 }
@@ -575,7 +575,7 @@ export const GameDetails = memo(function GameDetails({
             onSave={value => actions.onSetLaunchArguments(g.gamePath, value)} />}
           <div className="detailRow detailControlRow">
             <div className="detailLabel">Runtime <RuntimeDescription moduleInfo={moduleInfo} runtimeId={g.runtimeId} /></div>
-            <div className="detailActions">
+            <div className="detailActions menuWithIcon">
               <Select aria-label="Runtime"
                 className="input"
                 value={g.runtimeId}

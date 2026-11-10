@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { runImportBatch, resolveImportFailure, type ImportBatch } from "../import-batch.mjs";
 import type { ImportProgress as ImportJob } from "../types";
 import { ImportProgress } from "./ImportProgress";
+import { FolderIcon, XIcon } from "../icons";
 import { formatUserError } from "../ui-helpers";
 import { useNoticeTimeout } from "../use-notice-timeout";
 import "./import-batch.css";
@@ -92,7 +93,8 @@ function ImportFailures({ batches, resolve, dismiss, remove, reveal }: FailurePr
         </div>
         <div className="importBatchActions">
           {failure.code === "DETECTION_INVALID_INPUT" ? <>
-            <button className="btn small" onClick={() => reveal(failure.inputPath)}>Show in Finder</button>
+            <button className="btn small iconOnly" title="Show in Finder" aria-label={`Show ${itemName(failure.inputPath)} in Finder`}
+              onClick={() => reveal(failure.inputPath)}><FolderIcon /></button>
           </> : <>
             {found.length > 1 && separate && <button className="btn small" disabled={busy}
               onClick={() => void resolve(batch, index, found.map(game => game.inputPath))}>Add all</button>}
@@ -100,8 +102,8 @@ function ImportFailures({ batches, resolve, dismiss, remove, reveal }: FailurePr
               {batch.resolving === index ? "Adding…" : "Choose game file…"}</button>
             {!found.length && <button className="btn small" disabled={busy} onClick={() => void resolve(batch, index, false)}>Retry</button>}
           </>}
-          <button className="btn small" disabled={busy} aria-label={`Remove ${itemName(failure.inputPath)} from this list`}
-            onClick={() => remove(batch, index)}>Remove</button>
+          <button className="btn small iconOnly" disabled={busy} title="Remove from this list" aria-label={`Remove ${itemName(failure.inputPath)} from this list`}
+            onClick={() => remove(batch, index)}><XIcon /></button>
         </div>
       </li>;
       }))}

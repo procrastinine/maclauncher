@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { XIcon } from "../icons";
 import type { RuntimeSettingField } from "../types";
 import { HelpTip } from "./HelpTip";
 import { ErrorText } from "./ErrorText";
@@ -67,7 +68,7 @@ export function RuntimeFileSetting({ field, value, disabled, request, onChange }
         <button type="button" className="btn" disabled={disabled || busy || !request} onClick={() => void select()}>
           {busy ? "Choosing…" : value ? "Replace…" : "Choose file…"}
         </button>
-        {value && <button type="button" className="btn" disabled={disabled || busy} onClick={() => void onChange("")}>Remove</button>}
+        {value && <button type="button" className="btn iconOnly" title="Remove" aria-label="Remove file" disabled={disabled || busy} onClick={() => void onChange("")}><XIcon /></button>}
       </div>
       <div className="dim" role="status">{dragging ? "Drop to register this file." : status?.reason}</div>
       <div className="dim">Drop {field.label} here or choose a file.</div>

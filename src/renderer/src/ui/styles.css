@@ -1082,6 +1082,15 @@ body {
   min-width: min(100%, 24ch);
 }
 
+/* An icon button for a menu stays on the menu's line; the menu narrows instead. */
+.detailControlRow .detailActions.menuWithIcon {
+  flex-wrap: nowrap;
+}
+
+.detailControlRow .detailActions.menuWithIcon .input {
+  min-width: 0;
+}
+
 /* A control placed directly after its label ends at the same right edge as wrapped controls. */
 .detailControlRow > .input:last-child {
   grid-column: 2 / -1;
