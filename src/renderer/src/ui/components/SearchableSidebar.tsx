@@ -10,10 +10,12 @@ type SearchableSidebarProps = {
   selectedId: string | null;
   panelId: string;
   selectionKey?: string;
+  // A control shown at the end of the search row, at the field's height.
+  accessory?: React.ReactNode;
   onSelect: (id: string) => void;
 };
 
-export function SearchableSidebar({ label, searchLabel, items, selectedId, panelId, selectionKey = selectedId || "", onSelect }: SearchableSidebarProps) {
+export function SearchableSidebar({ label, searchLabel, items, selectedId, panelId, selectionKey = selectedId || "", accessory, onSelect }: SearchableSidebarProps) {
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
@@ -59,7 +61,7 @@ export function SearchableSidebar({ label, searchLabel, items, selectedId, panel
   </li>;
 
   return <aside className="launcherSidebar" aria-label={label}>
-    <div className="launcherSidebarSearch" role="search" aria-label={searchLabel}>
+    <div className={`launcherSidebarSearch${accessory ? " withAccessory" : ""}`} role="search" aria-label={searchLabel}>
       <input ref={search} className="input" type="search" aria-label={searchLabel} placeholder={searchLabel}
         value={query} autoComplete="off" spellCheck={false} onChange={event => setQuery(event.currentTarget.value)}
         onKeyDown={event => {
@@ -70,6 +72,7 @@ export function SearchableSidebar({ label, searchLabel, items, selectedId, panel
         }} />
       {query && <button type="button" className="launcherSidebarClear" aria-label={`Clear ${searchLabel.toLowerCase()}`}
         onClick={() => { setQuery(""); search.current?.focus(); }}><XIcon size="0.85em" /></button>}
+      {accessory}
     </div>
     <nav className="launcherSidebarChoices" aria-label={label}>
       {headed ? sections.map((section, sectionIndex) => {

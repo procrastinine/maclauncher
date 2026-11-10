@@ -308,21 +308,7 @@ export function RuntimesView({
 
   return (
     <main className="launcherView runtimesView" aria-labelledby="runtimes-title">
-        <div className="runtimeViewHeader">
-          <LauncherViewHeader title="Runtimes" titleId="runtimes-title">
-              <PopoverButton className="runtimeDownloadMenu" buttonClassName="btn iconOnly runtimeDownloadToggle"
-                popoverClassName="menuPopover runtimeDownloadDropdown" ariaLabel="Downloads" title="Downloads"
-                label={<><DownloadIcon />{downloadTasks.length > 0 && <span className="runtimeDownloadBadge">{downloadTasks.length}</span>}</>}>
-                {downloadTasks.length === 0 ? (
-                  <div className="runtimeDownloadEmpty">
-                    No active downloads.
-                  </div>
-                ) : (
-                  downloadTasks.map(task => <DownloadProgress key={task.id} task={task} onCancel={onCancelDownload} />)
-                )}
-              </PopoverButton>
-          </LauncherViewHeader>
-        </div>
+        <LauncherViewHeader title="Runtimes" titleId="runtimes-title" />
         <div className="launcherSidebarLayout">
           <SearchableSidebar label="Runtime groups" searchLabel="Search runtimes" selectedId={activeRuntimeGroup?.id || null}
             selectionKey={`${navigationKey ?? 0}:${activeRuntimeChoice?.id || ""}`}
@@ -330,6 +316,17 @@ export function RuntimesView({
             items={runtimeGroups.map(group => ({ id: group.id, label: group.label, heading: group.heading,
               keywords: group.managers.flatMap(manager => [manager.id, manager.label,
                 ...runtimeGroupSections(group, resolveRuntimeSections).map(choice => choice.label)]) }))}
+            accessory={<PopoverButton className="runtimeDownloadMenu" buttonClassName="btn iconOnly runtimeDownloadToggle"
+              popoverClassName="menuPopover runtimeDownloadDropdown" ariaLabel="Downloads" title="Downloads"
+              label={<><DownloadIcon />{downloadTasks.length > 0 && <span className="runtimeDownloadBadge">{downloadTasks.length}</span>}</>}>
+              {downloadTasks.length === 0 ? (
+                <div className="runtimeDownloadEmpty">
+                  No active downloads.
+                </div>
+              ) : (
+                downloadTasks.map(task => <DownloadProgress key={task.id} task={task} onCancel={onCancelDownload} />)
+              )}
+            </PopoverButton>}
             onSelect={id => { const group = runtimeGroups.find(group => group.id === id); if (group) selectGroup(group); }} />
           <div className="launcherSidebarContent">
           {tabStrip && <ScrollableTabStrip label={`${activeRuntimeGroup?.label || "Runtime"} sections`}

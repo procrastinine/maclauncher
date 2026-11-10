@@ -49,9 +49,9 @@ export function GraphicsShortcutSettings({api, settings, onSetLauncherSettings}:
   const folder = settings.graphicsScreenshotFolder;
   return <>
     {actions.map(item => <div className="settingsRow" key={item.action}>
-      <div className="settingsLabel">{item.label}{item.action === "bypass" && <HelpTip label="About the bypass shortcut">Turns the frontmost game's graphics off or back on, like the Graphics checkbox.</HelpTip>}
+      <div className="settingsLabel">{item.label.replace(/\S+$/, "")}<span className="labelWithHelp">{item.label.match(/\S+$/)?.[0]}{item.action === "bypass" && <HelpTip label="About the bypass shortcut">Turns the frontmost game's graphics off or back on, like the Graphics checkbox.</HelpTip>}
         {(ACTION_HELP as Record<string, string>)[item.action] && <HelpTip label={"About " + item.label}>{(ACTION_HELP as Record<string, string>)[item.action]}</HelpTip>}
-        {item.action === "screenshot" && <HelpTip label="About the screenshot shortcut">Saves the frontmost game's final processed image as a PNG file. The performance overlay is not included.</HelpTip>}</div>
+        {item.action === "screenshot" && <HelpTip label="About the screenshot shortcut">Saves the frontmost game's final processed image as a PNG file. The performance overlay is not included.</HelpTip>}</span></div>
       <div className="settingsControl">
         <button type="button" className="btn small" aria-pressed={recording === item.action}
           onClick={() => {setProblem(null);setRecording(recording === item.action ? null : item.action);}}>

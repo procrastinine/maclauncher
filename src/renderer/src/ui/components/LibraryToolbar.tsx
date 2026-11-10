@@ -53,11 +53,11 @@ export function LibraryToolbar({ sort, onSortChange, scope, onScopeChange, count
             <option value="added">Date added</option><option value="alphabetical">Alphabetical</option><option value="type">Game type</option>
           </select>
         </label>
-        {sort.mode !== "custom" && <button className="btn small iconOnly" title={sort.direction === "asc" ? "Ascending; click to reverse" : "Descending; click to reverse"}
+        {sort.mode !== "custom" && <button className="btn iconOnly" title={sort.direction === "asc" ? "Ascending; click to reverse" : "Descending; click to reverse"}
           aria-label="Reverse sort direction" onClick={() => onSortChange({ ...sort, direction: sort.direction === "asc" ? "desc" : "asc" })}>
           <span aria-hidden="true">{sort.direction === "asc" ? "↑" : "↓"}</span>
         </button>}
-        {hasSelection && <button className="btn small iconOnly inspectorToggle" title="Details" aria-label="Details" aria-controls="game-details"
+        {hasSelection && <button className="btn iconOnly inspectorToggle" title="Details" aria-label="Details" aria-controls="game-details"
           aria-expanded={inspectorOpen} onClick={onToggleInspector}><InspectorIcon /></button>}
       </div>
     </div>

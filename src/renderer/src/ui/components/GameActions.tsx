@@ -138,7 +138,7 @@ export const GameActions = memo(function GameActions({ g, isRunning, actions, in
       {inspector && canLaunch && canUseCheats && !g.ephemeral && <button className="btn small" title={filesUnavailable || "Cheats"} onClick={() => openCheats(g)} disabled={removing || Boolean(filesUnavailable)}>Cheats</button>}
       {/* A session entry is removed when its session ends, never forgotten. */}
       {!g.ephemeral && <button
-        className="btn iconOnly danger forgetAction"
+        className="btn iconOnly danger"
         title={removing ? "Removing" : isRunning || preparation ? "Stop or finish launching before removal" : "Forget game"}
         aria-label={`${removing ? "Removing" : "Forget"} ${g.name}`}
         aria-busy={removing || undefined}
