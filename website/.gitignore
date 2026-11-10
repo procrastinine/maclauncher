@@ -3,3 +3,4 @@ dist/
 .astro/
 public/demo/
 public/videos/*.mp4
+demo/data/state.json

@@ -5,9 +5,11 @@
 // empty profile lacks: a game on a disconnected drive, installed runtime and
 // translator versions, one of them damaged, a downloaded file, a Switch 2
 // dump and a running window graphics session. The file also records what
-// each runtime, package and graphics method needs. Run `pnpm run demo:data` in
-// a prepared checkout (one whose included helpers are built) after module,
-// runtime or effect changes; the website build reports stale data.
+// each runtime, package and graphics method needs. state.json is not checked
+// in: `pnpm dev` and `pnpm build` generate it when it is missing (ensure.cjs),
+// so the website workflow, which builds a fresh checkout, publishes the data
+// of the commit being built. Run `pnpm run demo:data` after module, runtime or
+// effect changes; the website build reports stale data.
 "use strict";
 const fs = require("node:fs");
 const os = require("node:os");
