@@ -386,10 +386,9 @@ export const GameDetails = memo(function GameDetails({
     runtimeVersionOptions.find(option => option.version === runtimeVersionOverride);
   // Automatic names the version Play uses without a version choice, as the
   // launcher selects it: a compatible installed version, otherwise the one Play
-  // installs. Before that is known it names the recommended or default version.
-  const runtimeAutomaticVersion = runtimePlayVersion ||
-    runtimeRecommendation?.version || runtimeDefaultVersion || runtimeStatusDefaultVersion || "";
-  const runtimeAutomaticLabel = runtimeAutomaticVersion ? `Automatic (${runtimeVersionTag(runtimeAutomaticVersion)})` : "Automatic";
+  // installs. It reads Automatic until that version arrives, and stays so when
+  // none is known; the menu's width does not depend on the label.
+  const runtimeAutomaticLabel = runtimePlayVersion ? `Automatic (${runtimeVersionTag(runtimePlayVersion)})` : "Automatic";
   const runtimeVariantOptions = (Array.isArray(runtimeSection?.variants)
     ? runtimeSection.variants
     : []) as Array<{ id?: string; label?: string } & Record<string, any>>;
@@ -402,16 +401,16 @@ export const GameDetails = memo(function GameDetails({
       runtimeDefaultVariant
     : "";
   // Damaged or incomplete installations stay in the menu marked Needs repair.
-  // When the version Play uses (the game's choice, otherwise the one the
-  // Automatic entry names) is one of them, Repair installs it again through the
-  // same install action as Reinstall in Runtimes.
+  // When the game's choice, otherwise the recommended or default version, is
+  // one of them, Repair installs it again through the same install action as
+  // Reinstall in Runtimes. It does not wait for the Automatic entry's version.
   const runtimeVariantInUse = runtimeHasMultipleVariants ? runtimeEffectiveVariantOverride || runtimeDefaultVariant : "";
   const runtimeVersionAvailability = (version: string, architecture = "") => {
     const { availability } = runtimeInspectorInstall(runtimeSection, version, runtimeVariantInUse, architecture);
     return availability === "installed" ? null : availability;
   };
   const runtimeRepair = runtimeInspectorRepair(runtimeSection,
-    runtimeVersionOverride || runtimeAutomaticVersion, runtimeVariantInUse,
+    runtimeVersionOverride || runtimeRecommendation?.version || runtimeDefaultVersion || runtimeStatusDefaultVersion, runtimeVariantInUse,
     runtimeVersionOption?.architecture || runtimePreferredArchitecture);
   const libsDependencies = (moduleState?.libs?.dependencies || []) as Array<{
     id: string;
@@ -682,7 +681,7 @@ export const GameDetails = memo(function GameDetails({
                       onSetRuntimeData(g.gamePath, g.runtimeId, patch);
                     }}
                   >
-                    <option value="" title={runtimeAutomaticVersion || undefined}>{runtimeAutomaticLabel}</option>
+                    <option value="" title={runtimePlayVersion || undefined}>{runtimeAutomaticLabel}</option>
                     {runtimeVersionOptions.map(option => (
                       <option key={option.value} value={option.value}>
                         {withAvailability(option.label, runtimeVersionAvailability(option.version, option.architecture))}

@@ -1416,22 +1416,50 @@ test('per-game version menus use only the selected runtime recommendation and pr
   const original = {...state.recents[0], nativeAppPath: null, moduleRuntimeSupport: [engine, portable],
     runtimeData: {[engine]: {version: engineVersion}, [portable]: {version: wineVersion}}};
   const before = structuredClone(original);
-  const renderGame = (runtimeId, automatic = false, automaticVersion = undefined) => renderToStaticMarkup(React.createElement(GameDetails, {
-    g: {...original, runtimeId, ...(automatic ? {runtimeData: {...original.runtimeData, [runtimeId]: {version: ''}}} : {})},
+  const managerFor = runtimeId => runtimeId === engine ? 'engine-version-scope' : portable;
+  const renderGame = (runtimeId, automatic = false, automaticVersion = undefined, runtimeData = undefined) => renderToStaticMarkup(React.createElement(GameDetails, {
+    g: {...original, runtimeId, ...(runtimeData ? {runtimeData: {...original.runtimeData, [runtimeId]: runtimeData}}
+      : automatic ? {runtimeData: {...original.runtimeData, [runtimeId]: {version: ''}}} : {})},
     state, moduleInfo, actions: {}, cheatsStatus: null, libsStatus: null,
     runtimeStatusEntry: {runtimeId, status: {runtimeRecommendation: runtimeId === engine ? {managerId: 'engine-version-scope', version: engineVersion} : null}},
-    runtimeAutomaticEntry: automaticVersion ? {runtimeId, value: {managerId: 'engine-version-scope', version: automaticVersion}} : null,
+    runtimeAutomaticEntry: automaticVersion !== undefined
+      ? {runtimeId, value: automaticVersion ? {managerId: managerFor(runtimeId), version: automaticVersion} : null} : null,
     cheatsPatchBusy: false, libsPatchBusy: false, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null
   }));
-  const automatic = renderGame(portable, true);
-  assert.match(automatic, /Automatic \(Wine 10\.0 \(rev 8\) · Template 1\.0\.24\)/);
-  assert.doesNotMatch(automatic, /\(v?4\.6\.3-stable\)/);
+  const versionMenu = markup => /<select aria-label="[^"]* version"[\s\S]*?<\/select>/.exec(markup)?.[0] || '';
+  const selected = markup => /<option([^>]*) selected="">([^<]*)<\/option>/.exec(versionMenu(markup))?.slice(1) || [];
+  // (d) Without a version choice the entry reads Automatic, never a guessed
+  // recommended or default version, until the launcher reports the version Play
+  // uses; a missing or failed lookup leaves it as Automatic.
+  for (const pending of [undefined, null]) {
+    assert.deepEqual(selected(renderGame(portable, true, pending)), ['', 'Automatic'].map((value, index) => index ? value : ' value=""'));
+    assert.doesNotMatch(versionMenu(renderGame(engine, true, pending)), /Automatic \(/);
+  }
+  assert.match(versionMenu(renderGame(portable, true, wineVersion)),
+    /<option value="" title="10\.0_8-template-1\.0\.24" selected="">Automatic \(Wine 10\.0 \(rev 8\) · Template 1\.0\.24\)<\/option>/);
   // Automatic names the version Play uses, such as a compatible installed
-  // version, rather than the recommended one; a game choice still selects its own.
-  const installed = renderGame(engine, true, '4.6.1-stable');
-  assert.match(installed, /<option value="" title="4\.6\.1-stable" selected="">Automatic \(v?4\.6\.1-stable\)<\/option>/);
-  assert.match(renderGame(engine, false, '4.6.1-stable'), new RegExp('Automatic \\(v?4\\.6\\.1-stable\\)[\\s\\S]*value="' + engineVersion + '" selected=""'));
-  assert.match(renderGame(engine), new RegExp('value="' + engineVersion + '" selected=""'));
-  assert.match(renderGame(portable), new RegExp('value="' + wineVersion + '" selected=""'));
+  // version, rather than the recommended one.
+  assert.match(versionMenu(renderGame(engine, true, '4.6.1-stable')), /<option value="" title="4\.6\.1-stable" selected="">Automatic \(v?4\.6\.1-stable\)<\/option>/);
+  // (a) A per-game version is the selection, labelled as itself, whether or not
+  // the Automatic version has arrived.
+  for (const pending of [undefined, '4.6.1-stable']) {
+    const [attributes, label] = selected(renderGame(engine, false, pending));
+    assert.match(attributes, new RegExp('value="' + engineVersion + '"'));
+    assert.match(label, /^v?4\.6\.3-stable$/);
+  }
+  assert.match(selected(renderGame(portable, false, wineVersion))[1], /^Wine 10\.0 \(rev 8\) · Template 1\.0\.24$/);
+  // (b) A chosen version that is neither installed nor listed stays selected,
+  // marked as not installed, and never falls back to Automatic.
+  const missing = selected(renderGame(engine, false, '4.6.1-stable', {version: '9.9.9-stable'}));
+  assert.match(missing[0], /value="9\.9\.9-stable"/); assert.match(missing[1], /^v?9\.9\.9-stable \(not installed\)$/);
+  // (c) Architecture and variant choices stay selected beside a version choice.
+  const scoped = state.runtimeManagers['engine-version-scope'];
+  state.runtimeManagers['engine-version-scope'] = {...scoped, variants: [{id: 'standard', label: 'Standard'}, {id: 'mono', label: '.NET'}],
+    installed: [{version: engineVersion, variant: 'mono', architecture: 'arm64', ready: true, status: 'ready'},
+      {version: engineVersion, variant: 'mono', architecture: 'x64', ready: true, status: 'ready'}]};
+  const both = renderGame(engine, false, '4.6.1-stable', {version: engineVersion, architecture: 'x64', variant: 'mono'});
+  assert.match(selected(both)[0], /value="\[&quot;4\.6\.3-stable&quot;,&quot;x64&quot;\]"/);
+  assert.match(both, /<select aria-label="Runtime variant"[\s\S]*?<option value="mono" selected="">\.NET<\/option>/);
+  state.runtimeManagers['engine-version-scope'] = scoped;
   assert.deepEqual(original, before);
 });
