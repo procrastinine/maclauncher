@@ -57,7 +57,7 @@ function readRecord(t) {
 function status(t) {
   try {
     const record = readRecord(t);
-    if (!fs.existsSync(t.libraryPath)) return { ready: false, owned: !!record, reason: "Live2D Core is not installed.", ...t.policy, symbols: undefined };
+    if (!fs.existsSync(t.libraryPath)) return { ready: false, owned: !!record, reason: "Live2D not installed", ...t.policy, symbols: undefined };
     regular(t.libraryPath);
     const native = validateCore(t.libraryPath, t.renpyVersion, t.architectures);
     if (record && native.sha256 !== record.binarySha256) throw Object.assign(new Error("Live2D library changed since installation; it will not be overwritten or removed."), { summary: "Library changed" });
