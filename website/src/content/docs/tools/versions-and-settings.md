@@ -45,7 +45,7 @@ The graphics components are managed the same way, under **Runtimes → Effects**
 
 ### Downloaded files
 
-A few downloads belong to no runtime of their own: the fonts that KiriKiri and NScripter games fall back on, the soundfont and RPG Maker run-time packages that MKXP-Z uses, the GOG and Epic download helpers, Android's system image and microG, the shared libraries that runtime packages declare, and caches that MacLauncher fills, such as Steam's version lists. **Runtimes → Tools → Downloaded files** lists the ones on your Mac, largest first, with each file's size, where it came from and which runtimes or games use it.
+A few downloads belong to no runtime of their own: the font that NScripter games fall back on, the soundfont and RPG Maker run-time packages that MKXP-Z uses, the GOG and Epic download helpers, Android's system image and microG, the shared libraries that runtime packages declare, and caches that MacLauncher fills, such as Steam's version lists. **Runtimes → Tools → Downloaded files** lists the ones on your Mac, largest first, with each file's size, where it came from and which runtimes or games use it.
 
 **Delete** removes a file after asking, and **Delete unused** clears out everything that nothing uses any more. **Add from file…** takes a file you downloaded yourself and adds it once MacLauncher has checked that it matches a known download, without going online. On the rows for the GOG and Epic helpers and for microG, a refresh button looks up the newest release, which the next download that needs it brings in; the refresh button at the top only reads the list on your Mac again. You never have to visit this tab before playing, though: each of these files downloads on its own, after you agree, when something needs it.
 

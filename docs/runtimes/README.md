@@ -257,7 +257,7 @@ Runtime status uses the same saved preferences as Play, including versions of de
 
 **Runtimes → Tools → Downloaded files**, the last subtab of the Tools entry, manages every downloaded file that has no runtime manager. Play and the inspector never open it; each file downloads by itself, after consent, when something needs it. It covers:
 
-- shared assets, such as the fallback fonts of KiriKiri and NScripter games and the MIDI soundfont and RPG Maker run-time packages that MKXP-Z uses
+- shared assets, such as the fallback font of NScripter games and the MIDI soundfont and RPG Maker run-time packages that MKXP-Z uses
 - the GOG and Epic Games Store download helpers
 - the Android system image that AIM attaches and the microG packages of the shared Google account service
 - the shared libraries that installed runtime packages declare

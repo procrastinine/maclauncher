@@ -19,7 +19,7 @@ The commands below use the GitHub CLI, `gh`.
 1. The archive and its manifest are downloaded from the same release. This example uses the Apple Silicon app; the Intel app uses `MacLauncher-Intel.app.zip` and `MacLauncher-x64.build-manifest.json`.
 
    ```sh
-   tag=v0.6.0
+   tag=v0.6.1
    gh release download "$tag" --repo procrastinine/maclauncher \
      --pattern MacLauncher.app.zip --pattern MacLauncher-arm64.build-manifest.json
    ```
