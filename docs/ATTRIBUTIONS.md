@@ -58,6 +58,12 @@ DOS playback uses the publisher's [DOSBox Staging](https://github.com/dosbox-sta
 
 Half-Life playback uses the publisher's [Xash3D FWGS](https://github.com/FWGS/xash3d-fwgs) builds, downloaded separately, under GPL-3.0-or-later. Each build includes SDL2 under zlib and the Half-Life game libraries built from [hlsdk-portable](https://github.com/FWGS/hlsdk-portable), the FWGS port of Valve's Half-Life SDK, under the Half-Life 1 SDK License. Half-Life's game data comes from the imported game.
 
+Doom-engine playback uses the publisher's [UZDoom](https://github.com/UZDoom/UZDoom) application, downloaded separately, under GPL-3.0, with its branding under CC BY-SA 4.0 and the notices that the application includes. The UZDoom game-type icon is the project's application icon, © 2025 The UZDoom Team, under CC BY-SA 4.0.
+
+Build-engine playback uses the publisher's [Raze](https://github.com/ZDoom/Raze) application, downloaded separately. Raze's own code is under GPL-2.0 and its Build engine code under Ken Silverman's Build Engine license; the application includes the notices of its components. The Raze game-type icon is the project's application icon, under GPL-2.0.
+
+LucasArts playback uses [DREAMM](https://dreamm.aarongiles.com/) by Aaron Giles, downloaded separately from its site. DREAMM is freeware: a free download whose source code is not published, copyright Aaron Giles. Its **License Details** list the libraries it includes. Game data for all three runtimes comes from the imported game.
+
 The Android host adapts [Klepton](https://github.com/shinyquagsire23/Klepton) (MIT) and [dex2jvm](https://github.com/kksimp/dex2jvm) (Apache-2.0). It signs with [Android apksig](https://android.googlesource.com/platform/tools/apksig/) (Apache-2.0), uses [SDL3](https://github.com/libsdl-org/SDL) (zlib) for windows and input, and uses [ANGLE](https://chromium.googlesource.com/angle/angle) (BSD-3-Clause) for OpenGL ES rendering. Their component notices ship with the runtime. The converter uses API hierarchy metadata during conversion, which is not an implementation of the Android framework.
 
 The ART runtime is built from the [Android Runtime](https://android.googlesource.com/platform/art) (Apache-2.0).

@@ -13,9 +13,11 @@ Some backends belong to another game type and are offered wherever they accept t
 | [AliceSoft](#alicesoft) | System 1–3 | System 1–3, System 3.5–3.9, System 4, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Android](#android) | MacLauncher Android | MacLauncher Android, Mac.apk, AIM |
 | [BGI / Ethornell](#bgi--ethornell) | Program tools | Program tools, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [Build engine (Raze)](#build-engine-raze) | Raze | Raze |
 | [CatSystem2](#catsystem2) | Archive and script tools | Archive and script tools, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Construct](#construct) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [DOS](#dos) | DOSBox Staging | DOSBox Staging, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [Doom engine (UZDoom)](#doom-engine-uzdoom) | UZDoom | UZDoom |
 | [FAVORITE / FVP](#favorite--fvp) | RFVP | RFVP, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Flash](#flash) | Adobe Flash Player | Adobe Flash Player, Ruffle |
 | [FNA / XNA 4](#fna--xna-4) | FNA | FNA, Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
@@ -31,6 +33,7 @@ Some backends belong to another game type and are offered wherever they accept t
 | [KiriKiri](#kirikiri) | KiriKiri SDL2 | KiriKiri SDL2, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [LÖVE](#löve) | LÖVE | LÖVE, Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [macOS Game](#macos-game) | Native macOS | Native macOS, 32-bit Mac *(provider)* |
+| [LucasArts (DREAMM)](#lucasarts-dreamm) | DREAMM | DREAMM |
 | [MAGES.](#mages) | Impacto Windows HD | Impacto Windows HD, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Minori](#minori) | ReMinori | ReMinori, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [MUGEN / Ikemen GO](#mugen--ikemen-go) | Ikemen GO | Ikemen GO, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
@@ -204,6 +207,18 @@ Inspector details: Archive format, Original executable version, Declared compati
 | --- | --- |
 | Actions | Export text; Inspect programs; Export programs |
 
+## Build engine (Raze)
+
+Module `raze`.
+
+Backends: Raze (default).
+
+Runtimes tabs: Raze (managed).
+
+Raze has no runtime settings or inspector actions.
+
+Inspector details: Game file.
+
 ## CatSystem2
 
 Module `catsystem2`.
@@ -270,6 +285,18 @@ Inspector details: Format, Bits.
 | Action group | Actions |
 | --- | --- |
 | Actions | Inspect program; Decompile; Show export |
+
+## Doom engine (UZDoom)
+
+Module `uzdoom`.
+
+Backends: UZDoom (default).
+
+Runtimes tabs: UZDoom (managed).
+
+UZDoom has no runtime settings or inspector actions.
+
+Inspector details: Game file.
 
 ## FAVORITE / FVP
 
@@ -563,6 +590,18 @@ Inspector details: App version, Bundle ID, Executable.
 | --- | --- |
 | Script | Make executable |
 | Other | Inspect binary |
+
+## LucasArts (DREAMM)
+
+Module `dreamm`.
+
+Backends: DREAMM (default).
+
+Runtimes tabs: DREAMM (managed).
+
+DREAMM has no runtime settings or inspector actions.
+
+Inspector details: Game file.
 
 ## MAGES.
 

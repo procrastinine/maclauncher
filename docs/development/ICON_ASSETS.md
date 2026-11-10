@@ -34,7 +34,9 @@ The artwork comes from these sources:
 | AliceSoft | system3-sdl2 haniwa artwork from the source commit MacLauncher uses, GPL 2 or later |
 | GemRB | GemRB application artwork from the source commit MacLauncher uses, GPL 2 or later |
 | Flash | Ruffle application artwork, MIT or Apache 2.0 |
-| RPG Maker MV/MZ/RGSS, FNA/XNA, Unity, Java, NScripter, Tyrano, Ikemen/MUGEN, AI5, Siglus, Nitroplus, Minori, FAVORITE/FVP, BGI, CatSystem2, VNDS, web, video and generic app | A distinct category symbol for each, made for MacLauncher |
+| Doom engine (UZDoom) | UZDoom application icon from the source commit the icon record names, © 2025 The UZDoom Team, CC BY-SA 4.0 |
+| Build engine (Raze) | Raze application icon from the source commit the icon record names, GPL 2 |
+| RPG Maker MV/MZ/RGSS, FNA/XNA, Unity, Java, NScripter, Tyrano, Ikemen/MUGEN, AI5, Siglus, Nitroplus, Minori, FAVORITE/FVP, BGI, CatSystem2, VNDS, LucasArts (DREAMM), web, video and generic app | A distinct category symbol for each, made for MacLauncher |
 
 The Steam logo in the External view is the `steam` glyph from [Simple Icons](https://github.com/simple-icons/simple-icons) 13.21.0, CC0, drawn in a single color; its source is noted beside the path in `SteamView.tsx`.
 

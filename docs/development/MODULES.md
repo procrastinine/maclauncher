@@ -20,9 +20,11 @@ The registry discovers one module per game type, plus provider modules that supp
 | [AliceSoft](../game-types/ALICESOFT.md) | `alicesoft` | `system3`, `xsystem35`, `xsystem4` | |
 | [Android](../game-types/ANDROID.md) | `android` | `klepton`, `macapk`, `aim` | [Architecture](../game-types/android/ARCHITECTURE.md) |
 | [BGI / Ethornell](../game-types/BGI.md) | `bgi` | `bgi-tools` | Tools only; no native interpreter |
+| [Build engine (Raze)](../game-types/BUILD_ENGINE.md) | `raze` | `raze` | |
 | [CatSystem2](../game-types/CATSYSTEM2.md) | `catsystem2` | `catsystem2-tools` | Tools only; no native interpreter |
 | [Construct](../game-types/CONSTRUCT.md) | `construct` | `electron`, `nwjs`, `nwjs-patched`, `native` | |
 | [DOS](../game-types/DOS.md) | `dosbox` | `dosbox-staging` | |
+| [Doom engine (UZDoom)](../game-types/DOOM_ENGINE.md) | `uzdoom` | `uzdoom` | |
 | [FAVORITE / FVP](../game-types/FVP.md) | `fvp` | `rfvp` | |
 | [Flash](../game-types/FLASH.md) | `flash` | `projector`, `ruffle` | |
 | [FNA / XNA 4](../game-types/FNA.md) | `fna` | `fna`, `native` | |
@@ -37,6 +39,7 @@ The registry discovers one module per game type, plus provider modules that supp
 | [Java](../game-types/JAVA.md) | `java` | `java` | |
 | [KiriKiri](../game-types/KIRIKIRI.md) | `kirikiri` | `krkrsdl2` | |
 | [LÖVE](../game-types/LOVE.md) | `love` | `love`, `native` | |
+| [LucasArts (DREAMM)](../game-types/DREAMM.md) | `dreamm` | `dreamm` | |
 | [macOS Game](../game-types/MACOS.md) | `generic-app` | `native` | App bundles, selected scripts and Mach-O executables |
 | [macOS Game](../game-types/MACOS.md#32-bit-mac) | `mac32` | `mac32` | Provider of the downloadable 32-bit Intel macOS runtime |
 | [MAGES.](../game-types/MAGES.md) | `mages` | `impacto` | |
@@ -71,7 +74,7 @@ Managers declare `versionCompatibility` as `major`, `exact`, or a predicate rece
 
 Runtime managers supply the versions and installations that backends and tools run from, and the Runtimes window shows them. Modules and shared services declare the managers, and each manager is registered once by ID, even when several modules use it. A module exports its managers in the `runtimeManagers` array of `main.js`. Backend IDs can differ from manager IDs; the `official-studio` backend, for example, uses the `gamemaker-official` manager.
 
-Engine modules own these playback managers: `mkxpz`, `sdk`, `godot`, `love`, `java`, `ruffle`, `fna`, `unity`, `butterscotch`, `opengmk`, `gamemaker-official`, `system3`, `xsystem35`, `xsystem4`, `krkrsdl2`, `onscripter-en`, `ai5`, `siglus`, `rlvm`, `npengine`, `impacto`, `reminori`, `rfvp`, `gemrb`, `ikemen`, `hashlink`, `easyrpg`, `scummvm`, `xash3d-fwgs` and `browser-woditor`. The `mac32` provider supplies the downloadable `mac32` manager, and the Windows module supplies the downloadable `sikarugir` manager and the `crossover` manager for local applications. A module can also reuse shared managers; for example, `dosbox` supplies the downloadable `dosbox-staging` player and uses the shared `native-inspector` tools.
+Engine modules own these playback managers: `mkxpz`, `sdk`, `godot`, `love`, `java`, `ruffle`, `fna`, `unity`, `butterscotch`, `opengmk`, `gamemaker-official`, `system3`, `xsystem35`, `xsystem4`, `krkrsdl2`, `onscripter-en`, `ai5`, `siglus`, `rlvm`, `npengine`, `impacto`, `reminori`, `rfvp`, `gemrb`, `ikemen`, `hashlink`, `easyrpg`, `scummvm`, `xash3d-fwgs`, `uzdoom`, `raze`, `dreamm` and `browser-woditor`. The `mac32` provider supplies the downloadable `mac32` manager, and the Windows module supplies the downloadable `sikarugir` manager and the `crossover` manager for local applications. A module can also reuse shared managers; for example, `dosbox` supplies the downloadable `dosbox-staging` player and uses the shared `native-inspector` tools.
 
 Shared managers live in `src/modules/shared/`, where the registry discovers `nwjs`, `onsyuri`, `innoextract`, `ilspy` and `native-inspector`. [ILSpy](https://github.com/icsharpcode/ILSpy) manages C# export tool versions and compatible .NET hosts for FNA and Unity, and [Rizin / Ghidra](../tools/NATIVE_INSPECTION.md) provides static inspection of native binaries. Greenworks is a section of the NW.js manager and has no game type of its own. Besides managers, `src/modules/shared/` holds the [installer reader](../tools/INSTALLERS.md), shared import infrastructure that unpacks supported offline installers before normal engine detection. It also holds Steam API resolution, runtime catalogs, native package verification, Rosetta checks, save snapshots, icons and preparation utilities.
 

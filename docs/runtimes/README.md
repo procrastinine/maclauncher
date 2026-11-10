@@ -56,8 +56,10 @@ The [web runtimes](WEB_RUNTIMES.md) page describes the first three. A game type 
 | [AliceSoft](../game-types/ALICESOFT.md) | `system3`, `xsystem35`, `xsystem4` |
 | [Android](../game-types/ANDROID.md) | `klepton` (MacLauncher Android), `macapk`, `aim` |
 | [BGI / Ethornell](../game-types/BGI.md) | `bgi-tools` (inspection only) |
+| [Build engine (Raze)](../game-types/BUILD_ENGINE.md) | `raze` |
 | [CatSystem2](../game-types/CATSYSTEM2.md) | `catsystem2-tools` (inspection only) |
 | [DOS](../game-types/DOS.md) | `dosbox-staging` |
+| [Doom engine (UZDoom)](../game-types/DOOM_ENGINE.md) | `uzdoom` |
 | [FAVORITE / FVP](../game-types/FVP.md) | `rfvp` |
 | [Flash](../game-types/FLASH.md) | `projector` (Adobe Flash Player), `ruffle` |
 | [FNA / XNA 4](../game-types/FNA.md) | `fna` |
@@ -71,6 +73,7 @@ The [web runtimes](WEB_RUNTIMES.md) page describes the first three. A game type 
 | [Java](../game-types/JAVA.md) | `java` |
 | [KiriKiri](../game-types/KIRIKIRI.md) | `krkrsdl2` |
 | [LÖVE](../game-types/LOVE.md) | `love` |
+| [LucasArts (DREAMM)](../game-types/DREAMM.md) | `dreamm` |
 | [MAGES.](../game-types/MAGES.md) | `impacto` |
 | [Minori](../game-types/MINORI.md) | `reminori` |
 | [MUGEN / Ikemen GO](../game-types/MUGEN.md) | `ikemen` |

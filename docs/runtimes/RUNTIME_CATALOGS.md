@@ -87,7 +87,7 @@ Every engine is paired with the newest support archive. A Sikarugir version ther
 
 ### GitHub releases
 
-Several runtimes are published as GitHub releases: Ruffle, LÖVE stable releases, ONScripter-Yuri, Ikemen GO, HashLink and Xash3D FWGS. Their catalogs read these releases through the shared helpers, which stop after a set number of pages. For Ruffle, the ordinary **Reload** lists all releases by default.
+Several runtimes are published as GitHub releases: Ruffle, LÖVE stable releases, ONScripter-Yuri, Ikemen GO, HashLink, Xash3D FWGS, UZDoom and Raze. Their catalogs read these releases through the shared helpers, which stop after a set number of pages. For Ruffle, the ordinary **Reload** lists all releases by default.
 
 The LÖVE nightly section and MKXP-Z's upstream source read GitHub Actions runs instead, through GitHub's public API, which needs neither the GitHub CLI nor a GitHub account. Their refresh control lists the newest successful build, and **All versions** lists the builds from the 20 most recent successful runs. Artifacts download through [nightly.link](https://nightly.link/), also without a sign-in, and each one is checked against the checksum that GitHub publishes for it. A run whose artifact list cannot be read, or whose artifacts have expired, is skipped while the other runs stay listed, and an installed build keeps working after its artifact expires. A LÖVE nightly label includes the upstream version from `src/common/version.h` at the exact workflow commit, together with that commit and its date. A branch name such as `main` is never shown as a runtime version.
 

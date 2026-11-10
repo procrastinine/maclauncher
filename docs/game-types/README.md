@@ -14,9 +14,11 @@ The table lists game types by the name the app shows. In it, *Windows runtimes* 
 | [AliceSoft](ALICESOFT.md) | System 1–3 | System 3.5–3.9, System 4, Windows runtimes |
 | [Android](ANDROID.md) | MacLauncher Android | Mac.apk, AIM |
 | [BGI / Ethornell](BGI.md) | Program tools (inspection only) | Windows runtimes |
+| [Build engine (Raze)](BUILD_ENGINE.md) | Raze | |
 | [CatSystem2](CATSYSTEM2.md) | Archive and script tools (inspection only) | Windows runtimes |
 | [Construct](CONSTRUCT.md) | Electron | NW.js, NW.js (Patched), Game's macOS app, Windows runtimes |
 | [DOS](DOS.md) | DOSBox Staging | Windows runtimes |
+| [Doom engine (UZDoom)](DOOM_ENGINE.md) | UZDoom | |
 | [FAVORITE / FVP](FVP.md) | RFVP | Windows runtimes |
 | [Flash](FLASH.md) | Adobe Flash Player | Ruffle |
 | [FNA / XNA 4](FNA.md) | FNA | Game's macOS app, Windows runtimes |
@@ -31,6 +33,7 @@ The table lists game types by the name the app shows. In it, *Windows runtimes* 
 | [Java](JAVA.md) | Java | |
 | [KiriKiri](KIRIKIRI.md) | KiriKiri SDL2 | Windows runtimes |
 | [LÖVE](LOVE.md) | LÖVE | Game's macOS app, Windows runtimes |
+| [LucasArts (DREAMM)](DREAMM.md) | DREAMM | |
 | [macOS Game](MACOS.md) | Native macOS | 32-bit Mac |
 | [MAGES.](MAGES.md) | Impacto Windows HD | Windows runtimes |
 | [Minori](MINORI.md) | ReMinori | Windows runtimes |

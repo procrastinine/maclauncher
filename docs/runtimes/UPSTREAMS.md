@@ -80,7 +80,7 @@ For the app's source dependencies, the source inventory describes each adaptatio
 
 MacLauncher tracks every Git source it uses as a Git submodule at an exact commit, including small tools, build dependencies and nested sources. A new upstream version is compared against that commit and against the module's adaptations, while the checkouts themselves are never edited. Submodules used only as references can stay uninitialized, and the app leaves them out. Downloads that contain only binaries need no source checkout; they record exact versions and checksums instead.
 
-Several runtimes and tools come from their publishers' release downloads and are not built from source: EasyRPG, ScummVM, ScummVM Tools, RFVP, Xash3D FWGS, Browser Woditor, JPEXS FFDec, Near Infinity and AssetRipper. Each has a version manager that records the exact versions, the downloaded files, checksums and installed license notices.
+Several runtimes and tools come from their publishers' release downloads and are not built from source: EasyRPG, ScummVM, ScummVM Tools, RFVP, Xash3D FWGS, UZDoom, Raze, DREAMM, Browser Woditor, JPEXS FFDec, Near Infinity and AssetRipper. Each has a version manager that records the exact versions, the downloaded files, checksums and installed license notices.
 
 ### mac32
 
