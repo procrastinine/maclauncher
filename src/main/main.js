@@ -3730,7 +3730,6 @@ ipcMain.handle("launcher:setGameNetworkAccess", async (_event, gamePath, network
   return true;
 });
 
-require("../modules/shared/effects/shader-options-ipc").register({ ipcMain, dialog, clipboard, owner: getLauncherDialogOwner });
 const effectsPresets = require("../modules/shared/effects/presets-ipc").register({ ipcMain, userDataDir, app, loadSettings, pickFile: pickEffectFile,
   inventoryRevision: () => graphicsCatalog.revision(),
   changed: presets => {
@@ -3739,6 +3738,7 @@ const effectsPresets = require("../modules/shared/effects/presets-ipc").register
     }
   }
 });
+require("../modules/shared/effects/shader-options-ipc").register({ ipcMain, dialog, clipboard, owner: getLauncherDialogOwner });
 const graphicsEdits = new Map();
 const graphicsEditControllers = new Map();
 function cancelGraphicsEdits(gamePath, reason) {

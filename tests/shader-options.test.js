@@ -8,34 +8,35 @@ const {readShaderOptionsFile, register} = require("../src/modules/shared/effects
 const fixtures = path.join(__dirname, "fixtures/shader-options");
 const fixture = name => fs.readFileSync(path.join(fixtures, name), "utf8");
 // The included ReShade port of RetroArch's zfast CRT shader declares the
-// parameters a RetroArch preset and a ReShade preset both name.
+// parameters a RetroArch preset and a ReShade preset both name. ReShade's
+// compiler describes each uniform as V__<name>.
 const ZFAST = path.join(__dirname, "../src/modules/shared/reshade/shader-collection/retroarch/Shaders/zfast_crt.fx");
 function zfastParameters() {
   const source = fs.readFileSync(ZFAST, "utf8"), parameters = [];
   for (const [, type, name, annotations, value] of source.matchAll(/^uniform\s+(float|bool)\s+(\w+)\s*<([\s\S]*?)>\s*=\s*([^;]+);/gm)) {
     const number = key => {const match = new RegExp(`${key}\\s*=\\s*([-\\d.]+)\\s*;`).exec(annotations);return match ? Number(match[1]) : undefined;};
-    parameters.push({name, label: name, type, default: [type === "bool" ? (value.trim() === "true" ? 1 : 0) : Number(value)],
+    parameters.push({name: `V__${name}`, label: name, type, default: [type === "bool" ? (value.trim() === "true" ? 1 : 0) : Number(value)],
       ...(number("ui_min") === undefined ? {} : {min: number("ui_min")}), ...(number("ui_max") === undefined ? {} : {max: number("ui_max")})});
   }
   return parameters;
 }
 
 test("the included zfast CRT shader declares the names the fixtures use", () => {
-  assert.deepEqual(zfastParameters().map(parameter => parameter.name),
+  assert.deepEqual(zfastParameters().map(parameter => parameter.label),
     ["FINEMASK", "BLACK_OUT_BORDER", "BLURSCALEX", "LOWLUMSCAN", "HILUMSCAN", "BRIGHTBOOST", "MASK_DARK", "MASK_FADE", "video_sizeX", "video_sizeY"]);
 });
 
 test("a RetroArch preset gives its parameter lines and leaves out passes, textures and framebuffers", () => {
   const result = Options.importShaderOptions(fixture("zfast_crt.slangp"), {parameters: zfastParameters(), effectFile: "zfast_crt.fx", source: "zfast_crt.slangp"});
-  assert.deepEqual(result.values, {BLURSCALEX: [0.45], LOWLUMSCAN: [5], HILUMSCAN: [12], BRIGHTBOOST: [1.5], MASK_DARK: [0.3], MASK_FADE: [0.7]});
+  assert.deepEqual(result.values, {V__BLURSCALEX: [0.45], V__LOWLUMSCAN: [5], V__HILUMSCAN: [12], V__BRIGHTBOOST: [1.5], V__MASK_DARK: [0.3], V__MASK_FADE: [0.7]});
   assert.deepEqual(result.missing, ["CURVATURE"]);
   assert.equal(result.message, "Imported 6 options from zfast_crt.slangp; 1 not found in this shader: CURVATURE.");
 });
 
 test("a ReShade preset gives the section of the row's effect, not other effects or shortcut keys", () => {
   const result = Options.importShaderOptions(fixture("ReShadePreset.ini"), {parameters: zfastParameters(), effectFile: "zfast_crt.fx"});
-  assert.deepEqual(result.values, {BLACK_OUT_BORDER: [1], BLURSCALEX: [0.45], BRIGHTBOOST: [1.1], FINEMASK: [0], HILUMSCAN: [12], LOWLUMSCAN: [5],
-    MASK_DARK: [0.3], MASK_FADE: [0.7], video_sizeX: [256], video_sizeY: [224]});
+  assert.deepEqual(result.values, {V__BLACK_OUT_BORDER: [1], V__BLURSCALEX: [0.45], V__BRIGHTBOOST: [1.1], V__FINEMASK: [0], V__HILUMSCAN: [12], V__LOWLUMSCAN: [5],
+    V__MASK_DARK: [0.3], V__MASK_FADE: [0.7], V__video_sizeX: [256], V__video_sizeY: [224]});
   assert.deepEqual(result.missing, []);
   assert.equal(result.message, "Imported 10 options.");
   // A preset for other effects names them and changes nothing.
@@ -70,7 +71,7 @@ test("text without options for this shader changes nothing and says why", () => 
 });
 
 test("copied options use the row's native format and paste back unchanged", () => {
-  const parameters = zfastParameters(), values = {BRIGHTBOOST: [1.2], FINEMASK: [0]};
+  const parameters = zfastParameters(), values = {V__BRIGHTBOOST: [1.2], V__FINEMASK: [0]};
   const ini = Options.formatShaderOptions({parameters, values, effectFile: "/Shaders/zfast_crt.fx"});
   assert.match(ini, /^\[zfast_crt\.fx\]\nFINEMASK=0\nBLACK_OUT_BORDER=0\n/);
   const slangp = Options.formatShaderOptions({parameters, values, effectFile: "crt.slangp"});
@@ -80,8 +81,15 @@ test("copied options use the row's native format and paste back unchanged", () =
   for (const [text, effectFile] of [[ini, "zfast_crt.fx"], [slangp, "crt.slangp"]]) {
     const result = Options.importShaderOptions(text, {parameters, effectFile});
     assert.equal(result.imported.length, parameters.length);
-    assert.deepEqual(result.values.BRIGHTBOOST, [1.2]);assert.deepEqual(result.values.FINEMASK, [0]);
+    assert.deepEqual(result.values.V__BRIGHTBOOST, [1.2]);assert.deepEqual(result.values.V__FINEMASK, [0]);
   }
+  // Combined effects keep the described name where two stages share a source name.
+  const stages = [{name: "V__MLStage0__Strength", type: "float", default: [1]}, {name: "V__MLStage1__Strength", type: "float", default: [0.5]},
+    {name: "V__MLStage1__Glow", type: "float", default: [0.2]}];
+  const combined = Options.formatShaderOptions({parameters: stages});
+  assert.equal(combined, "V__MLStage0__Strength=1\nV__MLStage1__Strength=0.5\nGlow=0.2\n");
+  assert.deepEqual(Options.importShaderOptions(combined, {parameters: stages}).values,
+    {V__MLStage0__Strength: [1], V__MLStage1__Strength: [0.5], V__MLStage1__Glow: [0.2]});
 });
 
 test("Import options reads the chosen preset as text and cancelling reads nothing", async t => {
@@ -118,13 +126,13 @@ const text = value => typeof value === "string" ? value : React.isValidElement(v
 test("the options panel imports, copies and pastes through the ordinary parameter edit", async () => {
   const writes = [], clipboard = {text: ""}, files = [{name: "zfast_crt.slangp", text: fixture("zfast_crt.slangp")}, {name: "CAS.ini", text: "[CAS.fx]\nSharpening=1\n"}];
   const transfer = {importFile: async () => files.shift() || null, readText: async () => clipboard.text, writeText: async value => {clipboard.text = value;}};
-  const harness = componentHarness(ShaderParameters, {gamePath: "/Game", settings: {parameters: {MASK_DARK: [0.5]}}, live: false, disclosure: false, transfer,
+  const harness = componentHarness(ShaderParameters, {gamePath: "/Game", settings: {parameters: {V__MASK_DARK: [0.5]}}, live: false, disclosure: false, transfer,
     onChange: async (_, patch) => {writes.push(structuredClone(patch));}, loadParameters: async () => ({parameters: zfastParameters(), effectFile: "zfast_crt.fx"})});
   harness.render();await harness.settle();await harness.settle();
   const button = label => elements(harness.render()).find(node => node.type === "button" && (node.props["aria-label"] === label || text(node) === label));
   const status = () => elements(harness.render()).flatMap(node => node.props.role === "status" ? [text(node)] : typeof node.props.error === "string" && node.props.error ? [node.props.error] : []);
   button("Import options…").props.onClick();await harness.settle();
-  assert.deepEqual(writes.at(-1).parameters, {MASK_DARK: [0.3], BLURSCALEX: [0.45], LOWLUMSCAN: [5], HILUMSCAN: [12], BRIGHTBOOST: [1.5], MASK_FADE: [0.7]});
+  assert.deepEqual(writes.at(-1).parameters, {V__MASK_DARK: [0.3], V__BLURSCALEX: [0.45], V__LOWLUMSCAN: [5], V__HILUMSCAN: [12], V__BRIGHTBOOST: [1.5], V__MASK_FADE: [0.7]});
   assert.ok(status().includes("Imported 6 options from zfast_crt.slangp; 1 not found in this shader: CURVATURE."));
   // A preset for another effect changes nothing.
   button("Import options…").props.onClick();await harness.settle();
@@ -134,7 +142,7 @@ test("the options panel imports, copies and pastes through the ordinary paramete
   assert.match(clipboard.text, /^\[zfast_crt\.fx\]\nFINEMASK=1\n[\s\S]*BRIGHTBOOST=1\.5\n/);
   clipboard.text = "HILUMSCAN = \"20.000000\"\n";
   button("Paste options").props.onClick();await harness.settle();
-  assert.deepEqual(writes.at(-1).parameters.HILUMSCAN, [20]);
-  assert.deepEqual(writes.at(-1).parameters.BRIGHTBOOST, [1.5]);
+  assert.deepEqual(writes.at(-1).parameters.V__HILUMSCAN, [20]);
+  assert.deepEqual(writes.at(-1).parameters.V__BRIGHTBOOST, [1.5]);
   harness.close();
 });

@@ -11,6 +11,9 @@ const LISTED = 8;
 const baseName = file => String(file || "").split(/[\\/]/).pop();
 const list = names => names.slice(0, LISTED).join(", ") + (names.length > LISTED ? ", …" : "");
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+// ReShade's compiler describes a uniform as V__<name>, or V__MLStage<n>__<name>
+// in combined effects; presets name the uniform as its source declares it.
+const sourceName = name => name.replace(/^V__(?:MLStage\d+__)?/, "");
 
 /** The text format of a row's options: ReShade for .fx files, RetroArch for .slangp and .slang, plain lines otherwise. */
 export function shaderOptionsFormat(effectFile) {
@@ -79,12 +82,18 @@ function accepted(parameter, value) {
 }
 
 /**
- * Matches option names to a shader's described parameters, exactly and then
- * ignoring case. Components the source leaves out keep their current values.
+ * Matches option names to a shader's described parameters, by described or
+ * source name, exactly and then ignoring case. Components the source leaves
+ * out keep their current values.
  */
 export function matchShaderOptions(options, parameters, current = {}) {
-  const exact = new Map(parameters.map(parameter => [parameter.name, parameter])), folded = new Map();
-  for (const parameter of parameters) if (!folded.has(parameter.name.toLowerCase())) folded.set(parameter.name.toLowerCase(), parameter);
+  const exact = new Map(), folded = new Map();
+  for (const key of [parameter => parameter.name, parameter => sourceName(parameter.name)])
+    for (const parameter of parameters) {
+      const name = key(parameter);
+      if (!exact.has(name)) exact.set(name, parameter);
+      if (!folded.has(name.toLowerCase())) folded.set(name.toLowerCase(), parameter);
+    }
   const values = {}, imported = [], missing = [], rejected = [];
   for (const [name, numbers] of options) {
     const parameter = exact.get(name) || folded.get(name.toLowerCase());
@@ -114,10 +123,15 @@ export function importShaderOptions(text, {parameters, values: current = {}, eff
   return {...result, message};
 }
 
-/** The row's current values as text in its native preset format. */
+/**
+ * The row's current values as text in its native preset format, under source
+ * names. A source name that two parameters share keeps the described name.
+ */
 export function formatShaderOptions({parameters, values = {}, effectFile}) {
-  const format = shaderOptionsFormat(effectFile);
-  const rows = parameters.map(parameter => [parameter.name, Array.isArray(values[parameter.name]) ? values[parameter.name] : parameter.default]);
+  const format = shaderOptionsFormat(effectFile), counts = new Map();
+  for (const parameter of parameters) counts.set(sourceName(parameter.name), (counts.get(sourceName(parameter.name)) || 0) + 1);
+  const rows = parameters.map(parameter => [counts.get(sourceName(parameter.name)) === 1 ? sourceName(parameter.name) : parameter.name,
+    Array.isArray(values[parameter.name]) ? values[parameter.name] : parameter.default]);
   if (format === "slangp") return rows.map(([name, numbers]) => `${name} = "${numbers[0]}"\n`).join("");
   const lines = rows.map(([name, numbers]) => `${name}=${numbers.join(",")}\n`).join("");
   return format === "reshade" ? `[${baseName(effectFile)}]\n${lines}` : lines;
