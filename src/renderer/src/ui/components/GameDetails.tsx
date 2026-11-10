@@ -2,7 +2,7 @@ import { Select } from "./Select";
 import React, { memo, useRef, useState } from "react";
 import type {
   CheatsPatchStatus, LauncherState, LibsPatchStatus, ModuleActionError, ModuleManifest,
-  ModuleUiAction, RecentGame, RuntimeId, RuntimeStatusEntry
+  ModuleUiAction, RecentGame, RuntimeAutomaticEntry, RuntimeId, RuntimeStatusEntry
 } from "../types";
 import {
   defaultSaveDirForGame, filesUnavailableReason, formatRuntimeLabel,
@@ -42,6 +42,7 @@ type GameDetailsProps = {
   cheatsStatus: CheatsPatchStatus | null;
   libsStatus: LibsPatchStatus | null;
   runtimeStatusEntry: RuntimeStatusEntry | null;
+  runtimeAutomaticEntry?: RuntimeAutomaticEntry | null;
   visible?: boolean;
   cheatsPatchBusy: boolean;
   libsPatchBusy: boolean;
@@ -198,7 +199,7 @@ function detectionDisplay(game: RecentGame, moduleInfo: ModuleManifest | null, s
 }
 
 export const GameDetails = memo(function GameDetails({
-  g, state, moduleInfo, actions, cheatsStatus, libsStatus, runtimeStatusEntry, visible = true,
+  g, state, moduleInfo, actions, cheatsStatus, libsStatus, runtimeStatusEntry, runtimeAutomaticEntry, visible = true,
   cheatsPatchBusy, libsPatchBusy, moduleActionResults, moduleActionBusy, moduleActionCancelling, moduleActionError, onClose
 }: GameDetailsProps) {
   const {
@@ -364,8 +365,11 @@ export const GameDetails = memo(function GameDetails({
   // does not use stays saved without being shown as the selection.
   const runtimeRecommended = (runtimeStatus as any)?.runtimeRecommendation?.managerId === runtimeManagerId
     ? (runtimeStatus as any).runtimeRecommendation as { version?: string; sectionId?: string; variant?: string;
-      requiredVariant?: string; requiredVariantReason?: string; automaticVersion?: string } : null;
+      requiredVariant?: string; requiredVariantReason?: string } : null;
   const runtimeRecommendation = runtimeRecommended?.version ? runtimeRecommended as { version: string; sectionId?: string } : null;
+  // The version Play uses without a version choice, loaded separately.
+  const runtimePlayVersion = runtimeAutomaticEntry?.runtimeId === g.runtimeId &&
+    runtimeAutomaticEntry.value?.managerId === runtimeManagerId ? runtimeAutomaticEntry.value.version : "";
   const runtimeRequiredVariant = runtimeRecommended?.requiredVariant || "";
   const runtimeEffectiveVariantOverride = runtimeRequiredVariant && runtimeVariantOverride !== runtimeRequiredVariant ? "" : runtimeVariantOverride;
   const runtimeDefaultVariant = runtimeRequiredVariant || runtimeRecommended?.variant || runtimeSection?.defaultVariant || "";
@@ -374,7 +378,7 @@ export const GameDetails = memo(function GameDetails({
     .some((item: any) => item?.version === runtimeRecommendation.version && item.ready !== false &&
       (!runtimeRecommendedVariant || item.variant === runtimeRecommendedVariant)));
   const runtimeVersionTag = runtimeVersionTagger(runtimeSection,
-    [...runtimeVersionChoices, runtimeRecommendation?.version, runtimeRecommended?.automaticVersion, runtimeStatusDefaultVersion]);
+    [...runtimeVersionChoices, runtimeRecommendation?.version, runtimePlayVersion, runtimeStatusDefaultVersion]);
   const runtimeVersionOptions = runtimeInspectorVersionOptions(runtimeSection, runtimeVersionOverride, runtimeVersionTag);
   const runtimePreferredArchitecture = runtimeArchitectureOverride || runtimeSection?.defaultArchitecture ||
     runtimeManagerState?.defaultArchitecture || runtimeSection?.launcherArchitecture || runtimeManagerState?.launcherArchitecture;
@@ -383,7 +387,7 @@ export const GameDetails = memo(function GameDetails({
   // Automatic names the version Play uses without a version choice, as the
   // launcher selects it: a compatible installed version, otherwise the one Play
   // installs. Before that is known it names the recommended or default version.
-  const runtimeAutomaticVersion = runtimeRecommended?.automaticVersion ||
+  const runtimeAutomaticVersion = runtimePlayVersion ||
     runtimeRecommendation?.version || runtimeDefaultVersion || runtimeStatusDefaultVersion || "";
   const runtimeAutomaticLabel = runtimeAutomaticVersion ? `Automatic (${runtimeVersionTag(runtimeAutomaticVersion)})` : "Automatic";
   const runtimeVariantOptions = (Array.isArray(runtimeSection?.variants)

@@ -867,7 +867,24 @@ function createLauncher({
   }
 
   function runAction(entry, actionId, payload, options) {
+    if (actionId === "runtimeAutomaticVersion") return automaticVersion(entry, options?.settings);
     return gameLifecycle.use(entry, () => runActionOnce(entry, actionId, payload, options));
+  }
+
+  // The version Play uses for the game's selected runtime when the game has no
+  // version choice, for the inspector's Automatic entry. It reads saved state
+  // and installed runtimes only: no game use, coordinator or runtime lock, no
+  // game files, catalog or network, and no write such as the cheats file.
+  async function automaticVersion(entry, settings = loadSettings()) {
+    const effective = structuredClone(entry), moduleId = resolveModuleId(effective);
+    const mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
+    const moduleSettings = resolveModuleSettings(settings, moduleId);
+    const runtimeId = resolveRuntimeForEntry(effective.runtimeId, mod, info, effective, moduleSettings, settings);
+    const managerId = info?.runtime?.manager?.[runtimeId];
+    if (!managerId) return null;
+    effective.runtimeId = runtimeId;
+    const version = await automaticRuntimeVersion(effective, mod, info, { settings, moduleSettings, userDataDir, logger, runtimeId }, managedRuntimes());
+    return version ? { managerId, version } : null;
   }
 
   // The runtime that graphics inspection uses for an entry.
@@ -931,23 +948,19 @@ function createLauncher({
       // The version, and where variants exist the variant, that the game's own
       // data recommends for its selected runtime, plus any variant the game
       // requires whatever is chosen, with its reason. Modules supply them;
-      // installation stays an explicit Runtimes action. `automaticVersion` is
-      // the version Play uses when the game has no version choice.
+      // installation stays an explicit Runtimes action.
       const effective = structuredClone(entry), moduleId = resolveModuleId(effective);
       const mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
       const selectedRuntime = resolveRuntimeForEntry(effective.runtimeId, mod, info, effective,
         resolveModuleSettings(settings, moduleId), settings);
       const managerId = info.runtime?.manager?.[selectedRuntime];
-      if (!managerId) return null;
+      if (!managerId || typeof mod?.runtimeRecommendation !== "function") return null;
       effective.runtimeId = selectedRuntime;
-      const context = getLaunchContext(effective, settings, { runtimeId: selectedRuntime });
-      const recommendation = typeof mod?.runtimeRecommendation === "function" ? await mod.runtimeRecommendation(effective, context) : null;
-      const text = (value, key) => typeof value?.[key] === "string" && value[key] ? { [key]: value[key] } : {};
-      const recommended = { ...text(recommendation, "version"), ...text(recommendation, "variant"), ...text(recommendation, "requiredVariant") };
-      const automatic = text({ automaticVersion: await automaticRuntimeVersion(effective, mod, info, context, managedRuntimes()).catch(() => null) },
-        "automaticVersion");
-      return Object.keys(recommended).length || automatic.automaticVersion ? { managerId, ...recommended, ...text(recommendation, "sectionId"),
-        ...(recommended.requiredVariant ? text(recommendation, "requiredVariantReason") : {}), ...automatic } : null;
+      const recommendation = await mod.runtimeRecommendation(effective, getLaunchContext(effective, settings, { runtimeId: selectedRuntime }));
+      const text = key => typeof recommendation?.[key] === "string" && recommendation[key] ? { [key]: recommendation[key] } : {};
+      const recommended = { ...text("version"), ...text("variant"), ...text("requiredVariant") };
+      return Object.keys(recommended).length ? { managerId, ...recommended, ...text("sectionId"),
+        ...(recommended.requiredVariant ? text("requiredVariantReason") : {}) } : null;
     }
     if (actionId === "setGameNotes") {
       const updated = GameStore.setGameNotes(userDataDir, entry.gameId, payload.notes);
@@ -1016,7 +1029,7 @@ function createLauncher({
   }
 
   return {
-    userDataDir, loadSettings, resolveEntry, launchEntry, runAction, graphicsCallbacks, getLaunchContext, getGameLaunchContext, persistEntry,
+    userDataDir, loadSettings, resolveEntry, launchEntry, runAction, automaticVersion, graphicsCallbacks, getLaunchContext, getGameLaunchContext, persistEntry,
     resolveModuleNativeLaunchPath, resolveRuntimeForEntry, resolveRuntimeSupportForEntry, resolveEntryRuntimeId, resolveEntryChecks,
     getResolvedModuleSettings,
     resolveModuleSettings, resolveToolsButtonVisible, normalizeCheatsForModule, writeCheatsFile,

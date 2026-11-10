@@ -104,7 +104,9 @@ async function automaticRuntimeVersion(entry, mod, info, context, managers) {
   const own = await owner?.automaticRuntimeVersion?.(automatic, context);
   if (typeof own === "string" && own) return own;
   if (typeof manager.resolveSelection === "function") {
-    const selection = await manager.resolveSelection(automatic, context.settings, context.userDataDir);
+    // A status check of installed copies is enough to name the version; Play
+    // verifies the copy it uses.
+    const selection = await manager.resolveSelection(automatic, context.settings, context.userDataDir, { verification: "status" });
     if (selection) return typeof selection.version === "string" && selection.version ? selection.version : null;
   }
   if (typeof owner?.ensureRuntime === "function") return null;

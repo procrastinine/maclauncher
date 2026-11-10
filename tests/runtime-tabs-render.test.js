@@ -1419,8 +1419,8 @@ test('per-game version menus use only the selected runtime recommendation and pr
   const renderGame = (runtimeId, automatic = false, automaticVersion = undefined) => renderToStaticMarkup(React.createElement(GameDetails, {
     g: {...original, runtimeId, ...(automatic ? {runtimeData: {...original.runtimeData, [runtimeId]: {version: ''}}} : {})},
     state, moduleInfo, actions: {}, cheatsStatus: null, libsStatus: null,
-    runtimeStatusEntry: {runtimeId, status: {runtimeRecommendation: runtimeId === engine
-      ? {managerId: 'engine-version-scope', version: engineVersion, ...(automaticVersion ? {automaticVersion} : {})} : null}},
+    runtimeStatusEntry: {runtimeId, status: {runtimeRecommendation: runtimeId === engine ? {managerId: 'engine-version-scope', version: engineVersion} : null}},
+    runtimeAutomaticEntry: automaticVersion ? {runtimeId, value: {managerId: 'engine-version-scope', version: automaticVersion}} : null,
     cheatsPatchBusy: false, libsPatchBusy: false, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null
   }));
   const automatic = renderGame(portable, true);

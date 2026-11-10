@@ -21,6 +21,7 @@ import type {
   RuntimeRefreshOptions,
   RuntimeSettingsContext,
   RuntimeStatusEntry,
+  RuntimeAutomaticEntry,
   RuntimeUiState,
   UtilityWindowRequest,
   SaveFileInfo,
@@ -173,6 +174,7 @@ export default function App() {
   }, [api]);
   const [moduleActionErrorByPath, setModuleActionErrorByPath] = useGamePathState<ModuleActionError | null>(gamePaths);
   const [runtimeStatusByPath, setRuntimeStatusByPath] = useGamePathState<RuntimeStatusEntry | null>(gamePaths);
+  const [runtimeAutomaticByPath, setRuntimeAutomaticByPath] = useGamePathState<RuntimeAutomaticEntry | null>(gamePaths);
   const [selectedGamePath, setSelectedGamePath] = useState<string | null>(null);
   const [draggingGamePath, setDraggingGamePath] = useState<string | null>(null);
   const [dragOrderPaths, setDragOrderPaths] = useState<string[] | null>(null);
@@ -457,6 +459,23 @@ export default function App() {
     });
     return () => { active = false; };
   }, [api, inspectionGame?.gamePath, runtimeInspectionKey, inspectionRequests, inspectionActionsBusy]);
+
+  // The version Play uses without a version choice loads on its own, so the
+  // status, recommendation and their actions never wait for it; the Automatic
+  // entry updates when it arrives.
+  useEffect(() => {
+    if (!api || !inspectionGame || !runtimeInspectionKey) return;
+    const [, , managed] = JSON.parse(runtimeInspectionKey) as [string | null, boolean, boolean];
+    if (!managed) return;
+    const gamePath = inspectionGame.gamePath, runtimeId = inspectionGame.runtimeId;
+    let active = true;
+    inspectionRequests.run(gamePath, "runtime:automatic", runtimeInspectionKey,
+      () => api.moduleAction(gamePath, "runtimeAutomaticVersion", {}).catch(() => null)).then(({ current, value }) => {
+      if (active && current) setRuntimeAutomaticByPath(previous => updatePathValue(previous, gamePath,
+        { runtimeId, value: value && typeof value === "object" ? value : null }));
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [api, inspectionGame?.gamePath, runtimeInspectionKey, inspectionRequests]);
 
   const sorted = useMemo(() => state?.recents ?? [], [state?.recents]);
   const librarySort = useMemo(() => normalizeLibrarySort(state?.launcherSettings?.library?.sort), [state?.launcherSettings?.library?.sort]);
@@ -2230,6 +2249,7 @@ export default function App() {
               cheatsStatus={cheatsPatchStatusByPath[selectedGame.gamePath] || null}
               libsStatus={libsPatchStatusByPath[selectedGame.gamePath] || null}
               runtimeStatusEntry={runtimeStatusByPath[selectedGame.gamePath] || null}
+              runtimeAutomaticEntry={runtimeAutomaticByPath[selectedGame.gamePath] || null}
               cheatsPatchBusy={cheatsPatchBusyPath === selectedGame.gamePath}
               libsPatchBusy={libsPatchBusyPath === selectedGame.gamePath}
               moduleActionResults={moduleActionResultsByPath[selectedGame.gamePath] || EMPTY_ACTION_STATE}

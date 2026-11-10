@@ -526,6 +526,12 @@ export type RuntimeStatusEntry = {
   status: any;
 };
 
+/** The version Play uses for a game's runtime without a version choice. */
+export type RuntimeAutomaticEntry = {
+  runtimeId: RuntimeId;
+  value: { managerId: string; version: string } | null;
+};
+
 export type RuntimeNoticeLine = {
   text: string;
   mono?: boolean;

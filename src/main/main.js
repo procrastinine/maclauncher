@@ -4781,9 +4781,12 @@ ipcMain.handle("launcher:moduleAction", async (event, gamePath, action, payload,
 
   try {
     const actionOptions = { ...options };
+    // The inspector's Automatic version reads installed runtimes in its own
+    // lane, so it never delays the game's actions, Play or an install.
+    const lane = action === "runtimeAutomaticVersion" ? "inspector" : `game:${entry.gameId || entry.gamePath}`;
     const result = options?.requestId !== undefined ? await moduleActionRequests.run(event.sender, options.requestId,
-      `game:${entry.gameId || entry.gamePath}`, [entry, action, payload, settings], actionOptions) :
-      await backendService.request(`game:${entry.gameId || entry.gamePath}`, "moduleAction", entry, action, payload, settings, actionOptions);
+      lane, [entry, action, payload, settings], actionOptions) :
+      await backendService.request(lane, "moduleAction", entry, action, payload, settings, actionOptions);
     return action === "graphicsInputs" ? {...result, graphicsLive: gameGraphicsLive(entry)} : result;
   } catch (e) {
     if (isAbortError(e)) return false;

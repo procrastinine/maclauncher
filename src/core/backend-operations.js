@@ -367,6 +367,9 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     },
     async moduleAction(entry, action, payload, settings, options = {}) {
       if (shuttingDown) throw createAbortError("Launcher is closing.");
+      // Read-only and lock-free, so the inspector's Automatic label never waits
+      // on or delays a game action, Play or an install.
+      if (action === "runtimeAutomaticVersion") return launcher.automaticVersion(entry, settings || launcher.loadSettings());
       const requestId = options.requestId;
       let pending, finish;
       if (requestId !== undefined) {
