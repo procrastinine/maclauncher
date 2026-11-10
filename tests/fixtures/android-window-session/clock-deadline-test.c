@@ -26,6 +26,15 @@ static void busy(void){
  uint64_t until=clock_gettime_nsec_np(CLOCK_UPTIME_RAW)+15000000;
  while(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)<until)atomic_signal_fence(memory_order_seq_cst);
 }
+/* Another busy thread or process accrues CPU time only while the scheduler runs
+ * it, so one 15 ms window on a loaded machine can pass without any. Read again
+ * until the clock advances past `before`, for at most two seconds. */
+static int cpu_clock_advances(int id,struct timespec before){
+ uint64_t deadline=clock_gettime_nsec_np(CLOCK_UPTIME_RAW)+2000000000ull;struct timespec after;
+ do{busy();if(klj_clock_read(id,&after))return 0;if(ns(after)>ns(before))return 1;}
+ while(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)<deadline);
+ return 0;
+}
 static _Atomic int worker_id,worker_stop;
 static void *worker(void *unused){
  (void)unused;int id=klj_thread_id();assert(id>0);
@@ -71,8 +80,8 @@ static void cpu_clocks(void){
  pthread_t thread;assert(!pthread_create(&thread,NULL,worker,NULL));
  while(!atomic_load(&worker_id))sched_yield();
  int tid=atomic_load(&worker_id);assert(tid!=process);
- assert(klj_clock_read(cpu_clock(tid,1,2),&before)==0);busy();
- assert(klj_clock_read(cpu_clock(tid,1,2),&after)==0&&ns(after)>ns(before));
+ assert(klj_clock_read(cpu_clock(tid,1,2),&before)==0);
+ assert(cpu_clock_advances(cpu_clock(tid,1,2),before));
  assert(klj_clock_resolution(cpu_clock(tid,1,2),NULL)==0);
  assert(klj_clock_read(cpu_clock(tid,0,2),&t)==-1&&errno==EINVAL);
  thread_t retained=pthread_mach_thread_np(thread);assert(retained);
@@ -97,8 +106,8 @@ static void cpu_clocks(void){
   close(stop[0]);_exit(0);
  }
  close(ready[1]);close(stop[0]);int child_id=0;assert(read(ready[0],&child_id,sizeof child_id)==sizeof child_id);close(ready[0]);
- assert(child_id!=process&&klj_clock_read(cpu_clock(child_id,0,2),&before)==0);busy();
- assert(klj_clock_read(cpu_clock(child_id,0,2),&after)==0&&ns(after)>ns(before));
+ assert(child_id!=process&&klj_clock_read(cpu_clock(child_id,0,2),&before)==0);
+ assert(cpu_clock_advances(cpu_clock(child_id,0,2),before));
  assert(klj_clock_resolution(cpu_clock(child_id,0,2),NULL)==0);
  assert(klj_clock_read(cpu_clock(child_id,1,2),&t)==-1&&errno==EINVAL);
  close(stop[1]);int status;assert(waitpid(child,&status,0)==child&&WIFEXITED(status)&&!WEXITSTATUS(status));
