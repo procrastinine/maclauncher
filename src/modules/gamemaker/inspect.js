@@ -148,10 +148,10 @@ function inspectStudio(filePath, { includeNames = false, limits = LIMITS } = {})
     }
     const hasBytecode = codeCount > 0 && codeBytes > 0;
     const executionKind = hasBytecode ? "studio-vm" : "native-or-no-code";
-    const reasons = [];
-    if (!hasBytecode) reasons.push("No nonempty VM code was found; YYC/native packages require their own macOS build.");
-    if (wadVersion < 8 || wadVersion > 17) reasons.push(`WAD ${wadVersion} is outside the pinned Butterscotch 8–17 range.`);
-    if (inventory.EXTN > 0) reasons.push("Windows extensions may require additional native support.");
+    const reasons = [], notes = [];
+    if (!hasBytecode) {reasons.push("No nonempty VM code was found; YYC/native packages require their own macOS build.");notes.push("No VM code");}
+    if (wadVersion < 8 || wadVersion > 17) {reasons.push(`WAD ${wadVersion} is outside the pinned Butterscotch 8–17 range.`);notes.push(`WAD ${wadVersion} unsupported`);}
+    if (inventory.EXTN > 0) {reasons.push("Windows extensions may require additional native support.");notes.push("Windows extensions");}
     const isCandidate = hasBytecode && wadVersion >= 8 && wadVersion <= 17 && !(inventory.EXTN > 0);
     const spriteSequences = inspectSpriteSequences({ reader, spriteChunk: byId.get("SPRT"), stringChunk: strg,
       spriteCount: inventory.SPRT || 0, rawVersion });
@@ -167,7 +167,7 @@ function inspectStudio(filePath, { includeNames = false, limits = LIMITS } = {})
       trailingBytes: reader.stat.size - containerEnd, chunks, inventory, audioGroupLayout,
       spriteSequenceLayout: spriteSequences.layout, spriteSequenceInspection: spriteSequences, stringCount, codeCount, codeBytes,
       ...(includeNames ? { codeEntries, namesTruncated: codeCount > limits.names } : {}),
-      butterscotchCandidate: isCandidate, compatibility: "format-candidate", reasons
+      butterscotchCandidate: isCandidate, compatibility: "format-candidate", reasons, reasonSummary: notes.join(" · ") || null
     };
   } finally { reader.close(); }
 }
@@ -198,7 +198,7 @@ function inspectClassic(filePath) {
         versionEvidence: [{ kind: "classic-runner-signature", offset: candidate.offset, value: candidate.version,
           meaning: "Identifies the standard GM8.0/8.1 runner; embedded assets have not yet been parsed." }],
         evidence: "standard-runner-signature", assetsVerified: false, fileBytes: reader.stat.size,
-        assetOffset, compatibility: "format-candidate", butterscotchCandidate: false,
+        assetOffset, compatibility: "format-candidate", butterscotchCandidate: false, reasonSummary: "GM8 data (OpenGMK)",
         reasons: ["OpenGMK runs GM8.0/8.1 data. Windows extensions require a matching native implementation."]
       };
     }
@@ -217,7 +217,7 @@ function inspectClassic(filePath) {
           detectedVersionConfidence: "format-header", versionEvidence: [{ kind: "classic-encrypted-data-header",
             offset: headerStart + offset, value: "8.1", meaning: "Default GM8.1 magic, version 800 and bounded zlib settings; full assets are checked on Play." }],
           evidence: "default-gm81-data-header", assetsVerified: false, fileBytes: reader.stat.size,
-          assetOffset: headerStart + offset + 36, compatibility: "format-candidate", butterscotchCandidate: false,
+          assetOffset: headerStart + offset + 36, compatibility: "format-candidate", butterscotchCandidate: false, reasonSummary: "GM8 data (OpenGMK)",
           reasons: ["OpenGMK runs GM8.0/8.1 data. Windows extensions require a matching native implementation."] };
       }
     }

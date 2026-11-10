@@ -408,7 +408,7 @@ The inspector builds a module's information rows, launch choices and action butt
 | `autoRun` | Run when the section expands, for status probes |
 | `inspector` | `false` for actions shown by a specialized control, such as a cheats panel; their metadata and backend actions stay available there |
 | `cancellable` | Show Cancel while running |
-| `resultFields` | Info fields to display after the action runs |
+| `resultFields` | Info fields to display after the action runs. A field's `helpKey` names a result value shown in the help button beside its label, so a status stays one short line, such as "Runtime not patched", and its explanation is in the help. |
 | `disabledWhen`, `hiddenWhen` | Conditions |
 
 A cancellable action receives `context.signal` and passes it to its asynchronous work, and closing the window that started the action also cancels it. Folder pickers and download consent keep their own controls.

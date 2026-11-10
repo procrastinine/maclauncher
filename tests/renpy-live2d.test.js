@@ -426,3 +426,13 @@ test("each Ren'Py API recommends its SDK from discovered releases while exact SD
   assert.equal((await Live2D.downloadLibrary(old, { userDataDir: root, libraryVersion: "5-r.99", confirmRuntimeInstall: () => true })).version, "5-r.99");
   assert.equal(downloads.at(-1), "5-r.99");
 });
+
+test("the Live2D status is one short line with its explanation as help", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "live2d-status-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const game = path.join(root, "Game");fs.mkdirSync(game);
+  const context = { userDataDir: path.join(root, "data") };
+  assert.deepEqual(require("../src/modules/renpy/live2d").gameStatus({ gameId: "vn", gamePath: game, moduleData: { version: "8.2.0" } }, context),
+    { ready: false, reason: "Runtime not patched", detail: "No macOS Ren'Py library directory exists. Patch the game's runtime first." });
+  assert.equal(require("../src/modules/renpy/live2d").gameStatus({ gameId: "vn", gamePath: game }, context).reason, "Runtime version unknown");
+});

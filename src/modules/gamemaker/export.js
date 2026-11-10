@@ -37,7 +37,7 @@ function exportInspection(entry, context) {
   const reportPath = writeLatestReport(resolveOutputRoot(entry, context), "inspection.json",
     { schemaVersion: 1, inspectedAt: new Date().toISOString(), ...inspection }, { legacyDirectories: /^inspection-[A-Za-z0-9]{6}$/ });
   const output = path.dirname(reportPath);
-  return { outputDir: output, reportPath, executionKind: inspection.executionKind, compatibility: inspection.compatibility, reason: inspection.reasons.join(" "), sourceSha256: inspection.sourceSha256 };
+  return { outputDir: output, reportPath, executionKind: inspection.executionKind, compatibility: inspection.compatibility, reason: inspection.reasons.join(" "), compatibilitySummary: inspection.reasonSummary || null, sourceSha256: inspection.sourceSha256 };
 }
 
 function exportChunks(entry, context) {

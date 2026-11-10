@@ -421,7 +421,8 @@
           },
           {
             "key": "reason",
-            "label": "Status"
+            "label": "Status",
+            "helpKey": "detail"
           }
         ]
       },

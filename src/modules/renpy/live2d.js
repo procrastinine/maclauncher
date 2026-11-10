@@ -37,7 +37,7 @@ function secureDirectory(root, directory, create = false) {
 function target({ rootDir, renpyVersion, metadataDir, metadataRoot }) {
   const policy = requirements(renpyVersion), root = fs.realpathSync(rootDir);
   const lib = Patcher.findMacLibDir(root, policy.major);
-  if (!lib) throw new Error("No macOS Ren'Py library directory exists. Patch the game's runtime first.");
+  if (!lib) throw Object.assign(new Error("No macOS Ren'Py library directory exists. Patch the game's runtime first."), { summary: "Runtime not patched" });
   const libDir = secureDirectory(root, lib.dir), executable = path.join(libDir, "renpy");
   regular(executable);
   const architectures = Native.readMachOArchitectures(executable);
@@ -60,10 +60,10 @@ function status(t) {
     if (!fs.existsSync(t.libraryPath)) return { ready: false, owned: !!record, reason: "Live2D Core is not installed.", ...t.policy, symbols: undefined };
     regular(t.libraryPath);
     const native = validateCore(t.libraryPath, t.renpyVersion, t.architectures);
-    if (record && native.sha256 !== record.binarySha256) throw new Error("Live2D library changed since installation; it will not be overwritten or removed.");
+    if (record && native.sha256 !== record.binarySha256) throw Object.assign(new Error("Live2D library changed since installation; it will not be overwritten or removed."), { summary: "Library changed" });
     return { ready: true, owned: !!record, version: record?.cubismVersion || "unmanaged", apiProfile: native.apiProfile, sha256: native.sha256, architectures: native.architectures,
       sourceUrl: record?.sourceUrl || null, officialArchive: record?.officialArchive || false, targetPath: t.libraryPath, renpyVersion: t.renpyVersion };
-  } catch (error) { return { ready: false, owned: fs.existsSync(path.join(t.metadataDir, "record.json")), reason: String(error.message || error), renpyVersion: t.renpyVersion }; }
+  } catch (error) { return { ready: false, owned: fs.existsSync(path.join(t.metadataDir, "record.json")), ...statusReason(error), renpyVersion: t.renpyVersion }; }
 }
 function withLock(t, work) {
   secureDirectory(t.metadataRoot, t.metadataDir, true);
@@ -283,7 +283,7 @@ function gameTarget(entry, context) {
   const patch = Patcher.readPatchMeta(context.userDataDir, entry.gameId);
   const version = context.runtimeVersion || (patch && patch.preexistingMacLib === false ? patch.sdkVersion : entry.moduleData?.version);
   const renpyVersion = String(version || "").match(/^(\d+\.\d+\.\d+)/)?.[1];
-  if (!renpyVersion) throw new Error("The game's actual macOS runtime version is unknown. Patch its runtime using an explicitly selected SDK first.");
+  if (!renpyVersion) throw Object.assign(new Error("The game's actual macOS runtime version is unknown. Patch its runtime using an explicitly selected SDK first."), { summary: "Runtime version unknown" });
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(entry.gameId || "")) throw new Error("A valid launcher game identity is required for reversible library patches.");
   fs.mkdirSync(context.userDataDir, { recursive: true });
   const userRoot = fs.realpathSync(context.userDataDir);
@@ -291,8 +291,13 @@ function gameTarget(entry, context) {
   const metadataDir = path.join(metadataRoot, "libraries", "live2d");
   return { ...target({ rootDir, renpyVersion, metadataRoot, metadataDir }), libraryPath: path.join(metadataDir, LIBRARY_NAME) };
 }
+// The inspector shows a short status; a longer explanation goes in its help.
+function statusReason(error) {
+  const message = String(error?.message || error);
+  return error?.summary ? { reason: error.summary, detail: message } : { reason: message };
+}
 function gameStatus(entry, context) {
-  try { return status(gameTarget(entry, context)); } catch (error) { return { ready: false, reason: error.message }; }
+  try { return status(gameTarget(entry, context)); } catch (error) { return { ready: false, ...statusReason(error) }; }
 }
 async function patchGame(entry, payload, context) {
   const t = gameTarget(entry, context);

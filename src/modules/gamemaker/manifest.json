@@ -304,8 +304,9 @@
             "label": "Execution format"
           },
           {
-            "key": "reason",
-            "label": "Compatibility"
+            "key": "compatibilitySummary",
+            "label": "Compatibility",
+            "helpKey": "reason"
           }
         ]
       },
