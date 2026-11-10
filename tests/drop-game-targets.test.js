@@ -35,3 +35,14 @@ test("graphics import hints name only files the library imports as shaders or mo
     assert.ok(["filter", "neural-model"].includes(kindForPath(`/Library/Effects/Example${extension}`)), extension);
   }
 });
+
+// The renderer tests have no DOM with native popovers, so stand-ins record the
+// selector and the calls: every open popover closes, and nothing else does.
+test("a drag into the window closes every open popover", async () => {
+  const { closePopoversForDrop } = await import("../src/renderer/src/ui/drop-game-targets.mjs");
+  const closed = [], popover = name => ({ hidePopover: () => closed.push(name) });
+  let selector;
+  closePopoversForDrop({ querySelectorAll: value => { selector = value; return [popover("game types"), popover("help")]; } });
+  assert.equal(selector, ":popover-open");
+  assert.deepEqual(closed, ["game types", "help"]);
+});

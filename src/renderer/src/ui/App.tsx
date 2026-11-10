@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { filterGames, gameTypeOptionsForModules } from "./search-utils.mjs";
 import { prioritizeDroppedPaths } from "./drop-path-utils.mjs";
-import { dropGameTargets, graphicsDropTargets } from "./drop-game-targets.mjs";
+import { closePopoversForDrop, dropGameTargets, graphicsDropTargets } from "./drop-game-targets.mjs";
 import { createGameFailureRecovery, createInspectionRequests, shareLauncherValue, subscribeLauncherGameFailures, subscribeLauncherState, updatePathValue } from "./launcher-state-model.mjs";
 import { useGamePathState } from "./use-game-path-state";
 import { readUtilityWindowContext } from "../../../core/utility-window-model.mjs";
@@ -1167,6 +1167,7 @@ export default function App() {
 
   function onAppDragEnter(ev: React.DragEvent) {
     if (!isExternalFileDrag(ev)) return;
+    closePopoversForDrop();
     addDropDepth.current += 1;
     setAddDropActive(true);
   }

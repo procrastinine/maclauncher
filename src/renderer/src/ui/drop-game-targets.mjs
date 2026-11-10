@@ -29,3 +29,10 @@ export function dropGameTargets(modules = []) {
     }))
   ];
 }
+
+// An open popover stays in the top layer above the drop layer, and light
+// dismiss reacts only to clicks in the document, so a drag from outside the
+// window closes every open popover when the drop layer shows.
+export function closePopoversForDrop(root = document) {
+  for (const popover of root.querySelectorAll(":popover-open")) popover.hidePopover();
+}
