@@ -142,6 +142,7 @@
       "!src/modules/renpy/resources/unren{,/**}",
       "!src/modules/renpy/resources/universal-renpy-walkthrough{,/**}",
       "!src/modules/android/native{,/**}",
+      "!src/modules/mages/native/*.{cpp,h}",
       "!src/main/native{,/**}",
       "!src/modules/shared/runtime/native{,/**}",
       "!src/modules/android/art/{native,java,adapters,licenses,tools,composer,graphics,sensors}{,/**}",
