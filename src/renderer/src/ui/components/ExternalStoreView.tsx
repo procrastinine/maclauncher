@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { DownloadIcon, FolderIcon, RefreshIcon } from "../icons";
 import { LibrarySearch } from "./LibraryToolbar";
 import { HelpTip } from "./HelpTip";
+import { StoreMark } from "./StoreMarks";
 import { formatUserError } from "../ui-helpers";
 import type { SteamDownload, SteamLibraryGame, SteamPlatform, SteamVersions } from "./SteamView";
 
@@ -378,7 +379,7 @@ export function ExternalStoreView({ store, api, onImported, active = true }: { s
       {publicStatus && <span className="externalPublicStatus" role="status">{publicStatus}</span>}
     </form>}
     {!connected && !publicMode && <div className={`steamLogin${googlePlay ? " externalAndroidLogin" : ""}`}>
-      <div className="steamLoginIntro">{!googlePlay && <span className={`steamBadge store-${store}`}>{name}</span>}
+      <div className="steamLoginIntro">{!googlePlay && <StoreMark store={store as Exclude<ExternalStore, "google-play">} size={42} />}
         <h2 className="externalControlHelp">{googlePlay ? "Google Play account" : `Connect ${name}`} <HelpTip label={`About ${name} downloads`}><p>{googlePlay ? "Browser sign-in is shared with Settings → Android. Google handles passwords and account confirmation in a separate window. Existing shared accounts can also be selected without opening an Android sign-in window." : store === "gog" ? "Browse owned games and download available offline installer editions for Mac, Windows and Linux." : store === "itch" ? "Load purchased and claimed games, then choose an available upload and platform before downloading." : "Browse owned games and choose the available platform and build before downloading."}</p><p>Account and version results are cached. Store searches and refresh actions check the network; browsing local installations stays offline.</p></HelpTip></h2>
       </div>
       <form className="steamLoginForm" onSubmit={authenticate}>

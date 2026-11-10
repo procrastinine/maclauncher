@@ -1,5 +1,8 @@
 .steamView { --steam-accent: light-dark(#315fca, #8cb8f3); }
 .steamMark { display: inline-flex; color: var(--steam-accent); flex-shrink: 0; }
+.steamMark.store-epic { color: var(--text); }
+.steamMark.store-gog { color: light-dark(#7b389d, #d9b7f2); }
+.steamMark.store-itch { color: light-dark(#b42d43, #ffb6bd); }
 /* The Steam tab's account row sits above its sign-in form or library. */
 .steamConnection { color: var(--muted); font-size: var(--font-sm); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding: 13px 18px 0; flex-shrink: 0; }
 .steamAccountSelect { max-width: 260px; font-size: var(--font-sm); }
