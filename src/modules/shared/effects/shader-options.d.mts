@@ -1,0 +1,10 @@
+type OptionParameter = {name: string; type: "float" | "int" | "bool"; default: number[]; min?: number; max?: number; options?: Array<{value: number}>};
+type OptionValues = Record<string, number[]>;
+export type ShaderOptionsFormat = "reshade" | "slangp" | "lines";
+export type ShaderOptionsMatch = {values: OptionValues; imported: string[]; missing: string[]; rejected: string[]};
+export function shaderOptionsFormat(effectFile?: string | null): ShaderOptionsFormat;
+export function parseShaderOptions(text: string): {sections: Map<string, Map<string, number[]>>; reshade: boolean};
+export function selectShaderOptions(parsed: {sections: Map<string, Map<string, number[]>>; reshade: boolean}, effectFile?: string | null): Map<string, number[]>;
+export function matchShaderOptions(options: Map<string, number[]>, parameters: OptionParameter[], current?: OptionValues): ShaderOptionsMatch;
+export function importShaderOptions(text: string, request: {parameters: OptionParameter[]; values?: OptionValues; effectFile?: string | null; source?: string}): ShaderOptionsMatch & {message: string};
+export function formatShaderOptions(request: {parameters: OptionParameter[]; values?: OptionValues; effectFile?: string | null}): string;

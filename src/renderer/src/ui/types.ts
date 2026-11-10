@@ -261,7 +261,8 @@ export type ReShadeFilter = { id: string; name: string; path: string; format?: S
 export type ShaderParameter = { name: string; label: string; type: "float" | "int" | "bool"; default: number[]; min?: number; max?: number; step?: number; description?: string;
   mode?: string; constant?: boolean; options?: Array<{ value: number; label: string }> };
 /** A shader's parameter metadata and the scene inputs its compiled program reads. */
-export type ShaderParameterSchema = { parameters: ShaderParameter[]; requirements?: { depth?: boolean; motion?: boolean } };
+/** `effectFile` is the described effect's file name, which selects the options text format. */
+export type ShaderParameterSchema = { parameters: ShaderParameter[]; requirements?: { depth?: boolean; motion?: boolean }; effectFile?: string };
 export type GameGraphicsSettings = { spatialShader?: GameReShadeSettings | null; spatialMethod: "off" | "bilinear" | "metalfx" | "fsr1" | "mako" | "ls1" | "nearest" | "bicubic" | `libplacebo:${string}`;
   neuralMethod: "off" | "mlx-dlss"; neuralModelPath: string | null; neuralInputScale: number | null; neuralInputHeight: number | null; neuralIntensity: number; neuralTemporal: boolean;
   temporalMethod: "off" | "metalfx" | "metalfx-denoised" | "fsr2" | "fsr3" | "fsr4" | "xess" | "asr" | "sgsr2"; temporalSharpness: number;
@@ -784,6 +785,9 @@ declare global {
         resetGameEffects(gamePath: string): Promise<boolean>;
         getGameEffectParameters(gamePath: string, nodeId: string, draftPlan?: GameEffectsPlan): Promise<ShaderParameterSchema & { key: string }>;
         pickGameEffectFile(gamePath: string, kind?: "neural-model",expectedOperation?:string): Promise<string | null>;
+        importShaderOptions?(): Promise<{ name: string; text: string } | null>;
+        readClipboardText?(): Promise<string>;
+        writeClipboardText?(text: string): Promise<boolean>;
         importReShadeFilters(family?: "reshade" | "libretro" | "mpv" | "isf" | "magpie" | "native",paths?:string[]): Promise<ReShadeFilter[] | null>;
         updateReShadeFilter(id: string, patch: { name?: string; path?: string }): Promise<boolean>;
         renameReShadeShader(presetId:string,name:string):Promise<boolean>;

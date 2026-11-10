@@ -138,6 +138,8 @@ A row can also use a shader file directly. **Custom shader…** and **Choose sha
 
 **Shader parameters…** shows each declared parameter with its name, default and range, including vectors, booleans and choices. Parameters keep their original labels, ranges and defaults in each row, and each use of the same shader keeps its own values. Changing a uniform reuses the prepared resources; changing a compile-time constant rebuilds them.
 
+**Import options…**, **Copy options** and **Paste options** follow the parameters. Import takes matching values from a RetroArch `.slangp` or ReShade `.ini` preset, and Copy and Paste move a row's values as preset text. [Shader options](EFFECT_PLANS.md#shader-options) describes the parsing and matching.
+
 A shader whose compiled program reads depth also shows **Depth input**. It holds the game's reversed, logarithmic, far-plane and multiplier definitions, which all of that game's depth shaders share, and changing them recompiles those shaders. Custom ReShade effects can override the compiler's forward-depth definitions. [Renderer integrations](SHARED_PROCESSING.md#scene-depth) describes where the depth comes from.
 
 ### MagpieFX shaders

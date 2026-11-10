@@ -96,6 +96,18 @@ Some image filters use a model, such as a depth estimator, and declare it as a t
 
 Neural rows and filters with model inputs share one path for model selection, download, reservation while in use, permission checks for a running game and cancellation. When a row with an attachment model is prepared, the key that identifies its resources includes the resolved model path and operation, so changing the model or an input parameter invalidates the earlier preparation. Turning the row off keeps the saved selection and requests no inference.
 
+### Shader options
+
+A shader row's parameter values live in its `shader.parameters`, and three controls at the end of the row's parameters move them in and out as text. Every value they apply goes through the same parameter edit as a manual change, so the row keeps one source of truth and the plan validator checks the result.
+
+- **Import options…** opens a RetroArch `.slangp` or ReShade `.ini` preset. The main process reads the file, and the editor matches its option names against the parameters that the row's shader declares.
+- **Copy options** puts every declared parameter's current value on the clipboard in the row's native format: a ReShade `[<effect>.fx]` section for `.fx` effects, RetroArch `NAME = "value"` lines for `.slangp` and `.slang` shaders, and `Name=value` lines for other formats.
+- **Paste options** reads clipboard text with the same parser and matcher as Import. It accepts copied options as well as `.slangp` or `.ini` text from elsewhere.
+
+The parser reads `NAME = "value"`, `NAME = value` and `Name=v1,v2,...` lines with one to four numbers. RetroArch pass, scale, filter, wrap, mipmap, alias, framebuffer and texture keys are not options, and neither are values that are not numbers, such as paths and technique lists. In a ReShade preset, the section named after the row's effect file supplies the values. A preset without that section falls back to its top-level lines, which older presets and copied options use, and its `Key<technique>` shortcut entries are skipped.
+
+Names match exactly first and then without regard to case. Each value is accepted as an edit control would accept it: numbers are clamped to the declared range, integers are rounded, switches become 0 or 1 and a menu value must be one of its choices. Components the text leaves out keep their current values. The editor reports the result inline, for example "Imported 6 options from zfast_crt.slangp; 1 not found in this shader: CURVATURE." Text with no values for the row's shader, such as an unreadable file, a preset for other effects or a file whose names the shader does not declare, changes nothing, and the editor states the reason.
+
 ### Sizing helpers
 
 A schema 2 resize row can size the image for another row. Such a helper names its owner in `ownedBy`:
@@ -293,7 +305,9 @@ The launcher's preload script exposes these graphics methods to the renderer:
 | `getGameEffects(gamePath)` | Returns the readable saved plan, the game's current catalog, source-resolution capabilities, native binding timing, `notices` and the [graphics status](STATUS_AND_DELIVERY.md#graphics-status). An unreadable saved plan is returned as `graphicsPlanError`, with an empty editor plan. |
 | `getGameEffectTemplates(gamePath)` | Returns the contextual templates for the graphics menu, read when the menu opens. |
 | `requestGraphicsCatalog({open, revision})`, `onGraphicsCatalog(callback)` | Declare and release a view's need for the graphics catalog, and receive each new catalog revision while the request is held. See [catalog loading](#catalog-loading). |
-| `getGameEffectParameters(gamePath, nodeId, draftPlan?)` | Describes a shader's parameters without saving or activating the draft. |
+| `getGameEffectParameters(gamePath, nodeId, draftPlan?)` | Describes a shader's parameters without saving or activating the draft. The description's `effectFile` names the effect file, which selects the options text format; combined built-in effects have none. |
+| `importShaderOptions()` | Opens a `.slangp` or `.ini` preset chosen in a native dialog and returns its `{name, text}`, or `null` when cancelled. A file that is missing, larger than 4 MiB or not UTF-8 text is rejected with its name. The editor applies the text as described in [Shader options](#shader-options). |
+| `readClipboardText()`, `writeClipboardText(text)` | Read and write plain text on the system clipboard for **Copy options** and **Paste options**. |
 | `pickGameEffectFile(gamePath, kind?, operation?)` | Selects a local shader or, with `kind: "neural-model"`, a compatible installed model or an original model file to import. An import returns the path of the stored copy. An expected `operation` validates the package before it is attached to a row. Cancelling changes no settings. |
 | `setGameEffects(gamePath, plan, request?)` | Applies the edit to the saved plan, rebasing it when `request.basePlan` names the plan it was made from. Validates the result once and saves it. A row that cannot be read is left out and listed in `notices`, and the readable rows are saved and published. A running game with live graphics editing receives the prepared plan; other games use it at the next launch. Returns the saved plan and its revision. A plan whose top-level structure cannot be read is rejected, and an unreadable saved plan rejects edits until it is cleared. |
 | `resetGameEffects(gamePath)` | Clears the chain and its upgrade notices. Changing the editor view does not call it. |

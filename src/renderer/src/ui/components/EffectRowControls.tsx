@@ -8,7 +8,7 @@ import {implementationOutputSummary, implementationHelp} from "../../../../modul
 import {selectNeuralModel, compatibleNeuralModel} from "../../../../modules/shared/effects/neural-selection.mjs";
 import {editableShaderExtent, selectedEffectExtent} from "../shader-implementations";
 import {losslessRequirement, neuralImplementation, resizeKind} from "../effects-catalog";
-import {ShaderParameters} from "./ShaderParameters";
+import {ShaderParameters, type ShaderOptionsTransfer} from "./ShaderParameters";
 import {GraphicsNumber, GraphicsRange} from "./GraphicsNumber";
 import {AdaptiveQualityControls} from "./AdaptiveQualityControls";
 import {HelpTip} from "./HelpTip";
@@ -18,6 +18,12 @@ const resizeHeightPresets = [540, 720, 1080];
 const multiplierSupported = (choice: EffectCatalogRow | undefined, factor: number) =>
   factor <= (choice?.outputContract?.maximumMultiplier || 5) && (!choice?.outputContract?.multipliers || choice.outputContract.multipliers.includes(factor));
 const NEURAL_DEFAULTS = {modelPath: null, temporal: false, intensity: 1};
+// Preset files are read by the main process; the clipboard is the system pasteboard.
+function shaderOptionsTransfer(): ShaderOptionsTransfer | undefined {
+  const api = window.MacLauncher?.launcher;
+  if (!api?.importShaderOptions || !api.readClipboardText || !api.writeClipboardText) return undefined;
+  return {importFile: () => api.importShaderOptions!(), readText: () => api.readClipboardText!(), writeText: text => api.writeClipboardText!(text)};
+}
 
 /**
  * Settings of one effect row, shared by Simple Options and Advanced rows:
@@ -59,7 +65,7 @@ export function EffectRowControls({editor, row: node, choice, simple = false}: {
       <span className="detailValue ellipsis" title={node.shader.effectPath || undefined}>{node.shader.effectPath?.split(/[\\/]/).pop() || "No shader selected"}</span>
       <button className="btn small" onClick={() => editor.pick(node)}>Choose shader…</button></div>}
     {status?.shaderParameters && <ShaderParameters key={JSON.stringify([node.id, node.shader.preset, node.shader.effects, node.shader.effectPath, filter?.path, filter?.sourceRevision || choice?.sourceRevision])}
-      disclosure={false} idPrefix={`effect-${node.id}`} gamePath={editor.game.gamePath} settings={node.shader} live={running && info?.live === true && info.shaderBindingsNextLaunch !== true}
+      disclosure={false} idPrefix={`effect-${node.id}`} gamePath={editor.game.gamePath} settings={node.shader} transfer={shaderOptionsTransfer()} live={running && info?.live === true && info.shaderBindingsNextLaunch !== true}
       loadParameters={async () => editor.loadParameters(node.id)} onChange={async (_, patch) => {await editor.setSettings(node.id, {shader: patch}, true);}}
       after={loaded => support?.depthInput === true && loaded.requirements?.depth === true ? <DepthInputControls nodeId={node.id} value={plan.depthInput}
         onChange={patch => void editor.setDepthInput(patch)} /> : null} />}

@@ -501,7 +501,7 @@ async function describeParameters(entry, { userDataDir, app, root = runtimeRoot(
     const provider = Providers.packaged(effect);
     if (provider) {
       Providers.requireAvailable(provider, { features: state.shaderFeatures, graphicsArchitecture });
-      return { key: Live.effectKey(settings, userDataDir), ...(await provider.inspect(effect, { root, execute, signal, nativeVideo, userDataDir, resourceRoots:[...(selected?.includePaths||[]),...(selected?.texturePaths||[])] })) };
+      return { key: Live.effectKey(settings, userDataDir), effectFile: path.basename(effect), ...(await provider.inspect(effect, { root, execute, signal, nativeVideo, userDataDir, resourceRoots:[...(selected?.includePaths||[]),...(selected?.texturePaths||[])] })) };
     }
     const env = { ...process.env };
     for (const key of Object.keys(env)) if (key.startsWith("DYLD_") || key.startsWith("RESHADE_")) delete env[key];
@@ -511,7 +511,7 @@ async function describeParameters(entry, { userDataDir, app, root = runtimeRoot(
     const requirements = require("./requirements").read(temporary, settings.preset === "chain" ? Chain.TECHNIQUE : undefined);
     if (!Array.isArray(uniforms) || uniforms.length > 4096) throw new Error("Invalid shader parameter metadata.");
     const traits=require("./shader-traits").analyzeFile(effect,"fx").traits;
-    return { key: Live.effectKey(settings, userDataDir), traits, outputContract:require("./shader-traits").outputContract(traits), ...(requirements ? { requirements } : {}), parameters: uniforms.slice(0, parameterLimit).map(parameter => {
+    return { key: Live.effectKey(settings, userDataDir), ...(settings.preset === "chain" ? {} : { effectFile: path.basename(effect) }), traits, outputContract:require("./shader-traits").outputContract(traits), ...(requirements ? { requirements } : {}), parameters: uniforms.slice(0, parameterLimit).map(parameter => {
       const stage = /^V__MLStage(\d+)__/.exec(parameter.name);
       return stage ? { ...parameter, label: `Effect ${Number(stage[1]) + 1} · ${parameter.label}` } : parameter;
     }) };

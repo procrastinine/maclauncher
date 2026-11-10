@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, shell, session, nativeImage, nativeTheme, screen, systemPreferences, safeStorage } = require("electron");
+const { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, shell, session, nativeImage, nativeTheme, screen, systemPreferences, safeStorage } = require("electron");
 
 const Modules = require("../modules/registry");
 const GameData = require("../modules/shared/game-data");
@@ -3730,6 +3730,7 @@ ipcMain.handle("launcher:setGameNetworkAccess", async (_event, gamePath, network
   return true;
 });
 
+require("../modules/shared/effects/shader-options-ipc").register({ ipcMain, dialog, clipboard, owner: getLauncherDialogOwner });
 const effectsPresets = require("../modules/shared/effects/presets-ipc").register({ ipcMain, userDataDir, app, loadSettings, pickFile: pickEffectFile,
   inventoryRevision: () => graphicsCatalog.revision(),
   changed: presets => {

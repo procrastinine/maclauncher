@@ -3,8 +3,17 @@ import type { GameReShadeSettings, ShaderParameter, ShaderParameterSchema } from
 import { GraphicsNumber } from "./GraphicsNumber";
 import { HelpTip } from "./HelpTip";
 import { ErrorText } from "./ErrorText";
+import { FolderIcon } from "../icons";
+import { formatShaderOptions, importShaderOptions } from "../../../../modules/shared/effects/shader-options.mjs";
 
-export function ShaderParameters({ gamePath, settings, live, onChange, loadParameters, idPrefix = "shader", disclosure = true, after }: {
+/** Reads a chosen preset file and the clipboard for Import, Copy and Paste options. */
+export type ShaderOptionsTransfer = {
+  importFile: () => Promise<{ name: string; text: string } | null>;
+  readText: () => Promise<string>;
+  writeText: (text: string) => Promise<unknown>;
+};
+
+export function ShaderParameters({ gamePath, settings, live, onChange, loadParameters, idPrefix = "shader", disclosure = true, after, transfer }: {
   gamePath: string; settings?: GameReShadeSettings; live: boolean;
   onChange: (path: string, patch: Partial<GameReShadeSettings>) => Promise<void>;
   loadParameters: () => Promise<ShaderParameterSchema>;
@@ -12,14 +21,18 @@ export function ShaderParameters({ gamePath, settings, live, onChange, loadParam
   disclosure?: boolean;
   /** Controls that depend on the compiled program, shown after its parameters. */
   after?: (loaded: ShaderParameterSchema) => React.ReactNode;
+  /** Import, Copy and Paste options at the end of the parameters. */
+  transfer?: ShaderOptionsTransfer;
 }) {
   const [parameters, setParameters] = useState<ShaderParameter[] | null>(null);
   const [loaded, setLoaded] = useState<ShaderParameterSchema | null>(null);
   const [expanded, setExpanded] = useState(!disclosure);
   const controlsId = useId();
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [transferring, setTransferring] = useState(false), [transferNotice, setTransferNotice] = useState("");
   type Values = Record<string, number[]>;
-  type Edit = { parameter: ShaderParameter; component: number; value: number } | null;
+  // One control's component, several parameters from imported options, or a reset (null).
+  type Edit = { parameter: ShaderParameter; component: number; value: number } | { values: Values } | null;
   type Write = {edit: Edit; onChange: typeof onChange; gamePath: string};
   const [, refresh] = useState(0);
   const mounted = useRef(true), loadRequest = useRef(0);
@@ -36,6 +49,7 @@ export function ShaderParameters({ gamePath, settings, live, onChange, loadParam
   }
   function apply(values: Values, edit: Edit): Values {
     if (!edit) return {};
+    if ("values" in edit) return {...values, ...edit.values};
     const components = [...(values[edit.parameter.name] || edit.parameter.default)];
     components[edit.component] = edit.value;
     return {...values, [edit.parameter.name]: components};
@@ -49,7 +63,10 @@ export function ShaderParameters({ gamePath, settings, live, onChange, loadParam
       try {
         await save(path, {parameters: edit ? next : null});
         if (mounted.current) {
-          if (edit) {
+          if (edit && "values" in edit) {
+            for (const [name, components] of Object.entries(edit.values))
+              if (JSON.stringify(state.saved[name]) === JSON.stringify(before[name])) state.saved = {...state.saved, [name]: components};
+          } else if (edit) {
             const previous = (before[edit.parameter.name] || edit.parameter.default)[edit.component];
             const current = (state.saved[edit.parameter.name] || edit.parameter.default)[edit.component];
             if (current === previous) state.saved = apply(state.saved, edit);
@@ -84,6 +101,28 @@ export function ShaderParameters({ gamePath, settings, live, onChange, loadParam
     if (parameter.min !== undefined && value < parameter.min || parameter.max !== undefined && value > parameter.max) return;
     enqueue({parameter, component, value});
   }
+  // Import and Paste apply matched values as one parameter edit; text that
+  // matches nothing changes nothing and its reason is shown.
+  async function transferOptions(action: "import" | "copy" | "paste") {
+    if (!transfer || !parameters?.length || transferring) return;
+    setTransferring(true);setTransferNotice("");setError("");
+    try {
+      if (action === "copy") {
+        await transfer.writeText(formatShaderOptions({parameters, values: displayed, effectFile: loaded?.effectFile}));
+        if (mounted.current) setTransferNotice(`Copied ${parameters.length} option${parameters.length === 1 ? "" : "s"}.`);
+        return;
+      }
+      const file = action === "import" ? await transfer.importFile() : null;
+      if (action === "import" && !file) return;
+      const text = file ? file.text : await transfer.readText();
+      if (!mounted.current) return;
+      if (!text.trim()) throw new Error("The clipboard has no text.");
+      const result = importShaderOptions(text, {parameters, values: displayed, effectFile: loaded?.effectFile, source: file?.name});
+      enqueue({values: result.values});setTransferNotice(result.message);
+    } catch (e) {
+      if (mounted.current) setError(e instanceof Error ? e.message : "Shader options could not be read.");
+    } finally { if (mounted.current) setTransferring(false); }
+  }
   useEffect(() => {if (!disclosure) {setExpanded(true);void load();}}, [disclosure]);
   function toggle() {
     setExpanded(!expanded);
@@ -114,6 +153,14 @@ export function ShaderParameters({ gamePath, settings, live, onChange, loadParam
             step={parameter.step || (parameter.type === "int" ? 1 : "any")} onValue={value => change(parameter, i, value)} />;
       })}</div>
     </div>)}
+    {transfer && Boolean(parameters?.length) && <div className="detailActions shaderOptionsTransfer">
+      <button type="button" className="btn iconOnly" title="Import options…" aria-label="Import options…" disabled={transferring}
+        onClick={() => void transferOptions("import")}><FolderIcon /></button>
+      <button type="button" className="btn small" disabled={transferring} onClick={() => void transferOptions("copy")}>Copy options</button>
+      <button type="button" className="btn small" disabled={transferring} onClick={() => void transferOptions("paste")}>Paste options</button>
+      <HelpTip label="About shader options">Import reads matching values from a RetroArch .slangp or ReShade .ini preset. Copy writes this shader's values as preset text, and Paste reads the same text or preset text copied elsewhere.</HelpTip>
+    </div>}
+    {transferNotice && <p className="detailMeta" role="status">{transferNotice}</p>}
     {loaded && after?.(loaded)}
     </div>
   </div>;
