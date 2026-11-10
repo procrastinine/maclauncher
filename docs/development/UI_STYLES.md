@@ -69,10 +69,9 @@ The library's selection button, `.gameSelect`, sets `aria-pressed` and `aria-con
 
 Icon sizes:
 
-- The `:root` tokens `--icon-size`, `--icon-size-sm` and `--icon-size-detail` set the icon scale.
-- Button sizes come from the `--icon-button-size*` tokens and the `.btn.iconOnly svg` rule.
-- Icon buttons in the inspector use the `.detailActions` override with `--icon-size-detail`.
-- `RefreshIcon` and `XIcon` are shared SVGs in `src/renderer/src/ui/icons.tsx` and default to `1em`.
+- Every icon button, small or regular, draws its glyph in one box set by the `:root` token `--icon-size`. Icon-only buttons have no text padding, so the glyph keeps that size.
+- Button sizes come from the `--icon-button-size*` tokens and the `.btn.iconOnly svg` rule; icon buttons in the inspector use the `.detailActions` override for their button size.
+- The shared SVGs in `src/renderer/src/ui/icons.tsx` default to `1em` and are centered on 12,12 in their 24-unit view box.
 - Reload and Refresh actions use `RefreshIcon` with `iconOnly`, and keep the full action name in both `title` and `aria-label`.
 
 ## Components and source files

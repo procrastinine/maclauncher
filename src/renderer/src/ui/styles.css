@@ -58,7 +58,6 @@
   --control-radius: var(--radius-sm);
   --icon-size: 18px;
   --icon-size-sm: var(--control-font-size-sm);
-  --icon-size-detail: var(--icon-size);
   --icon-button-size: 30px;
   --icon-button-size-sm: 28px;
   --icon-button-size-detail: 28px;
@@ -1275,11 +1274,12 @@ input[type="checkbox"], input[type="radio"] {
   font-size: var(--icon-size);
 }
 
+/* Every icon button draws its glyph in the same 18px box. */
 .btn.small.iconOnly {
   padding: 0;
   width: var(--icon-button-size-sm);
   height: var(--icon-button-size-sm);
-  font-size: var(--icon-size-sm);
+  font-size: var(--icon-size);
 }
 
 .btn.iconOnly svg {
@@ -1291,7 +1291,7 @@ input[type="checkbox"], input[type="radio"] {
 .detailActions .btn.small.iconOnly {
   width: var(--icon-button-size-detail);
   height: var(--icon-button-size-detail);
-  font-size: var(--icon-size-detail);
+  font-size: var(--icon-size);
 }
 
 .btn.danger {
