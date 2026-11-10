@@ -3,7 +3,6 @@ import type { GameReShadeSettings, ShaderParameter, ShaderParameterSchema } from
 import { GraphicsNumber } from "./GraphicsNumber";
 import { HelpTip } from "./HelpTip";
 import { ErrorText } from "./ErrorText";
-import { FolderIcon } from "../icons";
 import { formatShaderOptions, importShaderOptions } from "../../../../modules/shared/effects/shader-options.mjs";
 
 /** Reads a chosen preset file and the clipboard for Import, Copy and Paste options. */
@@ -154,8 +153,7 @@ export function ShaderParameters({ gamePath, settings, live, onChange, loadParam
       })}</div>
     </div>)}
     {transfer && Boolean(parameters?.length) && <div className="detailActions shaderOptionsTransfer">
-      <button type="button" className="btn iconOnly" title="Import options…" aria-label="Import options…" disabled={transferring}
-        onClick={() => void transferOptions("import")}><FolderIcon /></button>
+      <button type="button" className="btn small" disabled={transferring} onClick={() => void transferOptions("import")}>Import options…</button>
       <button type="button" className="btn small" disabled={transferring} onClick={() => void transferOptions("copy")}>Copy options</button>
       <button type="button" className="btn small" disabled={transferring} onClick={() => void transferOptions("paste")}>Paste options</button>
       <HelpTip label="About shader options">Import reads matching values from a RetroArch .slangp or ReShade .ini preset. Copy writes this shader's values as preset text, and Paste reads the same text or preset text copied elsewhere.</HelpTip>

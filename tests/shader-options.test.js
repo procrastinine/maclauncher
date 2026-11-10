@@ -129,7 +129,9 @@ test("the options panel imports, copies and pastes through the ordinary paramete
   const harness = componentHarness(ShaderParameters, {gamePath: "/Game", settings: {parameters: {V__MASK_DARK: [0.5]}}, live: false, disclosure: false, transfer,
     onChange: async (_, patch) => {writes.push(structuredClone(patch));}, loadParameters: async () => ({parameters: zfastParameters(), effectFile: "zfast_crt.fx"})});
   harness.render();await harness.settle();await harness.settle();
-  const button = label => elements(harness.render()).find(node => node.type === "button" && (node.props["aria-label"] === label || text(node) === label));
+  // The three controls are text buttons; the folder icon means Show in Finder.
+  const button = label => elements(harness.render()).find(node => node.type === "button" && text(node) === label);
+  assert.deepEqual(["Import options…", "Copy options", "Paste options"].map(label => button(label)?.props.className), ["btn small", "btn small", "btn small"]);
   const status = () => elements(harness.render()).flatMap(node => node.props.role === "status" ? [text(node)] : typeof node.props.error === "string" && node.props.error ? [node.props.error] : []);
   button("Import options…").props.onClick();await harness.settle();
   assert.deepEqual(writes.at(-1).parameters, {V__MASK_DARK: [0.3], V__BLURSCALEX: [0.45], V__LOWLUMSCAN: [5], V__HILUMSCAN: [12], V__BRIGHTBOOST: [1.5], V__MASK_FADE: [0.7]});
