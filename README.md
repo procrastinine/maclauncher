@@ -27,7 +27,7 @@ You can also run [from source](#development), and everything should be the same.
 
 # MacLauncher as a native runtime system
 
-https://github.com/user-attachments/assets/80d62d40-46c7-4d63-8ee4-8771015b9757
+https://github.com/user-attachments/assets/923b7374-076f-4b5d-aa5d-30dfb9f864bf
 
 *Shown: The Penjikent Creature, a [Godot](https://godotengine.org/) game packaged for Windows, dragged in as its `.exe`. MacLauncher detects Godot 3.5.2, downloads the matching runtime after asking, and plays it natively, without WINE. The installed Godot versions are then managed in **Runtimes**.*
 
@@ -114,7 +114,7 @@ Most of the above runtimes are existing tools with MacLauncher managing them. Ho
 
 # MacLauncher as a graphics and effects layer
 
-https://github.com/user-attachments/assets/593baa73-ed69-4e54-a40a-c7c47b437d2d
+https://github.com/user-attachments/assets/5a99ddfb-b73c-4cb6-b037-1640686f7fe4
 
 *Shown: the DOOM 3 demo running natively through [dhewm3](https://github.com/dhewm/dhewm3). First a CRT filter and grayscale in the Simple view, with the split and difference views, then the DLSS chain described below, in the Advanced view: downsample to 540p, DLSS 5, MetalFX back up to the window, and Lossless Scaling frame generation at 4x. The performance overlay shows the ~15fps coming out of DLSS turning into 60fps on screen, and DLSS and frame generation are switched off and on again live.*
 
