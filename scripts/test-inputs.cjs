@@ -30,6 +30,37 @@ function holds(existing, revision) {
   } catch { return false; }
 }
 
+const normalized = url => String(url || '').trim().replace(/\/+$/, '').replace(/\.git$/, '').toLowerCase();
+
+// The repository URL of each source a checkout declares, by path.
+function sourceUrls(checkout) {
+  const names = new Map(), urls = new Map();
+  let lines = [];
+  try { lines = git(checkout, ['config', '-f', '.gitmodules', '--get-regexp', '^submodule\\..*\\.(path|url)$']).split('\n'); } catch { return urls; }
+  for (const line of lines) {
+    const match = /^submodule\.(.+)\.(path|url) (.+)$/.exec(line);
+    if (match) names.set(match[1], { ...names.get(match[1]), [match[2]]: match[3] });
+  }
+  for (const { path: location, url } of names.values()) if (location && url) urls.set(location, url);
+  return urls;
+}
+
+// The one local clone of a source's repository: the checkout beside the primary worktree that is
+// named after the repository and whose origin is that repository.
+function canonicalClone(primary, url) {
+  const name = path.posix.basename(normalized(url));
+  if (!name || !url) return null;
+  const clone = path.join(path.dirname(primary), name);
+  try { return normalized(git(clone, ['remote', 'get-url', 'origin'])) === normalized(url) ? clone : null; } catch { return null; }
+}
+
+// The repositories a source can be attached from: in a linked worktree, the primary checkout's
+// checkout of it; in any checkout, the one local clone of its repository.
+function origins(repoRoot, primary, location, url) {
+  const linked = fs.realpathSync(primary) !== fs.realpathSync(repoRoot);
+  return [linked && path.join(primary, location), canonicalClone(primary, url)].filter(Boolean);
+}
+
 // Attach `existing`, a checkout of the primary worktree, at `target` as a detached worktree of
 // its own repository at `revision`; false when it is not a repository holding that commit.
 function attach(existing, target, revision) {
@@ -40,43 +71,49 @@ function attach(existing, target, revision) {
   return true;
 }
 
-// The nested sources of an attached source, each attached from the primary's checkout of it at
-// the commit the attached tree records.
-function attachNested(existing, target, root, notAttached) {
+// The nested sources of an attached source, each attached at the commit the attached tree records,
+// from the attached repository's own checkout of it or from the one local clone of its repository.
+function attachNested(existing, target, root, notAttached, primary) {
+  const urls = sourceUrls(target);
   for (const line of git(target, ['ls-files', '--stage']).split('\n')) {
     const match = /^160000 ([0-9a-f]{40}) \d\t(.+)$/.exec(line);
     if (!match) continue;
     const [, revision, location] = match, nested = path.join(target, location);
     if (fs.existsSync(path.join(nested, '.git'))) continue;
-    if (attach(path.join(existing, location), nested, revision)) attachNested(path.join(existing, location), nested, root, notAttached);
+    const used = [path.join(existing, location), canonicalClone(primary, urls.get(location))].filter(Boolean).find(candidate => attach(candidate, nested, revision));
+    if (used) attachNested(used, nested, root, notAttached, primary);
     else notAttached.push(path.relative(root, nested));
   }
 }
 
 async function prepareSources(repoRoot) {
   const plan = await Sources.readPlan({ repoRoot });
-  const primary = primaryOf(repoRoot);
+  const primary = primaryOf(repoRoot), urls = sourceUrls(repoRoot);
   const linked = fs.realpathSync(primary) !== fs.realpathSync(repoRoot);
-  // A linked app checkout shares the primary worktree's existing source repositories. No source
-  // checkout, index, branch or configuration of the primary worktree is changed. A source with
-  // nested sources is never cloned here: it is attached from the primary's checkout together with
-  // its nested sources, or left out with a message when the primary has no checkout at its pin.
-  if (linked) {
-    for (const source of plan.modules) {
-      if (sourceReady(repoRoot, source)) continue;
-      const target = path.join(repoRoot, source.path), existing = path.join(primary, source.path);
-      if (!attach(existing, target, source.revision)) {
-        if (source.recursive) console.warn('test-inputs: ' + source.path + ' has nested sources and the primary checkout ' + primary +
-          ' holds no checkout of it at ' + source.revision.slice(0, 12) + '; a linked worktree does not clone it. Initialize it in the primary checkout.');
-        continue;
-      }
-      if (!source.recursive) continue;
-      const notAttached = [];
-      attachNested(existing, target, repoRoot, notAttached);
-      if (notAttached.length) console.warn('test-inputs: the primary checkout holds no checkout of ' + notAttached.join(', ') + '; a linked worktree does not clone them.');
+  // A source is attached as a detached worktree of an existing repository: in a linked app checkout,
+  // the primary worktree's checkout of it, and in any checkout, the one local clone of its repository
+  // beside the primary worktree. No source checkout, index, branch or configuration of the primary
+  // worktree or of that clone is changed. A source with nested sources that can be attached is never
+  // cloned here: it is attached together with its nested sources, or left out with a message when
+  // no such repository holds its pin. Only a checkout with no such repository clones it.
+  const attachable = new Set();
+  for (const source of plan.modules) {
+    const candidates = origins(repoRoot, primary, source.path, urls.get(source.path));
+    if (!candidates.length) continue;
+    if (source.recursive) attachable.add(source.path);
+    const target = path.join(repoRoot, source.path), ready = sourceReady(repoRoot, source);
+    const existing = candidates.find(candidate => ready ? holds(candidate, source.revision) : attach(candidate, target, source.revision));
+    if (!existing) {
+      if (!ready && source.recursive) console.warn('test-inputs: ' + source.path + ' has nested sources and ' + (linked ? 'the primary checkout ' + primary : candidates.join(' and ')) +
+        ' holds no checkout of it at ' + source.revision.slice(0, 12) + '; ' + (linked ? 'a linked worktree does not clone it. Initialize it in the primary checkout.' : 'setup does not clone it. Fetch that commit there.'));
+      continue;
     }
+    if (!source.recursive) continue;
+    const notAttached = [];
+    attachNested(existing, target, repoRoot, notAttached, primary);
+    if (notAttached.length) console.warn('test-inputs: no local repository holds a checkout of ' + notAttached.join(', ') + '; ' + (linked ? 'a linked worktree' : 'setup') + ' does not clone them.');
   }
-  const pending = plan.modules.filter(source => !(linked && source.recursive) && !sourceReady(repoRoot, source)).map(source => source.path);
+  const pending = plan.modules.filter(source => !attachable.has(source.path) && !sourceReady(repoRoot, source)).map(source => source.path);
   if (pending.length) await Sources.initSubmodules({ repoRoot, select: pending });
   return plan;
 }
@@ -88,10 +125,10 @@ async function check({ repoRoot = ROOT } = {}) {
     const leftOut = [];
     for (const source of plan.modules) {
       if (sourceReady(repoRoot, source)) continue;
-      // A linked worktree leaves out a source with nested sources that the primary worktree has
-      // not checked out at its pin.
-      const primary = source.recursive && primaryOf(repoRoot);
-      if (primary && fs.realpathSync(primary) !== fs.realpathSync(repoRoot) && !holds(path.join(primary, source.path), source.revision)) leftOut.push(source.path);
+      // Setup leaves out a source with nested sources that it can only attach, when no repository
+      // it can attach from holds its pin.
+      const candidates = source.recursive ? origins(repoRoot, primaryOf(repoRoot), source.path, sourceUrls(repoRoot).get(source.path)) : [];
+      if (candidates.length && !candidates.some(candidate => holds(candidate, source.revision))) leftOut.push(source.path);
       else problems.push(source.path + ' at ' + source.revision.slice(0, 12));
     }
     if (problems.length) throw new Error(problems.join(', '));
@@ -125,7 +162,7 @@ async function check({ repoRoot = ROOT } = {}) {
     for (const name of ['aapt2', 'android', 'r8']) {
       if (!fs.lstatSync(tools[name]).isFile()) throw new Error('Missing Android fixture tool: ' + name);
     }
-    if (leftOut.length) console.warn('test-inputs: left out ' + leftOut.join(', ') + ', which the primary checkout has not checked out.');
+    if (leftOut.length) console.warn('test-inputs: left out ' + leftOut.join(', ') + ', which no local repository holds at its pin.');
     return { ready: true, sources: plan.modules.length - leftOut.length, packages: lock.packages.length, ...(leftOut.length ? { leftOut } : {}) };
   } catch (error) {
     throw new Error('Test inputs are not ready. Run `' + COMMAND + '`. ' + error.message.replace(/\s+/g, ' '), { cause: error });
