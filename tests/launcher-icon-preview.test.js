@@ -74,3 +74,59 @@ test("library rows never wait for icon decoding: pending icons decode in short s
   assert.equal(context.canRenderIconPath("/broken.txt"), false);
   assert.equal(decoded.length, files.length, "neither result is decoded again");
 });
+
+function sliceContext({ statSync, decode }) {
+  const immediates = [], decoded = [];
+  const context = { iconDataUrlCache: new Map(), gameRecordsCache: null, setImmediate: run => immediates.push(run), performance,
+    scheduleStateRebuild: () => { context.rebuilds += 1; }, rebuilds: 0, fs: { statSync },
+    nativeImage: { createFromPath: file => { decoded.push(file); return { isEmpty: () => false, getSize: () => ({ width: 64, height: 64 }), toDataURL: () => decode(file) }; } } };
+  vm.createContext(context); vm.runInContext(iconFunction, context);
+  const settle = () => { let rounds = 0; while (immediates.length) { immediates.shift()(); rounds += 1; } return rounds; };
+  return { context, decoded, immediates, settle };
+}
+
+test("an archived icon whose inode changes on every stat decodes once and its row stops pending", () => {
+  let ino = 0;
+  const { context, decoded, immediates, settle } = sliceContext({ decode: file => "data:" + file,
+    statSync: () => ({ isFile: () => true, mtimeMs: 7, ctimeMs: 7, ino: ++ino, size: 100 }) });
+  const icon = "/App.app/Contents/Resources/app.asar/src/modules/demo/resources/icon.png";
+  assert.equal(context.libraryIcon(icon).pending, true);
+  settle();
+  assert.equal(context.rebuilds, 1);
+  for (let rebuild = 0; rebuild < 3; rebuild++) assert.deepEqual({ ...context.libraryIcon(icon) }, { url: "data:" + icon });
+  assert.equal(immediates.length, 0, "a decoded archive icon queues no further decoding");
+  assert.equal(context.iconUrlForPath(icon), "data:" + icon);
+  assert.deepEqual(decoded, [icon]);
+});
+
+test("a file whose identity changes on every stat keeps its preview and decoding rounds end", () => {
+  let mtimeMs = 0, content = "a";
+  const { context, decoded, immediates, settle } = sliceContext({ decode: file => `data:${file}:${content}`,
+    statSync: () => ({ isFile: () => true, mtimeMs: ++mtimeMs, ctimeMs: 1, ino: 1, size: 100 }) });
+  assert.equal(context.libraryIcon("/unstable.png").pending, true);
+  settle();
+  assert.equal(context.rebuilds, 1);
+  assert.equal(context.libraryIcon("/unstable.png").url, "data:/unstable.png:a", "the row shows the previous preview while it is checked again");
+  assert.equal(context.libraryIcon("/unstable.png").url, "data:/unstable.png:a");
+  settle();
+  assert.equal(context.rebuilds, 1, "a round with unchanged results rebuilds nothing");
+  assert.equal(immediates.length, 0);
+  assert.equal(decoded.length, 2);
+  content = "b";
+  assert.equal(context.libraryIcon("/unstable.png").url, "data:/unstable.png:a");
+  settle();
+  assert.equal(context.rebuilds, 2, "a changed image rebuilds once");
+  assert.equal(context.libraryIcon("/unstable.png").url, "data:/unstable.png:b");
+});
+
+test("a pending icon whose file disappears before decoding releases its row", () => {
+  let missing = false;
+  const { context, decoded, settle } = sliceContext({ decode: file => "data:" + file,
+    statSync: () => { if (missing) throw Error("missing"); return { isFile: () => true, mtimeMs: 1, ctimeMs: 1, ino: 1, size: 100 }; } });
+  assert.equal(context.libraryIcon("/gone.png").pending, true);
+  missing = true;
+  settle();
+  assert.equal(context.rebuilds, 1);
+  assert.equal(context.libraryIcon("/gone.png"), null);
+  assert.deepEqual(decoded, []);
+});

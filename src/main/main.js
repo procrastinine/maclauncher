@@ -1038,7 +1038,10 @@ function resolveModuleDefaultIconPath(moduleId) {
 }
 
 const iconDataUrlCache = new Map();
-const sameIconFile = (cached, stat) => cached && cached.mtimeMs === stat.mtimeMs && cached.ctimeMs === stat.ctimeMs && cached.ino === stat.ino && cached.size === stat.size;
+// Size and timestamps identify a file version. Inode numbers are not compared:
+// Electron's ASAR file system reports a new inode on every stat of an archived
+// file, such as a module's default icon inside a packaged app.
+const sameIconFile = (cached, stat) => cached && cached.mtimeMs === stat.mtimeMs && cached.ctimeMs === stat.ctimeMs && cached.size === stat.size;
 
 // A decoded preview, or null for a file that is not a readable image, is kept
 // per file version so a state rebuild never decodes the same file again.
@@ -1058,7 +1061,7 @@ function decodeIcon(iconPath, stat) {
       if (encoded && typeof encoded === "string") url = encoded;
     }
   } catch {}
-  iconDataUrlCache.set(iconPath, { mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, ino: stat.ino, size: stat.size, url });
+  iconDataUrlCache.set(iconPath, { mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, size: stat.size, url });
   // Room for every library icon, so a state rebuild in a large library never
   // decodes and resizes all icons again.
   const limit = Math.max(256, 2 * (gameRecordsCache?.length || 0) + 64);
@@ -1090,31 +1093,40 @@ function canRenderIconPath(iconPath) {
 }
 
 // Library rows never wait for icon decoding. An icon file not decoded yet is
-// shown as pending; short decoding slices follow, then one state rebuild
-// carries the images, or the module icon where a file is not a readable image.
+// shown as pending, and a changed file keeps its previous preview; short
+// decoding slices follow, then one state rebuild carries the images, or the
+// module icon where a file is not a readable image. A round whose results all
+// match what the rows show rebuilds nothing, so no file can keep a row pending
+// or start decoding rounds without end.
 const ICON_DECODE_SLICE_MS = 8;
-const pendingIcons = new Set();
-let iconGeneration = 0, iconPendingReads = 0, iconDecoding = false;
+// Each queued path maps to the preview its rows show: undefined while pending.
+const pendingIcons = new Map();
+let iconGeneration = 0, iconPendingReads = 0, iconDecoding = false, iconsChanged = false;
 function libraryIcon(iconPath) {
   const stat = iconFile(iconPath);
   if (!stat) return null;
   const cached = iconDataUrlCache.get(iconPath);
-  if (sameIconFile(cached, stat)) return cached.url ? { url: cached.url } : null;
+  const shown = cached ? (cached.url ? { url: cached.url } : null) : { pending: true };
+  if (sameIconFile(cached, stat)) return shown;
   iconPendingReads += 1;
-  pendingIcons.add(iconPath);
+  const shownUrl = cached ? cached.url : undefined;
+  pendingIcons.set(iconPath, !pendingIcons.has(iconPath) || pendingIcons.get(iconPath) === shownUrl ? shownUrl : undefined);
   if (!iconDecoding) { iconDecoding = true; setImmediate(decodePendingIcons); }
-  return { pending: true };
+  return shown;
 }
 function decodePendingIcons() {
   const started = performance.now();
-  for (const iconPath of pendingIcons) {
+  for (const [iconPath, shownUrl] of pendingIcons) {
     pendingIcons.delete(iconPath);
-    const stat = iconFile(iconPath);
-    if (stat && !sameIconFile(iconDataUrlCache.get(iconPath), stat)) decodeIcon(iconPath, stat);
+    const stat = iconFile(iconPath), cached = stat && iconDataUrlCache.get(iconPath);
+    const url = !stat ? null : sameIconFile(cached, stat) ? cached.url : decodeIcon(iconPath, stat);
+    if (url !== shownUrl) iconsChanged = true;
     if (performance.now() - started >= ICON_DECODE_SLICE_MS) break;
   }
   if (pendingIcons.size) { setImmediate(decodePendingIcons); return; }
   iconDecoding = false;
+  if (!iconsChanged) return;
+  iconsChanged = false;
   iconGeneration += 1;
   scheduleStateRebuild();
 }
