@@ -655,15 +655,14 @@ body {
   text-wrap: balance;
 }
 
-/* No space is reserved for a scrollbar; content stays clear of the pane's
-   boundary line, which a scrollbar covers. */
+/* No space is reserved for a scrollbar, so rows reach the scrollbar or,
+   without one, the pane's boundary line. */
 .gameList {
   display: flex;
   flex-direction: column;
   overflow: auto;
   min-height: 0;
   flex: 1;
-  padding-right: 1px;
 }
 
 .gameListItems {
