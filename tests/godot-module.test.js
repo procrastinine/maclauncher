@@ -455,6 +455,9 @@ test("the launcher names the installed Godot build that Play uses for a saved ch
   assert.deepEqual(value, { managerId: GodotModule.runtimeManagers[0].id, version: "3.5.2-stable",
     choice: { requested: "3.5.2", version: "3.5.2-stable" } });
   assert.deepEqual(entry, before);
+  // The answer names the choice it is for, also when Play has no build for it.
+  const unknownChoice = { ...entry, runtimeData: { godot: { version: "3.5.9-stable", variant: "standard" } } };
+  assert.equal((await launcher.runAction(unknownChoice, "runtimeAutomaticVersion", {}, { settings: {} })).choice?.requested, "3.5.9-stable");
   // Without a saved choice there is nothing to name for it.
   const automatic = { ...entry, runtimeData: { godot: { variant: "standard" } } };
   assert.deepEqual(await launcher.runAction(automatic, "runtimeAutomaticVersion", {}, { settings: {} }),

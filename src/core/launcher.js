@@ -874,7 +874,8 @@ function createLauncher({
   // The version Play uses for the game's selected runtime when the game has no
   // version choice, for the inspector's Automatic entry, and with a saved
   // choice, the version Play uses for it, so the Version menu shows a choice
-  // that Play meets with an installed build as that build. It reads saved state
+  // that Play meets with an installed build as that build. The answer names the
+  // choice it is for, also when Play has no version for it. It reads saved state
   // and installed runtimes only: no game use, coordinator or runtime lock, no
   // game files, catalog or network, and no write such as the cheats file.
   async function automaticVersion(entry, settings = loadSettings()) {
@@ -890,8 +891,8 @@ function createLauncher({
     const requested = effective.runtimeData?.[runtimeId]?.version;
     const chosen = typeof requested === "string" && requested
       ? await automaticRuntimeVersion(effective, mod, info, context, managers, { choice: true }) : null;
-    if (!version && !chosen) return null;
-    return { managerId, version: version || null, ...(chosen ? { choice: { requested, version: chosen } } : {}) };
+    if (!version && !requested) return null;
+    return { managerId, version: version || null, ...(requested ? { choice: { requested, version: chosen || null } } : {}) };
   }
 
   // The runtime that graphics inspection uses for an entry.

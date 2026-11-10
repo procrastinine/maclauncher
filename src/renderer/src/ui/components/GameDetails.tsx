@@ -315,10 +315,13 @@ export const GameDetails = memo(function GameDetails({
   // Play's versions load separately: without a version choice for Automatic,
   // and for the saved choice, which the menu shows as the installed build Play
   // uses for it when that build is spelled otherwise. The saved choice stays.
+  // Until Play's answer for the current choice arrives, a choice that is not
+  // installed under its own spelling reads as itself, without a marker.
   const runtimePlayVersions = runtimeAutomaticEntry?.runtimeId === g.runtimeId &&
     runtimeAutomaticEntry.value?.managerId === runtimeManagerId ? runtimeAutomaticEntry.value : null;
-  const runtimeVersionSelected = runtimeInspectorSelectedVersion(runtimeSection, runtimeVersionOverride,
-    runtimePlayVersions?.choice?.requested === runtimeVersionOverride ? runtimePlayVersions.choice.version : "");
+  const runtimeChoiceAnswer = runtimeVersionOverride && runtimePlayVersions?.choice?.requested === runtimeVersionOverride
+    ? runtimePlayVersions.choice : null;
+  const runtimeVersionSelected = runtimeInspectorSelectedVersion(runtimeSection, runtimeVersionOverride, runtimeChoiceAnswer?.version || "");
   const runtimeArchitectureOverride = g.runtimeData?.[g.runtimeId]?.architecture || "";
   const runtimeVariantOverride = g.runtimeData?.[g.runtimeId]?.variant || "";
   const runtimeStatus =
@@ -384,7 +387,8 @@ export const GameDetails = memo(function GameDetails({
       (!runtimeRecommendedVariant || item.variant === runtimeRecommendedVariant)));
   const runtimeVersionTag = runtimeVersionTagger(runtimeSection,
     [...runtimeVersionChoices, runtimeRecommendation?.version, runtimePlayVersion, runtimeStatusDefaultVersion]);
-  const runtimeVersionOptions = runtimeInspectorVersionOptions(runtimeSection, runtimeVersionSelected, runtimeVersionTag);
+  const runtimeVersionOptions = runtimeInspectorVersionOptions(runtimeSection, runtimeVersionSelected, runtimeVersionTag,
+    Boolean(runtimeVersionOverride) && !runtimeChoiceAnswer);
   const runtimePreferredArchitecture = runtimeArchitectureOverride || runtimeSection?.defaultArchitecture ||
     runtimeManagerState?.defaultArchitecture || runtimeSection?.launcherArchitecture || runtimeManagerState?.launcherArchitecture;
   const runtimeVersionOption = runtimeVersionOptions.find(option => option.version === runtimeVersionSelected && option.architecture === runtimePreferredArchitecture) ||

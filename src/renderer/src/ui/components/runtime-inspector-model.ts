@@ -69,12 +69,14 @@ export function runtimeInspectorSelectedVersion(section: Record<string, any> | n
 }
 
 /** Separate locally installed CPU copies without changing the stored version.
- * Version wording stays with the same tagger used by the other runtime menus. */
+ * Version wording stays with the same tagger used by the other runtime menus.
+ * While `choicePending`, Play's answer for the saved choice has not arrived, so
+ * a choice missing under its own spelling carries no marker yet. */
 export function runtimeInspectorVersionOptions(section: Record<string, any> | null, selectedVersion = "",
-  tag = runtimeVersionTagger(section, runtimeInspectorVersions(section, selectedVersion))) {
+  tag = runtimeVersionTagger(section, runtimeInspectorVersions(section, selectedVersion)), choicePending = false) {
   return runtimeInspectorVersions(section, selectedVersion).flatMap<{ value: string; version: string; architecture?: string; label: string }>(version => {
     const present = (Array.isArray(section?.installed) ? section.installed : []).some((row: any) => row?.version === version);
-    const label = tag(version) + (present ? "" : " (not installed)");
+    const label = tag(version) + (present || choicePending && version === selectedVersion ? "" : " (not installed)");
     const cpus = [...new Set<string>((Array.isArray(section?.installed) ? section.installed : [])
       .filter((row: any) => row?.version === version && installedRuntimeAvailability(row) !== "unavailable")
       .map((row: any) => installedArchitecture(row)).filter((cpu: string) => cpu === "arm64" || cpu === "x64"))];

@@ -530,8 +530,8 @@ export type RuntimeStatusEntry = {
 export type RuntimeAutomaticEntry = {
   runtimeId: RuntimeId;
   /** `version` is the one Play uses without a version choice; `choice` the one
-   * it uses for the game's saved choice `requested`. */
-  value: { managerId: string; version: string | null; choice?: { requested: string; version: string } } | null;
+   * it uses for the game's saved choice `requested`, null when none is known. */
+  value: { managerId: string; version: string | null; choice?: { requested: string; version: string | null } } | null;
 };
 
 export type RuntimeNoticeLine = {

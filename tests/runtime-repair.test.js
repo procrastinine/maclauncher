@@ -113,9 +113,10 @@ test("Repair beside the Version menu reinstalls the game's damaged version throu
   const installs = [];
   const actions = new Proxy({ onInstallRuntime: async (...args) => { installs.push(args); } }, { get: (target, key) => target[key] || (async () => {}) });
   const nodes = node => React.isValidElement(node) ? [node, ...React.Children.toArray(node.props.children).flatMap(nodes)] : [];
-  const render = runtimeData => {
+  const render = (runtimeData, runtimeAutomaticEntry = null) => {
     const harness = componentHarness(GameDetails.type, { g: { ...state.recents[0], runtimeData: { managed: runtimeData } }, state,
-      moduleInfo: state.modules[0], actions, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null, runtimeStatusEntry: null });
+      moduleInfo: state.modules[0], actions, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null, runtimeStatusEntry: null,
+      runtimeAutomaticEntry });
     t.after(() => harness.close());
     return nodes(harness.render());
   };
@@ -132,8 +133,11 @@ test("Repair beside the Version menu reinstalls the game's damaged version throu
   assert.equal(other.some(node => node.props["aria-label"] === "Repair runtime version"), false, "A usable choice needs no repair");
   assert.deepEqual(optionLabels(render({ version: "1.5" })).slice(1).map(([value]) => value), ["2.0", "1.5", "1.0"],
     "A saved choice this Mac cannot run stays visible");
-  assert.ok(optionLabels(render({ version: "9.0" })).some(([value, label]) => value === "9.0" && label === "v9.0 (not installed)"),
-    "A saved absent version is shown plainly as not installed");
+  assert.ok(optionLabels(render({ version: "9.0" })).some(([value, label]) => value === "9.0" && label === "v9.0"),
+    "A saved absent version reads as itself until Play's answer for it arrives");
+  const answer = { runtimeId: state.recents[0].runtimeId, value: { managerId: "fixture-manager", version: null, choice: { requested: "9.0", version: "9.0" } } };
+  assert.ok(optionLabels(render({ version: "9.0" }, answer)).some(([value, label]) => value === "9.0" && label === "v9.0 (not installed)"),
+    "A saved absent version is shown plainly as not installed once Play's answer arrives");
 });
 
 test("installing a damaged version replaces the damaged copy in the shared install; usable, unavailable and included copies stay", async t => {
