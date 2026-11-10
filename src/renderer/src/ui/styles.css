@@ -615,10 +615,21 @@ body {
   font-size: var(--font-md);
 }
 
+/* Every progress bar is drawn the same way: an accent fill on a rounded track.
+   A bar without a known amount sweeps an accent segment back and forth with a
+   continuous animation, which renders at the display's frame rate. */
+progress { appearance: none; border: none; border-radius: 3px; overflow: hidden; background: transparent; }
+progress::-webkit-progress-bar { background: var(--border-strong); border-radius: 3px; }
+progress::-webkit-progress-value { background: var(--accent); border-radius: 3px; }
+/* The segment is 32% of the track; 212.5% of its own width reaches the far end. */
+progress:indeterminate::-webkit-progress-value { width: 32% !important; animation: progressSweep 1.2s ease-in-out infinite alternate; }
+@keyframes progressSweep { from { transform: translateX(0); } to { transform: translateX(212.5%); } }
+@media (prefers-reduced-motion: reduce) { progress:indeterminate::-webkit-progress-value { animation-duration: 3s; } }
+
 /* One-time library update from an earlier version, before the library loads. */
 .startupMigration { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
   padding: 18px 16px; text-align: center; font-variant-numeric: tabular-nums; }
-.startupMigration progress { width: 240px; height: 6px; accent-color: var(--accent); }
+.startupMigration progress { width: 240px; height: 6px; }
 
 .dropHint {
   display: flex;
@@ -1648,7 +1659,7 @@ input[type="checkbox"], input[type="radio"] {
   gap: 8px;
 }
 
-.runtimeDownloadProgress { flex: 1; min-width: 0; height: 6px; accent-color: var(--accent); }
+.runtimeDownloadProgress { flex: 1; min-width: 0; height: 6px; }
 
 .runtimeDownloadPercent {
   font-size: var(--font-xxs);
@@ -2413,7 +2424,7 @@ select.input:not([multiple]) {
 .moduleResultTitle { color: var(--muted); margin-top: 12px; }
 .gameLaunchStatus { color: var(--muted); font-size: var(--font-sm); }
 .gameLaunchProgress { display: flex; flex: 1 1 140px; flex-direction: column; gap: 3px; min-width: 120px; max-width: 280px; font-variant-numeric: tabular-nums; }
-.gameLaunchProgress progress { width: 100%; height: 6px; accent-color: var(--accent); }
+.gameLaunchProgress progress { width: 100%; height: 6px; }
 .gameLaunchFallback { font-size: var(--font-sm); line-height: 1.3; }
 .gameLaunchSpinner { width: 16px; height: 16px; flex: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: gameLaunchSpin 0.8s linear infinite; }
 @keyframes gameLaunchSpin { to { transform: rotate(360deg); } }
@@ -2687,7 +2698,7 @@ select.input:not([multiple]) {
 .importProgressList:empty { display: none; }
 .importProgressRow { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 12px; }
 .importProgressName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: min(40vw, 280px); }
-.importProgressRow progress { width: 140px; height: 6px; flex: 1; max-width: 240px; accent-color: var(--accent); }
+.importProgressRow progress { width: 140px; height: 6px; flex: 1; max-width: 240px; }
 
 /* Shared popovers: menus and light-dismiss panels anchored to a button. */
 .popoverAnchor { display: inline-flex; }
