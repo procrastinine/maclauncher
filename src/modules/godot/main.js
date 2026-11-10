@@ -508,12 +508,22 @@ function gameVariant(entry) {
   return typeof data.projectRoot === "string" && data.projectRoot && Pack.managedFolder(data.projectRoot) ? "mono" : "standard";
 }
 
-// A game that needs .NET always uses it. Other games use the variant chosen for
-// the game, then a selected custom runtime's own build, then the build already
-// installed for the version Play uses, Standard before .NET, and otherwise
-// Standard, which Play downloads.
+// Godot 3's .NET build copies its API assemblies into res://.mono when it starts
+// and stops when it cannot. An exported pack is read-only, so an exported
+// Godot 3 game without C# runs only on Standard.
+function needsStandard(entry) {
+  const data = entry?.moduleData || {};
+  return resolveDetectedInfo(entry).detectedMajor === 3 && Boolean(data.packPath) && !data.projectRoot && gameVariant(entry) !== "mono";
+}
+
+// A game that needs .NET always uses it, and an exported Godot 3 game without
+// C# always uses Standard. Other games use the variant chosen for the game,
+// then a selected custom runtime's own build, then the build already installed
+// for the version Play uses, Standard before .NET, and otherwise Standard,
+// which Play downloads.
 function managedRuntimeVariant(settings, runtimeData, entry, userDataDir, selectedVariant) {
   if (gameVariant(entry) === "mono") return "mono";
+  if (needsStandard(entry)) return "standard";
   const override = typeof runtimeData?.variant === "string" ? runtimeData.variant.trim() : "";
   const selected = GodotCore.normalizeVariant(override);
   if (selected) return selected;
@@ -1198,7 +1208,8 @@ module.exports = {
     if (entry?.moduleData?.packCustomMagic) return { variant };
     return { ...(detected.detectedVersion ? { version: resolveAvailableVersion(context.settings, context.userDataDir,
       detected.detectedVersion, detected.detectedMajor) || detected.detectedVersion } : {}), variant,
-      ...(gameVariant(entry) === "mono" ? { requiredVariant: "mono", requiredVariantReason: "This game uses C#, so it needs the .NET build." } : {}) };
+      ...(gameVariant(entry) === "mono" ? { requiredVariant: "mono", requiredVariantReason: "This game uses C#, so it needs the .NET build." } :
+        needsStandard(entry) ? { requiredVariant: "standard", requiredVariantReason: "Godot 3's .NET build can't run this exported game." } : {}) };
   },
   filterRuntimeSupport: (entry, supported) => {
     const nativePath = typeof entry?.gamePath === "string" && entry.gamePath.toLowerCase().endsWith(".app");

@@ -34,14 +34,15 @@ Without a detected version or an explicit choice, a single compatible installed 
 
 ### Standard and .NET variants
 
-Godot 3 and later releases come in a Standard and a .NET variant, while Godot 1 and 2 have only Standard. A .NET build can also run GDScript games. Play picks the variant in this order:
+Godot 3 and later releases come in a Standard and a .NET variant, while Godot 1 and 2 have only Standard. A .NET build can also run GDScript games, except an exported Godot 3 game: Godot 3's .NET build copies its API assemblies into the game's `.mono` folder when it starts and stops with a fatal error when it cannot, and an exported pack is read-only. Play picks the variant in this order:
 
 1. .NET, when the game needs it. An exported game needs .NET when its pack declares C# or Mono content, such as C# scripts, a `.mono` folder or .NET project settings, or when a `data_*` folder beside the pack holds `.dll` assemblies. A `.csproj` or `.sln` file or a `.mono` or `GodotSharp` folder beside the pack, or in a source project's folder, has the same effect. DLLs placed directly beside the executable, such as GDExtension or Steam libraries, are native libraries and do not count.
-2. The variant chosen for the game.
-3. The variant already installed for the Godot version that Play uses, with Standard preferred when both are installed.
-4. Standard, which Play downloads when neither variant of that version is installed.
+2. Standard, for an exported Godot 3 game that does not need .NET.
+3. The variant chosen for the game.
+4. The variant already installed for the Godot version that Play uses, with Standard preferred when both are installed.
+5. Standard, which Play downloads when neither variant of that version is installed.
 
-When the game has no variant choice, the inspector's **Variant** menu names the result of this order as **Default (Standard)** or **Default (.NET)**, so the label changes when a build is installed or removed. For a game that needs .NET, the menu shows **Default (.NET)** unless .NET itself is chosen; **Standard** is disabled, and the note "This game uses C#, so it needs the .NET build." appears under the menu. A Standard choice that was saved for such a game stays in the game's settings but does not apply. **Install**, beside the version menu, installs the variant that Play uses. A custom runtime selected for the game, on the other hand, runs with its own variant, so a game that needs .NET requires a .NET custom runtime. The game's C# assemblies must also match the selected Godot API and, where required, have compatible macOS native dependencies.
+When the game has no variant choice, the inspector's **Variant** menu names the result of this order as **Default (Standard)** or **Default (.NET)**, so the label changes when a build is installed or removed. For a game that needs .NET, the menu shows **Default (.NET)** unless .NET itself is chosen; **Standard** is disabled, and the note "This game uses C#, so it needs the .NET build." appears under the menu. A Standard choice that was saved for such a game stays in the game's settings but does not apply. An exported Godot 3 game without C# is the reverse: **.NET** is disabled, the note "Godot 3's .NET build can't run this exported game." appears under the menu, and a saved .NET choice does not apply. **Install**, beside the version menu, installs the variant that Play uses. A custom runtime selected for the game, on the other hand, runs with its own variant, so a game that needs .NET requires a .NET custom runtime. The game's C# assemblies must also match the selected Godot API and, where required, have compatible macOS native dependencies.
 
 ### Catalog and installation
 
