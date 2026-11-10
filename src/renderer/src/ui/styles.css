@@ -472,6 +472,17 @@ body {
   padding: 8px 18px 10px;
 }
 
+/* With the inspector open beside the list, the toolbar ends at the inspector's
+   content column: the same padding plus the same scrollbar gutter, so its last
+   button sits above the inspector's close button. */
+@media (min-width: 1081px) {
+  .workspaceToolbar:has(+ .libraryLayout.hasDetails) {
+    padding-right: 16px;
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
+}
+
 .libraryToolbar,
 .libraryToolbarControls {
   display: flex;
@@ -2401,10 +2412,22 @@ select.input:not([multiple]) {
 @media (max-width: 1080px) {
   .header .librarySearch { order: 3; flex-basis: 100%; }
   .headerActions { margin-left: auto; }
+  /* Stacked, the list is as tall as its rows, up to its share of the height,
+     and the inspector starts right below it and takes the rest. */
   .libraryLayout.hasDetails {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(200px, 1fr) minmax(220px, 0.9fr);
+    display: flex;
+    flex-direction: column;
+    row-gap: 0;
     overflow: auto;
+  }
+
+  .libraryLayout.hasDetails > .libraryPane {
+    flex: 0 0 auto;
+    max-height: max(200px, calc(100% / 1.9));
+  }
+
+  .libraryLayout.hasDetails > .detailsPane {
+    flex: 1 0 220px;
   }
 
   .libraryLayout.hasDetails > .card.libraryPane {

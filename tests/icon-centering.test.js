@@ -54,24 +54,37 @@ function pathBounds(d) {
   return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
 }
 
-function iconPaths() {
+function rectBounds(attributes) {
+  const value = name => Number(attributes.match(new RegExp(`\\b${name}="([^"]+)"`))?.[1] || 0);
+  const x = value('x'), y = value('y');
+  return { minX: x, maxX: x + value('width'), minY: y, maxY: y + value('height') };
+}
+
+function union(boxes) {
+  return boxes.reduce((a, b) => ({ minX: Math.min(a.minX, b.minX), maxX: Math.max(a.maxX, b.maxX), minY: Math.min(a.minY, b.minY), maxY: Math.max(a.maxY, b.maxY) }));
+}
+
+// Each icon's glyph is the union of its paths and rectangles; an icon whose path
+// depends on a prop is checked once per variant.
+function iconGlyphs() {
   const icons = [];
   for (const match of source.matchAll(/export function (\w+Icon)\b([\s\S]*?)\n}\n/g)) {
-    const [, name, body] = match;
-    const paths = [...body.matchAll(/\bd=(?:"([^"]+)"|\{[^?]*\?\s*"([^"]+)"\s*:\s*"([^"]+)"\})/g)]
-      .flatMap(found => found[1] ? [[name, found[1]]] : [[`${name} (first)`, found[2]], [`${name} (second)`, found[3]]]);
-    icons.push(...paths);
+    const [, name, body] = match, shared = [], variants = [];
+    for (const found of body.matchAll(/\bd=(?:"([^"]+)"|\{[^?]*\?\s*"([^"]+)"\s*:\s*"([^"]+)"\})/g)) {
+      if (found[1]) shared.push(pathBounds(found[1]));
+      else variants.push([`${name} (first)`, pathBounds(found[2])], [`${name} (second)`, pathBounds(found[3])]);
+    }
+    for (const rect of body.matchAll(/<rect\b([^>]*)>/g)) shared.push(rectBounds(rect[1]));
+    if (variants.length) icons.push(...variants.map(([variant, box]) => [variant, union([box, ...shared])]));
+    else if (shared.length) icons.push([name, union(shared)]);
   }
   return icons;
 }
 
 test('every icon is centered in its view box', () => {
-  const icons = iconPaths();
-  assert.ok(icons.length >= 9, `found ${icons.length} icon paths`);
-  const centers = icons.map(([name, d]) => {
-    const box = pathBounds(d);
-    return { name, x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2, box };
-  });
+  const icons = iconGlyphs();
+  assert.ok(icons.length >= 9, `found ${icons.length} icons`);
+  const centers = icons.map(([name, box]) => ({ name, x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2, box }));
   if (process.env.ICON_CENTERS) console.log(JSON.stringify(centers.map(({ name, x, y, box }) => ({ name, x: +x.toFixed(2), y: +y.toFixed(2),
     box: [box.minX, box.maxX, box.minY, box.maxY].map(value => +value.toFixed(2)) }))));
   for (const { name, x, y } of centers) {
