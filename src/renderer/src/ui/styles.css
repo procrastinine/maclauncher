@@ -1864,6 +1864,8 @@ input[type="checkbox"], input[type="radio"] {
 .runtimeSourceHeading > span { font-weight: 400; font-size: var(--font-xs); }
 .runtimeSource .runtimeRemoteField:first-child { flex: 1; min-width: min(220px, 100%); }
 .runtimeAvailability { font-size: var(--font-xs); }
+/* Under the Installed rule, inset like the installed rows and the empty state. */
+.runtimeDefaultMissing { padding: 10px 16px 0; }
 .runtimeSourceRefreshActions { display: flex; align-items: center; gap: 8px; }
 /* The processor override is one compact menu beside its label, above the version lists. */
 .runtimeBuildField { flex-direction: row; align-items: center; align-self: flex-start; gap: 8px; min-width: 0; }

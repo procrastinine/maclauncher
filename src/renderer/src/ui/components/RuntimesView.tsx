@@ -603,7 +603,7 @@ export function RuntimesView({
                     // A default shared by several sections can be installed in another one.
                     ![activeRuntimeSection, ...(Array.isArray(activeRuntimeManager?.sections) ? activeRuntimeManager.sections : [])]
                       .some((section: any) => (Array.isArray(section?.installed) ? section.installed : []).some((inst: any) => inst.version === activeRuntimeSection.defaultVersion)) &&
-                    <div className="dim runtimeAvailability" data-runtime-default-missing="true">
+                    <div className="dim runtimeAvailability runtimeDefaultMissing" data-runtime-default-missing="true">
                       The default version, {activeRuntimeVersionTag(activeRuntimeSection.defaultVersion)}, is not installed. MacLauncher asks before downloading it when a game needs it.
                     </div>}
                   {activeRuntimeInstalledSorted.length === 0 ? (
