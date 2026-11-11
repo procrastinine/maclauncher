@@ -2270,8 +2270,8 @@ function utilityViewDrawn(win, revision, limitMs) {
     setTimeout(() => { entry.waiters = entry.waiters.filter(item => item !== waiter); resolve(false); }, limitMs).unref?.();
   });
 }
-// Each prepared page holds all three views. Hidden pages acknowledge a DOM
-// switch through a posted message while background throttling stays enabled.
+// Each prepared page keeps painting all three views while hidden. Its switch
+// acknowledgement follows the frame callback and the task after it.
 async function presentUtilityWindow(win, { view, revision, switched, navigation, activate }) {
   if (switched && !navigation && !win.isDestroyed()) win.webContents.send("launcher:utilityViewSwitch", { view, revision });
   if (switched || navigation) await utilityViewDrawn(win, revision, 300);
@@ -2286,8 +2286,10 @@ const utilityWindows = createUtilityWindowController({
       ...(request?.view === "appAction" ? { title: moduleAppActions.title(request.moduleId, request.actionId) || options.title } : {}),
       ...utilityWindowSize(options),
       backgroundColor: nativeTheme.shouldUseDarkColors ? "#111318" : "#f5f6f8",
+      ...(KEPT_UTILITY_VIEWS.includes(request?.view) ? { paintWhenInitiallyHidden: true } : {}),
       webPreferences: { preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
-        nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: devtoolsEnabled }
+        nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: devtoolsEnabled,
+        ...(KEPT_UTILITY_VIEWS.includes(request?.view) ? { backgroundThrottling: false } : {}) }
     });
   },
   loadView: (win, request) => loadLauncherView(win, request),

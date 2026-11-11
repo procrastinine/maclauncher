@@ -128,7 +128,7 @@ Modules can be imported both on the main Node thread and in backend workers. A m
 
 ### Prepared utility windows
 
-Settings, Runtimes and Credits share one hidden native window loaded after the startup runtime inventory. Each page holds all three views with current state. Taking the hidden window starts loading its replacement immediately. A loaded page switches its displayed view and acknowledges through a posted message, which runs with background throttling enabled. A page still loading shows its native frame immediately in the window background color and draws the requested view when loaded. Closing hides the window at once; one hidden window remains, and excess closed windows are destroyed in idle time. The last visible launcher window closing still quits the app.
+Settings, Runtimes and Credits share one hidden native window loaded after the startup runtime inventory. Each page holds all three views with current state. Taking the hidden window starts loading its replacement immediately. A loaded page switches its displayed view and acknowledges in a task posted from its next animation-frame callback. Hidden utility renderers keep painting with background throttling disabled, so the requested frame is produced before acknowledgement. A page still loading shows its native frame immediately in the window background color and draws the requested view when loaded. Closing hides the window at once; one hidden window remains, and excess closed windows are destroyed in idle time. The last visible launcher window closing still quits the app.
 
 ### State updates
 

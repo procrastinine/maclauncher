@@ -654,38 +654,47 @@ test('utility windows receive the launcher state without library rows, other win
   assert.equal(f.controller.stateForWindow({}, state), state, 'the library and per-game windows keep every game');
 });
 
-test("a hidden throttled utility page acknowledges committed navigation through a posted message", async () => {
+test("utility navigation acknowledges after its frame callback and following task", async () => {
   const { MessageChannel } = require("node:worker_threads");
-  const reported = [];
-  let cleanup;
   const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/App.tsx"), "utf8");
   const start = source.indexOf('  useEffect(() => {\n    if (!utilityView');
   const effect = source.slice(start, source.indexOf('  const gamePaths', start));
+  let cleanup, frame, resolve;
+  const reported = [], ack = new Promise(done => { resolve = done; });
   vm.runInNewContext(effect, {
     MessageChannel, utilityView: "runtimes", utilityRevision: 42,
-    api: { utilityWindowDrawn: revision => reported.push(revision) },
+    requestAnimationFrame: callback => { frame = callback; return 1; }, cancelAnimationFrame: () => {},
+    api: { utilityWindowDrawn: revision => { reported.push(revision); resolve(); } },
     useEffect: effect => { cleanup = effect(); }
   });
-  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.deepEqual(reported, [], "No acknowledgement before a rendering opportunity");
+  frame();
+  assert.deepEqual(reported, [], "The frame callback posts a task rather than acknowledging before paint");
+  await ack;
   assert.deepEqual(reported, [42]);
   cleanup();
 });
 
-test("a hidden spare switches its DOM slots and acknowledges without frame callbacks or timers", async () => {
+test("a hidden spare switches DOM slots then acknowledges after a frame and posted task", async () => {
   const { MessageChannel } = require("node:worker_threads");
   const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/App.tsx"), "utf8");
   const start = source.indexOf('  useEffect(() => {\n    if (!keptUtility');
   const effect = source.slice(start, source.indexOf('  useEffect(() => {', start + 5)).replaceAll('<HTMLElement>', '');
   const slots = ["settings", "runtimes", "credits"].map(view => ({ dataset: { utilityView: view }, hidden: false }));
-  let switchView, cleanup, unsubscribed = false, resolve;
-  const ack = new Promise(done => { resolve = done; });
+  let switchView, cleanup, unsubscribed = false, frame, resolve;
+  const reported = [], ack = new Promise(done => { resolve = done; });
   vm.runInNewContext(effect, {
     MessageChannel, keptUtility: true, document: { querySelectorAll: () => slots },
-    api: { utilityWindowDrawn: resolve, onUtilityViewSwitch: callback => { switchView = callback; return () => { unsubscribed = true; }; } },
+    requestAnimationFrame: callback => { frame = callback; return 1; }, cancelAnimationFrame: () => {},
+    api: { utilityWindowDrawn: revision => { reported.push(revision); resolve(); }, onUtilityViewSwitch: callback => { switchView = callback; return () => { unsubscribed = true; }; } },
     useEffect: callback => { cleanup = callback(); }
   });
   switchView({ view: "credits", revision: 73 });
   assert.deepEqual(slots.map(slot => slot.hidden), [true, true, false]);
-  assert.equal(await ack, 73);
+  assert.deepEqual(reported, []);
+  frame();
+  assert.deepEqual(reported, [], "No acknowledgement inside the frame callback");
+  await ack;
+  assert.deepEqual(reported, [73]);
   cleanup(); assert.equal(unsubscribed, true);
 });

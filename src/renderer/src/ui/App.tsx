@@ -121,23 +121,25 @@ export default function App() {
   if (utilityView && utilityRevision !== undefined) utilityNavigation.current[utilityView] = utilityRevision;
   useEffect(() => {
     if (!keptUtility || !api?.onUtilityViewSwitch) return;
+    let frame = 0;
     const channel = new MessageChannel();
     channel.port1.onmessage = event => api.utilityWindowDrawn?.(event.data);
     const unsubscribe = api.onUtilityViewSwitch(({ view, revision }) => {
       for (const slot of document.querySelectorAll<HTMLElement>("[data-utility-view]")) slot.hidden = slot.dataset.utilityView !== view;
-      // Posted messages run in hidden, throttled pages without a frame callback.
-      channel.port2.postMessage(revision);
+      // The frame callback runs before painting; its posted task acknowledges
+      // after that rendering opportunity, while hidden painting stays enabled.
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => channel.port2.postMessage(revision));
     });
-    return () => { unsubscribe(); channel.port1.close(); channel.port2.close(); };
+    return () => { unsubscribe(); cancelAnimationFrame(frame); channel.port1.close(); channel.port2.close(); };
   }, [api, keptUtility]);
   useEffect(() => {
     if (!utilityView || utilityRevision === undefined || !api?.utilityWindowDrawn) return;
-    // Effects run after React commits the requested view. Posted messages run
-    // in hidden, throttled pages too; animation frames and timers may not.
+    // Navigation has committed. Acknowledge after its rendering opportunity.
     const channel = new MessageChannel();
     channel.port1.onmessage = () => { api.utilityWindowDrawn?.(utilityRevision); channel.port1.close(); channel.port2.close(); };
-    channel.port2.postMessage(0);
-    return () => { channel.port1.close(); channel.port2.close(); };
+    const frame = requestAnimationFrame(() => channel.port2.postMessage(0));
+    return () => { cancelAnimationFrame(frame); channel.port1.close(); channel.port2.close(); };
   }, [api, utilityView, utilityRevision]);
   const gamePaths = useMemo(() => new Set((state?.recents || []).map(game => game.gamePath)), [state?.recents]);
   const latestState = useRef(state);
