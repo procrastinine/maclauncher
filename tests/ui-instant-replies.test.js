@@ -17,7 +17,9 @@ function playFixture() {
   const activity = [], launches = [];
   const gamePreparations = new Map();
   const context = {
-    gamePreparations, pendingGameCompletions: new Map([["/Games/Slow", { code: 1 }]]),
+    gamePreparations, playFileChecks: new Map(), runningGameSessions: new Map(), cancelGraphicsEdits: () => {},
+    gameRecordsCache: [{ gamePath: "/Games/Slow" }], findGameByPath: (games, gamePath) => games.find(game => game.gamePath === gamePath),
+    stopRunSession: async () => {}, pendingGameCompletions: new Map([["/Games/Slow", { code: 1 }]]),
     gameLaunchNotices: new Map(), graphicsLaunchWarnings: new Map(), cachedState: null, userDataDir: "/data",
     assertGameNotRemoving: () => {}, prioritizeLibraryEntry: () => {},
     assertGameFilesAvailable: async () => {
@@ -27,10 +29,12 @@ function playFixture() {
     broadcastActivity: () => activity.push(JSON.parse(JSON.stringify(Object.fromEntries(gamePreparations)))),
     ReShade: { executionRequirements: () => ({ needed: { processor: false } }) },
     StoredPlan: { read: () => ({ source: "effects" }), notices: () => [] },
-    backendService: { launchEntry: async (entry, options) => { launches.push(`${entry.gamePath} ${options.runtimeId}`); return { kind: "cancelled" }; } },
+    backendService: { launchEntry: async (entry, options) => { launches.push(`${entry.gamePath} ${options.runtimeId}`); return { kind: "cancelled" }; },
+      cancelLaunch: async () => false },
     loadSettings: () => ({}), require
   };
   vm.runInNewContext(slice("async function runGameEntry(", "\nasync function runGameByPath("), context);
+  vm.runInNewContext(slice("async function stopGameRuns(", "\n}\n") + "\n}", context);
   return { context, activity, launches, finishCheck };
 }
 
@@ -121,4 +125,16 @@ test("opening a runtime's settings again focuses its window instead of loading a
   first.destroyed = true;first.listeners.closed();
   assert.notEqual(await context.createRuntimeSettingsWindow(game), first, "a closed window is replaced");
   assert.equal(windows.length, 3);
+});
+
+test("Cancel during Play's file check stops the launch before it starts", async () => {
+  const f = playFixture();
+  const playing = f.context.runGameEntry({ gamePath: "/Games/Slow" }, "player");
+  assert.equal(await f.context.stopGameRuns("/Games/Slow"), true, "Cancel reports that it stopped something");
+  f.finishCheck({ available: true });
+  assert.equal(await playing, false);
+  assert.deepEqual(f.launches, [], "the backend launch never starts");
+  assert.equal(f.context.gamePreparations.size, 0);assert.equal(f.context.playFileChecks.size, 0);
+  assert.deepEqual(f.activity.at(-1), {});
+  assert.equal(await f.context.stopGameRuns("/Games/Slow"), false, "nothing is left to stop");
 });

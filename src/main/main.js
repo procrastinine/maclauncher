@@ -190,6 +190,9 @@ function createLogger() {
 const logger = createLogger();
 const gamePreparations = new Map();
 const runtimeSettingsWindows = new Map();
+// Play's file check for each game, before the backend launch exists; Cancel
+// during the check marks it stopped.
+const playFileChecks = new Map();
 const gameRemovals = new Map();
 const importProgress = new Map();
 const graphicsImportControllers = new Map();
@@ -1908,6 +1911,8 @@ async function stopRunSession(session) {
 }
 
 async function stopGameRuns(gamePath) {
+  const checking = playFileChecks.get(gamePath);
+  if (checking) checking.stopped = true;
   const sessions = Array.from(runningGameSessions.get(gamePath)?.values() || []);
   // Mark stop intent before cancellation can deliver a process exit event.
   for (const session of sessions) session.stopRequested = true;
@@ -1917,7 +1922,7 @@ async function stopGameRuns(gamePath) {
   const results = await Promise.allSettled([cancelled, ...sessions.map(session => stopRunSession(session))]);
   const failed = results.find(result => result.status === "rejected");
   if (failed) throw failed.reason;
-  return Boolean(results[0].value) || sessions.length > 0;
+  return Boolean(checking) || Boolean(results[0].value) || sessions.length > 0;
 }
 
 // App-scope module actions (File and Dock menus) start ephemeral entries: a
@@ -2893,9 +2898,14 @@ async function runGameEntry(gameEntry, runtimeId, options = {}) {
   gamePreparations.set(gameEntry.gamePath, { phase: "check", label: "Starting game…" });
   broadcastActivity();
   let result, graphicsRequested, previousGraphicsLaunchId;
+  const check = { stopped: false };
+  playFileChecks.set(gameEntry.gamePath, check);
   try {
     // Explain unavailable files before preparation starts.
-    await assertGameFilesAvailable(gameEntry);
+    try { await assertGameFilesAvailable(gameEntry); }
+    finally { if (playFileChecks.get(gameEntry.gamePath) === check) playFileChecks.delete(gameEntry.gamePath); }
+    // Cancel during the check ends Play before anything starts.
+    if (check.stopped) return false;
     const hadLaunchNotices = gameLaunchNotices.delete(gameEntry.gamePath);
     if ((graphicsLaunchWarnings.delete(gameEntry.gamePath) || hadLaunchNotices) && cachedState) {
       cachedState = {...cachedState, recents: cachedState.recents.map(entry => {
