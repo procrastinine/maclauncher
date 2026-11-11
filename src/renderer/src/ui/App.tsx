@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { filterGames, gameTypeOptionsForModules } from "./search-utils.mjs";
-import { prioritizeDroppedPaths } from "./drop-path-utils.mjs";
-import { closePopoversForDrop, dropGameTargets, graphicsDropTargets } from "./drop-game-targets.mjs";
 import { toolsOverrideAfterFailure } from "./cheat-tools-model.mjs";
 import { createGameFailureRecovery, createInspectionRequests, restoreLauncherState, shareLauncherValue, subscribeLauncherGameFailures, subscribeLauncherState, updatePathValue } from "./launcher-state-model.mjs";
 import { useGamePathState } from "./use-game-path-state";
@@ -19,11 +17,9 @@ import type {
   ModuleManifest,
   RecentGame,
   RuntimeId,
-  RuntimeRefreshOptions,
   RuntimeSettingsContext,
   RuntimeStatusEntry,
   RuntimeAutomaticEntry,
-  RuntimeUiState,
   UtilityWindowRequest,
   SaveFileInfo,
   SaveInfo,
@@ -45,23 +41,17 @@ import { RuntimeSettingsWindow } from "./components/RuntimeSettingsWindow";
 import { LiveVariablesWindow, readLiveVariableEditorContext } from "./components/LiveVariablesWindow";
 import { SaveToolsModal } from "./components/modals/SaveToolsModal";
 import { CheatsModal } from "./components/modals/CheatsModal";
-import { SettingsView } from "./components/SettingsView";
 import { revealGraphicsSection } from "./components/EffectsControls";
-import { CreditsView } from "./components/CreditsView";
 import { AppActionPicker } from "./components/AppActionPicker";
-import { RuntimesView } from "./components/RuntimesView";
+import { useRuntimeManagement } from "./components/RuntimesView";
 import { resolveInspectorRuntimeSection, runtimeInspectorStatusAction } from "./components/runtime-inspector-model";
-import { groupRuntimeManagers, managedRuntimeSections, runtimeManagementPresentation, runtimePendingAction, runtimeRemovalPresentation,
-  runtimeRefreshPayload, runtimeSourceUiKey, runtimeInstallVersion } from "./components/runtime-tabs-model";
 import { nextInspectorSelection } from "./components/game-row-selection-model";
 import { GameRow } from "./components/GameRow";
 import { GameDetails, type GameDetailsState } from "./components/GameDetails";
 import { LibrarySearch, LibraryToolbar, type LibraryScope } from "./components/LibraryToolbar";
-import { ImportBatches, useImportBatches } from "./components/ImportBatch";
+import { ImportBatches, useImportBatches, DropGameHint, useLauncherDrop } from "./components/ImportBatch";
 import { ErrorText } from "./components/ErrorText";
 import launcherLogo from "./assets/maclauncher.svg";
-import sharedAcknowledgments from "../../../modules/shared/acknowledgments.json";
-import { collectAcknowledgments } from "./acknowledgments-model";
 import { toggleLibrarySelection } from "../../../core/library-selection.mjs";
 import { normalizeLibrarySort, sortLibraryGames, reorderLibraryGames, type LibrarySort } from "../../../core/library-view.mjs";
 import type { LibraryActions } from "./components/library-actions";
@@ -70,36 +60,6 @@ import { confirmAction } from "./confirm-action";
 const EMPTY_ACTION_STATE = Object.freeze({});
 const ExternalView = React.lazy(() => import("./components/SteamView").then(module => ({ default: module.SteamView })));
 const INTERNAL_GAME_DRAG_TYPE = "application/x-maclauncher-gamepath";
-
-type DropGameHintProps = {
-  className?: string;
-  title: string;
-  action?: React.ReactNode;
-  modules: ModuleManifest[];
-};
-
-function DropGameHint({ className, title, action, modules }: DropGameHintProps) {
-  return (
-    <div className={["dropHint", className || ""].filter(Boolean).join(" ")}>
-      <div className="dropHintTitle">{title}</div>
-      {[{ label: "Games", targets: dropGameTargets(modules) }, { label: "Shaders and models", targets: graphicsDropTargets }].map(group => (
-        <div className="dropHintGroup" key={group.label}>
-          <div className="dropHintSubtitle">{group.label}</div>
-          <div className="dropHintFormats" aria-label={`Supported ${group.label.toLowerCase()} inputs`}>
-            {group.targets.map(target => (
-              <span key={target.label} className={["badge", "dropHintFormat", target.mono ? "mono" : ""].filter(Boolean).join(" ")}>
-                {target.label}
-              </span>
-            ))}
-          </div>
-        </div>
-      ))}
-      {action ? <div className="dropHintAction">{action}</div> : null}
-    </div>
-  );
-}
-
-const KEPT_UTILITY_VIEWS = ["settings", "runtimes", "credits"];
 
 export default function App() {
   const api = window.MacLauncher?.launcher;
@@ -111,36 +71,7 @@ export default function App() {
     try { return api?.initialState?.() || null; } catch { return null; }
   });
   const [state, setState] = useState<LauncherState | null>(() => initialState && restoreLauncherState(initialState));
-  // Each kept utility page holds all three views for a direct DOM switch.
-  const keptUtility = Boolean(utilityWindowContext && KEPT_UTILITY_VIEWS.includes(utilityWindowContext.view));
-  const utilityView = utilityWindowContext ? state?.utilityWindow?.view || utilityWindowContext.view : null;
-  const runtimesOpen = keptUtility || utilityView === "runtimes";
-  const utilityRevision = state?.utilityWindow?.revision;
-  // Each view navigates only for requests made to it.
-  const utilityNavigation = useRef<Record<string, number>>({});
-  if (utilityView && utilityRevision !== undefined) utilityNavigation.current[utilityView] = utilityRevision;
-  useEffect(() => {
-    if (!keptUtility || !api?.onUtilityViewSwitch) return;
-    let frame = 0;
-    const channel = new MessageChannel();
-    channel.port1.onmessage = event => api.utilityWindowDrawn?.(event.data);
-    const unsubscribe = api.onUtilityViewSwitch(({ view, revision }) => {
-      for (const slot of document.querySelectorAll<HTMLElement>("[data-utility-view]")) slot.hidden = slot.dataset.utilityView !== view;
-      // The frame callback runs before painting; its posted task acknowledges
-      // after that rendering opportunity, while hidden painting stays enabled.
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => channel.port2.postMessage(revision));
-    });
-    return () => { unsubscribe(); cancelAnimationFrame(frame); channel.port1.close(); channel.port2.close(); };
-  }, [api, keptUtility]);
-  useEffect(() => {
-    if (!utilityView || utilityRevision === undefined || !api?.utilityWindowDrawn) return;
-    // Navigation has committed. Acknowledge after its rendering opportunity.
-    const channel = new MessageChannel();
-    channel.port1.onmessage = () => { api.utilityWindowDrawn?.(utilityRevision); channel.port1.close(); channel.port2.close(); };
-    const frame = requestAnimationFrame(() => channel.port2.postMessage(0));
-    return () => { cancelAnimationFrame(frame); channel.port1.close(); channel.port2.close(); };
-  }, [api, utilityView, utilityRevision]);
+  const utilityView = utilityWindowContext?.view || null;
   const gamePaths = useMemo(() => new Set((state?.recents || []).map(game => game.gamePath)), [state?.recents]);
   const latestState = useRef(state);
   latestState.current = state;
@@ -159,10 +90,7 @@ export default function App() {
   const [selectionBusy, setSelectionBusy] = useState(false);
   const selectionAnchor = useRef<string | null>(null);
   const currentVisiblePaths = useRef<string[]>([]);
-  const [runtimeManagerId, setRuntimeManagerId] = useState<string | null>(utilityWindowContext?.managerId || null);
-  const [runtimeSectionId, setRuntimeSectionId] = useState<string | null>(null);
-  const [runtimeUi, setRuntimeUi] = useState<RuntimeUiState>({});
-  const runtimeActionLocks = useRef(new Set<string>());
+  const { onRuntimeInstall } = useRuntimeManagement(api, state, false);
   const [saveGame, setSaveGame] = useState<RecentGame | null>(null);
   const [saveInfo, setSaveInfo] = useState<SaveInfo | null>(null);
   const [saveFiles, setSaveFiles] = useState<SaveFileInfo[]>([]);
@@ -218,28 +146,7 @@ export default function App() {
   const [draggingGamePath, setDraggingGamePath] = useState<string | null>(null);
   const [dragOrderPaths, setDragOrderPaths] = useState<string[] | null>(null);
   const [revealGamePath, setRevealGamePath] = useState<string | null>(null);
-  const [addDropActive, setAddDropActive] = useState(false);
-  const addDropDepth = useRef(0);
-  // A drag that ends outside the window or is cancelled can leave the enter and
-  // leave counts unbalanced. The overlay closes on any sign that no drag is over
-  // the window: no dragover for a second (a drag repeats it at least every
-  // 550 ms), a drop or drag end anywhere, focus loss, pointer movement or Escape.
-  useEffect(() => {
-    if (!addDropActive) return;
-    let last = performance.now();
-    const clear = () => { addDropDepth.current = 0; setAddDropActive(false); };
-    const seen = () => { last = performance.now(); };
-    const key = (event: KeyboardEvent) => { if (event.key === "Escape") clear(); };
-    const timer = window.setInterval(() => { if (performance.now() - last > 1000) clear(); }, 250);
-    const capture: Array<[string, EventListener]> = [["dragenter", seen], ["dragover", seen], ["drop", clear], ["dragend", clear], ["pointermove", clear], ["keydown", key as EventListener]];
-    for (const [type, listener] of capture) window.addEventListener(type, listener, true);
-    window.addEventListener("blur", clear);
-    return () => {
-      window.clearInterval(timer);
-      for (const [type, listener] of capture) window.removeEventListener(type, listener, true);
-      window.removeEventListener("blur", clear);
-    };
-  }, [addDropActive]);
+  const { addDropActive, onAppDragEnter, onAppDragLeave, onAppDragOver, onDropAdd } = useLauncherDrop(api, importBatches, setError);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inspectorSelection = useRef({ selectedGamePath, inspectorOpen });
   inspectorSelection.current = { selectedGamePath, inspectorOpen };
@@ -297,78 +204,6 @@ export default function App() {
       setError(null);
     });
   }, [api, isSecondaryView]);
-
-  useEffect(() => {
-    if (!runtimesOpen || !state?.utilityWindow?.managerId) return;
-    setRuntimeManagerId(state.utilityWindow.managerId);
-    setRuntimeSectionId(null);
-  }, [runtimesOpen, state?.utilityWindow?.revision]);
-
-  useEffect(() => {
-    if (!runtimesOpen) return;
-    if (!state?.runtimeManagers) return;
-
-    setRuntimeUi(prev => {
-      let didChange = false;
-      const next = { ...prev };
-      for (const manager of groupRuntimeManagers(Object.values(state.runtimeManagers)).flatMap(group => group.managers)) {
-        const sections = managedRuntimeSections(manager, resolveRuntimeSections);
-        const existing = next[manager.id];
-        const current = existing || {
-          remoteOpen: {},
-          installVersion: {},
-          installVariant: {},
-          installedSort: {},
-          error: null
-        };
-        let managerChanged = !existing;
-        const installVersion = { ...current.installVersion };
-        const installVariant = { ...current.installVariant };
-        const installedSort = { ...current.installedSort };
-        for (const section of sections) {
-          const currentVersion = installVersion[section.id];
-          const nextVersion = currentVersion || runtimeInstallVersion(section);
-          if (installVersion[section.id] !== nextVersion) {
-            installVersion[section.id] = nextVersion;
-            managerChanged = true;
-          }
-        const variantOptions = (Array.isArray(section.variants)
-          ? section.variants
-          : []) as Array<{ id?: string } & Record<string, any>>;
-          const hasMultipleVariants = variantOptions.length > 1;
-          const currentVariant = installVariant[section.id];
-          const fallbackVariant = hasMultipleVariants
-            ? section.defaultVariant || variantOptions[0]?.id || ""
-            : "";
-          const nextVariant =
-            hasMultipleVariants &&
-            currentVariant &&
-            variantOptions.some((opt: { id?: string }) => opt.id === currentVariant)
-              ? currentVariant
-              : fallbackVariant;
-          if (installVariant[section.id] !== nextVariant) {
-            installVariant[section.id] = nextVariant;
-            managerChanged = true;
-          }
-          const nextSort = installedSort[section.id] || "default";
-          if (installedSort[section.id] !== nextSort) {
-            installedSort[section.id] = nextSort;
-            managerChanged = true;
-          }
-        }
-        if (managerChanged) {
-          next[manager.id] = {
-            ...current,
-            installVersion,
-            installVariant,
-            installedSort
-          };
-          didChange = true;
-        }
-      }
-      return didChange ? next : prev;
-    });
-  }, [runtimesOpen, state?.runtimeManagers]);
 
   const inspectionGame = useMemo(() => state?.recents.find(game => game.gamePath === selectedGamePath) || null,
     [state?.recents, selectedGamePath]);
@@ -719,18 +554,6 @@ export default function App() {
     return out;
   }, [state?.modules]);
 
-  // Only the Credits window lists acknowledgments.
-  const creditsOpen = keptUtility || utilityView === "credits";
-  const acknowledgments = useMemo(
-    () => creditsOpen ? collectAcknowledgments(state?.modules || [], sharedAcknowledgments) : [],
-    [creditsOpen, state?.modules]
-  );
-
-  const runtimeManagers = useMemo(
-    () => Object.values(state?.runtimeManagers || {}),
-    [state?.runtimeManagers]
-  );
-
   async function onOpenDialog() {
     if (!api) return;
     setError(null);
@@ -782,26 +605,6 @@ export default function App() {
       setError(String(e?.message || e));
     }
   }, [api]);
-
-  async function onSetModuleSettings(moduleId: string, patch: Record<string, any>) {
-    if (!api) return;
-    setError(null);
-    try {
-      await api.setModuleSettings(moduleId, patch);
-    } catch (e: any) {
-      setError(String(e?.message || e));
-    }
-  }
-
-  async function onSetLauncherSettings(patch: Record<string, any>) {
-    if (!api) return;
-    setError(null);
-    try {
-      await api.setLauncherSettings(patch);
-    } catch (e: any) {
-      setError(String(e?.message || e));
-    }
-  }
 
   const onSetNetworkAccess = useCallback(async (gamePath: string, enabled: boolean) => {
     if (!api) return;
@@ -991,141 +794,6 @@ export default function App() {
     }
   }, [api, refreshCheatsPatchStatus]);
 
-  function updateRuntimeUiSection(
-    managerId: string,
-    sectionId: string,
-    key: "remoteOpen" | "installVersion" | "installVariant" | "installArchitecture" | "installedSort",
-    value: any
-  ) {
-    setRuntimeUi(prev => {
-      const current = prev[managerId] || {
-        remoteOpen: {},
-        installVersion: {},
-        installVariant: {},
-        installedSort: {},
-        error: null
-      };
-      return {
-        ...prev,
-        [managerId]: {
-          ...current,
-          [key]: { ...current[key], [sectionId]: value }
-        }
-      };
-    });
-  }
-
-  async function onRuntimeAction(
-    managerId: string,
-    action: string,
-    payload: Record<string, any>
-  ) {
-    if (!api) return;
-    const sectionId = payload.sectionId || "default";
-    const sourceId = action === "refreshCatalog" && typeof payload.sourceId === "string" ? payload.sourceId : undefined;
-    const sourceRefresh = action === "refreshCatalog" &&
-      !runtimeManagementPresentation(resolveRuntimeSection(state?.runtimeManagers[managerId] || null, sectionId)).local;
-    const actionKey = runtimeSourceUiKey(sectionId, sourceId);
-    const key = JSON.stringify([managerId, actionKey]);
-    if (runtimeActionLocks.current.has(key)) return;
-    runtimeActionLocks.current.add(key);
-    const updateAction = (pending: string | null, message: string | null, error: string | null = null) => {
-      setRuntimeUi(prev => {
-        const current = prev[managerId] || { remoteOpen: {}, installVersion: {}, installVariant: {}, installedSort: {}, error: null };
-        return { ...prev, [managerId]: { ...current,
-          ...(sourceRefresh ? { sourceErrors: { ...current.sourceErrors, [actionKey]: error } } : { error }),
-          pendingActions: { ...current.pendingActions, [actionKey]: pending },
-          messages: { ...current.messages, [actionKey]: message } } };
-      });
-    };
-    updateAction(runtimePendingAction(action, payload), null);
-    try {
-      const result = await api.runtimeAction(managerId, action, payload);
-      const section = resolveRuntimeSection(state?.runtimeManagers[managerId] || null, sectionId);
-      const { local, localFiles } = runtimeManagementPresentation(section);
-      const message = result === false ? null : action === "refreshCatalog"
-        ? localFiles ? "Files updated." : local ? "Applications updated." : `Versions updated at ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`
-        : action === "import" ? localFiles ? "File imported." : local ? "Application added." : "Runtime imported." : action === "install" ? "Runtime installed."
-        : action === "registerCustom" ? "Runtime registered."
-        : action === "setup" ? result?.message || "Tool setup complete."
-        : action === "installedAction" ? "Updated."
-        : action === "uninstall" ? localFiles ? "File removed." : "Runtime removed." : "Default updated.";
-      updateAction(null, message);
-      return result;
-    } catch (e: any) {
-      updateAction(null, null, String(e?.message || e));
-      return false;
-    } finally {
-      runtimeActionLocks.current.delete(key);
-    }
-  }
-
-  async function onRuntimeRefresh(
-    managerId: string,
-    sectionId: string,
-    options: RuntimeRefreshOptions = {}
-  ) {
-    const payload = runtimeRefreshPayload(sectionId, options);
-    return onRuntimeAction(managerId, "refreshCatalog", payload);
-  }
-
-  async function onRuntimeImport(managerId: string, sectionId: string, version?: string) {
-    return onRuntimeAction(managerId, "import", { sectionId, ...(version ? { version } : {}) });
-  }
-
-  async function onRuntimeRegister(managerId: string, sectionId: string, runtimePath?: string) {
-    return onRuntimeAction(managerId, "registerCustom", { sectionId, ...(runtimePath ? { runtimePath } : {}) });
-  }
-
-  async function onRuntimeSetupAction(managerId: string, sectionId: string, setupActionId: string, toolVersion?: string) {
-    return onRuntimeAction(managerId, "setup", { sectionId, setupActionId, toolVersion });
-  }
-
-  async function onRuntimeInstalledAction(managerId: string, sectionId: string, version: string, installedActionId: string, architecture?: string) {
-    return onRuntimeAction(managerId, "installedAction", { sectionId, version, installedActionId, ...(architecture ? {architecture} : {}) });
-  }
-
-  async function onRuntimeInstall(
-    managerId: string,
-    sectionId: string,
-    version: string,
-    variant?: string,
-    architecture?: string
-  ) {
-    return onRuntimeAction(managerId, "install", { sectionId, version, variant, ...(architecture ? {architecture} : {}) });
-  }
-
-  async function onRuntimeSetDefault(
-    managerId: string,
-    sectionId: string,
-    version: string | null,
-    variant?: string,
-    selectionId?:string,
-    architecture?: string
-  ) {
-    return onRuntimeAction(managerId, "setDefault", { sectionId, version, variant,...(selectionId?{selectionId}:{}), ...(architecture ? {architecture} : {}) });
-  }
-
-  async function onRuntimeUninstall(
-    managerId: string,
-    sectionId: string,
-    install: Record<string, any>
-  ) {
-    if (!api) return;
-    const section = resolveRuntimeSection(state?.runtimeManagers[managerId] || null, sectionId);
-    const removal = runtimeRemovalPresentation(install, section);
-    const ok = await confirmAction({ message: removal.confirm, confirmLabel: removal.label, destructive: true });
-    if (!ok) return;
-    return onRuntimeAction(managerId, "uninstall", {
-      sectionId,
-      version: install.version,
-      architecture: install.architecture,
-      variant: install.variant,
-      platformKey: install.platformKey,
-      installDir: install.installDir
-    });
-  }
-
   const onModuleAction = useCallback(async function onModuleAction(
     gamePath: string,
     actionId: string,
@@ -1196,128 +864,6 @@ export default function App() {
 
   function isInternalGameDrag(ev: React.DragEvent) {
     return Array.from(ev.dataTransfer.types || []).includes(INTERNAL_GAME_DRAG_TYPE);
-  }
-
-  // The add overlay is for files dragged in from outside the launcher. Drags
-  // that start inside it (reordering, sliders) carry no files.
-  function isExternalFileDrag(ev: React.DragEvent) {
-    return !isInternalGameDrag(ev) && Array.from(ev.dataTransfer.types || []).includes("Files");
-  }
-
-  function onAppDragEnter(ev: React.DragEvent) {
-    if (!isExternalFileDrag(ev)) return;
-    closePopoversForDrop();
-    addDropDepth.current += 1;
-    setAddDropActive(true);
-  }
-
-  function onAppDragLeave(ev: React.DragEvent) {
-    if (!isExternalFileDrag(ev)) return;
-    addDropDepth.current = Math.max(0, addDropDepth.current - 1);
-    if (addDropDepth.current === 0) setAddDropActive(false);
-  }
-
-  function onAppDragOver(ev: React.DragEvent) {
-    if (!isExternalFileDrag(ev)) return;
-    ev.preventDefault();
-  }
-
-  async function onDropAdd(ev: React.DragEvent) {
-    const handled=ev.defaultPrevented;
-    ev.preventDefault();
-    if (!isExternalFileDrag(ev)) return;
-    if (!api) return;
-    const launcherApi = api;
-    addDropDepth.current = 0;
-    setAddDropActive(false);
-    if(handled)return;
-    setError(null);
-    try {
-      const paths = new Set<string>();
-
-      async function addFilePath(f: any) {
-        if (!f) return;
-        if (typeof f?.path === "string" && f.path) {
-          paths.add(f.path);
-          return;
-        }
-        if (typeof launcherApi.getPathForFile === "function") {
-          const maybe = launcherApi.getPathForFile(f);
-          const p = await Promise.resolve(maybe as any);
-          if (typeof p === "string" && p) paths.add(p);
-        }
-      }
-
-      const files = Array.from(ev.dataTransfer.files || []);
-      for (const f of files as any[]) {
-        await addFilePath(f);
-      }
-
-      const items = Array.from(ev.dataTransfer.items || []);
-      for (const item of items) {
-        if (item.kind !== "file") continue;
-        const file = item.getAsFile() as any;
-        await addFilePath(file);
-      }
-
-      function addFileUrl(url: string) {
-        try {
-          const u = new URL(url);
-          if (u.protocol !== "file:") return;
-          let p = decodeURIComponent(u.pathname);
-          p = p.replace(/^\/([a-zA-Z]:\/)/, "$1");
-          if (p) paths.add(p);
-        } catch {}
-      }
-
-      function addPlainPath(raw: string) {
-        let p = String(raw || "").trim();
-        if (!p) return;
-        p = p.replace(/^["']+|["']+$/g, "").trim();
-        if (!p) return;
-        if (p.startsWith("file:")) {
-          addFileUrl(p);
-          return;
-        }
-        if (p.includes("%")) {
-          try {
-            p = decodeURIComponent(p);
-          } catch {}
-        }
-        if (p.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(p)) {
-          paths.add(p);
-        }
-      }
-
-      const uriList = ev.dataTransfer.getData("text/uri-list");
-      if (uriList) {
-        for (const line of uriList.split(/\r?\n/g)) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith("#")) continue;
-          if (trimmed.startsWith("file:")) addFileUrl(trimmed);
-          else addPlainPath(trimmed);
-        }
-      }
-
-      const text = ev.dataTransfer.getData("text/plain");
-      if (text) {
-        for (const line of text.split(/\r?\n/g)) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          addPlainPath(trimmed);
-        }
-      }
-
-      const candidates = prioritizeDroppedPaths(paths);
-      if (candidates.length === 0) {
-        throw new Error("Could not read dropped file paths. Drag files from Finder again or use an import chooser.");
-      }
-
-      await importBatches.addPaths(candidates);
-    } catch (e: any) {
-      if (/Import cancelled\./.test(String(e?.message || e))) return;
-      setError(String(e?.message || e));
-    }
   }
 
   function toggleGameTypeFilter(typeId: string) {
@@ -2089,29 +1635,7 @@ export default function App() {
       {state && api && utilityView === "external" && <React.Suspense fallback={<div className="empty" role="status">Loading External…</div>}>
         <ExternalView api={api} />
       </React.Suspense>}
-      {state && (keptUtility || utilityView === "settings") && <div className="utilityViewSlot" data-utility-view="settings" hidden={utilityView !== "settings"}><SettingsView
-        state={state} api={api || undefined} showIcons={showIcons} showNonDefaultTags={showNonDefaultTags}
-        sectionId={utilityView === "settings" ? state.utilityWindow?.sectionId || utilityWindowContext.sectionId : undefined}
-        shaderCategory={utilityView === "settings" ? state.utilityWindow?.shaderCategory || utilityWindowContext.shaderCategory : undefined}
-        navigationKey={utilityNavigation.current.settings}
-        onSetLauncherSettings={onSetLauncherSettings} onSetModuleSettings={onSetModuleSettings}
-        onAppUpdate={api?.appUpdate ? action => { void api.appUpdate(action).catch((e: any) => setError(String(e?.message || e))); } : undefined}
-      /></div>}
       {api && utilityView === "appAction" && <AppActionPicker api={api} />}
-      {state && creditsOpen && <div className="utilityViewSlot" data-utility-view="credits" hidden={utilityView !== "credits"}><CreditsView
-        acknowledgments={acknowledgments} canOpenExternal={canOpenExternal} onOpenLink={onOpenAcknowledgmentsLink}
-      /></div>}
-      {state && runtimesOpen && <div className="utilityViewSlot" data-utility-view="runtimes" hidden={utilityView !== "runtimes"}><RuntimesView
-        state={state} settingsApi={api} getPathForFile={api?.getPathForFile}
-        runtimeManagers={runtimeManagers} runtimeUi={runtimeUi} runtimeManagerId={runtimeManagerId}
-        navigationKey={utilityNavigation.current.runtimes}
-        runtimeSectionId={runtimeSectionId} downloadTasks={downloadTasks} setRuntimeManagerId={setRuntimeManagerId}
-        setRuntimeSectionId={setRuntimeSectionId} updateRuntimeUiSection={updateRuntimeUiSection}
-        onRuntimeRefresh={onRuntimeRefresh} onRuntimeInstall={onRuntimeInstall} onRuntimeImport={onRuntimeImport} onRuntimeRegister={onRuntimeRegister}
-        onRuntimeSetupAction={onRuntimeSetupAction} onRuntimeInstalledAction={onRuntimeInstalledAction}
-        onRuntimeSetDefault={onRuntimeSetDefault} onRuntimeUninstall={onRuntimeUninstall}
-        onCancelDownload={id => api?.cancelDownload(id)} onOpenSource={canOpenExternal ? onOpenAcknowledgmentsLink : undefined}
-      /></div>}
     </div>;
   }
 

@@ -15,7 +15,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/renderer"),
     emptyOutDir: true,
-    rolldownOptions: { output: { codeSplitting: { groups: [
+    rolldownOptions: { input: { main: path.resolve(import.meta.dirname, "src/renderer/index.html"),
+      utility: path.resolve(import.meta.dirname, "src/renderer/utility.html") }, output: { codeSplitting: { groups: [
       { name: "react", test: /[\\/]node_modules[\\/](?:react|react-dom|scheduler)[\\/]/ }
     ] } } }
   },

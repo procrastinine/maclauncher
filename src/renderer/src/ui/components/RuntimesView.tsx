@@ -8,13 +8,14 @@ import {
   runtimeVersionTagger,
   formatUserError,
   resolveRuntimeNotice,
-  resolveRuntimeSections,
+  resolveRuntimeSections, resolveRuntimeSection,
   sortInstalled
 } from "../ui-helpers";
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
 import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
   runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
+  managedRuntimeSections, runtimePendingAction, runtimeRefreshPayload, runtimeSourceUiKey,
   translatorInstallBuild, translatorInstallRequirement } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
@@ -38,6 +39,8 @@ import { StatusBadge } from "./StatusBadge";
 import { RuntimeComponentGroup } from "./RuntimeComponentGroup";
 import { DownloadProgress } from "./DownloadProgress";
 import { isolatedItem } from "./ItemBoundary";
+
+import { confirmAction } from "../confirm-action";
 
 const EMPTY_RUNTIME_UI: RuntimeUiState[string] = {
   remoteOpen: {},
@@ -746,4 +749,222 @@ export function RuntimesView({
         </div>
     </main>
   );
+}
+
+// Shared by the utility page and the library inspector's Install action.
+export function useRuntimeManagement(api: NonNullable<Window["MacLauncher"]>["launcher"] | undefined, state: LauncherState | null, runtimesOpen: boolean, initialManager?: string) {
+  const [runtimeManagerId, setRuntimeManagerId] = useState<string | null>(initialManager || null);
+  const [runtimeSectionId, setRuntimeSectionId] = useState<string | null>(null);
+  const [runtimeUi, setRuntimeUi] = useState<RuntimeUiState>({});
+  const runtimeActionLocks = useRef(new Set<string>());
+  useEffect(() => {
+    if (!runtimesOpen || !state?.utilityWindow?.managerId) return;
+    setRuntimeManagerId(state.utilityWindow.managerId);
+    setRuntimeSectionId(null);
+  }, [runtimesOpen, state?.utilityWindow?.revision]);
+
+  useEffect(() => {
+    if (!runtimesOpen) return;
+    if (!state?.runtimeManagers) return;
+
+    setRuntimeUi(prev => {
+      let didChange = false;
+      const next = { ...prev };
+      for (const manager of groupRuntimeManagers(Object.values(state.runtimeManagers)).flatMap(group => group.managers)) {
+        const sections = managedRuntimeSections(manager, resolveRuntimeSections);
+        const existing = next[manager.id];
+        const current = existing || {
+          remoteOpen: {},
+          installVersion: {},
+          installVariant: {},
+          installedSort: {},
+          error: null
+        };
+        let managerChanged = !existing;
+        const installVersion = { ...current.installVersion };
+        const installVariant = { ...current.installVariant };
+        const installedSort = { ...current.installedSort };
+        for (const section of sections) {
+          const currentVersion = installVersion[section.id];
+          const nextVersion = currentVersion || runtimeInstallVersion(section);
+          if (installVersion[section.id] !== nextVersion) {
+            installVersion[section.id] = nextVersion;
+            managerChanged = true;
+          }
+        const variantOptions = (Array.isArray(section.variants)
+          ? section.variants
+          : []) as Array<{ id?: string } & Record<string, any>>;
+          const hasMultipleVariants = variantOptions.length > 1;
+          const currentVariant = installVariant[section.id];
+          const fallbackVariant = hasMultipleVariants
+            ? section.defaultVariant || variantOptions[0]?.id || ""
+            : "";
+          const nextVariant =
+            hasMultipleVariants &&
+            currentVariant &&
+            variantOptions.some((opt: { id?: string }) => opt.id === currentVariant)
+              ? currentVariant
+              : fallbackVariant;
+          if (installVariant[section.id] !== nextVariant) {
+            installVariant[section.id] = nextVariant;
+            managerChanged = true;
+          }
+          const nextSort = installedSort[section.id] || "default";
+          if (installedSort[section.id] !== nextSort) {
+            installedSort[section.id] = nextSort;
+            managerChanged = true;
+          }
+        }
+        if (managerChanged) {
+          next[manager.id] = {
+            ...current,
+            installVersion,
+            installVariant,
+            installedSort
+          };
+          didChange = true;
+        }
+      }
+      return didChange ? next : prev;
+    });
+  }, [runtimesOpen, state?.runtimeManagers]);
+
+  function updateRuntimeUiSection(
+    managerId: string,
+    sectionId: string,
+    key: "remoteOpen" | "installVersion" | "installVariant" | "installArchitecture" | "installedSort",
+    value: any
+  ) {
+    setRuntimeUi(prev => {
+      const current = prev[managerId] || {
+        remoteOpen: {},
+        installVersion: {},
+        installVariant: {},
+        installedSort: {},
+        error: null
+      };
+      return {
+        ...prev,
+        [managerId]: {
+          ...current,
+          [key]: { ...current[key], [sectionId]: value }
+        }
+      };
+    });
+  }
+
+  async function onRuntimeAction(
+    managerId: string,
+    action: string,
+    payload: Record<string, any>
+  ) {
+    if (!api) return;
+    const sectionId = payload.sectionId || "default";
+    const sourceId = action === "refreshCatalog" && typeof payload.sourceId === "string" ? payload.sourceId : undefined;
+    const sourceRefresh = action === "refreshCatalog" &&
+      !runtimeManagementPresentation(resolveRuntimeSection(state?.runtimeManagers[managerId] || null, sectionId)).local;
+    const actionKey = runtimeSourceUiKey(sectionId, sourceId);
+    const key = JSON.stringify([managerId, actionKey]);
+    if (runtimeActionLocks.current.has(key)) return;
+    runtimeActionLocks.current.add(key);
+    const updateAction = (pending: string | null, message: string | null, error: string | null = null) => {
+      setRuntimeUi(prev => {
+        const current = prev[managerId] || { remoteOpen: {}, installVersion: {}, installVariant: {}, installedSort: {}, error: null };
+        return { ...prev, [managerId]: { ...current,
+          ...(sourceRefresh ? { sourceErrors: { ...current.sourceErrors, [actionKey]: error } } : { error }),
+          pendingActions: { ...current.pendingActions, [actionKey]: pending },
+          messages: { ...current.messages, [actionKey]: message } } };
+      });
+    };
+    updateAction(runtimePendingAction(action, payload), null);
+    try {
+      const result = await api.runtimeAction(managerId, action, payload);
+      const section = resolveRuntimeSection(state?.runtimeManagers[managerId] || null, sectionId);
+      const { local, localFiles } = runtimeManagementPresentation(section);
+      const message = result === false ? null : action === "refreshCatalog"
+        ? localFiles ? "Files updated." : local ? "Applications updated." : `Versions updated at ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`
+        : action === "import" ? localFiles ? "File imported." : local ? "Application added." : "Runtime imported." : action === "install" ? "Runtime installed."
+        : action === "registerCustom" ? "Runtime registered."
+        : action === "setup" ? result?.message || "Tool setup complete."
+        : action === "installedAction" ? "Updated."
+        : action === "uninstall" ? localFiles ? "File removed." : "Runtime removed." : "Default updated.";
+      updateAction(null, message);
+      return result;
+    } catch (e: any) {
+      updateAction(null, null, String(e?.message || e));
+      return false;
+    } finally {
+      runtimeActionLocks.current.delete(key);
+    }
+  }
+
+  async function onRuntimeRefresh(
+    managerId: string,
+    sectionId: string,
+    options: RuntimeRefreshOptions = {}
+  ) {
+    const payload = runtimeRefreshPayload(sectionId, options);
+    return onRuntimeAction(managerId, "refreshCatalog", payload);
+  }
+
+  async function onRuntimeImport(managerId: string, sectionId: string, version?: string) {
+    return onRuntimeAction(managerId, "import", { sectionId, ...(version ? { version } : {}) });
+  }
+
+  async function onRuntimeRegister(managerId: string, sectionId: string, runtimePath?: string) {
+    return onRuntimeAction(managerId, "registerCustom", { sectionId, ...(runtimePath ? { runtimePath } : {}) });
+  }
+
+  async function onRuntimeSetupAction(managerId: string, sectionId: string, setupActionId: string, toolVersion?: string) {
+    return onRuntimeAction(managerId, "setup", { sectionId, setupActionId, toolVersion });
+  }
+
+  async function onRuntimeInstalledAction(managerId: string, sectionId: string, version: string, installedActionId: string, architecture?: string) {
+    return onRuntimeAction(managerId, "installedAction", { sectionId, version, installedActionId, ...(architecture ? {architecture} : {}) });
+  }
+
+  async function onRuntimeInstall(
+    managerId: string,
+    sectionId: string,
+    version: string,
+    variant?: string,
+    architecture?: string
+  ) {
+    return onRuntimeAction(managerId, "install", { sectionId, version, variant, ...(architecture ? {architecture} : {}) });
+  }
+
+  async function onRuntimeSetDefault(
+    managerId: string,
+    sectionId: string,
+    version: string | null,
+    variant?: string,
+    selectionId?:string,
+    architecture?: string
+  ) {
+    return onRuntimeAction(managerId, "setDefault", { sectionId, version, variant,...(selectionId?{selectionId}:{}), ...(architecture ? {architecture} : {}) });
+  }
+
+  async function onRuntimeUninstall(
+    managerId: string,
+    sectionId: string,
+    install: Record<string, any>
+  ) {
+    if (!api) return;
+    const section = resolveRuntimeSection(state?.runtimeManagers[managerId] || null, sectionId);
+    const removal = runtimeRemovalPresentation(install, section);
+    const ok = await confirmAction({ message: removal.confirm, confirmLabel: removal.label, destructive: true });
+    if (!ok) return;
+    return onRuntimeAction(managerId, "uninstall", {
+      sectionId,
+      version: install.version,
+      architecture: install.architecture,
+      variant: install.variant,
+      platformKey: install.platformKey,
+      installDir: install.installDir
+    });
+  }
+
+  return {runtimeManagerId, setRuntimeManagerId, runtimeSectionId, setRuntimeSectionId, runtimeUi,
+    updateRuntimeUiSection, onRuntimeRefresh, onRuntimeInstall, onRuntimeImport, onRuntimeRegister,
+    onRuntimeSetupAction, onRuntimeInstalledAction, onRuntimeSetDefault, onRuntimeUninstall};
 }

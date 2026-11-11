@@ -89,7 +89,7 @@ export function restoreLauncherState(snapshot) {
 }
 
 // initial is a state the view already rendered, such as a utility view's first
-// state; with it, no separate request follows.
+// state. A follow-up after subscribing covers broadcasts missed while mounting.
 export function subscribeLauncherState(api, receive, fail, initial = null) {
   let active = true;
   let receivedBroadcast = false;
@@ -123,12 +123,12 @@ export function subscribeLauncherState(api, receive, fail, initial = null) {
   });
   const unsubscribeActivity = api.onActivity?.(activity => {
     if (!active) return;
+    pendingActivity = mergeLauncherActivity(pendingActivity, activity);
     if (current) deliver(mergeLauncherActivity(current, activity));
-    else pendingActivity = mergeLauncherActivity(pendingActivity, activity);
   });
-  if (!initial) Promise.resolve().then(() => api.getState()).then(next => {
+  Promise.resolve().then(() => api.getState()).then(next => {
     if (active && !receivedBroadcast) {
-      deliver(mergeLauncherActivity(next, pendingActivity));
+      deliver(shareLauncherValue(current, mergeLauncherActivity(next, pendingActivity)));
       pendingActivity = {};
     }
   }).catch(error => {

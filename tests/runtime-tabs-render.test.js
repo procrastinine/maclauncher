@@ -3,7 +3,7 @@ const path = require('node:path');
 const test = require('node:test');
 const Module = require('node:module');
 const React = require('react');
-const { renderToStaticMarkup } = require('react-dom/server');
+const { renderToStaticMarkup, renderToReadableStream } = require('react-dom/server');
 const { build } = require('vite');
 const { react, componentHarness } = require('./helpers/renderer-component');
 let RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow, RuntimeCatalogSources, runtimeInstallVersion;
@@ -251,24 +251,24 @@ test('scene adapters are managed downloads with their own rows', () => {
   for (const source of adapters) assert.ok(render(runtimes, source.id).includes(`id="runtime-panel-${source.id}-default"`), `${source.id}: own row`);
   assert.deepEqual(runtimes, before, 'Rendering does not mutate cached identities or installation state');
 });
-test('Settings → Graphics holds the shader library and presets, and section requests select their tab', () => {
+test('Settings → Graphics holds the shader library and presets, and section requests select their tab', async () => {
   const fixture = require('./library-layout-fixture').createLibraryFixture();
   const offline = () => assert.fail('Rendering a utility view must not call the backend');
-  const view = (sectionId, shaderCategory) => renderToStaticMarkup(React.createElement(SettingsView, { state: fixture, sectionId, shaderCategory,
-    showIcons: true, showNonDefaultTags: true, onSetLauncherSettings: offline, onSetModuleSettings: offline }));
-  assert.match(view(), /class="launcherSidebarItem[^>]*>Graphics<\/button>/);
-  const shaders = view('graphics');
+  const view = async (sectionId, shaderCategory) => { const stream = await renderToReadableStream(React.createElement(SettingsView, { state: fixture, sectionId, shaderCategory,
+    showIcons: true, showNonDefaultTags: true, onSetLauncherSettings: offline, onSetModuleSettings: offline })); await stream.allReady; return new Response(stream).text(); };
+  assert.match(await view(), /class="launcherSidebarItem[^>]*>Graphics<\/button>/);
+  const shaders = await view('graphics');
   assert.match(shaders, /id="graphics-shaders-tab" aria-controls="graphics-shaders-panel" aria-selected="true"/);
   assert.match(shaders, /id="shader-library-search"/);
   assert.match(shaders, />Import filter…<\/button>/);
   // Shader collections are downloads; the library links to them in Runtimes.
   assert.match(shaders, />Download shaders…<\/button>/);
   assert.doesNotMatch(shaders, /graphics-preset-name|shader-collection/);
-  const presets = view('graphics:presets:ed5f88b7-4041');
+  const presets = await view('graphics:presets:ed5f88b7-4041');
   assert.match(presets, /id="graphics-presets-tab" aria-controls="graphics-presets-panel" aria-selected="true"/);
   assert.match(presets, /graphics-preset-name/);
   assert.doesNotMatch(presets, /shader-library-search/);
-  assert.match(view('graphics:shaders', 'downscaling'), /<option value="downsample" selected="">/);
+  assert.match(await view('graphics:shaders', 'downscaling'), /<option value="downsample" selected="">/);
 });
 test('Settings and Credits use plain native-window content without HTML close or navigation controls', () => {
   const fixture = require('./library-layout-fixture').createLibraryFixture();

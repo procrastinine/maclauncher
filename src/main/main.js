@@ -2292,7 +2292,13 @@ const utilityWindows = createUtilityWindowController({
         ...(KEPT_UTILITY_VIEWS.includes(request?.view) ? { backgroundThrottling: false } : {}) }
     });
   },
-  loadView: (win, request) => loadLauncherView(win, request),
+  loadView: async (win, request) => {
+    const revision = utilityWindows.stateForWindow(win, {}).utilityWindow?.revision;
+    await loadLauncherView(win, request);
+    // The utility entry imports asynchronously. Navigation completion alone
+    // does not mean its views or switch listener have mounted.
+    if (KEPT_UTILITY_VIEWS.includes(request.view) && revision) await utilityViewDrawn(win, revision, 10000);
+  },
   registerWindow: (win, view,{activate=true}={}) => {
     win.__maclauncherWindowType = view;
     registerLauncherWindow(win);
@@ -2640,13 +2646,14 @@ function attachDevToolsAutoOpen(win, source) {
 
 async function loadLauncherView(win, query = null) {
   const startUrl = process.env.ELECTRON_START_URL;
+  const utility = Boolean(query && KEPT_UTILITY_VIEWS.includes(query.view));
   const cleanedQuery = query
     ? Object.fromEntries(
         Object.entries(query).filter(([, value]) => value !== undefined && value !== null && value !== "")
       )
     : null;
   if (startUrl) {
-    const url = new URL(startUrl);
+    const url = new URL(utility ? "./utility.html" : startUrl, startUrl);
     if (cleanedQuery) {
       for (const [key, value] of Object.entries(cleanedQuery)) {
         url.searchParams.set(key, String(value));
@@ -2655,7 +2662,7 @@ async function loadLauncherView(win, query = null) {
     await loadLocalView({ url: url.toString(), load: value => win.loadURL(value),
       isDestroyed: () => win.isDestroyed(), logger });
   } else {
-    const indexPath = path.resolve(__dirname, "../../dist/renderer/index.html");
+    const indexPath = path.resolve(__dirname, "../../dist/renderer", utility ? "utility.html" : "index.html");
     if (cleanedQuery) {
       await win.loadFile(indexPath, { query: cleanedQuery });
     } else {

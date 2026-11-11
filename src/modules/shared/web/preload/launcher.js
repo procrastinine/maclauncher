@@ -1,3 +1,4 @@
+globalThis.performance?.mark("launcher:preload-start");
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 const activitySubscribers = new Set();
@@ -30,11 +31,17 @@ function subscribeActivity(callback) {
   };
 }
 
+globalThis.performance?.mark("launcher:first-state-request");
+// Capture the window request and first state before loading the renderer graph.
+const firstUtilityState = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("view")
+  ? ipcRenderer.sendSync("launcher:initialState") : null;
+globalThis.performance?.mark("launcher:first-state");
+
 contextBridge.exposeInMainWorld("MacLauncher", {
   launcher: {
     getState: () => ipcRenderer.invoke("launcher:getState"),
     // A utility view's state for its first render; null for other views.
-    initialState: () => ipcRenderer.sendSync("launcher:initialState"),
+    initialState: () => firstUtilityState,
     // A utility view reports the request revision it has drawn.
     utilityWindowDrawn: revision => ipcRenderer.send("launcher:utilityWindowDrawn", revision),
     // The view a Settings, Runtimes or Credits window displays, switched before it shows.
@@ -265,3 +272,5 @@ contextBridge.exposeInMainWorld("MacLauncher", {
     onActivity: subscribeActivity
   }
 });
+
+globalThis.performance?.mark("launcher:preload-end");

@@ -5,7 +5,7 @@ const path = require('node:path');
 const test = require('node:test');
 const Module = require('node:module');
 const React = require('react');
-const { renderToStaticMarkup } = require('react-dom/server');
+const { renderToStaticMarkup, renderToReadableStream } = require('react-dom/server');
 const { build } = require('vite');
 const { react, componentHarness } = require('./helpers/renderer-component');
 const { createLibraryFixture } = require('./library-layout-fixture');
@@ -271,23 +271,23 @@ test('the Lossless Scaling section reports LS1 and LSFG families separately', t 
   assert.match(section.components.find(row => row.id === 'lossless').description, /LS1 spatial upscaling and LSFG frame generation/);
 });
 
-test('Settings → Graphics holds the shader library and presets, and module fields use toggles and committed inputs', () => {
+test('Settings → Graphics holds the shader library and presets, and module fields use toggles and committed inputs', async () => {
   const state = createLibraryFixture();
   state.modules = [{ ...state.modules[0], settingsDefaults: { defaultRuntime: 'managed', fastStart: true, frameLimit: 60, title: 'Fixture' } }];
   const offline = () => assert.fail('Rendering must not save settings');
-  const render = sectionId => renderToStaticMarkup(React.createElement(ui.SettingsView, { state, sectionId, navigationKey: 1,
-    showIcons: true, showNonDefaultTags: false, onSetLauncherSettings: offline, onSetModuleSettings: offline }));
-  const launcher = render('launcher');
+  const render = async sectionId => { const stream = await renderToReadableStream(React.createElement(ui.SettingsView, { state, sectionId, navigationKey: 1,
+    showIcons: true, showNonDefaultTags: false, onSetLauncherSettings: offline, onSetModuleSettings: offline })); await stream.allReady; return new Response(stream).text(); };
+  const launcher = await render('launcher');
   assert.doesNotMatch(launcher, /shader-library-search|graphics-preset-name/);
   assert.match(launcher, /<label class="inlineCheck settingsToggle"><input type="checkbox" aria-label="Show game icons" checked=""\/><\/label>/);
   assert.doesNotMatch(launcher, />(On|Off)</);
-  const module = render('module:fixture');
+  const module = await render('module:fixture');
   assert.match(module, /<label class="inlineCheck settingsToggle"><input type="checkbox" aria-label="Fast Start" checked=""\/><\/label>/);
   assert.match(module, /<input aria-label="Frame Limit" type="number" inputMode="decimal" class="input" value="60"\/>/);
   assert.match(module, /<input aria-label="Title" type="text" class="input" value="Fixture"\/>/);
   assert.doesNotMatch(module, />(On|Off)</);
-  assert.match(render('graphics'), /id="shader-library-search"/);
-  assert.match(render('graphics:presets'), /graphics-preset-name/);
+  assert.match(await render('graphics'), /id="shader-library-search"/);
+  assert.match(await render('graphics:presets'), /graphics-preset-name/);
 });
 
 const runtimeUiDefaults = { remoteOpen: {}, installedSort: {}, installVersion: {}, installVariant: {}, pendingActions: {}, messages: {}, sourceErrors: {} };

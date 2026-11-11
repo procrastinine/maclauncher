@@ -654,47 +654,118 @@ test('utility windows receive the launcher state without library rows, other win
   assert.equal(f.controller.stateForWindow({}, state), state, 'the library and per-game windows keep every game');
 });
 
-test("utility navigation acknowledges after its frame callback and following task", async () => {
+
+test("utility navigation acknowledges on the frame task or 20 ms fallback, once", async () => {
   const { MessageChannel } = require("node:worker_threads");
-  const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/App.tsx"), "utf8");
+  const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/UtilityApp.tsx"), "utf8");
   const start = source.indexOf('  useEffect(() => {\n    if (!utilityView');
-  const effect = source.slice(start, source.indexOf('  const gamePaths', start));
-  let cleanup, frame, resolve;
-  const reported = [], ack = new Promise(done => { resolve = done; });
-  vm.runInNewContext(effect, {
-    MessageChannel, utilityView: "runtimes", utilityRevision: 42,
-    requestAnimationFrame: callback => { frame = callback; return 1; }, cancelAnimationFrame: () => {},
-    api: { utilityWindowDrawn: revision => { reported.push(revision); resolve(); } },
-    useEffect: effect => { cleanup = effect(); }
-  });
-  assert.deepEqual(reported, [], "No acknowledgement before a rendering opportunity");
-  frame();
-  assert.deepEqual(reported, [], "The frame callback posts a task rather than acknowledging before paint");
-  await ack;
-  assert.deepEqual(reported, [42]);
-  cleanup();
+  const end = source.indexOf('  useLayoutEffect(', start + 5);
+  const effect = source.slice(start, end).replaceAll('<HTMLElement>', '');
+  for (const mode of ['frame', 'timer']) {
+    let cleanup, frame, timer, switchView, resolve;
+    const reported = [], ack = new Promise(done => { resolve = done; });
+    const slots = ['settings','runtimes','credits'].map(view => ({dataset:{utilityView:view},hidden:false}));
+    vm.runInNewContext(effect, {
+      MessageChannel, utilityView: 'credits', utilityRevision: 42, keptUtility: true,
+      document: {querySelectorAll: () => slots},
+      requestAnimationFrame: callback => {frame=callback;return 1;}, cancelAnimationFrame() {}, clearTimeout() {},
+      window: {setTimeout: (callback, ms) => {assert.equal(ms,20);timer=callback;return 2;}},
+      api: {utilityWindowDrawn: revision => {reported.push(revision);resolve();},
+        onUtilityViewSwitch: callback => {switchView=callback;return () => {}; }},
+      useEffect: callback => {cleanup=callback();}
+    });
+
+    assert.deepEqual(reported,[]);
+    if(mode==='frame') {frame();assert.deepEqual(reported,[]);}
+    else timer();
+    await ack;
+    timer();
+    assert.deepEqual(reported,[42]);
+    cleanup();
+  }
 });
 
-test("a hidden spare switches DOM slots then acknowledges after a frame and posted task", async () => {
+test("utility switch acknowledges on the frame task or 20 ms fallback, once", async () => {
   const { MessageChannel } = require("node:worker_threads");
-  const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/App.tsx"), "utf8");
+  const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/UtilityApp.tsx"), "utf8");
   const start = source.indexOf('  useEffect(() => {\n    if (!keptUtility');
-  const effect = source.slice(start, source.indexOf('  useEffect(() => {', start + 5)).replaceAll('<HTMLElement>', '');
-  const slots = ["settings", "runtimes", "credits"].map(view => ({ dataset: { utilityView: view }, hidden: false }));
-  let switchView, cleanup, unsubscribed = false, frame, resolve;
-  const reported = [], ack = new Promise(done => { resolve = done; });
-  vm.runInNewContext(effect, {
-    MessageChannel, keptUtility: true, document: { querySelectorAll: () => slots },
-    requestAnimationFrame: callback => { frame = callback; return 1; }, cancelAnimationFrame: () => {},
-    api: { utilityWindowDrawn: revision => { reported.push(revision); resolve(); }, onUtilityViewSwitch: callback => { switchView = callback; return () => { unsubscribed = true; }; } },
-    useEffect: callback => { cleanup = callback(); }
+  const end = source.indexOf('  useEffect(() => {', start + 5);
+  const effect = source.slice(start, end).replaceAll('<HTMLElement>', '');
+  for (const mode of ['frame', 'timer']) {
+    let cleanup, frame, timer, switchView, resolve;
+    const reported = [], ack = new Promise(done => { resolve = done; });
+    const slots = ['settings','runtimes','credits'].map(view => ({dataset:{utilityView:view},hidden:false}));
+    vm.runInNewContext(effect, {
+      MessageChannel, utilityView: 'credits', utilityRevision: 42, keptUtility: true,
+      document: {querySelectorAll: () => slots},
+      requestAnimationFrame: callback => {frame=callback;return 1;}, cancelAnimationFrame() {}, clearTimeout() {},
+      window: {setTimeout: (callback, ms) => {assert.equal(ms,20);timer=callback;return 2;}},
+      api: {utilityWindowDrawn: revision => {reported.push(revision);resolve();},
+        onUtilityViewSwitch: callback => {switchView=callback;return () => {}; }},
+      useEffect: callback => {cleanup=callback();}
+    });
+    switchView({view:'credits',revision:42});
+    assert.deepEqual(slots.map(slot=>slot.hidden),[true,true,false]);
+    assert.deepEqual(reported,[]);
+    if(mode==='frame') {frame();assert.deepEqual(reported,[]);}
+    else timer();
+    await ack;
+    timer();
+    assert.deepEqual(reported,[42]);
+    cleanup();
+  }
+});
+test('navigation to a mounting spare is delivered after its initial snapshot was read', async () => {
+  let release;
+  const loading = new Promise(resolve => {release=resolve;});
+  const sent=[];
+  const f=fixture({kept:['runtimes'],load:()=>loading,beforeShow:win=>sent.push(f.controller.stateForWindow(win,{}).utilityWindow)});
+  const preparing=f.controller.prepare();
+  await new Promise(resolve=>setImmediate(resolve));
+  const win=f.windows[0];
+  const first=f.controller.stateForWindow(win,{}).utilityWindow;
+  assert.equal(first.managerId,undefined);
+  const opening=f.controller.open({view:'runtimes',managerId:'wine',sectionId:'installed'});
+  assert.equal(win.shows,1,'The frame is not held for navigation');
+  assert.deepEqual(sent,[]);
+  release();await preparing;await opening;
+  assert.equal(sent.at(-1)?.managerId,'wine');
+  assert.equal(sent.at(-1)?.sectionId,'installed');
+});
+
+test('utility preload captures the first request once before the renderer reads it', () => {
+  const ipc = new EventEmitter(), first = {recents:[], utilityWindow:{view:'settings',revision:1}};
+  let api, requests=0;
+  ipc.sendSync=channel=>{assert.equal(channel,'launcher:initialState');requests++;return first;};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../src/modules/shared/web/preload/launcher.js'),'utf8'),{
+    window:{location:{search:'?view=settings'}},URLSearchParams,
+    require:()=>({ipcRenderer:ipc,contextBridge:{exposeInMainWorld:(_name,value)=>{api=value.launcher;}}})
   });
-  switchView({ view: "credits", revision: 73 });
-  assert.deepEqual(slots.map(slot => slot.hidden), [true, true, false]);
-  assert.deepEqual(reported, []);
-  frame();
-  assert.deepEqual(reported, [], "No acknowledgement inside the frame callback");
-  await ack;
-  assert.deepEqual(reported, [73]);
-  cleanup(); assert.equal(unsubscribed, true);
+  assert.equal(requests,1);
+  assert.equal(api.initialState(),first);
+  assert.equal(api.initialState(),first);
+  assert.equal(requests,1,'Rendering does not add another synchronous IPC request');
+});
+
+test('the utility renderer holds all three views without loading the library or inspector', async () => {
+  const {build}=require('vite'),Module=require('node:module'),React=require('react');
+  const {renderToStaticMarkup}=require('react-dom/server');
+  const bundle=await build({configFile:false,logLevel:'silent',build:{
+    ssr:path.resolve(__dirname,'../src/renderer/src/ui/UtilityApp.tsx'),write:false,
+    rollupOptions:{external:id=>/^react(?:-dom)?(?:\/|$)/.test(id),output:{format:'cjs',codeSplitting:false}}
+  }});
+  const chunk=bundle.output.find(chunk=>chunk.type==='chunk');
+  assert.ok(!chunk.moduleIds.some(id=>/\/(?:App|GameDetails|GameRow)\.tsx$/.test(id)), 'Utility pages do not parse the library and inspector');
+  const compiled=new Module(path.join(__dirname,'utility-render.cjs'),module);compiled.paths=module.paths;
+  compiled._compile(chunk.code,compiled.id);
+  const state=require('./library-layout-fixture').createLibraryFixture();state.recents=[];
+  state.utilityWindow={view:'runtimes',managerId:'fixture-manager',revision:1};
+  const previous=globalThis.window;
+  globalThis.window={location:{search:'?view=runtimes'},MacLauncher:{launcher:{initialState:()=>state}}};
+  try {
+    const markup=renderToStaticMarkup(React.createElement(compiled.exports.default || compiled.exports));
+    for(const view of ['settings','runtimes','credits'])assert.ok(markup.includes(`data-utility-view="${view}"`));
+    assert.match(markup,/data-utility-view="runtimes"><main/);
+    assert.doesNotMatch(markup,/game-search-input|gameRow|>Loading…</);
+  } finally {globalThis.window=previous;}
 });

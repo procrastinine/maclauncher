@@ -1,6 +1,9 @@
-import { useRef, useState } from "react";
+import { prioritizeDroppedPaths } from "../drop-path-utils.mjs";
+import { closePopoversForDrop, dropGameTargets, graphicsDropTargets } from "../drop-game-targets.mjs";
+const INTERNAL_GAME_DRAG_TYPE = "application/x-maclauncher-gamepath";
+import React, { useEffect, useRef, useState } from "react";
 import { runImportBatch, resolveImportFailure, type ImportBatch } from "../import-batch.mjs";
-import type { ImportProgress as ImportJob } from "../types";
+import type { ImportProgress as ImportJob, ModuleManifest } from "../types";
 import { ImportProgress } from "./ImportProgress";
 import { FolderIcon, XIcon } from "../icons";
 import { formatUserError } from "../ui-helpers";
@@ -131,4 +134,185 @@ export function ImportBatchNotice({ batch, jobs, onCancel, dismiss }: NoticeProp
       </div>
     </>}
   </section>;
+}
+
+type DropGameHintProps = {
+  className?: string;
+  title: string;
+  action?: React.ReactNode;
+  modules: ModuleManifest[];
+};
+
+export function DropGameHint({ className, title, action, modules }: DropGameHintProps) {
+  return (
+    <div className={["dropHint", className || ""].filter(Boolean).join(" ")}>
+      <div className="dropHintTitle">{title}</div>
+      {[{ label: "Games", targets: dropGameTargets(modules) }, { label: "Shaders and models", targets: graphicsDropTargets }].map(group => (
+        <div className="dropHintGroup" key={group.label}>
+          <div className="dropHintSubtitle">{group.label}</div>
+          <div className="dropHintFormats" aria-label={`Supported ${group.label.toLowerCase()} inputs`}>
+            {group.targets.map(target => (
+              <span key={target.label} className={["badge", "dropHintFormat", target.mono ? "mono" : ""].filter(Boolean).join(" ")}>
+                {target.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+      {action ? <div className="dropHintAction">{action}</div> : null}
+    </div>
+  );
+}
+
+
+export function useLauncherDrop(api: NonNullable<Window["MacLauncher"]>["launcher"] | undefined, importBatches: ReturnType<typeof useImportBatches>, setError: (value: string | null) => void) {
+  const [addDropActive, setAddDropActive] = useState(false);
+  const addDropDepth = useRef(0);
+  // A drag that ends outside the window or is cancelled can leave the enter and
+  // leave counts unbalanced. The overlay closes on any sign that no drag is over
+  // the window: no dragover for a second (a drag repeats it at least every
+  // 550 ms), a drop or drag end anywhere, focus loss, pointer movement or Escape.
+  useEffect(() => {
+    if (!addDropActive) return;
+    let last = performance.now();
+    const clear = () => { addDropDepth.current = 0; setAddDropActive(false); };
+    const seen = () => { last = performance.now(); };
+    const key = (event: KeyboardEvent) => { if (event.key === "Escape") clear(); };
+    const timer = window.setInterval(() => { if (performance.now() - last > 1000) clear(); }, 250);
+    const capture: Array<[string, EventListener]> = [["dragenter", seen], ["dragover", seen], ["drop", clear], ["dragend", clear], ["pointermove", clear], ["keydown", key as EventListener]];
+    for (const [type, listener] of capture) window.addEventListener(type, listener, true);
+    window.addEventListener("blur", clear);
+    return () => {
+      window.clearInterval(timer);
+      for (const [type, listener] of capture) window.removeEventListener(type, listener, true);
+      window.removeEventListener("blur", clear);
+    };
+  }, [addDropActive]);
+  function isInternalGameDrag(ev: React.DragEvent) {
+    return Array.from(ev.dataTransfer.types || []).includes(INTERNAL_GAME_DRAG_TYPE);
+  }
+
+  // The add overlay is for files dragged in from outside the launcher. Drags
+  // that start inside it (reordering, sliders) carry no files.
+  function isExternalFileDrag(ev: React.DragEvent) {
+    return !isInternalGameDrag(ev) && Array.from(ev.dataTransfer.types || []).includes("Files");
+  }
+
+  function onAppDragEnter(ev: React.DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    closePopoversForDrop();
+    addDropDepth.current += 1;
+    setAddDropActive(true);
+  }
+
+  function onAppDragLeave(ev: React.DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    addDropDepth.current = Math.max(0, addDropDepth.current - 1);
+    if (addDropDepth.current === 0) setAddDropActive(false);
+  }
+
+  function onAppDragOver(ev: React.DragEvent) {
+    if (!isExternalFileDrag(ev)) return;
+    ev.preventDefault();
+  }
+
+  async function onDropAdd(ev: React.DragEvent) {
+    const handled=ev.defaultPrevented;
+    ev.preventDefault();
+    if (!isExternalFileDrag(ev)) return;
+    if (!api) return;
+    const launcherApi = api;
+    addDropDepth.current = 0;
+    setAddDropActive(false);
+    if(handled)return;
+    setError(null);
+    try {
+      const paths = new Set<string>();
+
+      async function addFilePath(f: any) {
+        if (!f) return;
+        if (typeof f?.path === "string" && f.path) {
+          paths.add(f.path);
+          return;
+        }
+        if (typeof launcherApi.getPathForFile === "function") {
+          const maybe = launcherApi.getPathForFile(f);
+          const p = await Promise.resolve(maybe as any);
+          if (typeof p === "string" && p) paths.add(p);
+        }
+      }
+
+      const files = Array.from(ev.dataTransfer.files || []);
+      for (const f of files as any[]) {
+        await addFilePath(f);
+      }
+
+      const items = Array.from(ev.dataTransfer.items || []);
+      for (const item of items) {
+        if (item.kind !== "file") continue;
+        const file = item.getAsFile() as any;
+        await addFilePath(file);
+      }
+
+      function addFileUrl(url: string) {
+        try {
+          const u = new URL(url);
+          if (u.protocol !== "file:") return;
+          let p = decodeURIComponent(u.pathname);
+          p = p.replace(/^\/([a-zA-Z]:\/)/, "$1");
+          if (p) paths.add(p);
+        } catch {}
+      }
+
+      function addPlainPath(raw: string) {
+        let p = String(raw || "").trim();
+        if (!p) return;
+        p = p.replace(/^["']+|["']+$/g, "").trim();
+        if (!p) return;
+        if (p.startsWith("file:")) {
+          addFileUrl(p);
+          return;
+        }
+        if (p.includes("%")) {
+          try {
+            p = decodeURIComponent(p);
+          } catch {}
+        }
+        if (p.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(p)) {
+          paths.add(p);
+        }
+      }
+
+      const uriList = ev.dataTransfer.getData("text/uri-list");
+      if (uriList) {
+        for (const line of uriList.split(/\r?\n/g)) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) continue;
+          if (trimmed.startsWith("file:")) addFileUrl(trimmed);
+          else addPlainPath(trimmed);
+        }
+      }
+
+      const text = ev.dataTransfer.getData("text/plain");
+      if (text) {
+        for (const line of text.split(/\r?\n/g)) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          addPlainPath(trimmed);
+        }
+      }
+
+      const candidates = prioritizeDroppedPaths(paths);
+      if (candidates.length === 0) {
+        throw new Error("Could not read dropped file paths. Drag files from Finder again or use an import chooser.");
+      }
+
+      await importBatches.addPaths(candidates);
+    } catch (e: any) {
+      if (/Import cancelled\./.test(String(e?.message || e))) return;
+      setError(String(e?.message || e));
+    }
+  }
+
+  return {addDropActive, onAppDragEnter, onAppDragLeave, onAppDragOver, onDropAdd};
 }

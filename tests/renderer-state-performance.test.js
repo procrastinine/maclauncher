@@ -75,7 +75,7 @@ test('activity received before the initial snapshot is rebased per field without
   assert.deepEqual(received.at(-1).running, { '/other': 1 });
   stop();
 });
-test('a utility view rendered from its first state requests none and applies later activity to it', async () => {
+test('a utility view follows its first snapshot after subscribing and applies later activity to it', async () => {
   const received = [];
   let activity, requests = 0;
   const initial = { recents: [], downloads: [], preparing: {}, running: {}, utilityWindow: { view: 'runtimes', revision: 1 } };
@@ -84,7 +84,7 @@ test('a utility view rendered from its first state requests none and applies lat
     onState() { return () => {}; }, onActivity(callback) { activity = callback; return () => {}; }
   }, next => received.push(next), error => { throw error; }, initial);
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(requests, 0, 'The first state was read with the first render');
+  assert.equal(requests, 1, 'A follow-up covers the interval before listeners mounted');
   activity({ downloads: [{ id: 'java', downloaded: 10 }] });
   assert.equal(received.length, 1);
   assert.equal(received[0].utilityWindow, initial.utilityWindow);
@@ -401,4 +401,15 @@ test('unmounted state subscriptions ignore late snapshots and failures', async (
   stop(); pending.reject(Error('late'));
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(received, []); assert.deepEqual(errors, []);
+});
+
+test('utility snapshot follow-up repairs changes lost between render and listener installation', async () => {
+  const initial = {recents: [], runtimeManagers: {}, downloads: [], running: {}};
+  const latest = {...initial, runtimeManagers: {wine: {installed: [{version:'new'}]}}};
+  const received = [];
+  const stop = model.subscribeLauncherState({getState: async () => latest, onState: () => () => {}, onActivity: () => () => {}},
+    next => received.push(next), error => {throw error;}, initial);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(received.at(-1)?.runtimeManagers.wine.installed[0].version, 'new');
+  stop();
 });

@@ -88,7 +88,8 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
       record.shown = true;
       await record.ready;
       // The page may have read its initial state before this request arrived.
-      if (switched || navigation) onContextChange(win);
+      if (navigation) beforeShow(win);
+      else if (switched) onContextChange(win);
       return win;
     }
     if (navigation) beforeShow(win);

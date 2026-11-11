@@ -26,7 +26,7 @@ import { StatusBadge } from "./StatusBadge";
 import { GraphicsShortcutSettings, type GraphicsShortcutApi } from "./GraphicsShortcutSettings";
 import { TranslatorEnvironmentSettings } from "./TranslatorEnvironmentEditor";
 import { PluginSettings } from "./PluginLibrary";
-import { GraphicsLibrarySettings } from "./GraphicsLibrarySettings";
+const GraphicsLibrarySettings = React.lazy(() => import("./GraphicsLibrarySettings").then(module => ({default: module.GraphicsLibrarySettings})));
 import type { ReShadeFilterApi } from "./ReShadeFilterLibrary";
 
 type SettingsViewProps = {
@@ -169,7 +169,7 @@ export function SettingsView({
             </div>}
             {tab === "environment" && environments && api?.setTranslatorEnvironment && <TranslatorEnvironmentSettings
               declarations={environments} store={state.launcherSettings?.translatorEnvironment} onSave={api.setTranslatorEnvironment} />}
-            {tab === "graphics" && <GraphicsLibrarySettings api={api} sectionId={sectionId} shaderCategory={shaderCategory} navigationKey={navigationKey} />}
+            {tab === "graphics" && <React.Suspense fallback={<div className="settingsSection" aria-busy="true" />}><GraphicsLibrarySettings api={api} sectionId={sectionId} shaderCategory={shaderCategory} navigationKey={navigationKey} /></React.Suspense>}
             {modules.filter(mod => mod.id === tab).map(mod => {
               const moduleSettings = state.moduleSettings?.[mod.id] || {};
               const settingsDefaults =
