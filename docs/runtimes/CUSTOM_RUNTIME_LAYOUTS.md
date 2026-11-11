@@ -26,6 +26,7 @@ A custom runtime stays in its selected location, and removing its registration l
 | AnyPS5 and Android packages | A complete compatible runtime package, or a program inside it. The package's own metadata names the tools, libraries, resources and CPU architecture it needs. |
 | FNA, Unity and GameMaker | A complete native runtime directory with its framework or player version metadata and the files it depends on. Unity keeps its exact player-version matching. |
 | CrossOver and Sikarugir | A complete CrossOver application, or a Sikarugir runtime with its Wine engine, support libraries and the metadata that lists them. |
+| WineCX | None. WineCX versions come only from its managed downloads, whose installation records the sealed file inventory that each launch checks, so a registered path is listed as unavailable. |
 | HashLink | An Intel VM with its native modules and version header, or a complete runtime package. Bytecode versions and native primitive signatures decide compatibility. |
 | ILSpy | A DLL, an app host, or a directory containing `ilspycmd`, `ICSharpCode.Decompiler`, the runtime configuration, dependency metadata and referenced assemblies. The shared .NET host that MacLauncher installs stays available. |
 | Native runtimes and tools | A compatible native executable, application or runtime directory with its libraries and data. Windows tools keep their PE executable format. |
