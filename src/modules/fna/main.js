@@ -165,7 +165,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     const launch = prepareGame(entry, context), settings = context.runtimeSettings || {};
     const args = Array.isArray(settings.appArgs) ? settings.appArgs : [];
     if (args.some(arg => typeof arg !== "string" || arg.includes("\0"))) throw new Error("Invalid FNA game arguments.");
-    const env = { ...process.env, DOTNET_ROOT: launch.runtimeRoot, DOTNET_MULTILEVEL_LOOKUP: "0", FNA_PLATFORM_BACKEND: "SDL3",
+    const env = { ...process.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "", DOTNET_ROOT: launch.runtimeRoot, DOTNET_MULTILEVEL_LOOKUP: "0", FNA_PLATFORM_BACKEND: "SDL3",
       MACLAUNCHER_FNA_GAME_ROOT: launch.gameRoot, MACLAUNCHER_FNA_ASSEMBLY_ROOT: launch.assemblyRoot || "",
       MACLAUNCHER_FNA_USE_RUNTIME_FRAMEWORK: launch.converted ? "1" : "0" };
     applyGraphicsEnvironment(env, settings);
