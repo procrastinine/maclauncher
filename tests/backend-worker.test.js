@@ -215,6 +215,15 @@ test("the inspector worker is prepared with the launcher and stays open while id
   assert.equal(await service.request("game:a", "warmed"), null, "an idle game worker closed and a new one starts unprepared");
 });
 
+test("the inspector worker prepares recently played modules first and waits for requests between modules", async () => {
+  const calls = [], modules = { alpha: {}, beta: {}, gamma: {} };
+  for (const id of Object.keys(modules)) modules[id].warmBackendLane = () => { calls.push(id); };
+  const registry = { ...require("../src/modules/registry"), listModuleIds: () => Object.keys(modules), getModule: id => modules[id] || null };
+  const operations = createBackendOperations({ userDataDir: os.tmpdir(), registry, whenIdle: async () => { calls.push("idle"); } });
+  assert.equal(await operations.warmInspectorLane({}, ["beta", "unknown"]), true);
+  assert.deepEqual(calls, ["beta", "idle", "alpha", "idle", "gamma", "idle"]);
+});
+
 test("a spare worker becomes the next game's lane and another starts after it", { timeout: 10000 }, async t => {
   const events = [], service = createBackendService({ workerPath, onEvent: (event, _payload, lane) => events.push([event, lane]) });
   t.after(() => service.close());

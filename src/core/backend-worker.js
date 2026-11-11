@@ -25,7 +25,11 @@ require("../modules/shared/runtime/github-transport").configureHostTransport(cal
 require("./json-files").onUnreadablePreserved(notice => parentPort.postMessage({ type: "event", event: "unreadablePreserved", payload: notice }));
 const InventoryRevision = require("./runtime-inventory-revision");
 InventoryRevision.activate({ retainReads: workerData.retainReads === true });
-const operations = createBackendOperations({ ...workerData, getRunning: () => running,
+// Startup preparation continues only while no other request is in progress.
+const PREPARATION = "warmInspectorLane";
+let requestsInProgress = 0, idleWaiters = [];
+const whenIdle = () => new Promise(resolve => setImmediate(() => requestsInProgress ? idleWaiters.push(resolve) : resolve()));
+const operations = createBackendOperations({ ...workerData, getRunning: () => running, whenIdle,
   emit: (event, payload) => {
     if (InventoryRevision.EVENTS.has(event)) InventoryRevision.advance();
     parentPort.postMessage({ type: "event", event, payload });
@@ -46,9 +50,12 @@ parentPort.on("message", async message => {
     return;
   }
   if (message.type !== "request") return;
+  const counted = message.method !== PREPARATION;
+  if (counted) requestsInProgress += 1;
   try {
     if (!Object.hasOwn(operations, message.method)) throw new Error(`Unknown backend operation: ${message.method}`);
     const result = await operations[message.method](...message.args);
     parentPort.postMessage({ type: "result", id: message.id, result });
   } catch (error) { parentPort.postMessage({ type: "result", id: message.id, error: errorRecord(error) }); }
+  finally { if (counted && --requestsInProgress === 0) for (const resolve of idleWaiters.splice(0)) resolve(); }
 });

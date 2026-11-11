@@ -3167,8 +3167,14 @@ async function init() {
     // The window paints stored records immediately. Backend inventories and
     // metadata validation never delay opening Electron or handle selection.
     // The inspector worker reads installed runtimes alongside the inventory,
-    // and a spare worker loads the modules the next game's worker needs.
-    backendService.prepareInspectorLane(loadSettings());
+    // starting with the modules and runtime providers of the most recently
+    // played games, and a spare worker loads the modules the next game's
+    // worker needs.
+    const providers = new Map(Modules.listRuntimeProviderModules().flatMap(mod =>
+      [mod.runtimeProvider, ...(mod.runtimeProviders || [])].filter(Boolean).map(provider => [provider.runtimeId, mod.id])));
+    const recentModules = [...new Set(games.filter(game => game.lastPlayedAt).sort((a, b) => b.lastPlayedAt - a.lastPlayedAt)
+      .flatMap(game => [resolveModuleId(game), providers.get(game.runtimeId)]).filter(Boolean))];
+    backendService.prepareInspectorLane(loadSettings(), recentModules);
     backendService.prepareSpareLane();
     void readRuntimeInventory();
     void refreshModuleSnapshots();

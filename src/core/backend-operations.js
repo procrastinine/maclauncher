@@ -32,7 +32,8 @@ function listRuntimeManagers(registry) {
 /** All operations in this service run in Node, including the CLI's launch core. */
 function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules,
   emit = () => {}, callHost = async () => { throw new Error("Host service unavailable."); },
-  getRunning = () => ({}), runtimeCoordinator } = {}) {
+  getRunning = () => ({}), runtimeCoordinator,
+  whenIdle = () => new Promise(resolve => setImmediate(resolve)) } = {}) {
   runtimeCoordinator ||= coordinatorFor(userDataDir).client();
   const gameLifecycle = require("./game-lifecycle").createGameLifecycle({ userDataDir, coordinator: runtimeCoordinator });
   let shuttingDown = false;
@@ -254,14 +255,16 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     },
     // The inspector worker lets each module read what its games share, such as
     // installed runtimes, before the first game is selected.
-    async warmInspectorLane(settings) {
-      for (const id of registry.listModuleIds()) {
+    // Modules prepare in the given order, then in registry order.
+    async warmInspectorLane(settings, order = []) {
+      const rank = id => { const index = order.indexOf(id); return index < 0 ? order.length : index; };
+      for (const id of registry.listModuleIds().sort((a, b) => rank(a) - rank(b))) {
         const warm = registry.getModule(id)?.warmBackendLane;
         if (typeof warm !== "function") continue;
         try { await warm({ settings, userDataDir, logger }); }
         catch (error) { logger.debug?.(`[backend] ${id} lane preparation failed`, error.message); }
-        // Requests that arrived during one module's preparation run before the next module's.
-        await new Promise(resolve => setImmediate(resolve));
+        // Requests that arrived during one module's preparation finish before the next module's starts.
+        await whenIdle();
       }
       return true;
     },

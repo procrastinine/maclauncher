@@ -329,9 +329,9 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
   // The first selected game's inspector requests otherwise wait for a worker
   // to load its modules and read installed runtimes. The inspector worker
   // starts with the launcher and does that work before any selection.
-  function prepareInspector(settings) {
+  function prepareInspector(settings, order) {
     if (disposed || shuttingDown) return false;
-    get("inspector").request("warmInspectorLane", settings).catch(() => {});
+    get("inspector").request("warmInspectorLane", settings, order).catch(() => {});
     return true;
   }
   return {
@@ -363,7 +363,7 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
       await Promise.all([...clients.values()].map(client => client.shutdownTemporaryProcesses()));
     },
     async close() { disposed = true; for (const lane of timers.keys()) cancelIdle(lane); await Promise.all([...clients.values()].map(client => client.close())); clients.clear(); },
-    prepareInspectorLane: settings => prepareInspector(settings),
+    prepareInspectorLane: (settings, order) => prepareInspector(settings, order),
     prepareSpareLane: () => prepareSpare(),
     // State propagation is a cheap message; workers never query Electron synchronously.
     updateRunning: running => { currentRunning = running; for (const client of clients.values()) if (!client.closed) client.worker.postMessage({ type: "running", running }); }
