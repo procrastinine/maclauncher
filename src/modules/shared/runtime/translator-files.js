@@ -6,6 +6,11 @@ const { requiredMachine } = require('./binary-compatibility');
 const warn = require('../graphics-warning');
 const { DIRECT3D_ROLES } = require('./translator-roles');
 
+// A plan names its Wine source; the source states whether its own graphics
+// selector activates included translators and whether its Wine reads CX_LIBVULKAN.
+const sourceOf = plan => require('../../crossover/sources').get(plan?.runtime);
+const usesSelector = plan => plan?.graphicsSelector ?? Boolean(sourceOf(plan)?.graphicsSelector);
+const usesVulkanSelector = plan => plan?.vulkanLibrarySelector ?? Boolean(sourceOf(plan)?.vulkanLibrarySelector?.({}));
 const cpuFolder = machine => ({ 332: 'i386-windows', 34404: 'x86_64-windows', 43620: 'aarch64-windows' })[machine];
 function selectedDescriptions(plan) {
   if (plan?.apiMode) {
@@ -28,7 +33,7 @@ function selectedDescriptions(plan) {
       }) }));
   }
   return [...Object.entries(plan?.components || {}).filter(([key, row]) => !DIRECT3D_ROLES.some(role => role.id === key && key !== 'd3d12') &&
-    row.used && (plan.runtime === 'sikarugir' || !row.inherited || row.fallback))
+    row.used && (!usesSelector(plan) || !row.inherited || row.fallback))
     .map(([, row]) => ({ ...row.used, inherited: row.inherited })), ...(plan?.additional || [])];
 }
 // Mixed renderers bypass CrossOver's global selector through wined3d. A
@@ -37,11 +42,11 @@ function selectedDescriptions(plan) {
 const placedDirect3D = item => ['d3d-renderer', 'd3d12'].includes(item.component) &&
   !(item.included && item.component === 'd3d-renderer') && item.engine !== 'vkd3d';
 function placesDirect3D(plan, selected = selectedDescriptions(plan)) {
-  return plan?.runtime === 'crossover' && (Boolean(plan.apiMode) || selected.some(placedDirect3D));
+  return usesSelector(plan) && (Boolean(plan.apiMode) || selected.some(placedDirect3D));
 }
 function placedGraphicsBackend(plan, selected = selectedDescriptions(plan)) {
   const renderers = selected.filter(item => ['d3d-renderer', 'd3d12'].includes(item.component) && item.files.length);
-  return plan?.runtime === 'crossover' && renderers.some(item => item.engine === 'd3dmetal') &&
+  return usesSelector(plan) && renderers.some(item => item.engine === 'd3dmetal') &&
     renderers.every(item => ['d3dmetal', 'wined3d'].includes(item.engine)) ? 'd3dmetal' : 'wined3d';
 }
 function filesIdentity(descriptions) {
@@ -88,7 +93,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
   const separateD3D12 = !plan.apiMode && plan.components?.d3d12?.used;
   for (const item of selected) {
     signal?.throwIfAborted();
-    if (!placed && plan.runtime === 'crossover' && item.included && item.component === 'd3d-renderer') { env.CX_GRAPHICS_BACKEND = item.backend || item.engine; continue; }
+    if (!placed && usesSelector(plan) && item.included && item.component === 'd3d-renderer') { env.CX_GRAPHICS_BACKEND = item.backend || item.engine; continue; }
     if (item.engine === 'vkd3d' && !plan.apiMode) continue; // Legacy Wine d3d12 stays in its normal builtin tree.
     if (item.component === 'vulkan-driver') {
       const json = item.icd ? { path: item.icd } : item.files.find(file => file.format === 'json' && (() => { try { return Boolean(JSON.parse(fs.readFileSync(file.path)).ICD); } catch { return false; } })());
@@ -99,8 +104,8 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
       Object.assign(env, require('../vulkan').driverEnvironment({ driver, icd: json?.path, backend: item.engine }, root));
       const library = loader || driver;
       links[`lib/wine/${layout.unixName}/libMoltenVK.dylib`] = library;
-      if (plan.runtime === 'crossover') env.CX_LIBVULKAN = library;
-      else if (loader) links[`lib/wine/${layout.unixName}/libvulkan.1.dylib`] = loader;
+      if (usesVulkanSelector(plan)) env.CX_LIBVULKAN = library;
+      if (!usesSelector(plan) && loader) links[`lib/wine/${layout.unixName}/libvulkan.1.dylib`] = loader;
       continue;
     }
     if (item.component === 'video') {

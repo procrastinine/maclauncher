@@ -8,7 +8,7 @@ function legacyGameMirrors(entry, { userDataDir } = {}) {
   const Writable = require("../../shared/backcompat/writable-input"), originalEntry = Writable.sourceEntry(entry);
   const protectedSaves = [entry.saveDirOverride, originalEntry.saveDirOverride].filter(value => typeof value === "string" && path.isAbsolute(value)).map(value => path.resolve(value));
   const descriptors = [];
-  for (const [runtimeId, launch] of [["crossover", require("../runtime/launch")], ["sikarugir", require("../sikarugir/launch")]]) {
+  for (const [runtimeId, launch] of [["crossover", require("../runtime/launch")], ["sikarugir", require("../sources/wine-launch").forSource("sikarugir")]]) {
     const directory = launch.runtimeDirectory(entry, { userDataDir });
     for (const kind of ["camera", "original"]) {
       const legacy = path.join(directory, "temporal-" + kind);

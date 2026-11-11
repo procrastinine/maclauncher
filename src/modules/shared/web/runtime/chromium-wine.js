@@ -50,7 +50,7 @@ function explicitBackend(args) {
 }
 function legacyD3D9(entry, context, launch) {
   const args = launch.arguments;
-  if (context.runtimeId !== "sikarugir" || context.wineEnvironment || explicitBackend(args)) return false;
+  if (require("../../../crossover/sources").get(context.runtimeId)?.invocation !== "wine" || context.wineEnvironment || explicitBackend(args)) return false;
   try {
     const directory = path.dirname(launch.executablePath), manifestPath = path.join(directory, "package.json");
     if (fs.statSync(manifestPath).size > 1024 * 1024) return false;

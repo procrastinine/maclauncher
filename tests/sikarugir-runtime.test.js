@@ -171,7 +171,7 @@ test("Sikarugir Play repairs incomplete renderers through the existing consent f
   const gameRoot = path.join(root, "games", "game"), save = write(path.join(gameRoot, "save.dat"), "saved game");
   const entry = { gameId: "game", gamePath: gameRoot, runtimeId: "sikarugir", runtimeData: {
     crossover: { windowsExecutablePath: path.join(gameRoot, "Game.exe"), executableArchitecture: "x86_64", sourceRoot: gameRoot }, sikarugir: { version: pin.version } } };
-  const provider = require("../src/modules/crossover/sikarugir/provider").createProvider({ manager });
+  const provider = require("./helpers/wine-source.cjs").provider("sikarugir").createProvider({ manager });
   const mod = { runtimeManagers: [manager], getRuntimeProvider: () => provider };
   const info = { runtime: { manager: { sikarugir: "sikarugir" } } };
   const registry = { listModuleIds: () => ["crossover"], getModule: () => mod };
@@ -300,7 +300,7 @@ test("Sikarugir installs paired archives atomically with one progress total and 
   assert.equal(installed.wineRoot, path.join(installed.installDir, "wswine.bundle"));
   assert.equal(installed.templateRoot, path.join(installed.installDir, "support"));
   assert.ok(path.join(installed.wineRoot, "lib", "wine", "x86_64-windows").length < 260);
-  assert.deepEqual(installed.capabilities, { msync: true, esync: false });
+  assert.deepEqual(installed.capabilities, { msync: true, esync: false, graphicsSelector: false, vulkanLibrarySelector: false, d3dMetalBridge: false, adapterIdentity: false });
   assert.equal(installed.minimumMacOS, "14.0.0"); // Optional renderer is macOS26.
   assert.equal(manager.getState({ userDataDir: root }).installed[0].ready, true);
   assert.equal(fs.existsSync(path.join(installed.installDir, "Template-1.0.21.app")), false);

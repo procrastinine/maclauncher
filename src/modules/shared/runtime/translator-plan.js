@@ -5,6 +5,13 @@ const Roles = require('./translator-roles');
 const Pairing = require('./translator-pairing');
 const fs = require('node:fs'), path = require('node:path');
 const { fileDigest } = require('./verified-identity');
+// Labels and the graphics selector come from the Wine source's descriptor.
+const sourceOf = runtime => require('../../crossover/sources').get(runtime);
+const usesSelector = plan => plan?.graphicsSelector ?? Boolean(sourceOf(plan?.runtime)?.graphicsSelector);
+function sourceLabels(runtime) {
+  const labels = sourceOf(runtime)?.labels || sourceOf('sikarugir').labels;
+  return { ...labels, automaticPhrase: labels.automatic.startsWith('Template') ? `the ${labels.automatic}` : labels.automatic };
+}
 
 // `roles` names the other APIs whose choices hold a shared library, when known.
 function fallbackNotice(reasonCode, { roles = [] } = {}) {
@@ -139,7 +146,7 @@ function physicalPlacements(plan) {
   return { placements: [...placements.values()], conflicts };
 }
 function apiGroups(plan) {
-  if (plan.runtime === 'crossover' && !plan.components['d3d-renderer'].used && !plan.apiMode) {
+  if (usesSelector(plan) && !plan.components['d3d-renderer'].used && !plan.apiMode) {
     const roles = Roles.DIRECT3D_ROLES.map(role => role.id);
     return [{ id: roles.join('+'), roles, affectedRoles: roles, label: 'Direct3D', reason: 'runtime-global-automatic' }];
   }
@@ -168,7 +175,7 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
   projectRoles(plan);
   // While the private loader places Direct3D libraries, CrossOver's global
   // backend is WineD3D, so an API without a placed library uses this renderer.
-  if (plan.runtime === 'crossover') plan.builtinRenderer = included.find(item => item.component === 'd3d-renderer' && item.engine === 'wined3d') || null;
+  if (usesSelector(plan)) plan.builtinRenderer = included.find(item => item.component === 'd3d-renderer' && item.engine === 'wined3d') || null;
   const original = Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, { ...plan.components[role.id] }]));
   const pairingRequested = Boolean(plan.components.d3d12.used) ||
     included.some(item => item.engine === 'vkd3d') && plan.components['d3d-renderer'].used?.engine === 'dxvk';
@@ -184,7 +191,7 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
     const checked = item => apiCompatibility[role.id]?.[item.id] || compatibility[item.id];
     if (selected && checked(selected)?.compatible === false) { reason = checked(selected).reason; reasonCode = 'load-impossible'; }
     if (reason) used = selected && included.find(item => item.engine === selected.engine && serves(item, role) && checked(item)?.compatible !== false) || automatic[role.id] || null;
-    if (reason && !used && plan.runtime === 'crossover') used = original[role.id].used;
+    if (reason && !used && usesSelector(plan)) used = original[role.id].used;
     plan.components[role.id] = { value, selected, used, inherited, fallback: Boolean(reason), reason, reasonCode, scopeKnown: Boolean(selected?.apis?.length) };
   }
   for (const role of Roles.DIRECT3D_ROLES) {
@@ -241,7 +248,7 @@ function apiOptions(plan, { choices = [], included = [], environment = null, sel
   for (const role of Roles.DIRECT3D_ROLES) {
     const rows = [], current = plan.components[role.id], saved = selections[role.id];
     if (environment) rows.push({ value: INHERIT, label: environment.label || 'Environment setting' });
-    rows.push({ value: AUTOMATIC, label: plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice" });
+    rows.push({ value: AUTOMATIC, label: sourceLabels(plan.runtime).automatic });
     // Another API is affected when the library it uses, or the one its own
     // saved choice needs, would be a different copy of a file this item places.
     // Choosing the item then changes that API too, so no saved conflict remains.
@@ -317,13 +324,13 @@ function resolvePlan({ runtime = 'crossover', selections = {}, choices = [], inc
 function fallbackWarnings(plan) {
   return [...new Set(Object.values(plan.components).filter(row => row.fallback).map(row => {
     const message = ['load-impossible', 'dxgi-pairing'].includes(row.reasonCode) ? row.reason : fallbackNotice(row.reasonCode || 'recorded-fallback');
-    return `${row.selected ? label(row.selected) : UNAVAILABLE_CHOICE_LABEL}: ${String(message).replace(/[.!?]+\s*$/, '')}. Using ${row.used ? label(row.used) : plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "the Template's automatic choice"}.`;
+    return `${row.selected ? label(row.selected) : UNAVAILABLE_CHOICE_LABEL}: ${String(message).replace(/[.!?]+\s*$/, '')}. Using ${row.used ? label(row.used) : sourceLabels(plan.runtime).automaticPhrase}.`;
   }))];
 }
 function options({ component, runtime = 'crossover', included = [], choices = [], environment = null, selections = {} } = {}) {
   const result = [];
-  if (environment) result.push({ value: INHERIT, label: `${environment.label || (runtime === 'crossover' ? 'Bottle setting' : 'Wrapper setting')}: ${label(environment.selections?.[component]) || 'Automatic'}` });
-  result.push({ value: AUTOMATIC, label: runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice" });
+  if (environment) result.push({ value: INHERIT, label: `${environment.label || sourceLabels(runtime).environment || 'Environment setting'}: ${label(environment.selections?.[component]) || 'Automatic'}` });
+  result.push({ value: AUTOMATIC, label: sourceLabels(runtime).automatic });
   const selected = findChoice([...included, ...choices].filter(item => item.component === component), selections[component]);
   for (const item of uniqueComponents([...included, ...choices].filter(item => item.component === component &&
     (item.id === selected?.id || offeredForm(item, runtime))), null, selected))

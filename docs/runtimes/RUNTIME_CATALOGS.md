@@ -85,6 +85,10 @@ Sikarugir publishes two kinds of release on GitHub: Wine engines, and Templates,
 
 Every engine is paired with the newest support archive. A Sikarugir version therefore combines four identities: the Wine version, the engine identity, the Template version and the Template identity. The rolling `v1.0` release tag, on the other hand, does not identify a Wine version. Downloads are checked against the SHA-256 and size that GitHub lists. An asset that GitHub lists without a SHA-256 is identified by its download address, asset ID and size, and installation records its SHA-256. The minimum macOS version comes from the installed engine and support libraries, and installed versions stay selectable after a refresh.
 
+### WineCX
+
+WineCX publishes its runtime as GitHub releases of [dappermint/winecx-gptk](https://github.com/dappermint/winecx-gptk). On request, MacLauncher reads every listed release. A release is a runtime when it offers exactly one archive together with a checksum file named after that archive; its version number comes from the release tag, and a version plist in the release is recorded with it. Assets are recognized by role, so their names, versions and checksums are never fixed in MacLauncher. Versions are listed newest first. Downloads are checked against the SHA-256 and size that GitHub lists and against the SHA-256 in the publisher's checksum file, and the minimum macOS version comes from the installed native images.
+
 ### GitHub releases
 
 Several runtimes are published as GitHub releases: Ruffle, LÖVE stable releases, ONScripter-Yuri, Ikemen GO, HashLink, Xash3D FWGS, UZDoom and Raze. Their catalogs read these releases through the shared helpers, which stop after a set number of pages. For Ruffle, the ordinary **Reload** lists all releases by default.

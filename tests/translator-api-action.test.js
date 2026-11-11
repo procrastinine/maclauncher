@@ -5,7 +5,7 @@ const Translators = require('../src/modules/shared/runtime/wine-translators');
 const Files = require('../src/modules/shared/runtime/translator-files');
 const WineSettings = require('../src/modules/shared/runtime/wine-settings');
 const CrossLaunch = require('../src/modules/crossover/runtime/launch');
-const SikaLaunch = require('../src/modules/crossover/sikarugir/launch');
+const SikaLaunch = require('./helpers/wine-source.cjs').launch('sikarugir');
 const { peFixture } = require('./helpers/pe-fixture');
 const { image, X64 } = require('./fixtures/macho-image');
 
@@ -284,7 +284,7 @@ test('real Sikarugir API graphics view applies exact planned builtin and Unix so
 });
 
 test('translator schema follows canonical role order and explains CrossOver global Automatic before editing', async t => {
-  const Roles = require('../src/modules/shared/runtime/translator-roles'), original = require('../src/modules/crossover/manifest.json');
+  const Roles = require('../src/modules/shared/runtime/translator-roles'), original = require('../src/modules/crossover/sources/settings').withSources(require('../src/modules/crossover/manifest.json'));
   const before = JSON.stringify(original), manifest = Translators.withSettings(original);
   const expected = ['translatorRenderer', ...Roles.ROLES.map(role => role.settingsKey)];
   for (const runtime of ['crossover', 'sikarugir']) {

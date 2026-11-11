@@ -1,6 +1,8 @@
 const fs = require("node:fs");
 const Translators = require("../shared/runtime/wine-translators");
-const manifest = Translators.withSettings(require("../shared/runtime/wine-settings-ui").withSettings(require("./temporal/catalog").withSettingsOptions(require("./manifest.json"))));
+const Sources = require("./sources");
+const manifest = Translators.withSettings(require("../shared/runtime/wine-settings-ui").withSettings(require("./temporal/catalog").withSettingsOptions(
+  require("./sources/settings").withSources(require("./manifest.json")))));
 const Detection = require("./detect");
 const manager = require("./runtime/manager");
 const Launch = require("./runtime/launch");
@@ -18,10 +20,10 @@ function wineSettingInheritance(entry, payload, context) {
     { reference: payload?.environmentReference || context.runtimeSettings?.environmentReference });
 }
 async function translatorOptions(entry, payload, context, dependencies = {}) {
-  const runtime = context.runtimeId || payload?.runtimeId || entry.runtimeId || 'crossover';
+  const runtime = context.runtimeId || payload?.runtimeId || entry.runtimeId || manifest.runtime.default;
   const draft = { ...context, runtimeSettings: { ...context.runtimeSettings, ...payload?.runtimeSettings } };
   const preparedContext = Translators.environmentContext(draft);
-  const runtimeManager = dependencies.runtimeManager || (runtime === 'sikarugir' ? require('./sikarugir/runtime/manager') : manager);
+  const runtimeManager = dependencies.runtimeManager || Sources.get(runtime).manager();
   const selected = preparedContext.wineEnvironment?.install ? { ready: true, install: preparedContext.wineEnvironment.install } : runtimeManager.resolveSelection(entry, draft.settings, draft.userDataDir, draft.runtimeSettings);
   const install = selected.ready === false ? null : selected.install;
   const consumerArchitecture = selected.architecture;
@@ -49,16 +51,23 @@ async function currentPlan(entry, runtimeId, context, install) {
 // choices before a game is assigned to it; the game's first inspector request
 // then reuses them.
 async function warmBackendLane(context) {
-  for (const [runtime, runtimeManager] of [['crossover', manager], ['sikarugir', require('./sikarugir/runtime/manager')]]) {
-    const selected = runtimeManager.resolveSelection({}, context.settings, context.userDataDir, {});
+  for (const source of Sources.all()) {
+    const selected = source.manager().resolveSelection({}, context.settings, context.userDataDir, {});
     if (selected?.ready === false || !selected?.install) continue;
-    await Translators.optionsInventory(selected.install, runtime, { ...context, runtimeSettings: {} }, { reuse: true });
+    await Translators.optionsInventory(selected.install, source.id, { ...context, runtimeSettings: {} }, { reuse: true });
   }
+}
+// An existing environment of a source that runs its own Wine loader carries
+// that Wine; a CrossOver bottle runs with the selected CrossOver application.
+function existingWine(source, context) {
+  if (source?.invocation !== "wine" || !source.environmentKind) return null;
+  const reference = Environments.environmentReference(context.runtimeSettings?.environmentReference);
+  return reference?.kind === source.environmentKind ? Environments.readEnvironment(reference) : null;
 }
 async function runtimeStatus(entry, _payload, context) {
   const runtime = providerForEntry(entry, context)?.runtimeId;
-  const selectedManager = runtimeManagers.find(candidate => candidate.id === providerForEntry(entry, context)?.managerId) || manager;
-  const existing = runtime === 'sikarugir' ? Environments.readEnvironment(context.runtimeSettings?.environmentReference) : null;
+  const selectedManager = Sources.get(runtime).manager();
+  const existing = existingWine(Sources.get(runtime), context);
   const selected = existing ? { ready: true, install: existing.install, version: existing.path, versionLabel: existing.install.engineVersion } :
     selectedManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
   const preparedContext = selected.install ? Translators.environmentContext(context, selected.install) : context;
@@ -83,28 +92,40 @@ async function runtimeStatus(entry, _payload, context) {
 const graphicsBridgeActions = { runtimeStatus, listWineSettingInheritance: wineSettingInheritance, listTranslatorOptions: (entry, payload, context) => translatorOptions(entry, payload, context), listGraphicsBridgeVersions: (entry, _payload, context) => graphicsBridgeVersions(context.runtimeId || entry.runtimeId, context) };
 const graphicsBridgeSettingsActions = { listWineSettingInheritance: (payload, context) => wineSettingInheritance({}, payload, context), listTranslatorOptions: (payload, context) => translatorOptions({runtimeId:payload?.runtimeId}, payload, context), listGraphicsBridgeVersions: (payload, context) => graphicsBridgeVersions(payload?.runtimeId, context) };
 
-function graphicsBackendOptions(entry, context, { runtimeManager = manager, host } = {}) {
+function graphicsBackendOptions(entry, context, { runtimeId = context.runtimeId || entry?.runtimeId || manifest.runtime.default, runtimeManager = Sources.get(runtimeId).manager(), host } = {}) {
   const selected = runtimeManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
-  const field = require("./manifest.json").runtime.entries.crossover.settings.fields.find(field => field.key === "graphicsBackend");
+  const field = manifest.runtime.entries[runtimeId].settings.fields.find(field => field.key === "graphicsBackend");
   const support = require("./runtime/backend-support");
   return { graphicsBackends: field.options.filter(option => !support.reason(selected?.install, option.value, host)) };
 }
-function wineSynchronizations(entry, context) {
-  const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
-  const options = manifest.runtime.entries.crossover.settings.fields.find(field => field.key === 'synchronization').options;
-  return { synchronizations: options.filter(option => option.value !== 'esync' || Number.parseInt(selected.install?.upstreamVersion, 10) < 25) };
+// The synchronization modes the selected Wine offers: CrossOver by its
+// version, a downloaded Wine by the modes its wineserver names.
+function wineSynchronizations(entry, context, runtimeId = context.runtimeId || entry?.runtimeId || manifest.runtime.default) {
+  const source = Sources.get(runtimeId), existing = existingWine(source, context);
+  const install = existing?.install || source.manager().resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings).install;
+  const options = manifest.runtime.entries[runtimeId].settings.fields.find(field => field.key === 'synchronization').options;
+  const offered = mode => source.invocation === "crossover" ? mode !== 'esync' || Number.parseInt(install?.upstreamVersion, 10) < 25
+    : !install || install.capabilities?.[mode] === true;
+  return { synchronizations: options.filter(option => ['auto', 'off'].includes(option.value) || offered(option.value)) };
 }
 const Environments = require("../shared/runtime/wine-environment");
-const crossoverActions = { ...graphicsBridgeActions, ...Environments.environmentActions("crossover", { resolveOptions: context => ({
-  crossoverRoot: manager.resolveSelection({}, context.settings, context.userDataDir, context.runtimeSettings)?.install?.crossoverRoot }) }),
-  listWineSynchronizations: (entry, _payload, context) => wineSynchronizations(entry, context),
-  listGraphicsBackends: (entry, _payload, context) => graphicsBackendOptions(entry, context) };
-const crossoverSettingsActions = { ...graphicsBridgeSettingsActions, listWineSynchronizations: (_payload, context) => wineSynchronizations({}, context),
-  listGraphicsBackends: (_payload, context) => graphicsBackendOptions({}, context) };
-const sikarugirManager = require("./sikarugir/runtime/manager");
-const sikarugirProvider = { ...require("./sikarugir/provider"),
-  runtime: manifest.runtime.entries.sikarugir, supports: manifest.runtime.entries.sikarugir.supports,
-  actions: { ...graphicsBridgeActions, ...Environments.environmentActions("sikarugir") }, settingsActions: graphicsBridgeSettingsActions };
+// Every source has the same inspector and settings actions; the environment
+// picker lists the source's own external environments.
+function actionsFor(source) {
+  return { ...graphicsBridgeActions, ...(source.environmentKind ? Environments.environmentActions(source.id, source.invocation === "crossover" ? { resolveOptions: context => ({
+    crossoverRoot: manager.resolveSelection({}, context.settings, context.userDataDir, context.runtimeSettings)?.install?.crossoverRoot }) } : {}) : {}),
+    listWineSynchronizations: (entry, _payload, context) => wineSynchronizations(entry, context, source.id),
+    listGraphicsBackends: (entry, _payload, context) => graphicsBackendOptions(entry, context, { runtimeId: source.id }) };
+}
+function settingsActionsFor(source) {
+  return { ...graphicsBridgeSettingsActions, listWineSynchronizations: (_payload, context) => wineSynchronizations({}, context, source.id),
+    listGraphicsBackends: (_payload, context) => graphicsBackendOptions({}, context, { runtimeId: source.id }) };
+}
+const crossoverActions = actionsFor(Sources.get("crossover")), crossoverSettingsActions = settingsActionsFor(Sources.get("crossover"));
+const WineProvider = require("./sources/provider");
+const wineProviders = Sources.all().filter(source => source.invocation === "wine").map(source => ({ ...WineProvider.createProvider({ source }),
+  runtime: manifest.runtime.entries[source.id], supports: manifest.runtime.entries[source.id].supports,
+  actions: actionsFor(source), settingsActions: settingsActionsFor(source) }));
 // CrossOver cannot be downloaded, so it is offered only while an installed copy is available.
 function supportsEntry(entry, _moduleSettings, context = {}) {
   return Detection.supportsWindowsRuntimes(entry) && manager.isAvailable(context.userDataDir);
@@ -146,14 +167,14 @@ const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.en
       ...await require('./runtime/steam-bridge').requirements(entry, { ...context, runtimeId: 'crossover' })
     ],
     resolveGraphicsInputs: (entry, context) => resolveGraphicsInputs(entry, context) };
-const runtimeProviders = [crossoverProvider, sikarugirProvider];
-const runtimeManagers = [...require("./temporal/vulkan-dlss").managers,manager, sikarugirManager, require('./runtime/maclauncher-dxvk'), require('./runtime/winemac'), require('./runtime/steam-bridge'), ...Object.values(require("./temporal/support-manager").managers)];
+const runtimeProviders = [crossoverProvider, ...wineProviders];
+const runtimeManagers = [...require("./temporal/vulkan-dlss").managers, ...Sources.all().map(source => source.manager()), require('./runtime/maclauncher-dxvk'), require('./runtime/winemac'), require('./runtime/steam-bridge'), ...Object.values(require("./temporal/support-manager").managers)];
 const providerForRuntime = runtimeId => runtimeProviders.find(provider => provider.runtimeId === runtimeId);
 const providerForEntry = (entry, context) => providerForRuntime(context?.runtimeId || entry?.runtimeId || manifest.runtime.default);
 async function resolveGraphicsInputs(entry, context = {}, resolved, plan) {
   const runtimeId = providerForEntry(entry, context)?.runtimeId;
   const selectedManager = runtimeManagers.find(candidate => candidate.id === providerForEntry(entry, context)?.managerId);
-  const existing = runtimeId === "sikarugir" ? Environments.readEnvironment(context.runtimeSettings?.environmentReference) : null;
+  const existing = existingWine(Sources.get(runtimeId), context);
   if (existing) context.wineEnvironment = existing;
   const selected = resolved || (existing ? { ready: true, install: existing.install, version: existing.path } :
     selectedManager?.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings));
@@ -161,7 +182,7 @@ async function resolveGraphicsInputs(entry, context = {}, resolved, plan) {
   const prepared = Translators.environmentContext(context, selected.install);
   if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
   const install = prepared.wineEnvironment?.install || selected.install;
-  const fallback = runtimeId === "sikarugir" ? "x86_64" : null;
+  const fallback = manifest.runtime.entries[runtimeId]?.graphicsArchitecture || null;
   let translatorPlan = plan || context.translatorPlan;
   const recorded = !translatorPlan && recordedLaunch(entry, runtimeId, context, install);
   if (recorded) return require("./graphics-inputs").inputs(install, recorded.graphicsInputs, { fallback });
@@ -172,7 +193,7 @@ async function resolveGraphicsInputs(entry, context = {}, resolved, plan) {
 }
 
 module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
-  metadataSources: ["sikarugir/provider.js", "../shared/executable-candidates.js", "../shared/runtime/providers.js"],
+  metadataSources: ["sources/provider.js", "../shared/executable-candidates.js", "../shared/runtime/providers.js"],
   graphicsComputeHosts:[require("./runtime/compute-host"),require("./sikarugir/runtime/compute-host")],
   runtimeManagers, runtimeProviders, runtimeProvider: crossoverProvider,
   resolveGraphicsInputs, warmBackendLane,

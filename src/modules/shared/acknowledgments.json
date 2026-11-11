@@ -471,6 +471,14 @@
     "url": "https://www.codeweavers.com/crossover/source"
   },
   {
+    "label": "winecx-gptk Wine runtime (LGPL-2.1-or-later and component licenses)",
+    "url": "https://github.com/dappermint/winecx-gptk"
+  },
+  {
+    "label": "Wine upstream (LGPL-2.1-or-later)",
+    "url": "https://gitlab.winehq.org/wine/wine"
+  },
+  {
     "label": "AMD FidelityFX SDK (MIT)",
     "url": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK"
   },

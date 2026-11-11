@@ -1,5 +1,5 @@
 // Environment variables of the Wine runtimes. Locked names are the paths,
-// loaders and selections that runtime/launch.js and sikarugir/launch.js must
+// loaders and selections that runtime/launch.js and sources/wine-launch.js must
 // set for every launch. Launcher values come from Runtime Settings
 // (src/modules/shared/runtime/wine-settings.js and the launch files); a value
 // set here replaces them for the games it applies to.
@@ -33,8 +33,9 @@ module.exports = [
     locked: [...locked,
       ...["CX_ROOT", "CX_HOME", "CX_BOTTLE", "CX_BOTTLE_PATH", "CX_MANAGED_BOTTLE_PATH", "CX_INITIALIZED", "CX_ENV", "CX_WINELOADER"]
         .map(key => ({ key, reason: "The launcher sets CrossOver's application and bottle paths." }))] },
-  { id: "sikarugir", label: "Sikarugir", managerIds: ["sikarugir"],
-    description: "Applies to every game that runs with Sikarugir.",
+  // Every source that runs its own Wine loader shares one declaration.
+  ...require("./sources").all().filter(source => source.invocation === "wine").map(source => ({ id: source.id, label: source.label, managerIds: [source.managerId],
+    description: `Applies to every game that runs with ${source.label}.`,
     keys: [
       { key: "WINEDEBUG", description: "Wine debug channels, such as -all or +seh,+loaddll.", launcher: "MacLauncher sets -all, or Wine debug channels from Runtime Settings." },
       ...shared
@@ -45,7 +46,7 @@ module.exports = [
         .map(key => ({ key, reason: "The launcher sets the library paths of the selected Wine and translators." })),
       ...["VK_DRIVER_FILES", "VK_ICD_FILENAMES"].map(key => ({ key, reason: "Names the selected Vulkan driver." })),
       ...["NODE_OPTIONS", "ELECTRON_RUN_AS_NODE"].map(key => ({ key, reason: "MacLauncher's own process options are not passed to games." })),
-      { key: "SikarugirAppWine11", reason: "Required by Sikarugir's Wine 11 loader." },
-      { prefix: "CX_", reason: "CrossOver variables are not passed to Sikarugir launches." },
-      { prefix: "GST_", reason: "The launcher sets the GStreamer plugins of the selected video codecs." }] }
+      ...Object.keys(source.launchEnvironment({ engineVersion: "11" }, { existingEnvironment: true })).map(key => ({ key, reason: `Required by ${source.label}'s Wine loader.` })),
+      { prefix: "CX_", reason: "The launcher sets the CrossOver variables that the selected Wine and translators read." },
+      { prefix: "GST_", reason: "The launcher sets the GStreamer plugins of the selected video codecs." }] }))
 ];

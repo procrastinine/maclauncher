@@ -11,9 +11,9 @@ const { stopProcessTree } = require("../src/core/process-stop");
 const { untilTestEnds } = require("./helpers/fixture-process");
 const Detection = require("../src/modules/crossover/detect");
 const WindowsFiles = require("../src/modules/crossover/runtime/launch");
-const Launch = require("../src/modules/crossover/sikarugir/launch");
+const Launch = require("./helpers/wine-source.cjs").launch("sikarugir");
 const GamePaths = require("../src/modules/shared/runtime/wine-game-paths");
-const Provider = require("../src/modules/crossover/sikarugir/provider");
+const Provider = require("./helpers/wine-source.cjs").provider("sikarugir");
 
 function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-sikarugir-test-"));

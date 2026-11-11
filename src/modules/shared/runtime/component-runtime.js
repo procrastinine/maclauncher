@@ -223,7 +223,7 @@ function includedReferences(engine, options = {}) {
     order(hostsByReference.get(b.version).wineVersion, hostsByReference.get(a.version).wineVersion));
 }
 function withIncludedReferences(manager) {
-  manager.referenceManagerIds = [...new Set(Object.values(require("../../crossover/manifest.json").runtime.manager))];
+  manager.referenceManagerIds = [...new Set(require("../../crossover/sources").all().map(source => source.managerId))];
   const prepare = manager.prepareLocalState;
   manager.prepareLocalState = async function(options = {}) {
     await prepare?.call(this, options);

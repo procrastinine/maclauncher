@@ -105,5 +105,5 @@ function createAPIManager(projectId, dependencies = {}) {
 }
 const apiManagers = Object.freeze(Object.fromEntries(Object.keys(API_PROJECTS).map(id => [id, createAPIManager(id)])));
 const support = createManager(), managers = Object.freeze({ [support.id]: support, ...apiManagers });
-module.exports = { ...support, managers, apiManagers, forRuntime: runtimeId => ["crossover", "sikarugir"].includes(runtimeId) ? support : null,
+module.exports = { ...support, managers, apiManagers, forRuntime: runtimeId => require("../sources").IDS.includes(runtimeId) ? support : null,
   createManager, createAPIManager, apiDescriptor, verifyAPI };

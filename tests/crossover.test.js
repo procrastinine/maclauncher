@@ -11,7 +11,7 @@ const Detection = require("../src/modules/crossover/detect");
 const Module = require("../src/modules/crossover/main");
 const Manager = require("../src/modules/crossover/runtime/manager");
 const Launch = require("../src/modules/crossover/runtime/launch");
-const Sikarugir = require("../src/modules/crossover/sikarugir/provider");
+const Sikarugir = require("./helpers/wine-source.cjs").provider("sikarugir");
 
 function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-crossover-test-"));
@@ -214,7 +214,7 @@ test("Windows publisher launch entries preserve saved relative executable roots 
   assert.equal(fs.realpathSync(path.join(launch.bottlePath, "dosdevices", "g:")), root);
   assert.equal(entry.runtimeData.crossover.sourceRoot, content);
   assert.deepEqual(commands, [installed.bottleToolPath], "preparation uses only the injected synthetic bottle command");
-  const sikarugir = require("../src/modules/crossover/sikarugir/launch").executableEvidence(entry, settings);
+  const sikarugir = require("./helpers/wine-source.cjs").launch("sikarugir").executableEvidence(entry, settings);
   assert.equal(sikarugir.windowsExecutablePath, chosen); assert.equal(sikarugir.sourceRoot, content);
   assert.equal(sikarugir.executableArchitecture, "x86_64", "the same-named outer executable has the different x86 machine");
   assert.deepEqual(settings, original); assert.deepEqual(entry.runtimeSettings.crossover, original);

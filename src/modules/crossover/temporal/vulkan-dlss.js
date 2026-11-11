@@ -87,7 +87,7 @@ async function requirements(entry, context, { translatorPlan = context.translato
   if (architecture !== 'x86_64') return [];
   if (!translatorPlan) {
     const runtimeId=context.runtimeId || entry.runtimeId || 'crossover';
-    const manager=require(runtimeId==='sikarugir'?'../sikarugir/runtime/manager':'../runtime/manager');
+    const manager=require('../sources').get(runtimeId).manager();
     const selected=manager.resolveSelection(entry,context.settings,context.userDataDir,context.runtimeSettings);
     if(selected.ready){
       const translators=require('../../shared/runtime/wine-translators');

@@ -227,19 +227,22 @@ async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, la
     }
   }
 }
-async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, vulkanDLSS, helperLibraries = [], translatorPlan, translatorView, environment, context, userDataDir } = {}) {
+// `source` is the Wine source descriptor (sources/<id>.js). Without a
+// translator plan, the Sikarugir Template's own renderer selection applies.
+async function prepareGraphicsView({ source = require("../../sources").get("sikarugir"), install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, vulkanDLSS, helperLibraries = [], translatorPlan, translatorView, environment, context, userDataDir } = {}) {
   signal?.throwIfAborted();
   if (!translatorPlan && context) {
     const shared = require('../../../shared/runtime/wine-translators');
     if (environment) context.wineEnvironment = environment;
     context.runtimeSettings ||= settings;
     translatorPlan = context.translatorPlan?.layout?.root === wineLayout(install).root ? context.translatorPlan :
-      await shared.resolve(install, 'sikarugir', context, { executableArchitecture, host });
+      await shared.resolve(install, source.id, context, { executableArchitecture, host });
     settings = shared.settingsForPlan(settings, translatorPlan);
   }
   if (translatorPlan && !translatorView) translatorView = await require('../../../shared/runtime/translator-files').prepareTranslatorFiles(translatorPlan,
     { userDataDir: userDataDir || context?.userDataDir, layout: translatorPlan.layout, signal });
-  const support = supportRoot(install), engine = engineRoot(install), hostInfo = {
+  const native = source.nativeLibraries(install);
+  const support = translatorPlan ? null : supportRoot(install), engine = engineRoot(install), hostInfo = {
     hardwareArch: require("../../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, ...host };
   const layout = translatorPlan?.layout || wineLayout(install);
   let capabilities = translatorPlan ? { ...install.capabilities, wined3d: true, componentVersions: {} } : capabilitiesFor(install, support, hostInfo);
@@ -250,7 +253,7 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
   if (cameraBridge) capabilities.dxmt = true;
   const selection = translatorPlan ? { graphicsBackend: translatorPlan.apiMode ? 'wined3d' : translatorPlan.components["d3d-renderer"].used?.engine || "auto",
     vulkanBackend: translatorPlan.components["vulkan-driver"].used?.engine || "auto", components: [] } : selectGraphics(settings, capabilities, executableArchitecture);
-  const rendererRoot = path.join(support, "Frameworks", "renderer");
+  const rendererRoot = support && path.join(support, "Frameworks", "renderer");
   let dlss = DLSS.checkSelection(settings, { ...hostInfo, executableArchitecture, translatorPlan, vulkan: vulkanDLSS?.enabled===true,
     backend: selection.components.includes("dxmt") ? "dxmt" : selection.graphicsBackend === "auto" ? "wined3d" : selection.graphicsBackend,
     dxmt: settings.dlss === true && (translatorPlan ? Boolean(cameraBridge) || DLSS.hasPlanLibraries(translatorPlan, "dxmt") : capabilities.dxmt && (Boolean(cameraBridge) || DLSS.hasLibraries(path.join(rendererRoot, "dxmt", "wine", layout.primaryWindows)))),
@@ -260,9 +263,10 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
     dlss = { ...dlss, d3dmetal: false, enabled: dlss.dxmt || dlss.vulkan === true };
   }
   const destination = prospectiveRealPath(viewRoot || ".");
-  if (Closure.inside(support, destination) || Closure.inside(engine, destination)) fail("Per-game graphics state must be outside the shared runtime.");
+  const installed = install.installDir && fs.existsSync(install.installDir) ? fs.realpathSync(install.installDir) : null;
+  if ((support && Closure.inside(support, destination)) || (installed && Closure.inside(installed, destination)) || Closure.inside(engine, destination)) fail("Per-game graphics state must be outside the shared runtime.");
   ownDirectory(viewRoot);
-  const frameworks = path.join(support, "Frameworks"), renderers = path.join(frameworks, "renderer");
+  const renderers = support && path.join(support, "Frameworks", "renderer");
   if (!Array.isArray(helperLibraries) || helperLibraries.length > 8) fail("The GPU helper declaration is invalid.");
   const helpers = [], helperNames = new Set();
   for (const item of helperLibraries) {
@@ -316,36 +320,35 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
   }
   if (cameraBridge && selection.components.includes("dxmt") && dlss.dxmt)
     await linkFile(cameraBridge.dxmt.native, path.join(dllRoot, "x86_64-unix/maclauncher-dxmt-original.so"), signal);
-  const gstreamer = Closure.gstreamerPaths(support), gstLib = gstreamer.lib;
+  const gstreamer = native.gstreamer;
   const external = selection.components.includes("d3dmetal") ? path.join(renderers, "d3dmetal", "external") : null;
-  const libraryPaths = [path.join(dllRoot, layout.unixName), ...selectedUnix, ...(external ? [external] : []), path.join(engine, "lib", "wine", layout.unixName), frameworks,
-    ...(fs.existsSync(gstLib) ? [gstLib] : [])];
+  const libraryPaths = [...new Set([path.join(dllRoot, layout.unixName), ...selectedUnix, ...(external ? [external] : []), path.join(engine, "lib", "wine", layout.unixName), ...native.libraries,
+    ...(gstreamer ? [gstreamer.lib] : [])])];
   // Only ntdll's private anchor overrides lookup: Unix Wine modules must reuse
   // its initialized copy. Vendor dependencies must not replace system libraries
   // loaded by Apple frameworks in the same process.
   const env = { WINEDLLPATH: path.join(engine, "lib", "wine"),
     ...(privateLoader ? { DYLD_LIBRARY_PATH: loader.libraryOverride } : {}),
     DYLD_FALLBACK_LIBRARY_PATH: libraryPaths.join(path.delimiter),
-    DYLD_FALLBACK_FRAMEWORK_PATH: [frameworks, ...(external ? [external] : [])].join(path.delimiter),
+    ...(native.frameworks.length || external ? { DYLD_FALLBACK_FRAMEWORK_PATH: [...native.frameworks, ...(external ? [external] : [])].join(path.delimiter) } : {}),
     GST_REGISTRY_1_0: path.join(viewRoot, "gstreamer-registry.bin") };
   Object.assign(env, DLSS.environment(dlss));
   if (selection.components.includes("dxmt") && dlss.dxmt) Object.assign(env, require("../../temporal").environment(cameraBridge, dllRoot));
-  if (fs.existsSync(gstLib)) {
+  if (gstreamer) {
     env.GST_PLUGIN_SYSTEM_PATH_1_0 = gstreamer.plugins;
     env.GST_PLUGIN_PATH_1_0 = "";
-    const scanner = gstreamer.scanner;
-    if (fs.existsSync(scanner)) env.GST_PLUGIN_SCANNER_1_0 = scanner;
+    if (gstreamer.scanner && fs.existsSync(gstreamer.scanner)) env.GST_PLUGIN_SCANNER_1_0 = gstreamer.scanner;
   }
   if (!translatorPlan && selection.vulkanBackend !== "auto") {
     const icd = path.join(viewRoot, "vulkan-icd.json"), sourceIcd = path.join(support, Closure.RELATIVE_PATHS.vulkan,
       selection.vulkanBackend === "kosmickrisp" ? "kosmickrisp_mesa_icd.json" : "MoltenVK_icd.json");
     const descriptor = JSON.parse(Closure.boundedText(sourceIcd));
     if (!descriptor.ICD || typeof descriptor.ICD.library_path !== "string") fail("The Vulkan driver description is invalid.");
-    const native = path.resolve(path.dirname(sourceIcd), descriptor.ICD.library_path);
-    if (!Closure.inside(frameworks, fs.realpathSync(native))) fail("The Vulkan driver escapes its graphics package.");
+    const driver = path.resolve(path.dirname(sourceIcd), descriptor.ICD.library_path);
+    if (!Closure.inside(path.join(support, "Frameworks"), fs.realpathSync(driver))) fail("The Vulkan driver escapes its graphics package.");
     // The private manifest selects exactly one driver, without rewriting the
     // immutable upstream manifest or depending on a machine-wide Vulkan SDK.
-    descriptor.ICD.library_path = native;
+    descriptor.ICD.library_path = driver;
     // Windows applications do not opt into macOS portability enumeration.
     // Wine forwards their instance flags, so allow its selected MoltenVK driver
     // to be discovered without that opt-in. Driver features stay unchanged.

@@ -424,10 +424,10 @@ test("vendor dependencies use fallback paths while the HUD and private ntdll ove
   assert.equal(result.env.DYLD_FRAMEWORK_PATH, undefined);
   assert.ok(result.env.DYLD_FALLBACK_FRAMEWORK_PATH.split(path.delimiter).map(canonical).includes(canonical(frameworks)));
   assert.ok(result.env.DYLD_FALLBACK_FRAMEWORK_PATH.split(path.delimiter).includes(translatorView.frameworkPaths[0]));
-  const launch = require("../src/modules/crossover/sikarugir/launch").buildEnvironment({metalHud: true}, f.install,
+  const launch = require("./helpers/wine-source.cjs").launch("sikarugir").buildEnvironment({metalHud: true}, f.install,
     path.join(f.root, "game"), path.join(f.root, "prefix"), result, {baseEnvironment: {}});
   assert.equal(launch.environment.MTL_HUD_ENABLED, "1");
-  const stock = require("../src/modules/crossover/sikarugir/launch").prefixRuntime(f.install, path.join(f.root, "game"));
+  const stock = require("./helpers/wine-source.cjs").launch("sikarugir").prefixRuntime(f.install, path.join(f.root, "game"));
   assert.equal(stock.env.DYLD_LIBRARY_PATH, undefined);
   assert.ok(stock.env.DYLD_FALLBACK_LIBRARY_PATH.split(path.delimiter).map(canonical).includes(canonical(frameworks)));
 });

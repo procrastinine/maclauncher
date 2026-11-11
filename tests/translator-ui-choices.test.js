@@ -3,7 +3,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const { build } = require('vite');
 const D = require('../src/modules/shared/runtime/translator-description');
 const { withSettings } = require('../src/modules/shared/runtime/wine-translators');
-const manifest = require('../src/modules/crossover/manifest.json');
+const manifest = require('../src/modules/crossover/sources/settings').withSources(require('../src/modules/crossover/manifest.json'));
 const { peFixture } = require('./helpers/pe-fixture');
 const { image, X64 } = require('./fixtures/macho-image');
 let choices;

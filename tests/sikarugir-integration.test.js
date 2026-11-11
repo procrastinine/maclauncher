@@ -58,9 +58,9 @@ function fakeChild() {
 function managedFixture(t, { installed = [], approval = true, native = false } = {}) {
   const { root, userDataDir } = fixture(t), calls = [], children = [], installs = new Map();
   const Modules = registry(), manifest = Modules.getModuleInfo("crossover");
-  const Launch = require("../src/modules/crossover/sikarugir/launch");
+  const Launch = require("./helpers/wine-source.cjs").launch("sikarugir");
   const Graphics = require("../src/modules/crossover/sikarugir/graphics");
-  const Provider = require("../src/modules/crossover/sikarugir/provider");
+  const Provider = require("./helpers/wine-source.cjs").provider("sikarugir");
   const { composeRuntimeProviders } = require("../src/modules/shared/runtime/providers");
   const runtimeRoot = path.join(root, "runtime-payloads");
   function payload(version) {
@@ -298,7 +298,7 @@ test("ordinary Play obtains one consent, prepares the Windows environment and ru
   assert.deepEqual(plan.components["d3d-renderer"].used.files.flatMap(file => (file.slices || []).flatMap(slice => slice.imports || [])).map(({ symbol, library }) => ({ symbol, library })),
     [{ symbol: "wine_unix_call", library: "@rpath/ntdll.so" }]);
   assert.ok(plan.record.modules["ntdll.so"].exports.includes("wine_unix_call"));
-  assert.equal(spawned.command, "/bin/sh"); assert.equal(spawned.args[2], "maclauncher-sikarugir");
+  assert.equal(spawned.command, "/bin/sh"); assert.equal(spawned.args[2], "maclauncher-wine");
   assert.equal(spawned.options.cwd, state.gameRoot);
   assert.equal(spawned.options.env.WINEPREFIX, state.prefixPath);
   assert.equal(spawned.options.env.LC_ALL, "ja_JP.UTF-8");

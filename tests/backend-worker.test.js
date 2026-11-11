@@ -403,7 +403,7 @@ test("runtime actions publish actual Included references after host installation
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-action-references-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   t.mock.method(globalThis, "fetch", () => assert.fail("Host state changes must not refresh catalogs"));
-  const manifest = require("../src/modules/crossover/manifest.json"), Component = require("../src/modules/shared/runtime/component-runtime");
+  const manifest = require("../src/modules/crossover/sources/settings").withSources(require("../src/modules/crossover/manifest.json")), Component = require("../src/modules/shared/runtime/component-runtime");
   const { RELATIVE_PATHS } = require("../src/modules/crossover/sikarugir/graphics/closure");
   const { image, X64 } = require("./fixtures/macho-image"), { peFixture } = require("./helpers/pe-fixture");
   const put = (relative, bytes) => { const file = path.join(root, relative);fs.mkdirSync(path.dirname(file), { recursive: true });fs.writeFileSync(file, bytes);return file; };

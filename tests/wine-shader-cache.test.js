@@ -2,7 +2,7 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
 const Cache = require("../src/modules/crossover/runtime/shader-cache");
 const CrossOver = require("../src/modules/crossover/runtime/launch");
-const Sikarugir = require("../src/modules/crossover/sikarugir/launch");
+const Sikarugir = require("./helpers/wine-source.cjs").launch("sikarugir");
 function root(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-shader-cache-"));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));

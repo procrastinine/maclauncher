@@ -18,7 +18,7 @@ function activity(directory, marker) {
   return null;
 }
 function collect(entry, context, layout) {
-  const launch = layout.runtimeId === "crossover" ? require("../runtime/launch") : require("../sikarugir/launch");
+  const launch = layout.runtimeId === "crossover" ? require("../runtime/launch") : require("../sources/wine-launch").forSource(layout.runtimeId);
   const directory = launch.runtimeDirectory(entry, context), parent = path.join(directory, layout.folder);
   Writable.assertPreservesExternalEnvironments(entry, parent);
   Writable.assertOwnDirectory(context.userDataDir, parent, {create: false});

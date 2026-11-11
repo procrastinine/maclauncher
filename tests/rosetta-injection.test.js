@@ -6,7 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { createProcessLauncher } = require("../src/core/processes");
-const Sikarugir = require("../src/modules/crossover/sikarugir/launch");
+const Sikarugir = require("./helpers/wine-source.cjs").launch("sikarugir");
 const CrossOver = require("../src/modules/crossover/runtime/launch");
 
 // These fixtures exercise dyld, SIP's arch/shell environment handling, child

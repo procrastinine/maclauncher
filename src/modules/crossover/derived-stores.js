@@ -59,7 +59,7 @@ module.exports = [
   },
   {
     id: 'sikarugir-graphics-views',
-    directories: ({ userDataDir }) => [path.join(userDataDir, 'graphics/sikarugir-views')],
+    directories: ({ userDataDir }) => require('./sources').all().filter(source => source.invocation === 'wine').map(source => path.join(userDataDir, `graphics/${source.id}-views`)),
     match: /^[a-f0-9]{20}-[a-f0-9]{12}-[a-f0-9]{64}$/,
     keep: directory => currentTree(directory, 'prepared.json'),
     minAgeMs: 24 * 60 * 60 * 1000

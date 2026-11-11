@@ -8,7 +8,7 @@ const { readZipEntries, readZipEntry } = require("./zip");
 const { readWindowsExecutable } = require("../../crossover/detect");
 const Sikarugir = require("../../crossover/sikarugir/runtime/manager");
 const CrossOver = require("../../crossover/runtime/manager");
-const WineLaunch = require("../../crossover/sikarugir/launch");
+const WineLaunch = require("../../crossover/sources/wine-launch");
 const CrossLaunch = require("../../crossover/runtime/launch");
 const GameData = require("../game-data");
 const Writable = require("../writable-input");
@@ -83,9 +83,9 @@ async function runWindowsTool(manager, entry, context, { moduleId, install, args
         { run: (command, parameters, options) => run(command, host.install.serverPath, parameters, options) });
       env = CrossLaunch.buildEnvironment(settings, host.install, directory, prefix, { baseEnvironment: basicEnvironment() }).environment;
     } else {
-      const runtime = WineLaunch.prefixRuntime(host.install, directory);
-      await WineLaunch.ensurePrefix(host.install, prefix, directory, settings, runtime, context, { run });
-      env = WineLaunch.buildEnvironment(settings, host.install, directory, prefix, runtime, { baseEnvironment: basicEnvironment() }).environment;
+      const launch = WineLaunch.forSource(host.kind), runtime = launch.prefixRuntime(host.install, directory);
+      await launch.ensurePrefix(host.install, prefix, directory, settings, runtime, context, { run });
+      env = launch.buildEnvironment(settings, host.install, directory, prefix, runtime, { baseEnvironment: basicEnvironment() }).environment;
     }
     CrossLaunch.detachProfileAliases(prefix);
     let script;

@@ -100,6 +100,7 @@ test('every registered runtime manager has a linked upstream project in Credits'
     'scummvm-tools': 'https://github.com/scummvm/scummvm-tools',
     siglus: 'https://github.com/xmoezzz/siglus_rs',
     sikarugir: 'https://github.com/Sikarugir-App/Engines',
+    winecx: 'https://github.com/dappermint/winecx-gptk',
     rlvm: 'https://github.com/eglaysher/rlvm',
     'rlvm-adapter': 'https://github.com/eglaysher/rlvm',
     'sys3-decompiler': 'https://github.com/kichikuou/sys3c',

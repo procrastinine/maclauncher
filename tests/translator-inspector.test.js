@@ -2,7 +2,7 @@ const test = require('node:test'), assert = require('node:assert/strict'), path 
 const React = require('react'), { renderToStaticMarkup } = require('react-dom/server'), { build } = require('vite');
 const { react, componentHarness } = require('./helpers/renderer-component');
 const { createLibraryFixture } = require('./library-layout-fixture');
-const manifest = require('../src/modules/crossover/manifest.json');
+const manifest = require('../src/modules/crossover/sources/settings').withSources(require('../src/modules/crossover/manifest.json'));
 const Description = require('../src/modules/shared/runtime/translator-description');
 const Plan = require('../src/modules/shared/runtime/translator-plan');
 const Translators = require('../src/modules/shared/runtime/wine-translators');

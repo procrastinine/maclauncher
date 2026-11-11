@@ -47,10 +47,11 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
       if (manifest.managerId !== id || !manifest.steamBridge?.native || !manifest.steamBridge?.windows || !manifest.steamBridge?.clientEnvironment)
         throw new Error('The Steam bridge package lacks the managed loader paths required by this launcher and needs replacement.');
     }, async verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); }, dependencies });
-  // CrossOver and Sikarugir share one managed row under Compatibility. Play
-  // uses only managed versions, so the row offers no custom registration.
+  // The Wine runtimes share one managed row under Compatibility, after their
+  // own tabs. Play uses only managed versions, so the row offers no custom
+  // registration.
   const manager = { ...base, ui: { groupId: 'steam-bridge', tabLabel: 'Steam client bridge', sectionLabel: 'Steam client bridge',
-    management: 'managed', order: 202, category: 'compatibility' }, distributionRequired: false, customRuntime: false };
+    management: 'managed', order: 203, category: 'compatibility' }, distributionRequired: false, customRuntime: false };
   delete manager.registerCustomRuntime;
   const skippedPath = directory => path.join(directory, 'runtimes/steam-bridge-skipped.json');
   const skipped = directory => readJsonObject(skippedPath(directory))?.apps || [];
@@ -85,7 +86,7 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
   const getState = manager.getState;
   manager.getState = function(options = {}) {
     const state = getState.call(this, options), files = Components.status(options.userDataDir);
-    const extra = { description: 'Connects Windows Steam games in CrossOver and Sikarugir to the Steam client for Mac. Play offers it for a Windows Steam game while the Steam client for Mac is installed.',
+    const extra = { description: 'Connects Windows Steam games in CrossOver, Sikarugir and WineCX to the Steam client for Mac. Play offers it for a Windows Steam game while the Steam client for Mac is installed.',
       components: [{ id: 'steam-client-components', label: 'Windows Steam client files', ...(files ? { version: files.archiveSha1.slice(0, 12) } : {}),
         status: files ? 'Installed' : 'Not installed', available: Boolean(files),
         description: "steamclient.dll and steamclient64.dll from Valve's current Steam client download, checked against its content address. They are installed with the bridge and removed with its last version." }] };

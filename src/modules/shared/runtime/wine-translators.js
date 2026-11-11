@@ -10,10 +10,12 @@ const Requirements = require('./feature-requirements');
 const { compareRuntimeVersions } = require('./pinned-native-manager');
 const SETTINGS = Object.freeze({ 'd3d-renderer': 'translatorRenderer', 'vulkan-driver': 'translatorVulkan', d3d12: 'translatorD3D12', video: 'translatorVideo' });
 
+const Sources = () => require('../../crossover/sources');
+const sourceFor = runtime => Sources().get(runtime) || Sources().get('sikarugir');
 function includedTranslators(install, runtime, { engine: requestedEngine, describe } = {}) {
-  const layout = wineLayout(install), result = [], warnings = [], nativeRoots = [];
+  const layout = wineLayout(install), result = [], warnings = [], nativeRoots = [], wine = sourceFor(runtime);
   const source = { kind: runtime, id: install.version || layout.root, runtime,
-    label: require('./translator-label').hostLabel(install, { label: runtime === 'crossover' ? 'CrossOver' : 'Sikarugir Template' }) };
+    label: require('./translator-label').hostLabel(install, { label: wine.labels.source }) };
   const add = (root, engine, component, extra = {}) => {
     if (requestedEngine && engine !== requestedEngine) return;
     if (!fs.existsSync(root)) return;
@@ -22,62 +24,12 @@ function includedTranslators(install, runtime, { engine: requestedEngine, descri
       if (!value) return;
       // A supplied version is the reader's fallback; the component's own version text precedes it.
       value = { ...value, included: true, id: `included:${component}:${extra.templateComponent || engine}`, ...extra, version: value.version };
-      if (!value.version && runtime === 'crossover') {
-        try {
-          const name = Description.label({ engine }).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          value.version = fs.readFileSync(path.join(layout.root, 'changelog.html'), 'utf8').match(new RegExp(`Update to ${name}\\s+v?(\\d+(?:\\.\\d+)+(?:[a-z]\\d*)?)`, 'i'))?.[1] || '';
-        } catch {}
-      }
+      if (!value.version && wine.includedVersion) value.version = wine.includedVersion(engine, layout, Description);
       result.push(value);
       if (engine === 'd3dmetal' && component === 'd3d-renderer') result.push({ ...value, component: 'd3d12', id: 'included:d3d12:d3dmetal' });
     } catch (error) { warnings.push(`${engine}: ${error.message}`); }
   };
-  if (runtime === 'crossover') {
-    for (const engine of ['dxmt', 'dxvk']) add(path.join(layout.root, 'lib', engine), engine, 'd3d-renderer');
-    add(path.join(layout.root, 'lib64/apple_gptk'), 'd3dmetal', 'd3d-renderer');
-    add(path.join(layout.root, 'lib64/libMoltenVK.dylib'), 'moltenvk', 'vulkan-driver', { form: 'dylib' });
-    if (!requestedEngine || requestedEngine === 'gstreamer') {
-      let version = '';
-      try {
-        const core = (describe || Description.describeTranslator)(path.join(layout.root, 'lib64/libgstreamer-1.0.0.dylib'),
-          { engine: 'gstreamer', component: 'video', source, form: 'dylib' });
-        if (core) version = core.version || require('./gstreamer-source').libraryVersion(core);
-      } catch (error) { if (error.code !== 'ENOENT') warnings.push(`gstreamer: ${error.message}`); }
-      add(path.join(layout.root, 'lib64/gstreamer-1.0'), 'gstreamer', 'video', { form: 'dylib', version });
-    }
-  } else {
-    const { RELATIVE_PATHS, templateRenderers, gstreamerPaths } = require('../../crossover/sikarugir/graphics/closure');
-    const support = install.templateRoot || install.supportRoot || path.join(install.installDir, 'support');
-    const gstreamer = gstreamerPaths(support);
-    add(gstreamer.plugins, 'gstreamer', 'video', { form: 'dylib', frameworkRoot: gstreamer.root });
-    // This is the same explicit DYLD root used by the Sikarugir launcher.
-    if (fs.existsSync(gstreamer.lib)) nativeRoots.push(gstreamer.lib);
-    const rendererPath = fs.existsSync(path.join(support, RELATIVE_PATHS.renderers)) ? RELATIVE_PATHS.renderers : templateRenderers(support, install.templateVersion);
-    const renderers = rendererPath && path.join(support, rendererPath);
-    if (renderers) for (const name of fs.readdirSync(renderers).sort()) {
-      const engine = /^(?:dxvk|d9vk)/.test(name) ? 'dxvk' : name;
-      if (['dxmt', 'dxvk', 'd3dmetal', 'cnc_ddraw'].includes(engine)) add(path.join(renderers, name), engine, 'd3d-renderer', { templateComponent: name, hiddenChoice: engine === 'cnc_ddraw' });
-    }
-    const vulkan = path.join(support, RELATIVE_PATHS.vulkan);
-    if (fs.existsSync(vulkan)) for (const name of fs.readdirSync(vulkan).filter(name => name.endsWith('.json'))) {
-      const engine = /kosmickrisp/i.test(name) ? 'kosmickrisp' : /moltenvk/i.test(name) ? 'moltenvk' : null;
-      if (requestedEngine && engine !== requestedEngine) continue;
-      try {
-        const descriptor = JSON.parse(fs.readFileSync(path.join(vulkan, name), 'utf8')), library = path.resolve(vulkan, descriptor.ICD.library_path);
-        if (engine) {
-          const before = result.length; add(library, engine, 'vulkan-driver', { form: 'icd' });
-          if (result.length > before) {
-            const description = result.at(-1); description.icd = path.join(vulkan, name);
-            const relative = path.join(RELATIVE_PATHS.frameworks, 'libvulkan.1.dylib'), loader = path.join(support, relative);
-            if (fs.existsSync(loader)) {
-              const file = describe ? describe(loader, { engine, component: 'vulkan-driver', source, form: 'dylib' })?.files[0] : Description.inspectFile({ path: loader, relative });
-              if (file) description.files.push({ ...file, relative });
-            }
-          }
-        }
-      } catch (error) { warnings.push(error.message); }
-    }
-  }
+  wine.includedTranslators(install, add, { layout, describe, source, requestedEngine, warnings, nativeRoots, result, Description });
   const direct3DWindows = [layout.primaryWindows, ...layout.windows.filter(name => name !== layout.primaryWindows)].filter(Boolean);
   const direct3DFiles = (!requestedEngine || requestedEngine === 'wined3d' || requestedEngine === 'vkd3d') ? direct3DWindows.flatMap(windows => fs.readdirSync(path.join(layout.dllRoot, windows)).filter(name => /^(?:d3d\d.*|dxgi)\.dll$/i.test(name)).map(name => {
     const file = path.join(layout.dllRoot, windows, name), relative = `${windows}/${name}`;
@@ -136,7 +88,7 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
         // A description that is still being prepared joins the next read.
         if (!description) continue;
       }
-      if (description.source?.runtime === 'crossover' && runtime !== 'crossover') continue;
+      if (description.source?.runtime && description.source.runtime !== runtime && Sources().get(description.source.runtime)?.ownComponents) continue;
       const root = install.translatorRoot || install.payloadRoot || (install.installDir && path.join(install.installDir, install.installationMetadata?.translatorRelative || '')) || install.root;
       const value = { ...description, id: `${manager.id}:${install.version}`, root, entryPoint: install.executablePath || description.entryPoint,
         aliases: [...(description.aliases || []), ...(manager.formerIds || []).map(id => `${id}:${install.version}`)],
@@ -158,7 +110,7 @@ function inventory(install, runtime, context, dependencies = {}) {
   const consumerArchitecture = result.layout?.architecture || dependencies.consumerArchitecture;
   const choices = dependencies.choices || managedTranslators(context, runtime, managers, consumerArchitecture);
   const current = context.wineEnvironment;
-  const environment = current ? { label: runtime === 'crossover' ? 'Bottle setting' : 'Wrapper setting', selections: {} } : null;
+  const environment = current ? { label: sourceFor(runtime).labels.environment, selections: {} } : null;
   if (current) for (const [component, key] of [['d3d-renderer', 'graphicsBackend'], ['vulkan-driver', 'vulkanBackend']]) {
     const engine = current.settings?.[key];
     environment.selections[component] = result.included.find(item => item.component === component && item.engine === engine &&
@@ -173,7 +125,7 @@ function inventory(install, runtime, context, dependencies = {}) {
     selections['vulkan-driver'] = result.included.find(item => item.component === 'vulkan-driver' && item.engine === context.runtimeSettings.vulkanBackend)?.id || Plan.AUTOMATIC;
   const legacyBackend = context.runtimeSettings?.graphicsBackend || 'auto';
   if (!context.runtimeSettings?.translatorRenderer && selections['d3d-renderer'] !== Plan.INHERIT &&
-      (legacyBackend === 'dxmt' || runtime === 'sikarugir' && legacyBackend === 'auto')) {
+      (legacyBackend === 'dxmt' || !sourceFor(runtime).graphicsSelector && legacyBackend === 'auto')) {
     const manager = managers.find(item => item.translatorEngine === 'dxmt' || item.translator?.engine === 'dxmt');
     const entry = dependencies.entry;
     const version = context.runtimeSettings?.graphicsBridgeVersion;
@@ -293,7 +245,7 @@ async function inventoryFacts(install, runtime, context, dependencies) {
   for (const manager of managers.filter(item => item.referenceManagerIds?.length))
     for (const item of Component.referencedComponents(manager.translatorEngine || manager.translator.engine, context)) {
       const value = item.description;
-      if (value.source?.runtime === 'crossover' && runtime !== 'crossover' || seen.has(item.id)) continue;
+      if (value.source?.runtime && value.source.runtime !== runtime && Sources().get(value.source.runtime)?.ownComponents || seen.has(item.id)) continue;
       seen.add(item.id);
       choices.push({ ...value, id: item.id, included: false, managerId: item.reference.managerId,
         runtimeVersion: item.reference.version, architecture: Architecture.recordArchitecture(item.install),
@@ -399,7 +351,8 @@ async function resolve(install, runtime, context, { executableArchitecture, host
       return [item.id, Binary.compatibility({ ...item, files, requiredPaths }, record,
         { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() })];
     }))])) : {};
-  const plan = { ...Plan.resolvePlan({ ...input, compatibility }), layout: input.layout, compatibility, record };
+  const plan = { ...Plan.resolvePlan({ ...input, compatibility }), layout: input.layout, compatibility, record,
+    vulkanLibrarySelector: Boolean(sourceFor(runtime).vulkanLibrarySelector(install)) };
   const vulkan = plan.components['vulkan-driver'];
   const automaticVulkan = !vulkan.inherited && (vulkan.value === Plan.AUTOMATIC || vulkan.fallback && !vulkan.used);
   const videoRow = plan.components.video, selectedVideo = videoRow.selected || videoRow.used;
@@ -414,7 +367,7 @@ async function resolve(install, runtime, context, { executableArchitecture, host
     videoRow.used = video.description; videoRow.fallback = false; videoRow.reason = null;
   }
   let automaticRenderer = null, automaticAdditional = [];
-  if (runtime === 'sikarugir') {
+  if (!sourceFor(runtime).graphicsSelector) {
     const automatic = row => row.value === Plan.AUTOMATIC || (row.fallback || row.inherited) && !row.used;
     // Preserve the Template's existing automatic composition in this one plan.
     const choose = (component, engine, templateComponent) => input.included.find(item => item.component === component && item.engine === engine &&
@@ -436,12 +389,13 @@ async function resolve(install, runtime, context, { executableArchitecture, host
       const selected = choose('d3d-renderer', 'dxvk', vulkan.used?.engine === 'kosmickrisp' ? 'dxvk3' : 'dxvk') || renderer.used;
       renderer.selected = selected; renderer.used = selected;
     }
-    if ((context.runtimeSettings?.cncDdraw === Plan.INHERIT ? context.wineEnvironment?.settings.cncDdraw : context.runtimeSettings?.cncDdraw) === true) {
-      if (executableArchitecture && !['x86', 'i386'].includes(executableArchitecture)) throw new Error('DirectDraw compatibility requires a 32-bit Windows executable.');
-      const directDraw = input.included.find(item => item.templateComponent === 'cnc_ddraw');
-      if (!directDraw) throw new Error('The selected Template has no DirectDraw compatibility libraries.');
-      plan.additional = [...(plan.additional || []), { ...directDraw, inherited: context.runtimeSettings?.cncDdraw === Plan.INHERIT }];
-    }
+  }
+  // DirectDraw compatibility comes from the runtime's own CNC-DDraw libraries.
+  if ((context.runtimeSettings?.cncDdraw === Plan.INHERIT ? context.wineEnvironment?.settings.cncDdraw : context.runtimeSettings?.cncDdraw) === true) {
+    if (executableArchitecture && !['x86', 'i386'].includes(executableArchitecture)) throw new Error('DirectDraw compatibility requires a 32-bit Windows executable.');
+    const directDraw = input.included.find(item => item.templateComponent === 'cnc_ddraw');
+    if (!directDraw) throw new Error('The selected Wine runtime has no DirectDraw compatibility libraries.');
+    plan.additional = [...(plan.additional || []), { ...directDraw, inherited: context.runtimeSettings?.cncDdraw === Plan.INHERIT }];
   }
   const actualFiles = item => {
     const files = compatibility[item.id]?.files;
@@ -451,7 +405,7 @@ async function resolve(install, runtime, context, { executableArchitecture, host
   const automatic = Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id,
     role.id === 'd3d12' ? null : [...automaticAdditional, ...(automaticRenderer ? [automaticRenderer] : [])].find(item =>
       !item.apis?.length || item.apis.some(api => role.apis.includes(api))) ||
-      (runtime === 'sikarugir' ? input.included.find(item => item.engine === 'wined3d') : null) || null]));
+      (!sourceFor(runtime).graphicsSelector ? input.included.find(item => item.engine === 'wined3d') : null) || null]));
   Plan.resolveApiRoles(plan, { ...input, compatibility, apiCompatibility, automatic,
     selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])),
     environment: context.wineEnvironment ? Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id,
@@ -531,7 +485,7 @@ function withSettings(manifest) {
     optionsKey: SETTINGS['d3d-renderer'] + 'Options', description: 'Sets the renderer for Direct3D versions without an override.' },
     ...Roles.ROLES.map(role => ({ ...role, description: role.apis.length ? `Chooses the installed translator for ${role.label}. Shared libraries can also update linked Direct3D choices.` :
       role.id === 'vulkan-driver' ? 'Chooses the Vulkan driver used by translators that render through Vulkan.' : 'Adds codec plugins to the runtime’s video support.' }))];
-  for (const runtime of ['crossover', 'sikarugir']) {
+  for (const runtime of Object.keys(result.runtime.entries)) {
     const schema = result.runtime.entries[runtime].settings;
     schema.visibilityAction = 'listTranslatorOptions';
     schema.environmentAction = 'listTranslatorOptions';
@@ -542,7 +496,7 @@ function withSettings(manifest) {
     for (const role of controls) schema.defaults[role.settingsKey] = '';
     schema.fields.splice(Math.max(0, index), 0, ...controls.map(role => {
       return { key: role.settingsKey, type: 'select', label: role.label, optionsAction: 'listTranslatorOptions', optionsKey: role.optionsKey,
-        options: [{ value: '', label: runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice" }],
+        options: [{ value: '', label: sourceFor(runtime).labels.automatic }],
         inheritFrom: 'environmentReference', inheritanceInOptions: true, section: 'Basic',
         description: role.description };
     }));
@@ -593,7 +547,7 @@ function presentInspectorRows(rows) {
 function inspectorRows(plan, { host } = {}) {
   const labels = { 'd3d-renderer': 'Direct3D', 'vulkan-driver': 'Vulkan', d3d12: 'Direct3D 12', video: 'Video codecs' };
   const entries = plan.components.d3d11 ? Roles.ROLES.map(role => [role.id, role.settingsKey]) : Object.entries(SETTINGS);
-  const automatic = plan.runtime === 'crossover' ? "CrossOver's automatic choice" : "Template's automatic choice";
+  const automatic = sourceFor(plan.runtime).labels.automatic;
   // Placed Direct3D libraries switch CrossOver to WineD3D, which then serves
   // every Direct3D API that has no placed library of its own.
   const builtin = plan.builtinRenderer && require('./translator-files').placesDirect3D(plan) ? Description.label(plan.builtinRenderer) : null;

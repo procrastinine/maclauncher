@@ -20,7 +20,7 @@ function privateEnvironment(userDataDir, directory, relativePath) {
   }
   const relative = path.relative(userDataDir, directory).split(path.sep);
   const game = relative.length === 4 && relative[0] === "games" && /^[\w-]+$/.test(relative[1]) &&
-    relative[2] === "runtimes" && ["crossover", "sikarugir"].includes(relative[3]);
+    relative[2] === "runtimes" && require("../../crossover/sources").IDS.includes(relative[3]);
   const compute = relative.length === 3 && relative[0] === "graphics" && relative[1] === "compute-hosts" && /^[a-f0-9]+$/.test(relative[2]);
   const prefixPath = path.resolve(directory, relativePath);
   if ((!game && !compute) || prefixPath === path.resolve(directory) || !inside(directory, prefixPath)) {
@@ -136,12 +136,13 @@ function discoverEnvironments(runtimeId, options = {}) {
   const environment = { ...(options.environment || process.env), HOME: home };
   const expand = value => String(value).replace(/^~(?=\/|$)/, home)
     .replace(/\$\{([^}]+)\}|\$([A-Za-z_][\w]*)/g, (_all, braced, bare) => environment[braced || bare] || "");
+  const kind = require("../../crossover/sources").get(runtimeId)?.environmentKind;
   let candidates;
-  if (runtimeId === "sikarugir") {
+  if (kind === "sikarugir-wrapper") {
     const directory = path.join(home, "Applications", "Sikarugir");
     let entries = []; try { entries = fs.readdirSync(directory, { withFileTypes: true }); } catch {}
     candidates = [...entries.filter(item => item.isDirectory() && /\.app$/i.test(item.name)).map(item => path.join(directory, item.name)), ...(options.wrapperPaths || [])];
-  } else if (runtimeId === "crossover") {
+  } else if (kind === "crossover-bottle") {
     const configPaths = [...(options.crossoverRoot ? [path.join(options.crossoverRoot, "etc", "CrossOver.conf")] : []),
       path.join(home, "Library", "Application Support", "CrossOver", "CrossOver.conf")];
     const configs = configPaths.map(file => readIni(textFile(file)));
@@ -160,7 +161,7 @@ function discoverEnvironments(runtimeId, options = {}) {
   } else return [];
   const result = [], seen = new Set();
   for (const candidate of candidates) try {
-    const record = readEnvironment({ kind: runtimeId === "crossover" ? "crossover-bottle" : "sikarugir-wrapper", path: candidate });
+    const record = readEnvironment({ kind, path: candidate });
     let ownedRoot = options.userDataDir;
     if (ownedRoot) { try { ownedRoot = fs.realpathSync(ownedRoot); } catch { ownedRoot = path.resolve(ownedRoot); } }
     if (seen.has(record.path) || ownedRoot && inside(ownedRoot, record.path)) continue;
@@ -170,6 +171,7 @@ function discoverEnvironments(runtimeId, options = {}) {
 }
 
 function environmentActions(runtimeId, { crossoverRoot, resolveOptions } = {}) {
+  const source = require("../../crossover/sources").get(runtimeId), kind = source.environmentKind;
   const optionsFor = context => ({ userDataDir: context.userDataDir, crossoverRoot, ...resolveOptions?.(context),
     ...(context.environmentOptions || {}) });
   return {
@@ -182,16 +184,16 @@ function environmentActions(runtimeId, { crossoverRoot, resolveOptions } = {}) {
       const states = await Promise.all(rows.map(row => require("./wine-processes").runningState(row.prefixPath, context.processOptions)));
       return { environments: [{ value: "private", label: "Private (MacLauncher)" }, ...rows.map((row, index) => ({
         value: row.path === selected?.path && typeof selectedValue === "string" ? selectedValue : JSON.stringify(row.reference),
-        label: `${runtimeId === "crossover" ? "CrossOver bottle" : "Sikarugir wrapper"}: ${row.name}${states[index].running ? " (running; MSync and High Resolution require a restart)" : ""}` }))] };
+        label: `${source.labels.environmentName}: ${row.name}${states[index].running ? " (running; MSync and High Resolution require a restart)" : ""}` }))] };
     },
     async chooseEnvironment(_entry, payload, context) {
       const { getUiServices } = require("../ui-services");
       const selection = payload?.filePaths ? { filePaths: payload.filePaths } : await getUiServices(context).dialog.showOpenDialog({
-        title: runtimeId === "crossover" ? "Choose CrossOver bottle" : "Choose Sikarugir wrapper",
+        title: `Choose ${source.labels.environmentName}`,
         properties: ["openDirectory", "treatPackageAsDirectory"],
-        ...(runtimeId === "sikarugir" ? { filters: [{ name: "Sikarugir wrapper", extensions: ["app"] }] } : {}) });
+        ...(kind === "sikarugir-wrapper" ? { filters: [{ name: source.labels.environmentName, extensions: ["app"] }] } : {}) });
       if (selection.canceled || !selection.filePaths?.[0]) return null;
-      const record = readEnvironment({ kind: runtimeId === "crossover" ? "crossover-bottle" : "sikarugir-wrapper", path: selection.filePaths[0] }, optionsFor(context));
+      const record = readEnvironment({ kind, path: selection.filePaths[0] }, optionsFor(context));
       return { environmentReference: JSON.stringify(record.reference) };
     }
   };

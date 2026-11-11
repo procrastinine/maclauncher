@@ -12,7 +12,10 @@ test("Windows metadata registers a managed Wine choice without changing the game
   assert.equal(manifest.gameType, "windows");
   assert.equal(manifest.runtime.default, "sikarugir");
   assert.equal(manifest.settingsDefaults.defaultRuntime, "sikarugir");
-  assert.deepEqual(manifest.runtime.supported, ["sikarugir", "crossover"]);
+  assert.deepEqual(manifest.runtime.supported, ["sikarugir", "crossover", "winecx"]);
+  assert.equal(manifest.runtime.manager.winecx, "winecx");
+  assert.equal(manifest.runtime.managerUi.winecx.tabLabel, "WineCX");
+  assert.equal(manifest.runtime.managerUi.winecx.management, "managed");
   assert.equal(manifest.runtime.manager.sikarugir, "sikarugir");
   assert.equal(manifest.runtime.manager.crossover, "crossover");
   assert.equal(manifest.runtime.managerUi.sikarugir.tabLabel, "Sikarugir");
@@ -31,11 +34,17 @@ test("Windows metadata registers a managed Wine choice without changing the game
   assert.equal(wine.windowsVersion, "win10");
   assert.equal("environment" in wine, false, "translator environments replace the Wine variable list");
   const synchronization = manifest.runtime.entries.sikarugir.settings.fields.find(field => field.key === "synchronization");
-  assert.deepEqual(synchronization.options.map(option => option.value), ["auto", "msync", "off"]);
+  // The selected Wine narrows these to the modes its wineserver supports.
+  assert.deepEqual(synchronization.options.map(option => option.value), ["auto", "msync", "esync", "off"]);
+  assert.equal(synchronization.optionsAction, "listWineSynchronizations");
   const crossover = buildRuntimeSettingsDefaults(resolveRuntimeSettingsSchema(manifest, "crossover"));
   assert.equal(crossover.bottleTemplate, "win10_64");
   assert.equal(crossover.synchronization, "auto");
-  assert.equal(crossover.vulkanBackend, undefined);
+  assert.equal(crossover.vulkanBackend, "auto", "every Wine source has the same settings");
+  assert.equal("cncDdraw" in crossover, false, "DirectDraw compatibility is listed where the source includes CNC-DDraw");
+  const winecx = buildRuntimeSettingsDefaults(resolveRuntimeSettingsSchema(manifest, "winecx"));
+  assert.equal(winecx.windowsVersion, "win10");
+  assert.equal("environmentReference" in winecx, false, "WineCX has no external environment kind");
 });
 
 test("Wine settings and choices that need Apple Silicon or a newer macOS are not listed on a Mac that cannot use them", () => {
@@ -43,14 +52,14 @@ test("Wine settings and choices that need Apple Silicon or a newer macOS are not
   const fields = (info, id) => info.runtime.entries[id].settings.fields;
   const values = (info, id, key) => fields(info, id).find(field => field.key === key).options.map(option => option.value);
   const intel = withHostSettings(manifest, { platform: "darwin", hardwareArch: "x64", macOSVersion: "13.6" });
-  for (const id of ["crossover", "sikarugir"]) {
+  for (const id of ["crossover", "sikarugir", "winecx"]) {
     assert.equal(fields(intel, id).some(field => ["dlss", "graphicsBridgeVersion"].includes(field.key)), false);
     assert.deepEqual(values(intel, id, "graphicsBackend"), ["auto", "dxvk", "wined3d"]);
   }
-  assert.deepEqual(values(intel, "sikarugir", "vulkanBackend"), ["auto", "moltenvk"]);
+  for (const id of ["crossover", "sikarugir", "winecx"]) assert.deepEqual(values(intel, id, "vulkanBackend"), ["auto", "moltenvk"]);
   const sonoma = withHostSettings(manifest, { platform: "darwin", hardwareArch: "arm64", macOSVersion: "14.5" });
-  assert.deepEqual(values(sonoma, "sikarugir", "graphicsBackend"), ["auto", "dxmt", "dxvk", "wined3d"]);
-  assert.deepEqual(values(sonoma, "crossover", "graphicsBackend"), ["auto", "d3dmetal", "dxmt", "dxvk", "wined3d"]);
+  // The selected installation narrows the list further through listGraphicsBackends.
+  for (const id of ["crossover", "sikarugir", "winecx"]) assert.deepEqual(values(sonoma, id, "graphicsBackend"), ["auto", "d3dmetal", "dxmt", "dxvk", "wined3d"]);
   assert.ok(fields(sonoma, "sikarugir").some(field => field.key === "dlss"));
   for (const host of [{ platform: "darwin", hardwareArch: "arm64", macOSVersion: "26.4" }, { platform: "darwin" }, { platform: "linux", hardwareArch: "x64" }])
     assert.deepEqual(withHostSettings(manifest, host).runtime.entries, manifest.runtime.entries);

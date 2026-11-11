@@ -64,13 +64,7 @@ function createManager({ discoverCatalog = Catalog.discover, dependencies = {} }
     ...base,
     upstream: [Catalog.engines, Catalog.templates],
     ui: { groupId: "sikarugir", tabLabel: "Sikarugir", sectionLabel: "Sikarugir", memberOrder: 0, management: "managed", order: 201 },
-    resolveSelection(entry, settings, userDataDir, options = {}) {
-      const selection = base.resolveSelection(entry, settings, userDataDir, options);
-      if (!selection.install) return planned(selection);
-      const resolved = resolvePayload(selection.install, options);
-      return planned({ ...selection, install: resolved.install, ready: Boolean(resolved.install),
-        requiresDownload: !resolved.install, repairRequired: !resolved.install && !resolved.minimumMacOS, reason: resolved.reason });
-    },
+    resolveSelection: require("../../sources/wine-selection").createSelection({ id: "sikarugir", base, resolvePayload, planned }),
     async resolveForPlay(entry, context) {
       throwIfAborted(context.signal);
       return manager.resolveSelection(entry, context.settings, context.userDataDir, { signal: context.signal });

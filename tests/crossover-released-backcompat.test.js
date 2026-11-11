@@ -4,7 +4,7 @@ const fs = require("node:fs"), os = require("node:os"), path = require("node:pat
 const Backcompat = require("../src/modules/crossover/backcompat");
 const {retireLegacyGameMirror} = require("../src/core/backcompat/legacy-game-mirrors");
 const Detection = require("../src/modules/crossover/detect");
-const CrossOver = require("../src/modules/crossover/runtime/launch"), Wine = require("../src/modules/crossover/sikarugir/launch");
+const CrossOver = require("../src/modules/crossover/runtime/launch"), Wine = require("./helpers/wine-source.cjs").launch("sikarugir");
 const Manager = require("../src/modules/crossover/runtime/manager"), Temporal = require("../src/modules/crossover/temporal");
 
 function put(file, bytes) {fs.mkdirSync(path.dirname(file), {recursive: true});fs.writeFileSync(file, bytes);return file;}
@@ -101,7 +101,7 @@ for (const runtimeId of ["crossover", "sikarugir"]) test("released " + runtimeId
     const recorded = unchangedFile(markerPath);
     await Wine.prepareLaunch(f.entry, context, dependencies);
     assert.deepEqual(unchangedFile(markerPath), recorded, "recorded identity is reused without setup or another marker write");
-    const saves = require("../src/modules/crossover/sikarugir/provider").resolveSaveLocations(f.entry, context);
+    const saves = require("./helpers/wine-source.cjs").provider("sikarugir").resolveSaveLocations(f.entry, context);
     assert.equal(saves.primaryDirectory, launch.workingDirectory);assert.ok(saves.directories.some(row => row.directory === path.join(profile, "drive_c/users")));
   }
 });

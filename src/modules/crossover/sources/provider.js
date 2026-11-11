@@ -1,22 +1,22 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Detection = require("../detect");
-const Launch = require("./launch");
+const WineLaunch = require("./wine-launch");
 const Writable = require("../../shared/writable-input");
 const Environments = require("../../shared/runtime/wine-environment");
 const Processes = require("../../shared/runtime/wine-processes");
 const Translators = require("../../shared/runtime/wine-translators");
 
-// Both Windows runtimes share the executable evidence that detection records.
+// Every Windows runtime shares the executable evidence that detection records.
 // The runtime picker reads that record and does not depend on whether Wine is
 // already installed.
 const supportsEntry = entry => Detection.supportsWindowsRuntimes(entry);
 const decorateEntry = Detection.decorateEntry;
-function resolveSaveLocations(entry, context) {
-  const directory = Launch.runtimeDirectory(entry, context), gameRoot = Detection.cachedWindowsExecutable(entry)?.sourceRoot || entry.gamePath;
+function resolveSaveLocations(entry, context, { source, launch }) {
+  const directory = launch.runtimeDirectory(entry, context), gameRoot = Detection.cachedWindowsExecutable(entry)?.sourceRoot || entry.gamePath;
   const directories = path.isAbsolute(gameRoot || "") ? [{ directory: gameRoot, role: "primary", source: "Original Windows game files", confidence: "exact" }] : [];
   directories.push(...Environments.saveLocations(context.runtimeSettings));
-  const prefixPath = entry.runtimeData?.sikarugir?.prefixPath;
+  const prefixPath = entry.runtimeData?.[source.id]?.prefixPath;
   if (typeof prefixPath === "string" && path.isAbsolute(prefixPath) && Detection.inside(path.join(directory, "prefixes"), prefixPath)) {
     const users = path.join(prefixPath, "drive_c", "users");
     if (fs.existsSync(users)) {
@@ -45,11 +45,14 @@ function createLog(directory) {
     if (child.exitCode != null || child.signalCode != null) close();
   } };
 }
-function createProvider({ manager, launch = Launch, platform = process.platform, launchDependencies } = {}) {
-  const runtimeManager = () => manager || require("./runtime/manager");
-  return { runtimeId: "sikarugir", managerId: "sikarugir", supportsEntry, decorateEntry,
+// The runtime provider of a Wine source that runs its own Wine loader.
+function createProvider({ source, manager, launch = WineLaunch.forSource(source), platform = process.platform, launchDependencies } = {}) {
+  const runtimeManager = () => manager || source.manager();
+  const id = source.id, notSupported = `${source.label} requires an x86 or x64 Windows game.`;
+  const existingFor = reference => reference && reference.kind !== source.environmentKind ? null : reference;
+  return { runtimeId: id, managerId: source.managerId, supportsEntry, decorateEntry,
     resolveGraphicsInputs: async (entry, context) => {
-      const reference = Environments.environmentReference(context.runtimeSettings?.environmentReference);
+      const reference = existingFor(Environments.environmentReference(context.runtimeSettings?.environmentReference));
       const existing = reference ? Environments.readEnvironment(reference) : null;
       if (existing) context.wineEnvironment = existing;
       const selected = existing ? {ready:true,install:existing.install} : runtimeManager().resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
@@ -57,29 +60,30 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       const prepared = Translators.environmentContext(context, selected.install);
       if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
       const install = prepared.wineEnvironment?.install || selected.install;
-      const translatorPlan = await Translators.resolve(install, "sikarugir", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
-      const source = require("../temporal").resolvePlan(entry, context, { install, runtimeId: "sikarugir", translatorPlan, settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
-      return require("../graphics-inputs").inputs(install, source, { fallback: "x86_64" });
+      const translatorPlan = await Translators.resolve(install, id, context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+      const inputs = require("../temporal").resolvePlan(entry, context, { install, runtimeId: id, translatorPlan, settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
+      return require("../graphics-inputs").inputs(install, inputs, { fallback: "x86_64" });
     },
     getRuntimeRequirements: async (entry, context) => {
-      const existing = Environments.readEnvironment(context.runtimeSettings?.environmentReference);
+      const reference = existingFor(Environments.environmentReference(context.runtimeSettings?.environmentReference));
+      const existing = reference ? Environments.readEnvironment(reference) : null;
       if (existing) context.wineEnvironment = existing;
       const manager = existing ? { resolveSelection: () => ({ ready: true, install: existing.install, version: existing.path }) } : runtimeManager();
-      return [...await require("../temporal").requirements(entry, { ...context, runtimeId: "sikarugir" }, { manager }),
+      return [...await require("../temporal").requirements(entry, { ...context, runtimeId: id }, { manager }),
         ...await Translators.driverRequirements(context),
         ...await require("../temporal/vulkan-dlss").requirements(entry, context),
-        ...await require("../runtime/steam-bridge").requirements(entry, { ...context, runtimeId: "sikarugir" })];
+        ...await require("../runtime/steam-bridge").requirements(entry, { ...context, runtimeId: id })];
     },
-    runtimeDirectory: launch.runtimeDirectory, resolveSaveLocations,
+    runtimeDirectory: launch.runtimeDirectory, resolveSaveLocations: (entry, context) => resolveSaveLocations(entry, context, { source, launch }),
     supports: { cheats: false, cheatsPatcher: false, saveEditing: false, saveLocation: true },
-    canLaunchRuntime: (runtimeId, entry) => runtimeId === "sikarugir" && platform === "darwin" && supportsEntry(entry),
+    canLaunchRuntime: (runtimeId, entry) => runtimeId === id && platform === "darwin" && supportsEntry(entry),
     ensureRuntime: async (entry, context) => {
-      if (!supportsEntry(entry)) throw new Error("Sikarugir requires an x86 or x64 Windows game.");
+      if (!supportsEntry(entry)) throw new Error(notSupported);
       const reference = Environments.environmentReference(context.runtimeSettings?.environmentReference);
       if (reference) {
-        if (reference.kind !== "sikarugir-wrapper") throw new Error("Choose a Sikarugir wrapper for this runtime.");
+        if (reference.kind !== source.environmentKind) throw new Error(source.environmentKind ? `Choose a ${source.labels.environmentName} for this runtime.` : `${source.label} runs games in MacLauncher's own Windows environments.`);
         context.wineEnvironment = Environments.readEnvironment(reference);
-        const plan = await Translators.resolve(context.wineEnvironment.install, "sikarugir", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+        const plan = await Translators.resolve(context.wineEnvironment.install, id, context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
         return Translators.requirement(plan, context);
       }
       const selected = await runtimeManager().resolveForPlay(entry, context);
@@ -87,17 +91,17 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
         if (!selected.install) return null;
         const prepared = Translators.environmentContext(context, selected.install);
         if (prepared.wineEnvironment) context.wineEnvironment = prepared.wineEnvironment;
-        const plan = await Translators.resolve(prepared.wineEnvironment?.install || selected.install, "sikarugir", context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
+        const plan = await Translators.resolve(prepared.wineEnvironment?.install || selected.install, id, context, { entry, executableArchitecture: Detection.cachedWindowsExecutable(entry)?.executableArchitecture });
         return Translators.requirement(plan, context);
       }
-      if (!selected.version && !selected.discoveryRequired) throw new Error(selected.reason || "No compatible Sikarugir version is available.");
-      return { managerId: "sikarugir", version: selected.version || null, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: selected.installOptions || {},
+      if (!selected.version && !selected.discoveryRequired) throw new Error(selected.reason || `No compatible ${source.label} version is available.`);
+      return { managerId: source.managerId, version: selected.version || null, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: selected.installOptions || {},
         ...(selected.detail ? { detail: selected.detail } : {}), ...(selected.versionLabel ? { versionLabel: selected.versionLabel } : {}) };
     },
     launchRuntime: async (runtimeId, entry, context) => {
-      if (runtimeId !== "sikarugir") return null;
-      if (platform !== "darwin") throw new Error("Sikarugir requires macOS.");
-      if (!supportsEntry(entry)) throw new Error("Sikarugir requires an x86 or x64 Windows game.");
+      if (runtimeId !== id) return null;
+      if (platform !== "darwin") throw new Error(`${source.label} requires macOS.`);
+      if (!supportsEntry(entry)) throw new Error(notSupported);
       const plan = await launch.prepareLaunch(entry, context, { ...launchDependencies, manager: runtimeManager() });
       const log = createLog(plan.directory);
       try {
@@ -113,4 +117,4 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
     }
   };
 }
-module.exports = { ...createProvider(), createProvider, createLog };
+module.exports = { createProvider, createLog };

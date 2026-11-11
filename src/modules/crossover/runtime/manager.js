@@ -155,7 +155,7 @@ function uninstallRuntime({ userDataDir, version } = {}) {
 function resolveSelection(entry, settings, userDataDir, runtimeSettings) {
   const installed = listInstalled(userDataDir);
   if (!runtimeSettings && userDataDir) {
-    const manifest = require("../temporal/catalog").withSettingsOptions(require("../manifest.json"));
+    const manifest = require("../temporal/catalog").withSettingsOptions(require("../sources/settings").withSources(require("../manifest.json")));
     runtimeSettings = createRuntimeSettingsStore({ userDataDir }).resolveForEntry(entry, settings,
       { ...manifest, id: entry?.moduleId || entry?.engine || "crossover" }, "crossover");
   }

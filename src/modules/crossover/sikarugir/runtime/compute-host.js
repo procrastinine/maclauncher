@@ -1,6 +1,6 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypto");
-const Manager=require("./manager"),Launch=require("../launch"),Graphics=require("../graphics");
+const Manager=require("./manager"),Graphics=require("../graphics"),Source=require("../../sources").get("sikarugir"),Launch=require("../../sources/wine-launch").forSource(Source);
 const Writable=require("../../../shared/writable-input"),Rosetta=require("../../../shared/runtime/rosetta");
 const Environments=require("../../../shared/runtime/wine-environment");
 const Catalog=require("./catalog"),{versionAtLeast,systemVersionSync}=require("../../../shared/runtime/bundled-native");
@@ -67,7 +67,7 @@ async function prepare(request,context={}){
   const helperLibraries=(request.helperLibraries||[]).map(item=>({name:item.name,windows:regular(item.windows),unix:regular(item.unix)}));
   const viewIdentity=digest(JSON.stringify([hostPath,helperLibraries.map(item=>[item.name,digest(fs.readFileSync(item.windows)),digest(fs.readFileSync(item.unix))])])).slice(0,24);
   const settings={graphicsBackend:request.backend==="d3d12"?"d3dmetal":"wined3d",vulkanBackend:request.backend==="vulkan"?"kosmickrisp":"auto",synchronization:"auto",dlss:false,environment:[],windowsVersion:"win10"};
-  const graphics=await Graphics.prepareGraphicsView({install,settings,environment:existing,context,userDataDir,prefixPath:prefix,viewRoot:path.join(directory,"views",viewIdentity),host:{hardwareArch:architecture()},executableArchitecture:"x64",helperLibraries,signal});
+  const graphics=await Graphics.prepareGraphicsView({source:Source,install,settings,environment:existing,context,userDataDir,prefixPath:prefix,viewRoot:path.join(directory,"views",viewIdentity),host:{hardwareArch:architecture()},executableArchitecture:"x64",helperLibraries,signal});
   if(!request.prefixDirectory)await Launch.ensurePrefix(install,require("../../../shared/runtime/wine-environment").privateEnvironment(userDataDir,directory,"prefix"),directory,settings,graphics,context);
   const baseEnvironment=existing?(context.environment||process.env):require("../../../shared/runtime/macos-sandbox").environment(context.environment||process.env);
   const {environment}=Launch.buildEnvironment(settings,install,directory,prefix,graphics,{baseEnvironment,existingEnvironment:existing,translatorPlan:graphics.translatorPlan});

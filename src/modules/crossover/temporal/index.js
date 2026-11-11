@@ -1,4 +1,5 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
+const Sources = require("../sources");
 const Detection = require("../detect"), Streamline = require("./streamline"), XeSS = require("./xess"), FidelityFX = require("./fidelityfx");
 function libraryAdapter(library) {
   const name = path.basename(library?.relativePath || library?.sourcePath || "").toLowerCase();
@@ -89,7 +90,7 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
     const d3d11=usedForApi(translatorPlan,"d3d11"),d3d12=usedForApi(translatorPlan,"d3d12");
     const translator=d3d11?.engine==="dxmt"?d3d11:d3d12?.engine==="dxmt"?d3d12:d3d11;
     const roles=[...(d3d11?.engine==="dxmt"?["d3d11"]:[]),...(d3d12?.engine==="dxmt"?["d3d12"]:[])];
-    const d3dmetal = runtimeId === "crossover" && settings.dlss === true && translator?.engine !== "dxmt" &&
+    const d3dmetal = Sources.get(runtimeId)?.invocation === "crossover" && settings.dlss === true && translator?.engine !== "dxmt" &&
       (usedForApi(translatorPlan, "d3d12")?.engine || translator?.engine || settings.graphicsBackend) === "d3dmetal";
     if (!d3dmetal && Object.hasOwn(translatorPlan?.components || {}, "d3d11") && !translator) return null;
     if (Requirements.requirementSupport(Requirements.WINE_TEMPORAL, { ...Host.getHostCapabilities(), ...host }).supported === false ||
@@ -101,7 +102,6 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
     const match = Detection.cachedWindowsExecutable(entry);if (!match) return null;
     const executable = settings.executable ? path.resolve(match.sourceRoot, settings.executable) : match.windowsExecutablePath;
     if (!Detection.inside(match.sourceRoot, executable) || Detection.readWindowsExecutable(executable)?.executableArchitecture !== "x86_64") return null;
-    const support = install.templateRoot || install.supportRoot || install.runtimeLibraries || (install.installDir && path.join(install.installDir, "support"));
     root ||= require("../../shared/reshade").runtimeRoot(context.app);
     const sources = libraries(match, executable).flatMap(sourcePath => {
       const selected = libraryAdapter({sourcePath}), adapter = selected === XeSS ? "xess" : "streamline", providerRoot = path.join(root, "temporal", adapter);
@@ -123,18 +123,9 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
     }
     let baseRoot, selectedSupport;
     if (translator && translator.engine !== "dxmt") return null;
-    if (runtimeId === "sikarugir") {
-      if (!path.isAbsolute(support || "")) return null;
-      const engine = install.engineRoot || install.wineRoot || (install.executablePath && path.dirname(path.dirname(install.executablePath)));
-      if (!engine || !fs.existsSync(path.join(engine, "lib/wine/x86_64-unix/ntdll.so")) || fs.existsSync(path.join(engine, "lib/wine/x86_32on64-unix/ntdll.so"))) return null;
-      baseRoot = path.join(support, "Frameworks/renderer/dxmt/wine");
-    } else if (runtimeId === "crossover" && path.isAbsolute(install.crossoverRoot || "")) {
-      // CrossOver's automatic selector can choose another renderer. Its
-      // projection adapter requires an explicit matching DXMT selection.
-      if (translator?.engine !== "dxmt" && settings.graphicsBackend !== "dxmt") return null;
-      baseRoot = path.join(install.crossoverRoot, "lib/dxmt");
-      if (!fs.existsSync(path.join(install.crossoverRoot, "lib/wine/x86_64-unix/wine"))) return null;
-    } else return null;
+    // The source's own DXMT is the base of the camera adapter's libraries.
+    baseRoot = Sources.get(runtimeId)?.dxmtBase?.(install, { translator, settings });
+    if (!baseRoot) return null;
     if (translator?.engine === "dxmt") {
       baseRoot = require("../../shared/runtime/wine-layout").wineRoot(translator.root);
       const dxmt = payload(root, baseRoot, { verify, macOSVersion: host.macOSVersion });
@@ -219,7 +210,7 @@ function rendererFile(plan, architecture, filename, fallback) {
 }
 function cameraRequirements(entry, context, { manager, root } = {}) {
   const runtimeId = context.runtimeId || entry?.runtimeId;
-  if (!["crossover", "sikarugir"].includes(runtimeId)) return [];
+  if (!Sources.get(runtimeId)) return [];
   const settings = require("../dlss").withTemporalSelection(context.runtimeSettings || {}, entry.effects, context.translatorPlan);
   const automatic = settings.dlss !== true;
   if (automatic) {
@@ -227,7 +218,7 @@ function cameraRequirements(entry, context, { manager, root } = {}) {
     const executable = match && (settings.executable ? path.resolve(match.sourceRoot, settings.executable) : match.windowsExecutablePath);
     if (!match || !Detection.inside(match.sourceRoot, executable) || !libraries(match, executable).some(file => libraryAdapter({sourcePath: file}) === XeSS)) return [];
   }
-  manager ||= runtimeId === "sikarugir" ? require("../sikarugir/runtime/manager") : require("../runtime/manager");
+  manager ||= Sources.get(runtimeId).manager();
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, settings);
   const plan = selected.ready && resolvePlan(entry, context, { install: selected.install, runtimeId, root, settings, automatic, allowDownload: true });
   return plan?.requiresDownload ? [{ ...plan.download, installOptions: { sectionId: "default" },
@@ -315,7 +306,8 @@ function resolveScenePlan(entry, context = {}, { install, settings = context.run
 }
 function requirements(entry, context, options = {}) {
   const camera = cameraRequirements(entry, context, options), runtimeId = context.runtimeId || entry?.runtimeId;
-  if (runtimeId !== "crossover") return camera;
+  // The Vulkan scene adapter matches CrossOver's winevulkan modules.
+  if (Sources.get(runtimeId)?.invocation !== "crossover") return camera;
   const manager = options.manager || require("../runtime/manager"), selected = manager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
   const scene = selected.ready && resolveScenePlan(entry, context, { install: selected.install, root: options.root });
   return [...camera, ...(scene?.requirements || [])];

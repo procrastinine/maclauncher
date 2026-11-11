@@ -6,7 +6,7 @@ Each page below covers one game type: accepted inputs, detection and version evi
 
 ## Game types and their runtimes
 
-The table lists game types by the name the app shows. In it, *Windows runtimes* means [Sikarugir (Wine)](../runtimes/SIKARUGIR.md) and [CrossOver](../runtimes/CROSSOVER.md), which a game type offers when the game includes a compatible Windows executable.
+The table lists game types by the name the app shows. In it, *Windows runtimes* means the [Wine runtimes](../runtimes/WINE.md) [Sikarugir (Wine)](../runtimes/SIKARUGIR.md), [CrossOver](../runtimes/CROSSOVER.md) and [WineCX (Wine)](../runtimes/WINECX.md), which a game type offers when the game includes a compatible Windows executable.
 
 | Game type | Default runtime | Other runtimes |
 | --- | --- | --- |

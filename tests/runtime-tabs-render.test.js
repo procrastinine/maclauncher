@@ -809,7 +809,7 @@ test('native local imports require a visible matching version while application 
 });
 
 test('Sikarugir downloads and local CrossOver applications retain separate sidebar groups', () => {
-  const metadata = require('../src/modules/crossover/manifest.json').runtime.managerUi;
+  const metadata = require('../src/modules/crossover/sources/settings').withSources(require('../src/modules/crossover/manifest.json')).runtime.managerUi;
   const wine = manager('sikarugir', metadata.sikarugir, { versions: ['11.0'] });
   const crossover = manager('crossover', metadata.crossover, { versions: [], importable: true,
     managementKind: 'local-applications', importLabel: 'Add application…' });
@@ -1065,7 +1065,7 @@ test('Installed ordering compares component releases before host releases and pr
   const crosses=[host('Cross','crossover',{upstreamVersion:'26.3'},'1.10.3'),
     host('Cross-B','crossover',{upstreamVersion:'26.10'},'3.1.1'),host('Cross-C','crossover',{upstreamVersion:'26.9'},'3.1.1'),
     host('Cross-D','crossover',{upstreamVersion:'26.7'},'1.10.3')],beforeHosts=structuredClone([templates,crosses]);
-  const manifest=require('../src/modules/crossover/manifest.json');
+  const manifest=require('../src/modules/crossover/sources/settings').withSources(require('../src/modules/crossover/manifest.json'));
   const managers=[['sikarugir',templates],['crossover',crosses]].map(([runtime,hosts])=>({id:manifest.runtime.manager[runtime],core:{listInstalled:()=>hosts},getState:()=>({installed:hosts,versionLabels:{}})}));
   t.mock.method(require('../src/modules/registry'),'getModule',id=>id==='crossover'?{manifest,runtimeManagers:managers}:null);
   // Local preparation describes the included components that the listing then reads.

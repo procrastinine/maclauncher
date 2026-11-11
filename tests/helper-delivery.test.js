@@ -71,7 +71,7 @@ test("fresh video Play offers both default-on plugins and preserves disabled plu
 });
 
 test("Sikarugir provider returns its fresh-profile discovery plan without refreshing", async t => {
-  const userDataDir = profile(t), provider = require("../src/modules/crossover/sikarugir/provider");
+  const userDataDir = profile(t), provider = require("./helpers/wine-source.cjs").provider("sikarugir");
   const entry = { gamePath: userDataDir, runtimeData: { crossover: {
     windowsExecutablePath: path.join(userDataDir, "game.exe"), sourceRoot: userDataDir, executableArchitecture: "x86_64" } } };
   const before = Harness.network.requests.length;

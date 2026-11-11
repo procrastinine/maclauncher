@@ -31,490 +31,276 @@
     "default": "sikarugir",
     "supported": [
       "sikarugir",
-      "crossover"
+      "crossover",
+      "winecx"
     ],
-    "manager": {
-      "crossover": "crossover",
-      "sikarugir": "sikarugir"
-    },
-    "managerUi": {
-      "crossover": {
-        "groupId": "crossover",
-        "tabLabel": "CrossOver",
-        "sectionLabel": "CrossOver",
-        "memberOrder": 0,
-        "management": "managed",
-        "order": 200,
-        "category": "compatibility"
+    "windows": {
+      "input": {
+        "fileExtensions": [
+          ".exe"
+        ],
+        "binaryFormats": [
+          "pe"
+        ],
+        "webContent": true
       },
-      "sikarugir": {
-        "groupId": "sikarugir",
-        "tabLabel": "Sikarugir",
-        "sectionLabel": "Sikarugir",
-        "memberOrder": 0,
-        "management": "managed",
-        "order": 201,
-        "category": "compatibility"
-      }
-    },
-    "entries": {
-      "crossover": {
-        "input": {
-          "fileExtensions": [
-            ".exe"
-          ],
-          "binaryFormats": [
-            "pe"
-          ],
-          "webContent": true
+      "statusAction": "runtimeStatus",
+      "statusFromRecord": true,
+      "graphicsHost": "window",
+      "settings": {
+        "defaults": {
+          "graphicsBackend": "auto",
+          "vulkanBackend": "auto",
+          "cncDdraw": false,
+          "synchronization": "auto",
+          "locale": "",
+          "windowsVersion": "win10",
+          "executable": "",
+          "bepInExWinhttp": false,
+          "dllOverrides": [],
+          "arguments": [],
+          "wineDebug": "",
+          "dlss": false,
+          "graphicsBridgeVersion": "auto",
+          "advertiseAvx": true,
+          "environmentReference": "private"
         },
-        "label": "CrossOver",
-        "statusAction": "runtimeStatus",
-        "statusFromRecord": true,
-        "graphicsHost": "window",
-        "settings": {
-          "defaults": {
-            "graphicsBackend": "auto",
-            "synchronization": "auto",
-            "locale": "",
-            "bottleTemplate": "win10_64",
-            "executable": "",
-            "bepInExWinhttp": false,
-            "dllOverrides": [],
-            "arguments": [],
-            "wineDebug": "",
-            "dlss": false,
-            "graphicsBridgeVersion": "auto",
-            "advertiseAvx": true,
-            "environmentReference": "private"
+        "fields": [
+          {
+            "key": "environmentReference",
+            "type": "select",
+            "label": "Environment",
+            "gameOnly": true,
+            "optionsAction": "listEnvironments",
+            "optionsKey": "environments",
+            "pickerAction": "chooseEnvironment",
+            "pickerResultKey": "environmentReference",
+            "pickerLabel": "Choose…",
+            "options": [
+              {
+                "value": "private",
+                "label": "Private (MacLauncher)"
+              }
+            ],
+            "description": "An existing bottle or wrapper is used in place. Settings and translator files can be changed; its environment is never recreated."
           },
-          "fields": [
-            {
-              "key": "environmentReference",
-              "type": "select",
-              "label": "Environment",
-              "gameOnly": true,
-              "optionsAction": "listEnvironments",
-              "optionsKey": "environments",
-              "pickerAction": "chooseEnvironment",
-              "pickerResultKey": "environmentReference",
-              "pickerLabel": "Choose…",
-              "options": [
-                {
-                  "value": "private",
-                  "label": "Private (MacLauncher)"
-                }
-              ],
-              "description": "An existing bottle or wrapper is used in place. Settings and translator files can be changed; its environment is never recreated."
-            },
-            {
-              "key": "graphicsBackend",
-              "type": "select",
-              "label": "Graphics",
-              "optionsAction": "listGraphicsBackends",
-              "optionsKey": "graphicsBackends",
-              "options": [
-                {
-                  "value": "auto",
-                  "label": "Automatic"
-                },
-                {
-                  "value": "d3dmetal",
-                  "hostFeature": "WINE_BACKENDS.d3dmetal",
-                  "label": "D3DMetal"
-                },
-                {
-                  "value": "dxmt",
-                  "hostFeature": "WINE_BACKENDS.dxmt",
-                  "label": "DXMT"
-                },
-                {
-                  "value": "dxvk",
-                  "label": "DXVK"
-                },
-                {
-                  "value": "wined3d",
-                  "label": "WineD3D"
-                }
-              ],
-              "description": "Only renderers compatible with the selected CrossOver version, Mac and macOS version are offered."
-            },
-            {
-              "key": "dlss",
-              "hostFeature": "WINE_TEMPORAL",
-              "capability": "temporal-integration",
-              "type": "boolean",
-              "label": "Game temporal integration",
-              "description": "Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver build with a temporal carrier, a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, independent of this setting; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch.",
-              "hiddenWhen": [
-                {
-                  "key": "graphicsBackend",
-                  "equals": "wined3d"
-                }
-              ]
-            },
-            {
-              "key": "graphicsBridgeVersion",
-              "hostFeature": "WINE_TEMPORAL",
-              "type": "select",
-              "label": "DXMT support",
-              "description": "Matching DXMT libraries for temporal upscaling. Automatic uses the Runtimes default.",
-              "options": [
-                {
-                  "value": "auto",
-                  "label": "Automatic"
-                }
-              ],
-              "visibleWhen": [
-                {
-                  "key": "graphicsBackend",
-                  "equals": "auto"
-                },
-                {
-                  "key": "graphicsBackend",
-                  "equals": "dxmt"
-                }
-              ]
-            },
-            {
-              "key": "synchronization",
-              "type": "select",
-              "label": "Synchronization",
-              "options": [
-                {
-                  "value": "auto",
-                  "label": "Automatic"
-                },
-                {
-                  "value": "msync",
-                  "label": "MSync"
-                },
-                {
-                  "value": "esync",
-                  "label": "ESync (older CrossOver versions)"
-                },
-                {
-                  "value": "off",
-                  "label": "Off"
-                }
-              ]
-            },
-            {
-              "key": "locale",
-              "type": "string",
-              "label": "Language locale",
-              "description": "Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8."
-            },
-            {
-              "key": "bottleTemplate",
-              "type": "select",
-              "label": "Windows environment",
-              "options": [
-                {
-                  "value": "win10_64",
-                  "label": "Windows 10 (64-bit)"
-                },
-                {
-                  "value": "win11_64",
-                  "label": "Windows 11 (64-bit)"
-                },
-                {
-                  "value": "win7_64",
-                  "label": "Windows 7 (64-bit)"
-                },
-                {
-                  "value": "winxp_64",
-                  "label": "Windows XP (64-bit)"
-                }
-              ],
-              "description": "Changing this option uses a separate Windows environment. Existing saves remain in the previous environment."
-            },
-            {
-              "key": "executable",
-              "type": "string",
-              "label": "Windows executable (optional)",
-              "description": "Relative path inside the game folder. Automatic selects the game's executable."
-            },
-            {
-              "key": "bepInExWinhttp",
-              "capability": "bepinex",
-              "type": "boolean",
-              "label": "Enable BepInEx winhttp override",
-              "description": "Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed."
-            },
-            {
-              "key": "dllOverrides",
-              "type": "list",
-              "listSeparator": "newline",
-              "label": "Wine DLL overrides",
-              "description": "One library=order entry per line, such as winhttp=n,b."
-            },
-            {
-              "key": "arguments",
-              "type": "list",
-              "listSeparator": "newline",
-              "label": "Game arguments",
-              "description": "One argument per line."
-            },
-            {
-              "key": "wineDebug",
-              "type": "string",
-              "label": "Wine debug channels (optional)",
-              "description": "Wine channel filters, such as -all or +seh."
-            },
-            {
-              "key": "advertiseAvx",
-              "type": "boolean",
-              "label": "Advertise AVX under Rosetta",
-              "advanced": true,
-              "section": "Compatibility"
-            }
-          ]
-        }
+          {
+            "key": "graphicsBackend",
+            "type": "select",
+            "label": "Graphics",
+            "optionsAction": "listGraphicsBackends",
+            "optionsKey": "graphicsBackends",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Automatic"
+              },
+              {
+                "value": "d3dmetal",
+                "hostFeature": "WINE_BACKENDS.d3dmetal",
+                "label": "D3DMetal"
+              },
+              {
+                "value": "dxmt",
+                "hostFeature": "WINE_BACKENDS.dxmt",
+                "label": "DXMT"
+              },
+              {
+                "value": "dxvk",
+                "label": "DXVK"
+              },
+              {
+                "value": "wined3d",
+                "label": "WineD3D"
+              }
+            ],
+            "description": "Only renderers compatible with the selected Wine version, Mac and macOS version are offered."
+          },
+          {
+            "key": "dlss",
+            "hostFeature": "WINE_TEMPORAL",
+            "capability": "temporal-integration",
+            "type": "boolean",
+            "label": "Game temporal integration",
+            "description": "Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later with a Wine version that supports its game integration, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver build with a temporal carrier, a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, independent of this setting; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch.",
+            "hiddenWhen": [
+              {
+                "key": "graphicsBackend",
+                "equals": "wined3d"
+              }
+            ]
+          },
+          {
+            "key": "graphicsBridgeVersion",
+            "hostFeature": "WINE_TEMPORAL",
+            "type": "select",
+            "label": "DXMT support",
+            "description": "Matching DXMT libraries for temporal upscaling. Automatic uses the Runtimes default.",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Automatic"
+              }
+            ],
+            "visibleWhen": [
+              {
+                "key": "graphicsBackend",
+                "equals": "auto"
+              },
+              {
+                "key": "graphicsBackend",
+                "equals": "dxmt"
+              }
+            ]
+          },
+          {
+            "key": "vulkanBackend",
+            "type": "select",
+            "label": "Vulkan driver",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Automatic"
+              },
+              {
+                "value": "moltenvk",
+                "label": "MoltenVK"
+              },
+              {
+                "value": "kosmickrisp",
+                "hostFeature": "TEMPLATE_RENDERERS.kosmickrisp",
+                "label": "KosmicKrisp"
+              }
+            ],
+            "description": "Applies to Vulkan graphics. KosmicKrisp requires a compatible runtime, Apple Silicon and macOS 26 or later."
+          },
+          {
+            "key": "cncDdraw",
+            "type": "boolean",
+            "label": "DirectDraw compatibility",
+            "description": "Use CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate."
+          },
+          {
+            "key": "synchronization",
+            "type": "select",
+            "label": "Synchronization",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Automatic"
+              },
+              {
+                "value": "msync",
+                "label": "MSync"
+              },
+              {
+                "value": "esync",
+                "label": "ESync"
+              },
+              {
+                "value": "off",
+                "label": "Off"
+              }
+            ],
+            "description": "Availability depends on the selected Wine version.",
+            "optionsAction": "listWineSynchronizations",
+            "optionsKey": "synchronizations"
+          },
+          {
+            "key": "locale",
+            "type": "string",
+            "label": "Language locale",
+            "description": "Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8."
+          },
+          {
+            "key": "windowsVersion",
+            "type": "select",
+            "label": "Windows version",
+            "options": [
+              {
+                "value": "win10",
+                "label": "Windows 10"
+              },
+              {
+                "value": "win11",
+                "label": "Windows 11"
+              },
+              {
+                "value": "win7",
+                "label": "Windows 7"
+              },
+              {
+                "value": "winxp",
+                "label": "Windows XP"
+              }
+            ],
+            "description": "Selects the Windows environment. Changing this option uses a separate Windows environment. Existing saves remain in the previous environment."
+          },
+          {
+            "key": "executable",
+            "type": "string",
+            "label": "Windows executable (optional)",
+            "description": "Relative path inside the game folder. Automatic selects the game's executable."
+          },
+          {
+            "key": "bepInExWinhttp",
+            "capability": "bepinex",
+            "type": "boolean",
+            "label": "Enable BepInEx winhttp override",
+            "description": "Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed."
+          },
+          {
+            "key": "dllOverrides",
+            "type": "list",
+            "listSeparator": "newline",
+            "label": "Wine DLL overrides",
+            "description": "One library=order entry per line, such as winhttp=n,b."
+          },
+          {
+            "key": "arguments",
+            "type": "list",
+            "listSeparator": "newline",
+            "label": "Game arguments",
+            "description": "One argument per line."
+          },
+          {
+            "key": "wineDebug",
+            "type": "string",
+            "label": "Wine debug channels (optional)",
+            "description": "Wine channel filters, such as -all or +seh."
+          },
+          {
+            "key": "advertiseAvx",
+            "type": "boolean",
+            "label": "Advertise AVX under Rosetta",
+            "advanced": true,
+            "section": "Compatibility"
+          }
+        ]
       },
-      "sikarugir": {
-        "input": {
-          "fileExtensions": [
-            ".exe"
-          ],
-          "binaryFormats": [
-            "pe"
-          ],
-          "webContent": true
-        },
-        "label": "Sikarugir (Wine)",
-        "statusAction": "runtimeStatus",
-        "statusFromRecord": true,
-        "graphicsHost": "window",
-        "graphicsArchitecture": "x86_64",
-        "supports": {
-          "cheats": false,
-          "cheatsPatcher": false,
-          "saveEditing": false,
-          "saveLocation": true
-        },
-        "settings": {
-          "defaults": {
-            "graphicsBackend": "auto",
-            "vulkanBackend": "auto",
-            "cncDdraw": false,
-            "synchronization": "auto",
-            "locale": "",
-            "windowsVersion": "win10",
-            "executable": "",
-            "bepInExWinhttp": false,
-            "dllOverrides": [],
-            "arguments": [],
-            "wineDebug": "",
-            "dlss": false,
-            "graphicsBridgeVersion": "auto",
-            "advertiseAvx": true,
-            "environmentReference": "private"
+      "bottleTemplateField": {
+        "key": "bottleTemplate",
+        "type": "select",
+        "label": "Windows environment",
+        "options": [
+          {
+            "value": "win10_64",
+            "label": "Windows 10 (64-bit)"
           },
-          "fields": [
-            {
-              "key": "environmentReference",
-              "type": "select",
-              "label": "Environment",
-              "gameOnly": true,
-              "optionsAction": "listEnvironments",
-              "optionsKey": "environments",
-              "pickerAction": "chooseEnvironment",
-              "pickerResultKey": "environmentReference",
-              "pickerLabel": "Choose…",
-              "options": [
-                {
-                  "value": "private",
-                  "label": "Private (MacLauncher)"
-                }
-              ],
-              "description": "An existing bottle or wrapper is used in place. Settings and translator files can be changed; its environment is never recreated."
-            },
-            {
-              "key": "graphicsBackend",
-              "type": "select",
-              "label": "Graphics",
-              "options": [
-                {
-                  "value": "auto",
-                  "label": "Automatic"
-                },
-                {
-                  "value": "d3dmetal",
-                  "hostFeature": "TEMPLATE_RENDERERS.d3dmetal",
-                  "label": "D3DMetal"
-                },
-                {
-                  "value": "dxmt",
-                  "hostFeature": "TEMPLATE_RENDERERS.dxmt",
-                  "label": "DXMT"
-                },
-                {
-                  "value": "dxvk",
-                  "label": "DXVK"
-                },
-                {
-                  "value": "wined3d",
-                  "label": "WineD3D"
-                }
-              ],
-              "description": "Availability depends on the selected Wine version, Mac and macOS version."
-            },
-            {
-              "key": "dlss",
-              "hostFeature": "WINE_TEMPORAL",
-              "capability": "temporal-integration",
-              "type": "boolean",
-              "label": "Game temporal integration",
-              "description": "Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver build with a temporal carrier, a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, independent of this setting; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch.",
-              "hiddenWhen": [
-                {
-                  "key": "graphicsBackend",
-                  "equals": "wined3d"
-                }
-              ]
-            },
-            {
-              "key": "graphicsBridgeVersion",
-              "hostFeature": "WINE_TEMPORAL",
-              "type": "select",
-              "label": "DXMT support",
-              "description": "Matching DXMT libraries for temporal upscaling. Automatic uses the Runtimes default.",
-              "options": [
-                {
-                  "value": "auto",
-                  "label": "Automatic"
-                }
-              ],
-              "visibleWhen": [
-                {
-                  "key": "graphicsBackend",
-                  "equals": "auto"
-                },
-                {
-                  "key": "graphicsBackend",
-                  "equals": "dxmt"
-                }
-              ]
-            },
-            {
-              "key": "vulkanBackend",
-              "type": "select",
-              "label": "Vulkan driver",
-              "options": [
-                {
-                  "value": "auto",
-                  "label": "Automatic"
-                },
-                {
-                  "value": "moltenvk",
-                  "label": "MoltenVK"
-                },
-                {
-                  "value": "kosmickrisp",
-                  "hostFeature": "TEMPLATE_RENDERERS.kosmickrisp",
-                  "label": "KosmicKrisp"
-                }
-              ],
-              "description": "Applies to Vulkan graphics. KosmicKrisp requires a compatible runtime, Apple Silicon and macOS 26 or later."
-            },
-            {
-              "key": "cncDdraw",
-              "type": "boolean",
-              "label": "DirectDraw compatibility",
-              "description": "Use CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate."
-            },
-            {
-              "key": "synchronization",
-              "type": "select",
-              "label": "Synchronization",
-              "options": [
-                {
-                  "value": "auto",
-                  "label": "Automatic"
-                },
-                {
-                  "value": "msync",
-                  "label": "MSync"
-                },
-                {
-                  "value": "off",
-                  "label": "Off"
-                }
-              ],
-              "description": "Availability depends on the selected Wine version."
-            },
-            {
-              "key": "locale",
-              "type": "string",
-              "label": "Language locale",
-              "description": "Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8."
-            },
-            {
-              "key": "windowsVersion",
-              "type": "select",
-              "label": "Windows version",
-              "options": [
-                {
-                  "value": "win10",
-                  "label": "Windows 10"
-                },
-                {
-                  "value": "win11",
-                  "label": "Windows 11"
-                },
-                {
-                  "value": "win7",
-                  "label": "Windows 7"
-                },
-                {
-                  "value": "winxp",
-                  "label": "Windows XP"
-                }
-              ]
-            },
-            {
-              "key": "executable",
-              "type": "string",
-              "label": "Windows executable (optional)",
-              "description": "Relative path inside the game folder. Automatic selects the game's executable."
-            },
-            {
-              "key": "bepInExWinhttp",
-              "capability": "bepinex",
-              "type": "boolean",
-              "label": "Enable BepInEx winhttp override",
-              "description": "Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed."
-            },
-            {
-              "key": "dllOverrides",
-              "type": "list",
-              "listSeparator": "newline",
-              "label": "Wine DLL overrides",
-              "description": "One library=order entry per line, such as winhttp=n,b."
-            },
-            {
-              "key": "arguments",
-              "type": "list",
-              "listSeparator": "newline",
-              "label": "Game arguments",
-              "description": "One argument per line."
-            },
-            {
-              "key": "wineDebug",
-              "type": "string",
-              "label": "Wine debug channels (optional)",
-              "description": "Wine channel filters, such as -all or +seh."
-            },
-            {
-              "key": "advertiseAvx",
-              "type": "boolean",
-              "label": "Advertise AVX under Rosetta",
-              "advanced": true,
-              "section": "Compatibility"
-            }
-          ]
-        }
+          {
+            "value": "win11_64",
+            "label": "Windows 11 (64-bit)"
+          },
+          {
+            "value": "win7_64",
+            "label": "Windows 7 (64-bit)"
+          },
+          {
+            "value": "winxp_64",
+            "label": "Windows XP (64-bit)"
+          }
+        ],
+        "description": "Changing this option uses a separate Windows environment. Existing saves remain in the previous environment."
       }
     }
   },
@@ -569,6 +355,10 @@
     {
       "label": "Sikarugir Wine engines",
       "url": "https://github.com/Sikarugir-App/Engines"
+    },
+    {
+      "label": "winecx-gptk Wine runtime by dappermint",
+      "url": "https://github.com/dappermint/winecx-gptk"
     },
     {
       "label": "Proton lsteamclient and steam_helper",
