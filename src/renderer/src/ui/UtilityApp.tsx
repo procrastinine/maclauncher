@@ -26,31 +26,26 @@ export default function UtilityApp() {
   const keptUtility = true, runtimesOpen = true, creditsOpen = true;
   const utilityNavigation = useRef<Record<string, number>>({});
   if (utilityRevision !== undefined) utilityNavigation.current[utilityView] = utilityRevision;
-  useEffect(() => {
-    if (!keptUtility || !api?.onUtilityViewSwitch) return;
-    // The main process switches the displayed view directly, without a render,
-    // then shows the window once the frame holding it has been produced: the
-    // task after the next frame callback. A window that receives no frames
-    // while hidden reports after one frame interval instead.
-    let frame = 0, timer = 0;
-    const unsubscribe = api.onUtilityViewSwitch(({ view, revision }) => {
+  useLayoutEffect(() => {
+    if (!api?.onUtilityViewSwitch) return;
+    return api.onUtilityViewSwitch(({view, revision}) => {
       for (const slot of document.querySelectorAll<HTMLElement>("[data-utility-view]")) slot.hidden = slot.dataset.utilityView !== view;
-      cancelAnimationFrame(frame); clearTimeout(timer);
-      let reported = false;
-      const report = () => { if (reported) return; reported = true; cancelAnimationFrame(frame); clearTimeout(timer); api.utilityWindowDrawn?.(revision); };
-      frame = requestAnimationFrame(() => { const channel = new MessageChannel(); channel.port1.onmessage = () => { channel.port1.close(); channel.port2.close(); report(); }; channel.port2.postMessage(0); });
-      timer = window.setTimeout(report, 20);
+      // All slots are mounted. Acknowledge the DOM switch without a hidden frame wait.
+      api.utilityWindowDrawn?.(revision);
     });
-    return () => { cancelAnimationFrame(frame); clearTimeout(timer); unsubscribe(); };
-  }, [api, keptUtility]);
-  useEffect(() => {
-    if (!utilityView || utilityRevision === undefined || !api?.utilityWindowDrawn) return;
-    // Navigation uses the same bounded frame acknowledgement as a direct switch.
-    let frame = 0, timer = 0, reported = false;
-    const report = () => { if (reported) return; reported = true; cancelAnimationFrame(frame); clearTimeout(timer); api.utilityWindowDrawn?.(utilityRevision); };
-    frame = requestAnimationFrame(() => { const channel = new MessageChannel(); channel.port1.onmessage = () => { channel.port1.close(); channel.port2.close(); report(); }; channel.port2.postMessage(0); });
-    timer = window.setTimeout(report, 20);
-    return () => { cancelAnimationFrame(frame); clearTimeout(timer); };
+  }, [api]);
+  const initiallyPainted = useRef(false);
+  useLayoutEffect(() => {
+    if (utilityRevision === undefined) return;
+    if (initiallyPainted.current) { api?.utilityWindowDrawn?.(utilityRevision); return; }
+    // A fresh page must produce content before its first show. Later requests
+    // reuse that painted page and acknowledge their committed DOM immediately.
+    let second = 0;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => {
+      initiallyPainted.current = true;
+      api?.utilityWindowDrawn?.(utilityRevision);
+    }); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [api, utilityView, utilityRevision]);
 
   useLayoutEffect(() => { performance.mark("launcher:utility-commit"); }, []);

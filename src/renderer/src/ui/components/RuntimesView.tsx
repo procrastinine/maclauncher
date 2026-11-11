@@ -757,11 +757,12 @@ export function useRuntimeManagement(api: NonNullable<Window["MacLauncher"]>["la
   const [runtimeSectionId, setRuntimeSectionId] = useState<string | null>(null);
   const [runtimeUi, setRuntimeUi] = useState<RuntimeUiState>({});
   const runtimeActionLocks = useRef(new Set<string>());
-  useEffect(() => {
-    if (!runtimesOpen || !state?.utilityWindow?.managerId) return;
+  const navigation = useRef<number | undefined>(undefined);
+  if (runtimesOpen && state?.utilityWindow?.managerId && navigation.current !== state.utilityWindow.revision) {
+    navigation.current = state.utilityWindow.revision;
     setRuntimeManagerId(state.utilityWindow.managerId);
     setRuntimeSectionId(null);
-  }, [runtimesOpen, state?.utilityWindow?.revision]);
+  }
 
   useEffect(() => {
     if (!runtimesOpen) return;

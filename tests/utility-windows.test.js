@@ -93,7 +93,7 @@ test("one hidden spare serves Settings, Runtimes and Credits: switched on open, 
   assert.equal(reopened.destroyed, true);
   assert.equal(live().length, 1, "Idle, one hidden window remains");
 
-  // A spare still loading shows its native frame immediately for the new view.
+  // With no loaded page to reuse, a cold spare stays hidden until ready.
   live()[0].destroy();
   let release; holdLoad = new Promise(resolve => { release = resolve; });
   void f.controller.prepare();
@@ -103,7 +103,7 @@ test("one hidden spare serves Settings, Runtimes and Credits: switched on open, 
   const opening = f.controller.open({ view: "credits" });
   await settle();
   assert.equal(f.windows.length, count + 1, "A replacement starts even while the taken spare loads");
-  assert.equal(loading.shows, 1, "Its native frame shows before load completes");
+  assert.equal(loading.shows, 0, "A loading page never exposes an empty frame");
   assert.equal(f.controller.stateForWindow(loading, {}).utilityWindow.view, "credits", "Its first state names the requested view");
   release(); holdLoad = null;
   const credits = await opening;
@@ -655,66 +655,28 @@ test('utility windows receive the launcher state without library rows, other win
 });
 
 
-test("utility navigation acknowledges on the frame task or 20 ms fallback, once", async () => {
-  const { MessageChannel } = require("node:worker_threads");
+test("utility switches acknowledge the mounted DOM without frame callbacks or timers", () => {
   const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/UtilityApp.tsx"), "utf8");
-  const start = source.indexOf('  useEffect(() => {\n    if (!utilityView');
-  const end = source.indexOf('  useLayoutEffect(', start + 5);
-  const effect = source.slice(start, end).replaceAll('<HTMLElement>', '');
-  for (const mode of ['frame', 'timer']) {
-    let cleanup, frame, timer, switchView, resolve;
-    const reported = [], ack = new Promise(done => { resolve = done; });
-    const slots = ['settings','runtimes','credits'].map(view => ({dataset:{utilityView:view},hidden:false}));
-    vm.runInNewContext(effect, {
-      MessageChannel, utilityView: 'credits', utilityRevision: 42, keptUtility: true,
-      document: {querySelectorAll: () => slots},
-      requestAnimationFrame: callback => {frame=callback;return 1;}, cancelAnimationFrame() {}, clearTimeout() {},
-      window: {setTimeout: (callback, ms) => {assert.equal(ms,20);timer=callback;return 2;}},
-      api: {utilityWindowDrawn: revision => {reported.push(revision);resolve();},
-        onUtilityViewSwitch: callback => {switchView=callback;return () => {}; }},
-      useEffect: callback => {cleanup=callback();}
-    });
-
-    assert.deepEqual(reported,[]);
-    if(mode==='frame') {frame();assert.deepEqual(reported,[]);}
-    else timer();
-    await ack;
-    timer();
-    assert.deepEqual(reported,[42]);
-    cleanup();
-  }
+  const start = source.indexOf('  useLayoutEffect(() => {\n    if (!api?.onUtilityViewSwitch)');
+  const effect = source.slice(start, source.indexOf('  const initiallyPainted',start+5)).replaceAll('<HTMLElement>','');
+  const slots=['settings','runtimes','credits'].map(view=>({dataset:{utilityView:view},hidden:false}));
+  let switchView, cleanup; const reported=[];
+  vm.runInNewContext(effect,{api:{onUtilityViewSwitch:callback=>{switchView=callback;return ()=>{};},utilityWindowDrawn:revision=>reported.push(revision)},
+    document:{querySelectorAll:()=>slots},useLayoutEffect:callback=>{cleanup=callback();}});
+  switchView({view:'credits',revision:73});
+  assert.deepEqual(slots.map(slot=>slot.hidden),[true,true,false]);
+  assert.deepEqual(reported,[73]);cleanup();
 });
 
-test("utility switch acknowledges on the frame task or 20 ms fallback, once", async () => {
-  const { MessageChannel } = require("node:worker_threads");
+test("utility navigation acknowledges its React commit without a hidden frame wait", () => {
   const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/UtilityApp.tsx"), "utf8");
-  const start = source.indexOf('  useEffect(() => {\n    if (!keptUtility');
-  const end = source.indexOf('  useEffect(() => {', start + 5);
-  const effect = source.slice(start, end).replaceAll('<HTMLElement>', '');
-  for (const mode of ['frame', 'timer']) {
-    let cleanup, frame, timer, switchView, resolve;
-    const reported = [], ack = new Promise(done => { resolve = done; });
-    const slots = ['settings','runtimes','credits'].map(view => ({dataset:{utilityView:view},hidden:false}));
-    vm.runInNewContext(effect, {
-      MessageChannel, utilityView: 'credits', utilityRevision: 42, keptUtility: true,
-      document: {querySelectorAll: () => slots},
-      requestAnimationFrame: callback => {frame=callback;return 1;}, cancelAnimationFrame() {}, clearTimeout() {},
-      window: {setTimeout: (callback, ms) => {assert.equal(ms,20);timer=callback;return 2;}},
-      api: {utilityWindowDrawn: revision => {reported.push(revision);resolve();},
-        onUtilityViewSwitch: callback => {switchView=callback;return () => {}; }},
-      useEffect: callback => {cleanup=callback();}
-    });
-    switchView({view:'credits',revision:42});
-    assert.deepEqual(slots.map(slot=>slot.hidden),[true,true,false]);
-    assert.deepEqual(reported,[]);
-    if(mode==='frame') {frame();assert.deepEqual(reported,[]);}
-    else timer();
-    await ack;
-    timer();
-    assert.deepEqual(reported,[42]);
-    cleanup();
-  }
+  const start = source.indexOf('  useLayoutEffect(() => {\n    if (utilityRevision');
+  const effect = source.slice(start,source.indexOf('  useLayoutEffect(() => {',start+5));
+  const reported=[];
+  vm.runInNewContext(effect,{api:{utilityWindowDrawn:revision=>reported.push(revision)},utilityRevision:73,utilityView:'settings',initiallyPainted:{current:true},useLayoutEffect:callback=>callback()});
+  assert.deepEqual(reported,[73]);
 });
+
 test('navigation to a mounting spare is delivered after its initial snapshot was read', async () => {
   let release;
   const loading = new Promise(resolve => {release=resolve;});
@@ -726,7 +688,7 @@ test('navigation to a mounting spare is delivered after its initial snapshot was
   const first=f.controller.stateForWindow(win,{}).utilityWindow;
   assert.equal(first.managerId,undefined);
   const opening=f.controller.open({view:'runtimes',managerId:'wine',sectionId:'installed'});
-  assert.equal(win.shows,1,'The frame is not held for navigation');
+  assert.equal(win.shows,0,'A loading view stays hidden until content is ready');
   assert.deepEqual(sent,[]);
   release();await preparing;await opening;
   assert.equal(sent.at(-1)?.managerId,'wine');
@@ -768,4 +730,105 @@ test('the utility renderer holds all three views without loading the library or 
     assert.match(markup,/data-utility-view="runtimes"><main/);
     assert.doesNotMatch(markup,/game-search-input|gameRow|>Loading…</);
   } finally {globalThis.window=previous;}
+});
+
+test('a rapid second utility open retargets the just-taken page while refill is pending', async () => {
+  let hold=false,release;
+  const loading=new Promise(resolve=>{release=resolve;});
+  const presented=[];
+  const f=fixture({kept:['settings','runtimes','credits'],load:()=>hold?loading:null,
+    present:async(win,request)=>{presented.push(request.view);win.show();}});
+  await f.controller.prepare();hold=true;
+  const first=await f.controller.open({view:'runtimes'});
+  const refill=f.windows[1];
+  assert.equal(f.windows.length,2);
+  const second=await f.controller.open({view:'credits'});
+  assert.equal(second,first,'The second request does not wait for another renderer');
+  assert.equal(f.windows.length,2,'Only the single refill loads');
+  assert.equal(refill.shows,0,'The loading refill is never shown empty');
+  assert.deepEqual(presented,['runtimes','credits']);
+  assert.equal(f.controller.stateForWindow(second,{}).utilityWindow.view,'credits');
+  // Retargeting to the refill's own name must not steal its native window either.
+  assert.equal(await f.controller.open({view:'settings'}),first);
+  assert.equal(refill.shows,0);
+  release();await new Promise(resolve=>setImmediate(resolve));
+});
+
+test('concurrent rapid opens finish the first presentation before retargeting its page', async () => {
+  let refill=false,releaseRefill,releaseFirst;
+  const loading=new Promise(resolve=>{releaseRefill=resolve;});
+  const firstPaint=new Promise(resolve=>{releaseFirst=resolve;});
+  const presented=[];
+  const f=fixture({kept:['settings','runtimes','credits'],load:()=>refill?loading:null,
+    present:async(win,request)=>{if(request.view==='runtimes')await firstPaint;presented.push(request.view);win.show();}});
+  await f.controller.prepare();refill=true;
+  const first=f.controller.open({view:'runtimes'});
+  const second=f.controller.open({view:'credits'});
+  assert.deepEqual(presented,[]);
+  releaseFirst();
+  assert.equal(await first,await second);
+  assert.deepEqual(presented,['runtimes','credits']);
+  assert.equal(f.windows.length,2);
+  releaseRefill();await new Promise(resolve=>setImmediate(resolve));
+});
+
+test('a fresh utility page produces a content frame before acknowledging its initial readiness', () => {
+  const source=fs.readFileSync(path.join(__dirname,'../src/renderer/src/ui/UtilityApp.tsx'),'utf8');
+  const start=source.indexOf('  useLayoutEffect(() => {\n    if (utilityRevision');
+  const effect=source.slice(start,source.indexOf('  useLayoutEffect(() => { performance.mark',start));
+  const frames=[],reported=[],initiallyPainted={current:false};let cleanup;
+  vm.runInNewContext(effect,{api:{utilityWindowDrawn:revision=>reported.push(revision)},utilityRevision:1,utilityView:'settings',initiallyPainted,
+    requestAnimationFrame:callback=>{frames.push(callback);return frames.length;},cancelAnimationFrame(){},useLayoutEffect:callback=>{cleanup=callback();}});
+  assert.deepEqual(reported,[]);
+  frames.shift()();assert.deepEqual(reported,[],'The first callback precedes the first content paint');
+  frames.shift()();assert.deepEqual(reported,[1]);
+  assert.equal(initiallyPainted.current,true);cleanup();
+});
+
+test('Settings and Runtimes navigation commits its selection without waiting for passive effects', async () => {
+  const {build}=require('vite'),Module=require('node:module'),React=require('react');
+  let slots=[],cursor=0,dirty=false;
+  const hooks={...React,
+    useState(initial){const index=cursor++;if(!slots[index])slots[index]={value:typeof initial==='function'?initial():initial};return [slots[index].value,value=>{const next=typeof value==='function'?value(slots[index].value):value;if(!Object.is(next,slots[index].value)){slots[index].value=next;dirty=true;}}];},
+    useRef(initial){return slots[cursor++] ||= {current:initial};},useMemo:create=>create(),useEffect() {}};
+  // Passive effects are deliberately not flushed by this render-only harness.
+  const compile=async name=>{
+    const bundle=await build({configFile:false,logLevel:'silent',build:{ssr:path.resolve(__dirname,`../src/renderer/src/ui/components/${name}.tsx`),write:false,
+      rollupOptions:{external:id=>/^react(?:-dom)?(?:\/|$)/.test(id),output:{format:'cjs',codeSplitting:false}}}});
+    const compiled=new Module(path.join(__dirname,name+'-navigation.cjs'),module);compiled.paths=module.paths;
+    compiled.require=id=>id==='react'?hooks:Module.prototype.require.call(compiled,id);
+    compiled._compile(bundle.output.find(chunk=>chunk.type==='chunk').code,compiled.id);return compiled.exports;
+  };
+  const render=(fn,...args)=>{let value,count=0;do{cursor=0;dirty=false;value=fn(...args);assert.ok(++count<5,'Navigation settles before commit');}while(dirty);return value;};
+  const state=require('./library-layout-fixture').createLibraryFixture();
+  const {SettingsView}=await compile('SettingsView');
+  const props={state,sectionId:'launcher',navigationKey:1,showIcons:true,showNonDefaultTags:true,onSetLauncherSettings(){},onSetModuleSettings(){}};
+  assert.ok(JSON.stringify(render(SettingsView,props)).includes('settings-panel-launcher'));
+  const graphics=render(SettingsView,{...props,sectionId:'graphics',navigationKey:2});
+  assert.ok(JSON.stringify(graphics).includes('settings-panel-graphics'),'The committed DOM targets Graphics before its ACK');
+  slots=[];
+  const {useRuntimeManagement}=await compile('RuntimesView');
+  const initial={...state,utilityWindow:{view:'runtimes',managerId:'fixture-manager',revision:1}};
+  assert.equal(render(useRuntimeManagement,undefined,initial,true,'fixture-manager').runtimeManagerId,'fixture-manager');
+  const next={...initial,utilityWindow:{view:'runtimes',managerId:'other-manager',revision:2}};
+  const selected=render(useRuntimeManagement,undefined,next,true,'fixture-manager');
+  assert.equal(selected.runtimeManagerId,'other-manager');
+  assert.equal(selected.runtimeSectionId,null);
+  assert.deepEqual(next.runtimeManagers,state.runtimeManagers,'Navigation does not alter automatic choices or defaults');
+});
+
+test('a third rapid request cannot overwrite a second presentation still in progress', async () => {
+  let hold=false,releaseRefill,releaseFirst,releaseSecond;
+  const loading=new Promise(resolve=>{releaseRefill=resolve;});
+  const firstPaint=new Promise(resolve=>{releaseFirst=resolve;});
+  const secondPaint=new Promise(resolve=>{releaseSecond=resolve;});
+  const f=fixture({kept:['settings','runtimes','credits'],load:()=>hold?loading:null,
+    present:async(win,request)=>{if(request.view==='runtimes')await firstPaint;if(request.view==='credits')await secondPaint;win.show();}});
+  await f.controller.prepare();hold=true;
+  const first=f.controller.open({view:'runtimes'}),second=f.controller.open({view:'credits'}),third=f.controller.open({view:'settings'});
+  releaseFirst();await first;await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(f.controller.stateForWindow(f.windows[0],{}).utilityWindow.view,'credits','The second request owns its presentation until complete');
+  releaseSecond();assert.equal(await second,await third);
+  assert.equal(f.controller.stateForWindow(f.windows[0],{}).utilityWindow.view,'settings');
+  releaseRefill();await new Promise(resolve=>setImmediate(resolve));
 });

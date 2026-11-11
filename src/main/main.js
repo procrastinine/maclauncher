@@ -2270,11 +2270,11 @@ function utilityViewDrawn(win, revision, limitMs) {
     setTimeout(() => { entry.waiters = entry.waiters.filter(item => item !== waiter); resolve(false); }, limitMs).unref?.();
   });
 }
-// Each prepared page keeps painting all three views while hidden. Its switch
-// acknowledgement follows the frame callback and the task after it.
+// All three views are mounted. A switch acknowledges its DOM change directly;
+// navigation acknowledges after its React commit, without a hidden-frame wait.
 async function presentUtilityWindow(win, { view, revision, switched, navigation, activate }) {
   if (switched && !navigation && !win.isDestroyed()) win.webContents.send("launcher:utilityViewSwitch", { view, revision });
-  if (switched || navigation) await utilityViewDrawn(win, revision, 300);
+  if ((switched || navigation) && !await utilityViewDrawn(win, revision, 300)) throw new Error("Utility view did not acknowledge its content.");
   if (win.isDestroyed()) return;
   if (!activate) { win.showInactive(); return; }
   if (win.isMinimized()) win.restore();
@@ -2297,7 +2297,9 @@ const utilityWindows = createUtilityWindowController({
     await loadLauncherView(win, request);
     // The utility entry imports asynchronously. Navigation completion alone
     // does not mean its views or switch listener have mounted.
-    if (KEPT_UTILITY_VIEWS.includes(request.view) && revision) await utilityViewDrawn(win, revision, 10000);
+    if (KEPT_UTILITY_VIEWS.includes(request.view) && revision && !await utilityViewDrawn(win, revision, 10000)) {
+      throw new Error("Utility view did not become ready.");
+    }
   },
   registerWindow: (win, view,{activate=true}={}) => {
     win.__maclauncherWindowType = view;

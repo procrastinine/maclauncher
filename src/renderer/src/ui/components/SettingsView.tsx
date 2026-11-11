@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { AppUpdateState, LauncherState } from "../types";
 import {
   buildRuntimeSettingsDefaults,
@@ -100,9 +100,11 @@ export function SettingsView({
   // `graphics:presets:<preset id>`, whose first part selects the entry.
   const section = (id?: string | null) => (id?.replace(/^module:/, "") || "launcher").split(":")[0];
   const [activeTab, setActiveTab] = useState(() => section(sectionId));
-  useEffect(() => {
+  const navigation = useRef({sectionId, navigationKey});
+  if (navigation.current.sectionId !== sectionId || navigation.current.navigationKey !== navigationKey) {
+    navigation.current = {sectionId, navigationKey};
     if (sectionId) setActiveTab(section(sectionId));
-  }, [sectionId, navigationKey]);
+  }
   const [activeRuntimes, setActiveRuntimes] = useState<Record<string, string>>({});
   // Global translator environment variables have a section of their own.
   const environments = api?.setTranslatorEnvironment && state.translatorEnvironments?.length ? state.translatorEnvironments : null;
