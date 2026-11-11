@@ -185,8 +185,10 @@ function embeddedInfo(bytes) {
 }
 // macOS turns on Game Mode for a full-screen application in the games
 // category. The application properties are the loader's own, with the bundle's
-// executable name, a MacLauncher identifier and that category.
+// executable name, a MacLauncher identifier, that category and the text that
+// macOS shows when it asks for local network access for the bundle.
 const GAME_BUNDLE = "MacLauncher Game.app";
+const LOCAL_NETWORK_USE = "Windows games started by MacLauncher use the local network to find and join games, players and devices nearby.";
 // Views of an earlier layout are never reused; a new layout gets new paths.
 const VIEW_LAYOUT = 4;
 function gameBundleInfo(embedded) {
@@ -194,7 +196,8 @@ function gameBundleInfo(embedded) {
   let text = /^\s*<\?xml[\s\S]*<dict>[\s\S]*<\/dict>\s*<\/plist>\s*$/.test(embedded || "") ? embedded.trim() + "\n" :
     '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' +
     '<plist version="1.0">\n<dict>\n' + value("CFBundleName", "MacLauncher Game") + value("CFBundlePackageType", "APPL") + '</dict>\n</plist>\n';
-  for (const [key, setting] of [["CFBundleExecutable", "wine"], ["CFBundleIdentifier", "com.maclauncher.wine-game"], ["LSApplicationCategoryType", "public.app-category.games"]]) {
+  for (const [key, setting] of [["CFBundleExecutable", "wine"], ["CFBundleIdentifier", "com.maclauncher.wine-game"], ["LSApplicationCategoryType", "public.app-category.games"],
+    ["NSLocalNetworkUsageDescription", LOCAL_NETWORK_USE]]) {
     const pattern = new RegExp(`(<key>${key}</key>\\s*<string>)[^<]*(</string>)`);
     text = pattern.test(text) ? text.replace(pattern, `$1${setting}$2`) : text.replace(/<\/dict>\s*<\/plist>\s*$/, value(key, setting) + "</dict>\n</plist>\n");
   }

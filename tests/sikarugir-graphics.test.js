@@ -513,6 +513,8 @@ test("the game's Wine loader runs from a games-category bundle that keeps the lo
   assert.equal(value("LSApplicationCategoryType"), "public.app-category.games");
   assert.equal(value("CFBundleExecutable"), "wine");
   assert.equal(value("CFBundleIdentifier"), "com.maclauncher.wine-game");
+  assert.match(value("NSLocalNetworkUsageDescription"), /^Windows games started by MacLauncher use the local network/,
+    "the Local Network permission request names what asks and why");
   assert.equal(value("NSPrincipalClass"), "WineApplication", "the loader's own properties are kept");
   assert.equal(value("LSUIElement"), "1");
   // A loader without embedded properties gets a minimal games-category bundle.
