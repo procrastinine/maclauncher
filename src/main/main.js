@@ -2877,27 +2877,31 @@ async function launchHostedRuntimeChild(gameEntry, runtimeId, context) {
 async function runGameEntry(gameEntry, runtimeId, options = {}) {
   assertGameNotRemoving(gameEntry);
   prioritizeLibraryEntry(gameEntry);
-  // Explain unavailable files before preparation starts.
-  await assertGameFilesAvailable(gameEntry);
-  const hadLaunchNotices = gameLaunchNotices.delete(gameEntry.gamePath);
-  if ((graphicsLaunchWarnings.delete(gameEntry.gamePath) || hadLaunchNotices) && cachedState) {
-    cachedState = {...cachedState, recents: cachedState.recents.map(entry => {
-      if (entry.gamePath !== gameEntry.gamePath) return entry;
-      const {graphicsWarnings, launchNotices, ...rest} = entry;
-      return rest;
-    })};
-    broadcastState();
-  }
-  const graphicsRequested = ReShade.executionRequirements(gameEntry).needed.processor;
-  const previousGraphicsLaunchId = graphicsRequested
-    ? require("../modules/shared/reshade/launch-binding").read(gameEntry, {userDataDir})?.launchId : null;
-  pendingGameCompletions.delete(gameEntry.gamePath);
+  // Play shows the game as starting at once. The file check, which can wait
+  // on a slow or sleeping drive, and preparation follow.
   gamePreparations.set(gameEntry.gamePath, { phase: "check", label: "Starting game…" });
   broadcastActivity();
-  let result;
-  try { result = await backendService.launchEntry(gameEntry, {
-    ...options, runtimeId, settings: loadSettings()
-  }); } finally { gamePreparations.delete(gameEntry.gamePath); broadcastActivity(); }
+  let result, graphicsRequested, previousGraphicsLaunchId;
+  try {
+    // Explain unavailable files before preparation starts.
+    await assertGameFilesAvailable(gameEntry);
+    const hadLaunchNotices = gameLaunchNotices.delete(gameEntry.gamePath);
+    if ((graphicsLaunchWarnings.delete(gameEntry.gamePath) || hadLaunchNotices) && cachedState) {
+      cachedState = {...cachedState, recents: cachedState.recents.map(entry => {
+        if (entry.gamePath !== gameEntry.gamePath) return entry;
+        const {graphicsWarnings, launchNotices, ...rest} = entry;
+        return rest;
+      })};
+      broadcastState();
+    }
+    graphicsRequested = ReShade.executionRequirements(gameEntry).needed.processor;
+    previousGraphicsLaunchId = graphicsRequested
+      ? require("../modules/shared/reshade/launch-binding").read(gameEntry, {userDataDir})?.launchId : null;
+    pendingGameCompletions.delete(gameEntry.gamePath);
+    result = await backendService.launchEntry(gameEntry, {
+      ...options, runtimeId, settings: loadSettings()
+    });
+  } finally { gamePreparations.delete(gameEntry.gamePath); broadcastActivity(); }
   if (result.kind === "cancelled") return false;
   if (result.launchNotices?.length) gameLaunchNotices.set(gameEntry.gamePath, result.launchNotices);
   if (graphicsRequested) {
