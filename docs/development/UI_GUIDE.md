@@ -442,7 +442,7 @@ The live-variable editor changes the variables of a running game. Modules with l
 
 ### Cheats
 
-The Cheats modal adjusts the cheat values that a module defines for its games, and it is available only when the module declares `supports.cheats`. Its fields come from the module's cheat schema (numbers and toggles). Besides them, it has an enable toggle and a reset to defaults. Changes save automatically and apply at once if the game is running. When the module exposes the setting, a per-game option hides the in-game Tools button, and modules that define cheat patches add cheat add-on actions. The Tools button choice is saved and shown at once. When the Tools overlay is patched into the game's files, the patch is then updated for the new choice; if that update fails, the modal shows the error and the game's setting returns to the last choice whose patch succeeded.
+The Cheats modal adjusts the cheat values that a module defines for its games, and it is available only when the module declares `supports.cheats`. Its fields come from the module's cheat schema (numbers and toggles). Besides them, it has an enable toggle and a reset to defaults. Changes save automatically and apply at once if the game is running. When the module exposes the setting, a per-game option hides the in-game Tools button, and modules that define cheat patches add cheat add-on actions. The Tools button choice is saved and shown at once. When the Tools overlay is patched into the game's files, the patch is then updated for the new choice; if that update fails, the modal shows the error, and the game's setting and the modal's checkbox return to the last choice whose patch succeeded.
 
 ## Error handling
 
