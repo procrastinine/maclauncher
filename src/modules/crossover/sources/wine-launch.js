@@ -3,18 +3,17 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
-const GameData = require("../../shared/game-data");
 const Writable = require("../../shared/writable-input");
 const Environments = require("../../shared/runtime/wine-environment");
 const Rosetta = require("../../shared/runtime/rosetta");
 const { isAbortError } = require("../../shared/runtime/download-utils");
 const warnGraphics = require("../../shared/graphics-warning");
 const { systemVersionSync } = require("../../shared/runtime/bundled-native");
-const WindowsFiles = require("../runtime/launch");
 const Sources = require(".");
 const Detection = require("../detect");
 const DLSS = require("../dlss");
-const Finish = require("./launch-finish");
+const Steps = require("./launch-steps");
+const { safeText, dllOverrides } = Steps;
 const Translators = require("../../shared/runtime/wine-translators");
 const TranslatorFiles = require("../../shared/runtime/translator-files");
 
@@ -66,29 +65,6 @@ function supervisorArguments(command, serverPath, mode, args, environment = {}) 
   return ["-c", SUPERVISOR, "maclauncher-wine", command, serverPath, mode, ...libraries, ...args];
 }
 
-function runtimeDirectory(entry, context, source) {
-  if (!path.isAbsolute(context.userDataDir || "") || !/^[\w-]+$/.test(entry.gameId || "")) {
-    throw new Error(`${source.label} requires a saved game and launcher data directory.`);
-  }
-  return GameData.resolveGameRuntimeDir(context.userDataDir, entry.gameId, source.id);
-}
-function safeText(value, label) {
-  const text = String(value ?? "");
-  if (/[\0\r\n]/.test(text)) throw new Error(`${label} must not contain newlines or NUL bytes.`);
-  return text;
-}
-function dllOverrides(settings, graphicsOverrides = []) {
-  const values = [...(Array.isArray(graphicsOverrides) ? graphicsOverrides : []),
-    ...(Array.isArray(settings.dllOverrides) ? settings.dllOverrides : [])]
-    .map(value => safeText(value, "DLL overrides").trim()).filter(Boolean);
-  if (settings.bepInExWinhttp && !values.some(value => /^winhttp\s*=/i.test(value))) values.push("winhttp=n,b");
-  for (const value of values) {
-    if (!/^[\w.*,-]+=(?:n(?:ative)?|b(?:uiltin)?|[nb],\s*[nb]|[nb]\s*,\s*[nb]|)$/i.test(value)) {
-      throw new Error("DLL overrides must use Wine library=order syntax, such as winhttp=n,b.");
-    }
-  }
-  return values.join(";");
-}
 // `translatorEnvironment` holds the values of the chosen translators'
 // environments (shared/runtime/translator-environment-launch.js). They replace
 // the values that Runtime Settings set; locked names never reach them.
@@ -109,11 +85,7 @@ function buildEnvironment(settings, installation, directory, prefixPath, graphic
     environment.WINEMSYNC = synchronization === "msync" || synchronization === "auto" && capabilities.msync === true ? "1" : "0";
     environment.WINEESYNC = synchronization === "esync" ? "1" : "0";
   }
-  if (settings.locale) {
-    const locale = safeText(settings.locale, "Locale");
-    if (!/^[A-Za-z0-9_.@-]+$/.test(locale)) throw new Error("Locale must use a locale identifier, such as ja_JP.UTF-8.");
-    environment.LANG = locale; environment.LC_ALL = locale; environment.LC_MESSAGES = locale;
-  }
+  Object.assign(environment, Steps.localeEnvironment(settings));
   environment.WINEDEBUG = settings.wineDebug ? safeText(settings.wineDebug, "Wine debug channels") : existingEnvironment?.environment.WINEDEBUG || "-all";
   Object.assign(environment, translatorEnvironment);
   const dll = dllOverrides(settings, graphics.dllOverrides);
@@ -258,13 +230,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const manager = dependencies.manager || source.manager();
   const prepareGraphicsView = dependencies.prepareGraphicsView || require("./wine-graphics").prepareGraphicsView;
   const rosetta = dependencies.rosetta || Rosetta;
-  const existingEnvironment = await require("../../shared/runtime/wine-processes").prepareEnvironment(
-    Environments.readEnvironment(context.runtimeSettings?.environmentReference), context, context.processOptions);
-  if (existingEnvironment && existingEnvironment.kind !== source.environmentKind) throw new Error(source.environmentKind ? `Choose a ${source.labels.environmentName} for this runtime.` : `${source.label} runs games in MacLauncher's own Windows environments.`);
   const requestedSettings = context.runtimeSettings || {};
-  let settings = existingEnvironment ? require("../../shared/runtime/wine-settings").explicitSettings(requestedSettings) : requestedSettings;
-  context.wineEnvironment = existingEnvironment;
-  if (existingEnvironment?.running) { settings = { ...settings, synchronization: existingEnvironment.settings.synchronization, retina: Environments.INHERIT }; }
+  let { existingEnvironment, settings } = await Steps.existingEnvironment(context, source);
   const match = executableEvidence(entry, settings);
   if (!match) throw new Error("Windows executable must be a PE executable inside the game folder.");
   if (!["x86", "x86_64"].includes(match.executableArchitecture)) throw new Error(`${source.label} supports x86 and x64 Windows executables. Select a compatible Windows build.`);
@@ -285,19 +252,14 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   await context.flushRuntimeUses?.();
   if (selected.install.needsRosetta && !rosetta.isAvailable()) await rosetta.ensure(context);
   context.signal?.throwIfAborted();
-  const directory = runtimeDirectory(entry, context, source);
+  const directory = Steps.runtimeDirectory(entry, context, source);
   const GameView = require("../temporal/game-view");GameView.clearWatch(context);
   Writable.assertOwnDirectory(context.userDataDir, directory);
   if (!existingEnvironment) for (const name of ["home", "tmp", "prefixes", "runtime-view"]) Writable.assertOwnDirectory(directory, path.join(directory, name));
   const originalRoot = match.sourceRoot;
-  let gameRoot = originalRoot, executablePath = match.windowsExecutablePath, cameraView;
-  if (cameraBridge || scenePlan?.packageReady) {
-    const plans = [...(cameraBridge ? [{ kind: "camera", plan: cameraBridge }] : []), ...(scenePlan?.packageReady ? [{ kind: "scene", plan: scenePlan }] : [])];
-    const folder = await GameView.prepareLaunchFolder(entry, context, { runtimeId: source.id, label: source.label, directory, originalRoot,
-      executable: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture, plans });
-    ({ view: cameraView, gameRoot, executablePath } = folder);
-    if (!folder.ready.has("camera")) cameraBridge = null;
-  }
+  const folder = await Steps.launchFolder(entry, context, { source, directory, originalRoot,
+    executable: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture, cameraBridge, scenePlan });
+  let { view: cameraView, gameRoot, executablePath } = folder;cameraBridge = folder.cameraBridge;
   context.graphicsInputs = require("../graphics-inputs").inputs(selected.install, cameraBridge?.inputs, { fallback: "x86_64" });
   const nativeInputs = [selected.install.executablePath, selected.install.serverPath,
     ...(translatorPlan.layout.unixRoot ? ["ntdll.so", "wine"].map(name => path.join(translatorPlan.layout.unixRoot, name)).filter(file => fs.existsSync(file)) : [])]
@@ -321,7 +283,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   if (!existingEnvironment) {
     await ensurePrefix(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, prefixPath)), directory, { ...settings, windowsVersion: environmentVersion }, graphics, context,
       { source, run: dependencies.run, runtimeIdentity: JSON.stringify([selected.version, identity]) });
-    WindowsFiles.detachProfileAliases(prefixPath);
+    Steps.detachProfileAliases(prefixPath);
   }
   await TranslatorFiles.applyNativeLibraries(translatorView, prefixPath, { signal: context.signal });
   await graphics.applyPrefix?.();
@@ -339,9 +301,9 @@ async function prepareLaunch(entry, context, dependencies = {}) {
       else delete environment[key];
     }
   }
-  const steam = await Finish.steamBridge(entry, context, { install: selected.install, prefixPath, architecture: match.executableArchitecture, environment, executablePath });
+  const steam = await Steps.steamBridge(entry, context, { install: selected.install, prefixPath, architecture: match.executableArchitecture, environment, executablePath });
   const { bridge: steamBridge, launch: bridgeLaunch } = steam;({ environment, executablePath } = steam);
-  Object.assign(environment, await Finish.adapterDescription(environment, { translatorPlan, host, signal: context.signal }));
+  Object.assign(environment, await Steps.adapterDescription(environment, { translatorPlan, host, signal: context.signal }));
   const registryEnvironment = existingEnvironment;
   await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(executablePath),
     assertWritable: registryEnvironment ? () => Environments.assertWritableRegistry(registryEnvironment) : undefined }, args => {
@@ -350,16 +312,16 @@ async function prepareLaunch(entry, context, dependencies = {}) {
       ? require("../../shared/runtime/wine-processes").runTool(selected.install.executablePath, args, options)
       : runSupervised(selected.install.executablePath, selected.install.serverPath, args, options);
   });
-  const { workingDirectory, windowsExecutablePath, windowsWorkingDirectory } = Finish.gamePaths(entry, prefixPath,
+  const { workingDirectory, windowsExecutablePath, windowsWorkingDirectory } = Steps.gamePaths(entry, prefixPath,
     { originalRoot, gameRoot, executable: match.windowsExecutablePath, executablePath });
-  Object.assign(environment, Finish.shaderCache(directory, prefixPath));
+  Object.assign(environment, Steps.shaderCache(directory, prefixPath));
   let applicationArguments = [...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")), ...(context.gameArguments || [])];
   if (context.resolveRuntimeArguments) applicationArguments = await context.resolveRuntimeArguments({ arguments: applicationArguments,
     install: selected.install, executablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
     graphicsBackend: graphics.graphicsBackend });
   const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(bridgeLaunch?.arguments || []), ...applicationArguments]);
-  Finish.keepLaunchFolder(entry, context, { runtimeId: source.id, directory, view: cameraView });
-  Finish.recordRuntime(entry, context, { runtimeId: source.id, match, gameRoot, existingEnvironment, steamBridge, translatorPlan, requestedSettings,
+  Steps.keepLaunchFolder(entry, context, { runtimeId: source.id, directory, view: cameraView });
+  Steps.recordRuntime(entry, context, { runtimeId: source.id, match, gameRoot, existingEnvironment, steamBridge, translatorPlan, requestedSettings,
     install: selected.install, values: { installedVersion: selected.version, prefixPath, viewRoot, graphicsBackend: graphics.graphicsBackend,
       vulkanBackend: graphics.vulkanBackend, dlss: graphics.dlss?.enabled === true, componentVersions: graphics.componentVersions } });
   return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, windowsWorkingDirectory, graphics, environment, args, translatorPlan,
@@ -371,7 +333,7 @@ function forSource(sourceOrId) {
   const source = typeof sourceOrId === "string" ? Sources.get(sourceOrId) : sourceOrId;
   if (!source || source.invocation !== "wine") throw new Error("Choose a Wine source that runs its own Wine loader.");
   return { source, SUPERVISOR, supervisorArguments, safeText, dllOverrides, runSupervised, executableEvidence,
-    runtimeDirectory: (entry, context) => runtimeDirectory(entry, context, source),
+    runtimeDirectory: (entry, context) => Steps.runtimeDirectory(entry, context, source),
     buildEnvironment: (settings, installation, directory, prefixPath, graphics, options = {}) => buildEnvironment(settings, installation, directory, prefixPath, graphics, { ...options, source }),
     prefixRuntime: (installation, directory) => prefixRuntime(installation, directory, source),
     ensurePrefix: (installation, ownedEnvironment, directory, settings, graphics, context, options = {}) => ensurePrefix(installation, ownedEnvironment, directory, settings, graphics, context, { ...options, source }),

@@ -87,7 +87,7 @@ async function runWindowsTool(manager, entry, context, { moduleId, install, args
       await launch.ensurePrefix(host.install, prefix, directory, settings, runtime, context, { run });
       env = launch.buildEnvironment(settings, host.install, directory, prefix, runtime, { baseEnvironment: basicEnvironment() }).environment;
     }
-    CrossLaunch.detachProfileAliases(prefix);
+    require("../../crossover/sources/launch-steps").detachProfileAliases(prefix);
     let script;
     try {
       let parameters = [windowsPath(install.executablePath), ...args];

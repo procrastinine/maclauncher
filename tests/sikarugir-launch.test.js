@@ -615,7 +615,7 @@ test("profile cleanup rejects an aliased users root before modifying outside dir
   fs.mkdirSync(path.join(prefix, "drive_c"), { recursive: true }); fs.mkdirSync(path.join(outside, "player"), { recursive: true });
   fs.symlinkSync(os.tmpdir(), path.join(outside, "player", "Documents"));
   fs.symlinkSync(outside, path.join(prefix, "drive_c", "users"));
-  assert.throws(() => WindowsFiles.detachProfileAliases(prefix), /must not be aliases/);
+  assert.throws(() => require("../src/modules/crossover/sources/launch-steps").detachProfileAliases(prefix), /must not be aliases/);
   assert.equal(fs.lstatSync(path.join(outside, "player", "Documents")).isSymbolicLink(), true);
 });
 

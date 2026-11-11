@@ -11,6 +11,7 @@ const Detection = require("../src/modules/crossover/detect");
 const Module = require("../src/modules/crossover/main");
 const Manager = require("../src/modules/crossover/runtime/manager");
 const Launch = require("../src/modules/crossover/runtime/launch");
+const Steps = require("../src/modules/crossover/sources/launch-steps");
 const Sikarugir = require("./helpers/wine-source.cjs").provider("sikarugir");
 
 function fixture(t) {
@@ -533,12 +534,12 @@ test("CrossOver environment settings are launch-scoped, quoted as data and keep 
   assert.equal(launch.overrides.LANG, "ja_JP.UTF-8");
   assert.equal(launch.overrides.DXMT_CONFIG, "d3d11.preferredMaxFrameRate=60");
   assert.match(Launch.wineEnvironmentString(launch.overrides), /'CUSTOM_TITLE=it'"'"'s a game; \$\(echo nope\)'/);
-  assert.equal(Launch.dllOverrides({}), "");
-  assert.equal(Launch.dllOverrides({ dllOverrides: ["winhttp=b"], bepInExWinhttp: true }), "winhttp=b");
-  assert.equal(Launch.dllOverrides({ dllOverrides: ["winhttp,wininet=b"], bepInExWinhttp: true }), "winhttp,wininet=b");
-  assert.equal(Launch.dllOverrides({ dllOverrides: ["WINHTTP.dll=b"], bepInExWinhttp: true }), "WINHTTP.dll=b");
-  assert.equal(Launch.dllOverrides({ dllOverrides: ["*=b"], bepInExWinhttp: true }), "*=b");
-  assert.throws(() => Launch.dllOverrides({ dllOverrides: ["winhttp=n;anything"] }), /library=order/);
+  assert.equal(Steps.dllOverrides({}), "");
+  assert.equal(Steps.dllOverrides({ dllOverrides: ["winhttp=b"], bepInExWinhttp: true }), "winhttp=b");
+  assert.equal(Steps.dllOverrides({ dllOverrides: ["winhttp,wininet=b"], bepInExWinhttp: true }), "winhttp,wininet=b");
+  assert.equal(Steps.dllOverrides({ dllOverrides: ["WINHTTP.dll=b"], bepInExWinhttp: true }), "WINHTTP.dll=b");
+  assert.equal(Steps.dllOverrides({ dllOverrides: ["*=b"], bepInExWinhttp: true }), "*=b");
+  assert.throws(() => Steps.dllOverrides({ dllOverrides: ["winhttp=n;anything"] }), /library=order/);
 });
 
 test("CrossOver preserves a missing explicit application selection until it is restored or changed", t => {
