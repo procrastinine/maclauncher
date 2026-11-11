@@ -81,7 +81,7 @@ test("a guest-supplied process ID cannot replace the authenticated peer", async 
   const reply = await exchange(broker.socket, { capability: broker.capability, pid: 1234, operation: "accounts" });
   assert.equal(reply.error.code, 9);
 });
-test("official microG artifacts match manifest, published digest and signer", { skip: !process.env.MACLAUNCHER_MICROG_TEST_PACKAGES }, () => {
+test("official microG artifacts match manifest, published digest and signer", { skip: !process.env.MACLAUNCHER_MICROG_TEST_PACKAGES && 'Requires the downloaded official microG packages named by MACLAUNCHER_MICROG_TEST_PACKAGES' }, () => {
   const { verifyPublishedApk } = require("../src/modules/android/google/apk-identity");
   for (const pin of Packages.catalog.legacy.packages) {
     const identity = verifyPublishedApk(path.join(process.env.MACLAUNCHER_MICROG_TEST_PACKAGES, pin.filename), { ...pin, signers: Packages.catalog.signers });

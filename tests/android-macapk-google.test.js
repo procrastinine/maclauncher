@@ -23,7 +23,7 @@ test("Mac.apk Google access defaults off without preparing accounts or packages"
   assert.equal(await Google.prepareLaunch({ entry: {}, context: { userDataDir: root, runtimeSettings: {} }, policy: { networkAllowed: true } }), null);
   assert.deepEqual(fs.readdirSync(root), []);
 });
-test("Original Mac.apk account store remains private and offline; app token peeks do not expose its shared cache", { skip: !app }, t => {
+test("Original Mac.apk account store remains private and offline; app token peeks do not expose its shared cache", { skip: !app && 'Requires the built Mac.apk app named by MACAPK_TEST_APP' }, t => {
   const root = directory(t), gms = path.join(root, "gms"), store = path.join(gms, "gms_state.properties"); fs.mkdirSync(gms, { mode: 0o700 });
   fs.writeFileSync(store, "account.fixture@example.invalid.masterToken=fixture-not-a-credential\ncheckin.androidId=123\ntoken.fixture@example.invalid.oauth2:test.value=another-app-cache\n", { mode: 0o600 });
   const reply = control(root, { operation: "accounts" });
@@ -36,7 +36,7 @@ test("Original Mac.apk account store remains private and offline; app token peek
   const remaining = fs.readFileSync(store, "utf8"); assert.ok(!remaining.includes("fixture-not-a-credential")); assert.match(remaining, /checkin\.androidId=123/);
   assert.equal(fs.statSync(store).mode & 0o777, 0o600);
 });
-test("Browser registration uses the original Mac.apk public account API without a sign-in window or token output", { skip: !app }, t => {
+test("Browser registration uses the original Mac.apk public account API without a sign-in window or token output", { skip: !app && 'Requires the built Mac.apk app named by MACAPK_TEST_APP' }, t => {
   const root = directory(t), email = "browser@example.invalid", aasToken = "fixture-browser-token";
   assert.deepEqual(control(root, { operation: "register", account: email, aasToken, networkAllowed: false }), { ok: true, completed: true });
   assert.deepEqual(control(root, { operation: "accounts" }), { ok: true, accounts: [{ name: email, type: "com.google" }] });
@@ -58,7 +58,7 @@ test("Mac.apk browser import passes credentials only through the trusted request
   assert.doesNotMatch(JSON.stringify(result), /token|aasToken|email/);
   await assert.rejects(Google.importBrowserSession(context, { ...session, aasToken: "invalid token" }), { code: "AUTHORIZATION_FAILED" });
 });
-test("Publisher APK verifier binds real package and SHA1 identity and rejects changed signed content", { skip: !app || !apk }, t => {
+test("Publisher APK verifier binds real package and SHA1 identity and rejects changed signed content", { skip: (!app || !apk) && 'Requires the built Mac.apk app and a publisher APK named by MACAPK_TEST_APP and MACAPK_TEST_APK' }, t => {
   const root = directory(t), verified = control(root, { operation: "verify", apks: [apk] }, { verifier: true });
   assert.equal(verified.ok, true); assert.ok(verified.packageName); assert.ok(verified.signers.length);
   assert.ok(verified.signers.every(value => /^[a-f0-9]{64}$/.test(value.sha256) && /^[a-f0-9]{40}$/.test(value.sha1)));

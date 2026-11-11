@@ -31,7 +31,7 @@ test("Android argument transport retains literal arrays and never inherits anoth
 
 const jdk=process.env.MACLAUNCHER_POLICY_JDK||"/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home";
 const app=process.env.MACAPK_TEST_APP;
-test("JVM and Mac.apk initial Intent bindings receive exact JSON before application startup", {skip:!app||!fs.existsSync(path.join(jdk,"bin/javac")),timeout:20000}, async t=>{
+test("JVM and Mac.apk initial Intent bindings receive exact JSON before application startup", {skip:(!app||!fs.existsSync(path.join(jdk,"bin/javac")))&&"Requires the built Mac.apk app (MACAPK_TEST_APP) and a JDK 21 (MACLAUNCHER_POLICY_JDK or Temurin 21)",timeout:20000}, async t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),"android-arguments-bindings-"));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const lib=path.join(app,"Contents/lib"),framework=path.join(lib,"android-framework.jar"),loader=path.join(lib,"macapk-loader.jar"),classes=path.join(root,"classes");
   const sources={

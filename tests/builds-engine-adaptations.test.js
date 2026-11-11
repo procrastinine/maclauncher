@@ -6,9 +6,10 @@ const os = require("node:os");
 const { pathToFileURL } = require("node:url");
 const Bundled = require("../src/modules/shared/runtime/bundled-native");
 // The package producer and packer belong to the separate MacLauncher Builds project.
-const buildsStage = path.resolve(__dirname, "../../maclauncher-builds/producers/engine-adaptations/stage.mjs");
-const buildsPackage = path.resolve(__dirname, "../../maclauncher-builds/tools/runtime-package.mjs");
-const skip = [buildsStage, buildsPackage].every(file => fs.existsSync(file)) ? false : "Optional Builds integration; needs a maclauncher-builds checkout beside this repository.";
+const builds = require("./helpers/builds-checkout.cjs").buildsCheckout("producers/engine-adaptations/stage.mjs", "tools/runtime-package.mjs");
+const buildsStage = path.join(builds.root, "producers/engine-adaptations/stage.mjs");
+const buildsPackage = path.join(builds.root, "tools/runtime-package.mjs");
+const skip = builds.skip;
 
 for (const [id, modulePath, entry] of [
   ["vnds-love", "../src/modules/vnds/runtime/manager", "engine/main.lua"]

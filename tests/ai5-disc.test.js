@@ -2,8 +2,10 @@ const test = require("node:test"), assert = require("node:assert/strict"), fs = 
 const Disc = require("../src/modules/ai5/disc"), Inspect = require("../src/modules/ai5/inspect");
 const { archiveFixture } = require("./helpers/ai5-fixture"), { isoFixture } = require("./helpers/iso-fixture");
 // The native stream header belongs to the separate MacLauncher Builds project.
-const buildsHeader = path.resolve(__dirname, "../../maclauncher-builds/producers/maclauncher/src/modules/ai5/runtime/macos-disc.h");
-const buildsSkip = fs.existsSync(buildsHeader) ? false : "Optional Builds integration; needs a maclauncher-builds checkout beside this repository.";
+const { buildsCheckout } = require("./helpers/builds-checkout.cjs");
+const builds = buildsCheckout("producers/package-support/src/modules/ai5/runtime/macos-disc.h");
+const buildsHeader = path.join(builds.root, "producers/package-support/src/modules/ai5/runtime/macos-disc.h");
+const buildsSkip = builds.skip;
 
 function temporary(t) { const root = fs.mkdtempSync(path.join(os.tmpdir(), "ai5-disc-")); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; }
 function create(root, fixture) { const file = path.join(root, "GAME.bin"); fs.writeFileSync(file, fixture.bytes); return file; }

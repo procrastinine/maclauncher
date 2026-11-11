@@ -3,7 +3,7 @@ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {spawnSync}=require('node:child_process');
 
 test('Canvas composition preserves both native source origins and horizontal placement on Metal',{
-  skip:process.platform!=='darwin'||process.env.KLEPTON_GRAPHICS_RUN!=='1',timeout:45000
+  skip:(process.platform!=='darwin'||process.env.KLEPTON_GRAPHICS_RUN!=='1')&&'Requires macOS and KLEPTON_GRAPHICS_RUN=1 for a Metal graphics run',timeout:45000
 },t=>{
   const jdk=process.env.JAVA_HOME||spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout?.trim();
   if(!jdk||!fs.existsSync(path.join(jdk,'bin/javac')))return t.skip('Requires Java21 and clang');

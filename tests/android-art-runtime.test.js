@@ -235,7 +235,7 @@ test('ART Rust projection preserves the resolved original lock and unchanged sou
  assert.equal(fs.statSync(source,{bigint:true}).mtimeNs,before);assert.equal(fs.readFileSync(path.join(output,'Cargo.lock'),'utf8'),'resolved original v1 plus owned crate\n');
  fs.writeFileSync(path.join(aim,'Cargo.lock'),'upstream v2\n');prepareHostSource({aim,output});assert.equal(fs.readFileSync(path.join(output,'Cargo.lock'),'utf8'),'upstream v2\n');
 });
-test('ART pinned overlay includes its complete RGBX sources inside another Git checkout',{skip:!process.env.ANDROID_AIM_SOURCE||!process.env.KLEPTON_SOURCE},async t=>{
+test('ART pinned overlay includes its complete RGBX sources inside another Git checkout',{skip:(!process.env.ANDROID_AIM_SOURCE||!process.env.KLEPTON_SOURCE)&&'Requires the pinned AIM and Klepton sources named by ANDROID_AIM_SOURCE and KLEPTON_SOURCE'},async t=>{
  const root=fixture(t),{execFileSync}=require('node:child_process');
  execFileSync('git',['init','--quiet',root]);
  const {prepareAimSource}=await import('../src/modules/android/art/source.mjs');

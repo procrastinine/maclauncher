@@ -5,7 +5,7 @@ const os=require('node:os');
 const path=require('node:path');
 const {execFileSync}=require('node:child_process');
 
-test('original alarm JNI shares timer delivery and descriptor lifetime',{skip:!process.env.KLEPTON_NATIVE_RUNTIME||!process.env.ANDROID_ALARM_LIBRARY},t=>{
+test('original alarm JNI shares timer delivery and descriptor lifetime',{skip:(!process.env.KLEPTON_NATIVE_RUNTIME||!process.env.ANDROID_ALARM_LIBRARY)&&'Requires a built Android runtime (KLEPTON_NATIVE_RUNTIME) and the original alarm JNI library (ANDROID_ALARM_LIBRARY)'},t=>{
   const runtime=path.resolve(process.env.KLEPTON_NATIVE_RUNTIME),source=path.resolve(process.env.ANDROID_ALARM_LIBRARY);
   const temp=fs.mkdtempSync(path.join(os.tmpdir(),'android-alarm-'));t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));
   const library=path.join(temp,'libalarm_jni.dylib');fs.copyFileSync(source,library);

@@ -9,7 +9,7 @@ const {pathToFileURL}=require('node:url');
 
 const configured=process.env.ANDROID_ART_FRAMEWORK_JAR&&process.env.ANDROID_ART_HOOKS_JAR&&process.env.ANDROID_DEX_TOOLS;
 test('ART DEX platform delegation preserves complete original APIs, bodies, hidden API flags and resources',
- {skip:!configured,timeout:90000},async t=>{
+ {skip:!configured&&'Requires ANDROID_ART_FRAMEWORK_JAR, ANDROID_ART_HOOKS_JAR and ANDROID_DEX_TOOLS',timeout:90000},async t=>{
  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'android-dex-bodies-'));
  try{
   const root=path.resolve(__dirname,'..'),tools=path.resolve(process.env.ANDROID_DEX_TOOLS);
@@ -56,7 +56,7 @@ test('ART DEX platform delegation preserves complete original APIs, bodies, hidd
 
 
 test('ART original PendingIntent destinations use the same complete JVM call binding',
- {skip:!process.env.ANDROID_ART_SERVICES_JAR||!configured,timeout:90000},async()=>{
+ {skip:(!process.env.ANDROID_ART_SERVICES_JAR||!configured)&&'Requires ANDROID_ART_SERVICES_JAR, ANDROID_ART_FRAMEWORK_JAR, ANDROID_ART_HOOKS_JAR and ANDROID_DEX_TOOLS',timeout:90000},async()=>{
  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'android-pending-dex-'));
  try{
   const tools=path.resolve(process.env.ANDROID_DEX_TOOLS),jdk=process.env.JAVA_HOME||execFileSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).trim();

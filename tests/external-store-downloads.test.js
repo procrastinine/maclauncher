@@ -209,7 +209,7 @@ function freshModule() {
   delete require.cache[require.resolve("../src/core/external-store-downloads")];
   return require("../src/core/external-store-downloads");
 }
-test("Legendary follows PyPI's newest release, resolves its own requirements to compatible wheels and keeps working offline", { skip: !PYTHON }, async t => {
+test("Legendary follows PyPI's newest release, resolves its own requirements to compatible wheels and keeps working offline", { skip: !PYTHON && 'Requires the embedded Python in src/resources/python (npm run test:setup)' }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "legendary-pypi-test-")), wheels = path.join(root, "wheels"); fs.mkdirSync(wheels);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const userDataDir = path.join(root, "profile"), pkg = name => ({ [`${name}/__init__.py`]: "" });

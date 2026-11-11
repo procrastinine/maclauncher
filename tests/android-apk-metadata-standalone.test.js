@@ -11,7 +11,7 @@ const helper = process.env.ANDROID_APK_METADATA_HELPER || (() => {
 })();
 const enabled = process.platform === 'darwin' && helper && fs.existsSync(helper);
 
-test('standalone APK metadata resolves localized adaptive icons and split resources without Java', { skip: !enabled }, t => {
+test('standalone APK metadata resolves localized adaptive icons and split resources without Java', { skip: !enabled && 'Requires macOS and the built APK metadata helper (ANDROID_APK_METADATA_HELPER or the installed apk-metadata tool)' }, t => {
   if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const fixture=require('./helpers/android-fixture-tools.cjs').metadataApk(t);
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'maclauncher-apk-metadata-')));
@@ -71,7 +71,7 @@ test('standalone APK metadata resolves localized adaptive icons and split resour
   assert.match(bad.child.stderr, /1 to 1024/);
 });
 
-test('adaptive icon viewport fills its intended bounds while legacy vectors keep their scale', { skip: !enabled }, t => {
+test('adaptive icon viewport fills its intended bounds while legacy vectors keep their scale', { skip: !enabled && 'Requires macOS and the built APK metadata helper (ANDROID_APK_METADATA_HELPER or the installed apk-metadata tool)' }, t => {
   if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const fixture=require('./helpers/android-fixture-tools.cjs').metadataApk(t);
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android-icon-viewport-')));

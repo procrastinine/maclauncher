@@ -49,7 +49,7 @@ test('AIM keeper bounds command output and command duration',async()=>{
 
 const keeper=process.env.ANDROID_AIM_CONTROLLER;
 test('native AIM controller installs base and split APKs with one original PackageInstaller session and preserves its inputs',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
+  {skip:(process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper))&&'Requires macOS on Apple Silicon and the built AIM controller named by ANDROID_AIM_CONTROLLER'},async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-package-'));
   try {
     const runtime=path.join(root,'runtime'),ctl=path.join(runtime,'bin/aimctl'),log=path.join(root,'commands.jsonl'),data=path.join(root,'android');
@@ -114,7 +114,7 @@ test('Android provider isolation retains selected graphics injection and exact f
 });
 
 test('native AIM controller preserves stdout failures and identifies the failed Android tool',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
+  {skip:(process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper))&&'Requires macOS on Apple Silicon and the built AIM controller named by ANDROID_AIM_CONTROLLER'},async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-error-'));
   try {
     const runtime=path.join(root,'runtime'),ctl=path.join(runtime,'bin/aimctl'),profile=path.join(root,'profile');
@@ -126,7 +126,7 @@ test('native AIM controller preserves stdout failures and identifies the failed 
 });
 
 test('native AIM controller waits for the original user unlock state before settings, installation or Activity start',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
+  {skip:(process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper))&&'Requires macOS on Apple Silicon and the built AIM controller named by ANDROID_AIM_CONTROLLER'},async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-unlock-'));
   try {
     const runtime=path.join(root,'runtime'),ctl=path.join(runtime,'bin/aimctl'),profile=path.join(root,'profile');
@@ -167,7 +167,7 @@ else if(a.includes('get-started-user-state')){
 });
 
 test('native AIM controller refuses app startup after a credential unlock refusal or user-state Binder error',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
+  {skip:(process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper))&&'Requires macOS on Apple Silicon and the built AIM controller named by ANDROID_AIM_CONTROLLER'},async()=>{
   for(const scenario of ['credential','binder']){
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-locked-'));
     try{
@@ -194,7 +194,7 @@ else{console.error('application work before user unlock');process.exitCode=3;}
 });
 
 test('native AIM controller resolves an ambiguous original unlock refusal using the actual subsequent user state',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
+  {skip:(process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper))&&'Requires macOS on Apple Silicon and the built AIM controller named by ANDROID_AIM_CONTROLLER'},async()=>{
   for(const stateAfterRefusal of ['RUNNING_UNLOCKED','RUNNING_UNLOCKING','BOOTING','binder-error','unexpected-stderr']){
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-unlock-race-'));
     try{
@@ -239,7 +239,7 @@ else if(a.includes('get-started-user-state')){
 });
 
 test('native AIM controller preserves pending activity waits and ordinary Close with original resident shutdown results',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
+  {skip:(process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper))&&'Requires macOS on Apple Silicon and the built AIM controller named by ANDROID_AIM_CONTROLLER'},async()=>{
   for(const activity of ['.Main',''])for(const pending of [false,true])for(const residentExit of [0,7]){
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-close-'));
     try{
@@ -285,7 +285,7 @@ else console.log(a.includes('start')||a[2]==='open'?${JSON.stringify(pending?'St
 });
 
 test('native AIM controller rejects an unsuccessful original ActivityManager wait result even when the command exits zero',
-  {skip:process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper)},async()=>{
+  {skip:(process.platform!=='darwin'||process.arch!=='arm64'||!keeper||!fs.existsSync(keeper))&&'Requires macOS on Apple Silicon and the built AIM controller named by ANDROID_AIM_CONTROLLER'},async()=>{
   for(const response of [
     {out:'Status: timeout\nComplete\n',error:'',expected:/activity did not finish starting[\s\S]*Status: timeout/},
     {out:'Status: timeout\nWaitTime: -1\nComplete\n',error:'',expected:/activity did not finish starting[\s\S]*WaitTime: -1/},

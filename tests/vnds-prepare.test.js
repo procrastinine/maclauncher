@@ -6,9 +6,10 @@ const Preparation = require("../src/modules/vnds/prepare");
 const Runtime = require("../src/modules/vnds/runtime/manager");
 const sha256 = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 // The package producer and packer belong to the separate MacLauncher Builds project.
-const buildsStage = path.resolve(__dirname, "../../maclauncher-builds/producers/engine-adaptations/stage.mjs");
-const buildsPackage = path.resolve(__dirname, "../../maclauncher-builds/tools/runtime-package.mjs");
-const skip = [buildsStage, buildsPackage].every(file => fs.existsSync(file)) ? false : "Optional Builds integration; needs a maclauncher-builds checkout beside this repository.";
+const builds = require("./helpers/builds-checkout.cjs").buildsCheckout("producers/engine-adaptations/stage.mjs", "tools/runtime-package.mjs");
+const buildsStage = path.join(builds.root, "producers/engine-adaptations/stage.mjs");
+const buildsPackage = path.join(builds.root, "tools/runtime-package.mjs");
+const skip = builds.skip;
 function inventory(root) {
   return fs.readdirSync(root, { withFileTypes: true }).flatMap(item => {
     const file = path.join(root, item.name);
