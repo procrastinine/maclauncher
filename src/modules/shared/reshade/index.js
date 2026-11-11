@@ -172,8 +172,9 @@ async function prepareLegacy(entry, { userDataDir, app, signal, runtimeId, logge
     const launchId = crypto.randomUUID();
     require("./launch-files").pruneEarlierLaunches(directory);
     if (diagnostics || gpuTiming || trace) require("./diagnostic-retention").pruneDiagnostics(directory);
-    // Processed screenshots use the frame capture channel in its final-image
-    // mode, which never attaches processing by itself. Diagnostic capture keeps
+    // Screenshots use the frame capture channel in its final-image mode. It
+    // attaches to the presented frame only while a request is pending, so a
+    // dormant launch captures the game's own frame. Diagnostic capture keeps
     // its own pairs. Nothing from an earlier launch stays staged.
     const screenshotCapture = Boolean(launcherSettings?.launcher?.graphicsShortcuts?.screenshot) && !(diagnostics && capture) && screenshotSupport(root) ? captureEnvironment(directory, true) : null;
     if (screenshotCapture) require("./screenshots").cleanup(screenshotCapture.RESHADE_CAPTURE_PREFIX);

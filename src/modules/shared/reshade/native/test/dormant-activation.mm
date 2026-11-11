@@ -77,6 +77,9 @@ int main(int argc,char **argv){@autoreleasepool {
     setenv("RESHADE_CONTROL_FILE",controls.c_str(),1);setenv("RESHADE_LIVE_EFFECTS",directory,1);setenv("RESHADE_EFFECT_KEY",std::string(64,'0').c_str(),1);
     setenv("RESHADE_EFFECT_PLAN",selected.c_str(),1);setenv("RESHADE_WINDOW_STATE",state.c_str(),1);setenv("RESHADE_LAYER_SURFACE","1",1);setenv("RESHADE_LOG",log.c_str(),1);
     setenv("RESHADE_EFFECT","/stale-launch-selection.fx",1);setenv("RESHADE_PREPARED_EFFECT",missing.c_str(),1);
+    // The screenshot channel of a live launch: final-image mode, no request yet.
+    const auto capture=std::string(directory)+"/frame-capture",trigger=std::string(directory)+"/frame-capture.request";
+    setenv("RESHADE_CAPTURE_PREFIX",capture.c_str(),1);setenv("RESHADE_CAPTURE_TRIGGER",trigger.c_str(),1);setenv("RESHADE_CAPTURE_FINAL","1",1);
     for(const char *name:{"RESHADE_EXPLICIT_HOST","RESHADE_TRACE","RESHADE_DIAGNOSTICS","RESHADE_GPU_TIMING","RESHADE_RENDER_SOURCE_CONTROL","RESHADE_RENDER_HEIGHT","RESHADE_RENDER_MAX_HEIGHT","RESHADE_RENDER_MULTIPLIER","RESHADE_RENDER_AUTO"})unsetenv(name);
     const auto source=std::string(directory)+"/source-control-dormant-test.json",status=std::string(directory)+"/source-status-dormant-test.json";
     const char command[]="{\"schema\":1,\"launchId\":\"dormant-test\",\"epoch\":1,\"revision\":\"d769e0da94ae6d2614d5b6e22e9740c0f1180c467dd18a5bf3643e0d6a1c9a52\",\"control\":\"virtual\",\"source\":null}";
@@ -130,9 +133,11 @@ int main(int argc,char **argv){@autoreleasepool {
     packet.spatial=0;write(controls,&packet,sizeof(packet));plan(selected,"advanced");std::this_thread::sleep_for(std::chrono::milliseconds(110));
     const auto queries=deviceQueries.load(),writes=framebufferWrites.load(),before=drawables.load();const auto size=layer.drawableSize;const auto framebuffer=layer.framebufferOnly;
     contents.contents=(__bridge id)image;
-    assert([layer nextDrawable]==nil&&drawables==before+1&&deviceQueries==queries&&queues==1&&framebufferWrites==writes);
-    assert(contents.contents==(__bridge id)image&&layer.framebufferOnly==framebuffer&&CGSizeEqualToSize(layer.drawableSize,size));
-    std::puts("Off again: unchanged original publisher state, no additional fake-device/queue/framebuffer work; no owned output was created");
+    // Off returns a layer that On made readable to the game's own framebufferOnly, once.
+    assert([layer nextDrawable]==nil&&drawables==before+1&&deviceQueries==queries&&queues==1&&framebufferWrites==writes+(framebuffer?0:1));
+    assert(contents.contents==(__bridge id)image&&layer.framebufferOnly&&CGSizeEqualToSize(layer.drawableSize,size));
+    assert([layer nextDrawable]==nil&&framebufferWrites==writes+(framebuffer?0:1)&&layer.framebufferOnly);
+    std::puts("Off again: the game's framebufferOnly restored once, original publisher state, no additional fake-device/queue work; no owned output was created");
     if(installedHooks){
         completedHandlers=0;scheduledHandlers=0;handlerCalls=0;
         expectUnwrapped=true;
@@ -149,6 +154,19 @@ int main(int argc,char **argv){@autoreleasepool {
         [(id<MTLCommandBuffer>)fakeBuffer addScheduledHandler:expectedHandler];assert(completedHandlers==0);
         std::puts("installed Off hooks: no extra retirement handler; explicit registration stays active and unregister restores inert forwarding");
     }
-    CGImageRelease(image);unlink(controls.c_str());unlink(selected.c_str());unlink(state.c_str());unlink(log.c_str());unlink(source.c_str());unlink(status.c_str());rmdir(directory);
+    {
+        // Last, since the request stays pending without a published image: a
+        // screenshot request is presentation demand while it is pending: the
+        // dormant layer asks for a readable drawable so its own frame can be
+        // captured. The library's watcher consumes the request file.
+        fetchSupported=false;layer.framebufferOnly=YES;
+        const auto requestWrites=framebufferWrites.load(),requestDrawables=drawables.load();
+        {std::ofstream request(trigger);request<<"capture";}
+        for(unsigned attempt=0;attempt<200&&access(trigger.c_str(),F_OK)==0;++attempt)std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        assert(access(trigger.c_str(),F_OK)!=0);
+        assert([layer nextDrawable]==nil&&drawables==requestDrawables+1&&!layer.framebufferOnly&&framebufferWrites==requestWrites+1);
+        std::puts("dormant screenshot request: the watcher runs while hooks are dormant and a pending request asks for a readable drawable");
+    }
+    CGImageRelease(image);unlink(controls.c_str());unlink(selected.c_str());unlink(state.c_str());unlink(log.c_str());unlink(source.c_str());unlink(status.c_str());unlink(trigger.c_str());rmdir(directory);
     // The library installs process-lifetime hooks; keep it loaded until exit.
 }}

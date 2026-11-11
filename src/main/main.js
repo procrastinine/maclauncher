@@ -4468,7 +4468,8 @@ function setGameEffects(gamePath, value, request = {}) {
 }
 // User-assigned graphics shortcuts. Bypass toggles the same master switch as
 // the Graphics checkbox; a screenshot asks the running game's frame capture
-// for its final processed image and moves it into the screenshot folder.
+// for its final image, processed or, with no processing attached, the game's
+// own frame, and moves it into the screenshot folder.
 const GraphicsShortcuts = require("./graphics-shortcuts");
 async function shortcutGame() {
   const running = [...runningGameSessions.entries()].flatMap(([gamePath, runs]) => [...runs.values()].map(run => ({gamePath, pid: run.pid})));
@@ -4503,7 +4504,7 @@ graphicsShortcuts.handle("screenshot", async () => {
     Screenshots.request(channel.trigger);
     if (!await Screenshots.wait(channel.prefix, requestedAt)) {
       Screenshots.cleanup(channel.prefix);
-      logger.warn("[graphics] No processed frame was captured for the screenshot. Graphics processing must be on.");
+      logger.warn("[graphics] No frame was captured for the screenshot. The game presented no frame that its graphics connection could read.");
       return;
     }
     logger.info("[graphics] Screenshot saved:", Screenshots.save({prefix: channel.prefix, title: entry.name, settings: loadSettings().launcher}));

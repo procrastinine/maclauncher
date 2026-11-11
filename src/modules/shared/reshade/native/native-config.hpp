@@ -28,7 +28,8 @@ struct LegacyGraphicsConfig {
 };
 // Diagnostic frame capture: a fixed frame number, or one capture per trigger file.
 // finalOnly (RESHADE_CAPTURE_FINAL=1) is the screenshot mode: only the final
-// processed image is written, and capture never attaches processing by itself.
+// image is written. It attaches to the presented frame only while a requested
+// screenshot is pending; without processing that frame is the game's own image.
 struct CaptureConfig {
     std::string prefix;std::optional<std::string> trigger;uint64_t frame=120;bool finalOnly=false;
     bool configured() const noexcept {return !prefix.empty();}

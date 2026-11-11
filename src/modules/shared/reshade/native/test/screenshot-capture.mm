@@ -121,10 +121,15 @@ int main(int argc,char**argv){@autoreleasepool{try{
         auto source=texture(device,format);auto buffer=commands(device);buffer.retainedReferences=retaining;const auto before=conversions,beforeReadbacks=readbacks;
         check(!macfx::FrameCapture::begin((id<MTLCommandBuffer>)buffer,source,1,false,&color),"Idle capture unexpectedly admitted");
         check(conversions==before,"Idle capture ran color conversion");
-        request(trigger);auto capture=macfx::FrameCapture::begin((id<MTLCommandBuffer>)buffer,source,2,false,&color);
+        // A screenshot channel is presentation demand only while a request is
+        // pending, so dormant hooks present and capture the game's own frame.
+        check(macfx::FrameCapture::requested()==pair,"An idle screenshot channel is presentation demand");
+        request(trigger);check(macfx::FrameCapture::requested(),"A pending screenshot request is not presentation demand");
+        auto capture=macfx::FrameCapture::begin((id<MTLCommandBuffer>)buffer,source,2,false,&color);
         check(bool(capture),"Non-8-bit source capture was rejected");
         capture->finish((id<MTLCommandBuffer>)buffer,source);capture->finish((id<MTLCommandBuffer>)buffer,source);
         [buffer complete];dispatch_sync(macfx::captureWriterQueue(),^{});image(prefix+"-after.rgba",hdr);
+        check(macfx::FrameCapture::requested()==pair,"A published screenshot kept presentation demand");
         if(pair)image(prefix+"-before.rgba",hdr);else check(!std::filesystem::exists(prefix+"-before.rgba"),"Final capture wrote a diagnostic source");
         check(readbacks-beforeReadbacks==(pair?2:1),"Capture read back the wrong number of images");
         // HDR output is always encoded once to BT.2020 PQ; 8-bit SDR output is read directly.
@@ -159,6 +164,7 @@ int main(int argc,char**argv){@autoreleasepool{try{
     request(trigger);failConversion=true;auto bad=commands(device);auto source=texture(device,MTLPixelFormatRGB10A2Unorm);
     auto capture=macfx::FrameCapture::begin((id<MTLCommandBuffer>)bad,source,3,false,&pqColor);if(capture)capture->finish((id<MTLCommandBuffer>)bad,source);
     [bad complete];dispatch_sync(macfx::captureWriterQueue(),^{});check(!std::filesystem::exists(prefix+"-after.rgba"),"Failed conversion published an image");
+    check(macfx::FrameCapture::requested(),"A failed capture ended the request's presentation demand");
     failConversion=false;auto retry=commands(device);capture=macfx::FrameCapture::begin((id<MTLCommandBuffer>)retry,source,4,false,&pqColor);check(bool(capture),"Failed conversion consumed the request");
     capture->finish((id<MTLCommandBuffer>)retry,source);[retry complete];dispatch_sync(macfx::captureWriterQueue(),^{});image(prefix+"-after.rgba",true);
     // Optional HDR storage keeps the existing SDR screenshot when only the
@@ -166,5 +172,5 @@ int main(int argc,char**argv){@autoreleasepool{try{
     std::filesystem::remove(prefix+"-after.rgba");request(trigger);failHDRConversion=true;auto fallback=commands(device);
     capture=macfx::FrameCapture::begin((id<MTLCommandBuffer>)fallback,source,5,false,&pqColor);check(bool(capture),"HDR fallback capture was rejected");
     capture->finish((id<MTLCommandBuffer>)fallback,source);[fallback complete];dispatch_sync(macfx::captureWriterQueue(),^{});image(prefix+"-after.rgba");failHDRConversion=false;
-    std::puts(pair?"screenshot-capture: HDR PQ and SDR RGB10A2, RGBA16Float and RGBA8 diagnostic pairs, HDR fallback and nonretaining resource leases pass (CPU stand-ins)":"screenshot-capture: HDR PQ and SDR RGB10A2, RGBA16Float and RGBA8 final captures, HDR fallback and nonretaining resource leases pass (CPU stand-ins)");return 0;
+    std::puts(pair?"screenshot-capture: HDR PQ and SDR RGB10A2, RGBA16Float and RGBA8 diagnostic pairs, HDR fallback and nonretaining resource leases pass (CPU stand-ins)":"screenshot-capture: HDR PQ and SDR RGB10A2, RGBA16Float and RGBA8 final captures, request-only demand, HDR fallback and nonretaining resource leases pass (CPU stand-ins)");return 0;
 }catch(const std::exception &error){std::fprintf(stderr,"%s\n",error.what());return 1;}}}

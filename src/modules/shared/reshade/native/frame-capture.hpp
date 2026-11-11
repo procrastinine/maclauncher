@@ -120,6 +120,15 @@ public:
     // Diagnostic capture attaches processing on its own; a screenshot channel
     // captures only frames that are already processed.
     static bool forcesAttachment(){const auto&capture=nativeConfig().capture;return capture.configured()&&!capture.finalOnly;}
+    // Presentation demand of capture: diagnostic capture always, a screenshot
+    // channel while a requested screenshot is pending. With no processing the
+    // pending frame is presented as is and captured; once it is published
+    // dormant hooks bypass frames again.
+    static bool requested(){const auto&capture=nativeConfig().capture;
+        return capture.configured()&&(!capture.finalOnly||(capture.trigger&&captureTriggerPending()));}
+    // A requested screenshot not yet published, for hooks that read a frame
+    // themselves while no processing runs.
+    static bool screenshotPending(){const auto&capture=nativeConfig().capture;return capture.configured()&&capture.finalOnly&&capture.trigger&&captureTriggerPending();}
     static bool pending(uint64_t frame){const auto&capture=nativeConfig().capture;if(!capture.configured())return false;return capture.trigger?captureTriggerPending():frame==capture.frame;}
     static std::shared_ptr<FrameCapture>begin(id<MTLCommandBuffer>commands,id<MTLTexture>source,uint64_t frame,bool flip=false,const ImageColorDescription *color=nullptr){
         if(!pending(frame))return {};

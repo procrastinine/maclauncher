@@ -18,6 +18,7 @@
 #include "graphics.hpp"
 #include "resolution-scale.hpp"
 #include "virtual-window.hpp"
+#include "frame-capture.hpp"
 #import <Cocoa/Cocoa.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
@@ -437,6 +438,38 @@ void deallocContext(__unsafe_unretained id object,SEL selector) {
     reinterpret_cast<void(*)(__unsafe_unretained id,SEL)>(originalDealloc)(object,selector);
 }
 IMP originalFlushBuffer=nullptr;
+// A screenshot requested while no processing runs for this context reads the
+// game's own back buffer once, before the flush presents it, and publishes it
+// through the frame capture channel. Rows are read bottom to top.
+void captureDormantFrame(CGLContextObj context) {
+    if(!macfx::FrameCapture::screenshotPending()||!macfx::acceptsOpenGL(context))return;
+    static id<MTLDevice> device=MTLCreateSystemDefaultDevice();static id<MTLCommandQueue> queue=[device newCommandQueue];
+    static std::atomic<uint64_t> frames{0};
+    if(!queue)return;
+    try {
+        CurrentContext current(context);
+        GLint size[2]={};CGLGetParameter(context,kCGLCPSurfaceBackingSize,size);
+        if(size[0]<=0||size[1]<=0){unsigned width=0,height=0;if(macfx::openGLSize(context,width,height)){size[0]=GLint(width);size[1]=GLint(height);}}
+        if(size[0]<=0||size[1]<=0)return;
+        const NSUInteger width=NSUInteger(size[0]),height=NSUInteger(size[1]),stride=width*4;
+        auto descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:width height:height mipmapped:NO];
+        descriptor.storageMode=MTLStorageModeShared;descriptor.usage=MTLTextureUsageShaderRead;
+        id<MTLTexture> image=[device newTextureWithDescriptor:descriptor];if(!image)return;
+        std::vector<unsigned char> pixels(stride*height);
+        GLint readFbo=0,readBuffer=0,alignment=0,rowLength=0,packBuffer=0;
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&readFbo);glGetIntegerv(GL_READ_BUFFER,&readBuffer);glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING,&packBuffer);
+        glGetIntegerv(GL_PACK_ALIGNMENT,&alignment);glGetIntegerv(GL_PACK_ROW_LENGTH,&rowLength);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER,0);glBindFramebuffer(GL_READ_FRAMEBUFFER,0);glReadBuffer(GL_BACK);glPixelStorei(GL_PACK_ALIGNMENT,4);glPixelStorei(GL_PACK_ROW_LENGTH,0);
+        glReadPixels(0,0,GLsizei(width),GLsizei(height),GL_BGRA,GL_UNSIGNED_INT_8_8_8_8_REV,pixels.data());
+        glPixelStorei(GL_PACK_ROW_LENGTH,rowLength);glPixelStorei(GL_PACK_ALIGNMENT,alignment);glBindBuffer(GL_PIXEL_PACK_BUFFER,packBuffer);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER,readFbo);glReadBuffer(readBuffer);
+        [image replaceRegion:MTLRegionMake2D(0,0,width,height) mipmapLevel:0 withBytes:pixels.data() bytesPerRow:stride];
+        auto color=macfx::describeImageColor(macfx::ImageColorSpace::LegacySDR);color.alpha=macfx::ColorAlpha::Opaque;
+        id<MTLCommandBuffer> commands=[queue commandBuffer];
+        if(auto capture=macfx::FrameCapture::begin(commands,image,frames.fetch_add(1)+1,true,&color))capture->finish(commands,image,true,&color);
+        [commands commit];
+    } catch(const std::exception &error) { log("OpenGL screenshot capture failed: "+std::string(error.what())); }
+}
 void process(CGLContextObj context) {
     const auto &config=macfx::nativeConfig();const auto &transport=config.diagnostics.openGLTransport;
     if(!context || inside || config.explicitHost) return;
@@ -447,6 +480,7 @@ void process(CGLContextObj context) {
         if(!macfx::imageProcessingRequested()&&!source&&!macfx::virtualWindowEnabled()&&!diagnostic&&!macfx::gpuTimingEnabled()){
             // A bypassed frame of the game's own context adopts a pass-through plan.
             if(macfx::runtimeStatusLeased()&&macfx::acceptsOpenGL(context))macfx::observeBypassedPlan(reinterpret_cast<uintptr_t>(context));
+            captureDormantFrame(context);
             return;
         }
         // Once a context can own output, keep its existing Off retirement path.
@@ -457,8 +491,9 @@ void process(CGLContextObj context) {
     const bool forcedOverlay=config.diagnostics.enabled&&transport=="overlay";
     if(!macfx::effectRequested()&&!forcedOverlay&&!macfx::openGLPresentation(context)){
         macfx::observeBypassedPlan(reinterpret_cast<uintptr_t>(context));
-        std::lock_guard lock(runtimeMutex());const auto found=runtimes().find(context);
-        if(found!=runtimes().end()&&found->second.interop)found->second.interop->resetHistory();
+        {std::lock_guard lock(runtimeMutex());const auto found=runtimes().find(context);
+        if(found!=runtimes().end()&&found->second.interop)found->second.interop->resetHistory();}
+        captureDormantFrame(context);
         return;
     }
     macfx::DiagnosticScope diagnostics(macfx::DiagnosticStage::OpenGLFrame,reinterpret_cast<uintptr_t>(context));
@@ -547,7 +582,7 @@ __attribute__((constructor)) static void loaded() {
     if(macfx::nativeConfig().explicitHost) return;
     macfx::DiagnosticScope diagnostics(macfx::DiagnosticStage::Hooks,2);
     if(macfx::nativeTraceEnabled())log("ReShade macOS library loaded");
-    if(macfx::liveEffects()||macfx::effectRequested()||macfx::graphicsRequested()) {
+    if(macfx::liveEffects()||macfx::effectRequested()||macfx::graphicsRequested()||macfx::FrameCapture::configured()) {
         const SEL dealloc=sel_registerName("dealloc");
         Method destroy=class_getInstanceMethod(NSOpenGLContext.class,dealloc);originalDealloc=method_getImplementation(destroy);
         if(!class_addMethod(NSOpenGLContext.class,dealloc,reinterpret_cast<IMP>(deallocContext),method_getTypeEncoding(destroy)))

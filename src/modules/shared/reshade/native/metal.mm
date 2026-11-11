@@ -210,7 +210,7 @@ RSMNativeLayer *nativeLayer(id layer) { return objc_getAssociatedObject(layer,&n
 bool explicitHost() { return macfx::nativeConfig().explicitHost; }
 bool acceptsNativeLayer(CALayer *layer) { return nativeLayer(layer)||(explicitHost()?false:macfx::acceptsLayer(layer)); }
 bool currentPresentationDemand() {
-    if(macfx::imageProcessingRequested()||macfx::virtualWindowEnabled()||macfx::timingEnabled()||macfx::FrameCapture::forcesAttachment())return true;
+    if(macfx::imageProcessingRequested()||macfx::virtualWindowEnabled()||macfx::timingEnabled()||macfx::FrameCapture::requested())return true;
     try{return macfx::drawableResolutionRequested();}catch(...){return false;}
 }
 uint64_t pendingCaptureFrame(CAMetalLayer *layer) {
@@ -1737,10 +1737,10 @@ id<CAMetalDrawable> nextDrawable(id object,SEL selector) {
     const bool readsSource=activePresentation&&!activePresentation->snapshot().stopped;
     bool source=false;try{source=macfx::drawableResolutionRequested();}catch(...){}
     CAMetalLayer *layer=(CAMetalLayer*)object;
-    const bool processing=macfx::imageProcessingRequested(readsSource)||macfx::FrameCapture::forcesAttachment();
+    const bool processing=macfx::imageProcessingRequested(readsSource)||macfx::FrameCapture::requested();
     const bool readable=nativeLayer(object)||(processing&&!macfx::nativeMetalSourceReadable(layer.pixelFormat,true,macfx::framebuffer::supported(layer.device)));
     updateFramebufferAccess(layer,readable);
-    if(!nativeLayer(object)&&!macfx::imageProcessingRequested(readsSource)&&!source&&!macfx::virtualWindowEnabled()&&!macfx::timingEnabled()&&!macfx::FrameCapture::forcesAttachment())
+    if(!nativeLayer(object)&&!processing&&!source&&!macfx::virtualWindowEnabled()&&!macfx::timingEnabled())
         return reinterpret_cast<id<CAMetalDrawable>(*)(id,SEL)>(original(object,selector))(object,selector);
     installMetalDeviceHooks(((CAMetalLayer*)object).device);
     if(!explicitHost())macfx::acceptsLayer(object);
@@ -1840,7 +1840,10 @@ void macfx::writeCapturedFrame(const std::string &file,const void *bytes,unsigne
 __attribute__((constructor)) static void loadMetal() { @autoreleasepool {
     if(explicitHost()) return;
     macfx::DiagnosticScope diagnostics(macfx::DiagnosticStage::Hooks,1);
-    if(!macfx::liveEffects() && !macfx::effectRequested() && !macfx::timingEnabled() && !macfx::graphicsRequested() && !macfx::FrameCapture::forcesAttachment()) return;
+    if(!macfx::liveEffects() && !macfx::effectRequested() && !macfx::timingEnabled() && !macfx::graphicsRequested() && !macfx::FrameCapture::configured()) return;
+    // The screenshot channel's request file is watched from load, so a
+    // request is seen while the hooks are dormant.
+    if(macfx::FrameCapture::configured())(void)macfx::captureTriggerPending();
     if(@available(macOS 26.0,*))if(macfx::timingEnabled())hookMetal4Feedback();
     try { if(macfx::effectRequested())prepareLaunchEffect(); }
     catch(const std::exception &error) { log("Effect preload failed: "+std::string(error.what())); return; }
