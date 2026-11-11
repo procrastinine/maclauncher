@@ -15,6 +15,19 @@
 #include <vector>
 #include <unistd.h>
 
+// The fixture owns this layer tree. AppKit must host it, rather than redraw
+// an automatically created backing layer over the independently presented image.
+@interface HoldDrawableLayer : CAMetalLayer @end
+@implementation HoldDrawableLayer
+- (id<CAMetalDrawable>)nextDrawable {
+    id<CAMetalDrawable> value=[super nextDrawable];
+    if(value){const auto identity=value.drawableID;
+        std::fprintf(stderr,"Hold drawable acquired: id=%lu attached=%u size=%lux%lu\n",(unsigned long)identity,self.superlayer!=nil,(unsigned long)value.texture.width,(unsigned long)value.texture.height);
+        [value addPresentedHandler:^(id<MTLDrawable> shown){std::fprintf(stderr,"Hold drawable retired: id=%lu presentedTime=%.9f\n",(unsigned long)identity,shown.presentedTime);}];
+    }return value;
+}
+@end
+
 namespace {
 NSString *shaderRoot;
 void idle(double seconds){const auto until=CACurrentMediaTime()+seconds;while(CACurrentMediaTime()<until){
@@ -85,9 +98,13 @@ int main(int argc,char **argv){@autoreleasepool{
     assert(replaceFile(first,control));publish(plan,@"a",.2);[NSApplication sharedApplication];assert([NSApp setActivationPolicy:NSApplicationActivationPolicyRegular]);[NSApp finishLaunching];auto device=MTLCreateSystemDefaultDevice();auto queue=[device newCommandQueue];assert(device&&queue);
     const auto initialUntil=CACurrentMediaTime()+3;
     NSWindow *window=[[NSWindow alloc]initWithContentRect:NSMakeRect(80,100,256,192)styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];window.releasedWhenClosed=NO;
-    auto layer=[CAMetalLayer layer];layer.device=device;layer.pixelFormat=MTLPixelFormatBGRA8Unorm;layer.opaque=YES;layer.displaySyncEnabled=YES;window.contentView.wantsLayer=YES;window.contentView.layer=[CALayer layer];layer.frame=window.contentView.bounds;[window.contentView.layer addSublayer:layer];
-    // Keep the CAMetalLayer below the view backing layer: AppKit owns the
-    // backing layer contents and may clear a drawable during view display.
+    auto layer=[HoldDrawableLayer layer];layer.device=device;layer.pixelFormat=MTLPixelFormatBGRA8Unorm;layer.opaque=YES;layer.displaySyncEnabled=YES;
+    auto host=[[NSView alloc]initWithFrame:window.contentView.bounds];auto root=[CALayer layer];root.frame=host.bounds;
+    // Assign the root BEFORE enabling layers: that selects a layer-hosting
+    // view. Enabling wantsLayer first lets AppKit own the backing store.
+    host.layer=root;host.wantsLayer=YES;window.contentView=host;layer.frame=host.bounds;[root addSublayer:layer];
+    // Keep the CAMetalLayer below the explicitly hosted root. AppKit must
+    // not replace its backing contents during view display.
     // A fully occluded window correctly reports a zero display timestamp, so
     // the window must actually be visible on a display. Activation is not
     // needed for that and is not available everywhere (another process may
@@ -99,7 +116,7 @@ int main(int argc,char **argv){@autoreleasepool{
     std::fprintf(stderr,"Hold window ready: occlusion=%lu window=%ld\n",(unsigned long)window.occlusionState,(long)window.windowNumber);
     assert(window.isVisible&&(window.occlusionState&NSWindowOcclusionStateVisible));
     [window display];[window.contentView displayIfNeeded];layer.drawableSize=CGSizeMake(128,96);[CATransaction flush];
-    assert(layer.superlayer==window.contentView.layer);
+    assert(window.contentView==host&&host.layer==root&&layer.superlayer==root);
     int owner=0;uint64_t epoch=0;macfx::FramePresenter presenter(layer,&owner);presenter.retainCompletedFrameForReplay(true);const auto preparations=std::make_shared<std::atomic<unsigned>>(0);presenter.setPreparationObserver([preparations](const macfx::EffectPreparationNotice&){++*preparations;});auto source=image(device,128,96);macfx::PresentationHoldCommand begin{++epoch,"transaction","hold",a,b};
     const auto finish=[&](const std::string&transaction,const macfx::PresentationContract&expected){macfx::PresentationHoldCommand value{++epoch,transaction,"finish",expected,{}};auto status=presenter.resumePresentationHold(value);assert(status.state=="finished"&&!status.holding&&!presenter.presentationHeld());};
     const auto unsupported=presenter.beginPresentationHold(begin);assert(unsupported.state=="failed"&&!unsupported.holding&&!presenter.presentationHeld());
@@ -119,7 +136,7 @@ int main(int argc,char **argv){@autoreleasepool{
         }
         idle(.005);
     }
-    const auto initial=presenter.snapshot();std::fprintf(stderr,"Hold initial display: submitted=%llu encoded=%llu completed=%llu real=%llu generated=%llu dropped=%llu pending=%u frame=%llu stopped=%u size=%.0fx%.0f bounds=%.0fx%.0f visible=%u transaction=%u reason=%s\n",(unsigned long long)initial.submitted,(unsigned long long)initial.encoded,(unsigned long long)initial.completedReal,(unsigned long long)initial.presentedReal,(unsigned long long)initial.presentedGenerated,(unsigned long long)initial.dropped,initial.pending,(unsigned long long)initial.lastPresentedFrame,initial.stopped,layer.drawableSize.width,layer.drawableSize.height,layer.bounds.size.width,layer.bounds.size.height,window.visible,layer.presentsWithTransaction,initial.reason.c_str());
+    const auto initial=presenter.snapshot();std::fprintf(stderr,"Hold initial display: submitted=%llu encoded=%llu completed=%llu real=%llu generated=%llu dropped=%llu pending=%u frame=%llu stopped=%u size=%.0fx%.0f bounds=%.0fx%.0f visible=%u transaction=%u attached=%u reason=%s\n",(unsigned long long)initial.submitted,(unsigned long long)initial.encoded,(unsigned long long)initial.completedReal,(unsigned long long)initial.presentedReal,(unsigned long long)initial.presentedGenerated,(unsigned long long)initial.dropped,initial.pending,(unsigned long long)initial.lastPresentedFrame,initial.stopped,layer.drawableSize.width,layer.drawableSize.height,layer.bounds.size.width,layer.bounds.size.height,window.visible,layer.presentsWithTransaction,layer.superlayer==root&&host.layer==root,initial.reason.c_str());
     assert(presenter.snapshot().lastPresentedFrame==1);
     auto late=[queue commandBuffer];assert(presenter.submitDisplayFrame(late,source,2,CACurrentMediaTime(),true).encoded);const auto before=presenter.snapshot();
     const auto draining=presenter.beginPresentationHold(begin);assert(draining.state=="draining"&&draining.holding&&presenter.presentationHeld());const auto conflict=presenter.beginPresentationHold(begin);assert(conflict.state=="failed"&&conflict.holding);commit(late);awaitState(presenter,"held");

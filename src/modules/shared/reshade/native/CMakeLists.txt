@@ -295,7 +295,7 @@ if(BUILD_TESTING)
   native_fixture(window-output-policy.cpp)
   native_fixture(window-capture-service.mm UNITS graphics-capture-service.mm window-capture-client.mm graphics-window-catalog.mm LINK "-framework AppKit" "-framework ScreenCaptureKit" "-framework CoreMedia" "-framework CoreVideo" "-framework IOSurface")
   native_fixture(provider.mm)
-  foreach(file presentation-lifecycle.mm presentation-failure.mm presentation-reentrant.mm presentation-replay.mm
+  foreach(file presentation-lifecycle.mm presentation-failure.mm presentation-reentrant.mm presentation-replay.mm presentation-replay-cpu.mm
       presentation-epoch.mm presentation-observed-fg.mm adaptive-presentation-test.mm neural-presentation.mm)
     native_fixture(${file} LINK reshade-macos)
   endforeach()
