@@ -57,7 +57,7 @@ CrossOver includes a DXVK build of its own as well. DXVK's settings offer the as
 
 ### vkd3d-proton
 
-[vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) is Proton's translator for Direct3D 12, which it turns into Vulkan. It's the open-source alternative to D3DMetal for Direct3D 12 games, and it asks a lot of the Vulkan driver underneath: its own documentation lists Vulkan 1.3 and several extensions as hard requirements. For that reason, MacLauncher recommends KosmicKrisp for vkd3d-proton and shows a warning when a game uses it with another driver. On [MacLauncher KosmicKrisp](#maclauncher-kosmickrisp), vkd3d-proton runs and reports Direct3D feature level 12_1, which [KosmicKrisp](/maclauncher/windows/kosmickrisp/#direct3d-12-games-through-vkd3d-proton) explains. MacLauncher installs vkd3d-proton from the project's releases.
+[vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) is Proton's translator for Direct3D 12, which it turns into Vulkan. It's the open-source alternative to D3DMetal for Direct3D 12 games, and it asks a lot of the Vulkan driver underneath: its own documentation lists Vulkan 1.3 and several extensions as hard requirements. For that reason, MacLauncher recommends KosmicKrisp for vkd3d-proton and shows a warning when a game uses it with another driver. On [MacLauncher KosmicKrisp](#maclauncher-kosmickrisp), vkd3d-proton runs and reports Direct3D feature level 12_1, or 12_2 in conformance mode, which [KosmicKrisp](/maclauncher/windows/kosmickrisp/#direct3d-12-games-through-vkd3d-proton) explains. MacLauncher installs vkd3d-proton from the project's releases.
 
 ### WineD3D and WINE's vkd3d
 
@@ -103,6 +103,7 @@ MacLauncher KosmicKrisp is MacLauncher's own build of KosmicKrisp, published in 
 - transform feedback with primitives-generated queries, which ANGLE, the layer that provides OpenGL ES to Android games, needs before it offers the geometry and tessellation shaders of OpenGL ES 3.2 through Vulkan
 - sparse resources, on GPUs where Metal supports them, which Direct3D's tiled resources and feature level 12_0 rest on
 - pixel interlock, which vkd3d-proton turns into the rasterizer-ordered views of Direct3D 12 feature level 12_1
+- ray tracing, mesh shaders and variable rate shading, which feature level 12_2 adds, in conformance mode
 
 The build adds plenty more, from mesh shaders to 64-bit floating point; [KosmicKrisp](/maclauncher/windows/kosmickrisp/#maclauncher-kosmickrisp) goes through it.
 
