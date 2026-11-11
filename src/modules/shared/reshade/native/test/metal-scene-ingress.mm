@@ -24,6 +24,8 @@
 #define MACFX_METAL_INGRESS_SOURCE <metal.mm>
 #endif
 #include MACFX_METAL_INGRESS_SOURCE
+// The temporal unit owns the camera frame boundary; this check links metal.mm alone.
+extern "C" __attribute__((visibility("hidden"))) void rsTemporalCameraFrameBoundary(){}
 #include <cassert>
 #include <thread>
 namespace {
