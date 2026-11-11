@@ -12,6 +12,7 @@
     "fileExtensions": [".grp", ".rff", ".dat"]
   },
   "runtime": {
+    "providers": [],
     "default": "raze",
     "supported": ["raze"],
     "manager": { "raze": "raze" },

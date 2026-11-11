@@ -26,10 +26,13 @@ test("Build-engine game data or a folder holding it selects that game", t => {
   assert.equal(Module.detectGame(context(write(path.join(root, "Other", "STUFF.DAT"), "data"))), null);
 });
 
-test("Raze starts with the game data in place", t => {
-  const root = temporary(t), data = write(path.join(root, "SW.GRP"), grp());
-  assert.deepEqual(Module.__test.launchArguments({ gamePath: data, contentRootDir: root, moduleData: { gameFile: "SW.GRP" } }),
-    { args: ["-gamegrp", data], cwd: root });
+test("Raze starts in the game folder and selects the main file by name", t => {
+  // Raze matches -gamegrp as a name among the files it finds in its folders; a
+  // full path never matches, and an add-on finds its base game in the same folder.
+  const root = temporary(t), data = write(path.join(root, "DUKEDC.GRP"), grp());
+  write(path.join(root, "DUKE3D.GRP"), grp());
+  assert.deepEqual(Module.__test.launchArguments({ gamePath: data, contentRootDir: root, moduleData: { gameFile: "DUKEDC.GRP" } }),
+    { args: ["-gamegrp", "DUKEDC.GRP"], cwd: root });
 });
 
 test("the Raze catalog lists releases with a Mac archive", () => {

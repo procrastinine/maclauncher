@@ -19,11 +19,11 @@ Import accepts the main data file of one of these games, or a folder that holds 
 
 DREAMM identifies the exact release, language or demo from the files in the game's folder.
 
-Detection of this game type runs after every other game type. The SCUMM adventures, which [ScummVM](SCUMMVM.md) plays, keep that game type. A game folder that holds the original DOS executables is a [DOS](DOS.md) game; selecting the main data file in that folder imports it here instead.
+Detection of this game type runs after every other game type. The SCUMM adventures, which [ScummVM](SCUMMVM.md) plays, keep that game type. A game folder that holds the original DOS executables is a [DOS](DOS.md) game; selecting the main data file in that folder imports it here instead. A [DOS](DOS.md#uzdoom-raze-and-dreamm) game whose folder holds one of these main data files also offers DREAMM as its runtime.
 
 ## Preparation and saves
 
-Play starts DREAMM with `-run <folder>`, which identifies the game in the folder and starts it without DREAMM's Game Manager. DREAMM keeps the files a game writes, saves included, in its own user folder, `~/Library/Application Support/Aaron Giles/DREAMM`, so the game folder stays unchanged. MacLauncher does not track that folder, and the inspector has no save location for this game type.
+Play starts DREAMM with `-run <folder>`, which identifies the game in the folder and starts it without DREAMM's Game Manager. DREAMM runs with its user folders (Preferences, Application Support and Documents) inside the game's launcher data. The files a game writes, saves included, and DREAMM's own settings stay there with the game and are removed when the game is removed from the library; the game folder stays unchanged. The inspector has no save location for this game type. Stop asks DREAMM to quit and ends it when it is still running after 5 seconds.
 
 ## Settings
 

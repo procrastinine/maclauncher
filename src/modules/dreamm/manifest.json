@@ -12,6 +12,7 @@
     "fileExtensions": [".gob", ".lab", ".dta", ".daw"]
   },
   "runtime": {
+    "providers": [],
     "default": "dreamm",
     "supported": ["dreamm"],
     "manager": { "dreamm": "dreamm" },

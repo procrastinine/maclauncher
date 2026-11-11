@@ -16,11 +16,11 @@ Import accepts a main game file, known to the engine as an IWAD, or a folder tha
 
 Add-on files (`PWAD` files and `.pk3` mods without a game definition) need a main game and are not imported on their own. A folder that holds several main game files, such as Freedoom's two phases, asks for one of them, and each one becomes a separate entry.
 
-Detection of this game type runs after every other game type. A folder that another game type accepts keeps that game type. For example, a DOS release with its original executable is a [DOS](DOS.md) game, and a Windows release is a [Windows](WINDOWS.md) game; selecting the main game file in such a folder imports it here instead. Entries are named after the game the file belongs to, for example *Freedoom: Phase 1*, or after the file name.
+Detection of this game type runs after every other game type. A folder that another game type accepts keeps that game type. For example, a DOS release with its original executable is a [DOS](DOS.md) game, and a Windows release is a [Windows](WINDOWS.md) game; selecting the main game file in such a folder imports it here instead. Entries are named after the game the file belongs to, for example *Freedoom: Phase 1*, or after the file name. A [DOS](DOS.md#uzdoom-raze-and-dreamm) game whose folder holds one main game file also offers UZDoom as its runtime.
 
 ## Preparation and saves
 
-Play starts UZDoom with `-iwad <file>` in the game's folder. The game files stay unchanged. UZDoom keeps its configuration, saves and screenshots in its own user folders, and MacLauncher does not track them, so the inspector has no save location for this game type.
+Play starts UZDoom with `-iwad <file>` in the game's folder. The game files stay unchanged. UZDoom runs with its user folders (Preferences, Application Support and Documents) inside the game's launcher data, so its configuration, saves, screenshots and logs stay with the game and are removed when the game is removed from the library. The inspector has no save location for this game type. Stop asks UZDoom to quit and ends it when it is still running after 5 seconds.
 
 ## Settings
 

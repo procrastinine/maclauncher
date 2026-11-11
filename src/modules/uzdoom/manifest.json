@@ -12,6 +12,7 @@
     "fileExtensions": [".wad", ".ipk3", ".pk3"]
   },
   "runtime": {
+    "providers": [],
     "default": "uzdoom",
     "supported": ["uzdoom"],
     "manager": { "uzdoom": "uzdoom" },

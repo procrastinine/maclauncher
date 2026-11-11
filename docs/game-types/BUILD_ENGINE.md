@@ -16,11 +16,11 @@ Import accepts a game data file, or a folder that holds one at its top level:
 
 A folder that holds several game data files, such as Duke Nukem 3D with an add-on, asks for one of them. Raze identifies the exact game, edition and add-on from the data.
 
-Detection of this game type runs after every other game type. A folder that another game type accepts keeps that game type. For example, a DOS release with its original executable is a [DOS](DOS.md) game; selecting the data file in such a folder imports it here instead. Entries are named after the game the file belongs to, for example *Duke Nukem 3D*, or after the file name.
+Detection of this game type runs after every other game type. A folder that another game type accepts keeps that game type. For example, a DOS release with its original executable is a [DOS](DOS.md) game; selecting the data file in such a folder imports it here instead. Entries are named after the game the file belongs to, for example *Duke Nukem 3D*, or after the file name. A [DOS](DOS.md#uzdoom-raze-and-dreamm) game whose folder holds one main game file also offers Raze as its runtime.
 
 ## Preparation and saves
 
-Play starts Raze with `-gamegrp <file>` in the game's folder, where Raze also finds the game's other files. The game files stay unchanged. Raze keeps its configuration, saves and screenshots in its own user folders, and MacLauncher does not track them, so the inspector has no save location for this game type.
+Play starts Raze in the game's folder with `-gamegrp <file name>`. Raze searches that folder for game data and selects the main file by its name, and an add-on GRP loads the base game it depends on from the same folder. The game files stay unchanged. Raze runs with its user folders (Preferences, Application Support and Documents) inside the game's launcher data, so its configuration, saves, screenshots and logs stay with the game and are removed when the game is removed from the library. The inspector has no save location for this game type. Stop asks Raze to quit and ends it when it is still running after 5 seconds.
 
 ## Settings
 
