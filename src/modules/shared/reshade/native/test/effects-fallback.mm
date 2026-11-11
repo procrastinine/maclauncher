@@ -738,7 +738,7 @@ int main(int argc,char **argv){@autoreleasepool{
         char temporary[1024];temporaryPath(temporary,"maclauncher-effects-fallback-XXXXXX");assert(mkdtemp(temporary));NSString *directory=[NSString stringWithUTF8String:temporary];
         NSString *log=std::getenv("RESHADE_LOG")?[NSString stringWithUTF8String:std::getenv("RESHADE_LOG")]:[directory stringByAppendingPathComponent:@"native.log"];
         std::vector<std::string> arguments{temporary};for(int i=1;i<argc;++i)arguments.emplace_back(argv[i]);
-        const int status=fixture::runPhase("checks",{{"RESHADE_LOG",log.fileSystemRepresentation},{"RESHADE_DIAGNOSTICS","1"},
+        const int status=fixture::runPhase("checks",{{"RESHADE_LOG",log.fileSystemRepresentation},{"RESHADE_DIAGNOSTICS",[directory stringByAppendingPathComponent:@"diagnostics"].fileSystemRepresentation},
             {"RESHADE_EFFECT_PLAN",[directory stringByAppendingPathComponent:@"plan.json"].fileSystemRepresentation}},arguments);
         [[NSFileManager defaultManager]removeItemAtPath:directory error:nil];return status;
     }

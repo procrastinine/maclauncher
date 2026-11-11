@@ -257,7 +257,7 @@ int main(int argc,char **argv){@autoreleasepool{
         assert(argc==2&&(!std::strcmp(argv[1],"--history")||!std::strcmp(argv[1],"--release")));
         char temporary[1024];temporaryPath(temporary,"maclauncher-graph-transitions-XXXXXX");assert(mkdtemp(temporary));NSString *directory=[NSString stringWithUTF8String:temporary];
         NSString *log=[directory stringByAppendingPathComponent:@"native.log"];
-        const int status=fixture::runPhase("checks",{{"RESHADE_LOG",log.fileSystemRepresentation},{"RESHADE_DIAGNOSTICS","1"},
+        const int status=fixture::runPhase("checks",{{"RESHADE_LOG",log.fileSystemRepresentation},{"RESHADE_DIAGNOSTICS",[directory stringByAppendingPathComponent:@"diagnostics"].fileSystemRepresentation},
             {"RESHADE_EFFECT_PLAN",[directory stringByAppendingPathComponent:@"plan.json"].fileSystemRepresentation}},{temporary,argv[1]});
         if(status)std::fprintf(stderr,"native log: %s\n",log.fileSystemRepresentation);else [[NSFileManager defaultManager]removeItemAtPath:directory error:nil];
         return status;
