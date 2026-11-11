@@ -23,6 +23,26 @@ test('incomplete declared test sources fail offline with the explicit setup comm
   assert.equal(fs.existsSync(path.join(root, 'source')), false, 'Readiness cannot initialize or create a source checkout');
 });
 
+test('a checkout without its tracked .gitmodules names the restore command instead of setup alone', async t => {
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'test-inputs-declarations-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const git = args => execFileSync('git', ['-c', 'core.fsmonitor=false', ...args], { cwd: root, stdio: 'pipe' });
+  git(['init', '-q']);
+  fs.mkdirSync(path.join(root, 'build'));
+  fs.writeFileSync(path.join(root, '.gitmodules'), '[submodule "source"]\npath = source\nurl = https://example.invalid/source.git\n');
+  fs.writeFileSync(path.join(root, 'build/source-dependencies.json'), JSON.stringify({ schemaVersion: 1, submodules: ['source'] }));
+  git(['add', '.gitmodules', 'build/source-dependencies.json']);
+  git(['update-index', '--skip-worktree', '.gitmodules']);
+  fs.rmSync(path.join(root, '.gitmodules'));
+  await assert.rejects(check({ repoRoot: root }), error => {
+    assert.match(error.message, /The tracked \.gitmodules is missing from this checkout\./);
+    assert.match(error.message, /`git update-index --no-skip-worktree \.gitmodules && git checkout -- \.gitmodules`/);
+    return true;
+  });
+  git(['update-index', '--no-skip-worktree', '.gitmodules']);
+  await assert.rejects(check({ repoRoot: root }), /Restore it with `git checkout -- \.gitmodules`/);
+});
+
 // A primary checkout with a plain source, a source it has not checked out, and a source with a
 // nested source (recursive), plus a linked worktree of it.
 function linkedFixture(t, { deinit = [] } = {}) {

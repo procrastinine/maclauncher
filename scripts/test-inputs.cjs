@@ -118,9 +118,35 @@ async function prepareSources(repoRoot) {
   return plan;
 }
 
+// A checkout whose tracked .gitmodules is not written to its working tree (for example
+// skip-worktree) cannot read its source plan; setup cannot repair that either.
+function assertSourceDeclarations(repoRoot) {
+  if (fs.existsSync(path.join(repoRoot, '.gitmodules'))) return;
+  let tracked = '';
+  try { tracked = git(repoRoot, ['ls-files', '-v', '--', '.gitmodules']); } catch {}
+  if (!tracked) return;
+  const restore = (tracked.startsWith('S ') ? 'git update-index --no-skip-worktree .gitmodules && ' : '') + 'git checkout -- .gitmodules';
+  throw Object.assign(new Error('The tracked .gitmodules is missing from this checkout. Restore it with `' + restore + '`, then run `' + COMMAND + '`.'), { sourceDeclarations: true });
+}
+
+// The executable 7-Zip and embedded Python that macOS app setup prepares, which tests run.
+function assertPreparedTools(repoRoot) {
+  if (process.platform !== 'darwin') return;
+  const sevenZip = path.join(repoRoot, 'src/resources/7zip/7zz'), pin = JSON.parse(fs.readFileSync(path.join(repoRoot, 'src/resources/7zip/source.json')));
+  const stat = fs.lstatSync(sevenZip, { throwIfNoEntry: false });
+  if (!stat?.isFile() || stat.isSymbolicLink()) throw new Error('Missing 7-Zip executable: src/resources/7zip/7zz');
+  if (sha(fs.readFileSync(sevenZip)) !== pin.executableSha256) throw new Error('Changed input: src/resources/7zip/7zz');
+  const python = path.join(repoRoot, 'src/resources/python'), expected = require('../src/modules/shared/runtime/python').embeddedPythonProfile(process.arch);
+  let installed = null;
+  try { installed = JSON.parse(fs.readFileSync(path.join(python, 'runtime.json'), 'utf8')); } catch {}
+  if (installed?.architecture !== expected.architecture || installed.sha256 !== expected.sha256 || !fs.existsSync(path.join(python, 'bin/python3')))
+    throw new Error('Missing or different embedded Python ' + expected.version + ' (' + expected.architecture + '): src/resources/python');
+}
+
 async function check({ repoRoot = ROOT } = {}) {
   const problems = [];
   try {
+    assertSourceDeclarations(repoRoot);
     const plan = await Sources.readPlan({ repoRoot });
     const leftOut = [];
     for (const source of plan.modules) {
@@ -146,6 +172,7 @@ async function check({ repoRoot = ROOT } = {}) {
     const encoding = path.join(repoRoot, 'src/modules/catsystem2/resources/encoding');
     const cp932 = JSON.parse(fs.readFileSync(path.join(encoding, 'cp932.json')));
     regular(path.join(encoding, cp932.table), { size: cp932.tableBytes, sha256: cp932.tableSha256 });
+    assertPreparedTools(repoRoot);
     const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, 'build/runtime-packages.json')));
     const resources = path.join(repoRoot, 'src/resources');
     const B = require('../src/modules/shared/runtime/bundled-native');
@@ -165,6 +192,7 @@ async function check({ repoRoot = ROOT } = {}) {
     if (leftOut.length) console.warn('test-inputs: left out ' + leftOut.join(', ') + ', which no local repository holds at its pin.');
     return { ready: true, sources: plan.modules.length - leftOut.length, packages: lock.packages.length, ...(leftOut.length ? { leftOut } : {}) };
   } catch (error) {
+    if (error.sourceDeclarations) throw new Error('Test inputs are not ready. ' + error.message, { cause: error });
     throw new Error('Test inputs are not ready. Run `' + COMMAND + '`. ' + error.message.replace(/\s+/g, ' '), { cause: error });
   }
 }
@@ -173,6 +201,10 @@ async function setup({ repoRoot = ROOT } = {}) {
   await prepareSources(repoRoot);
   await require('./published-inputs.cjs').prepareDeclaredPublishers({ repoRoot });
   await require('../src/modules/catsystem2/runtime/stage-cp932.cjs').prepare({ repoRoot });
+  if (process.platform === 'darwin') {
+    await require('./published-inputs.cjs').prepareSevenZip({ repoRoot });
+    await require('./ci-macos.cjs').preparePython({ repoRoot, arch: process.arch });
+  }
   const R = require('./runtime-packages.cjs');
   const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, R.LOCK)));
   for (const arch of lock.architectures) await R.fetchPackages({ repoRoot, lock: R.readLock({ repoRoot, arch }) });
