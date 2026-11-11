@@ -24,7 +24,7 @@ Runtime versions are chosen in a fixed order: the version chosen for the game co
 
 Games of other types that include a compatible Windows executable also offer the three [Wine runtimes](runtimes/WINE.md), [Sikarugir](runtimes/SIKARUGIR.md), [CrossOver](runtimes/CROSSOVER.md) and [WineCX](runtimes/WINECX.md), while known engines keep their native default. Sikarugir and WineCX are free Wine distributions that MacLauncher downloads itself; CrossOver runs from a licensed CrossOver application that is already installed on the Mac.
 
-**Settings**, **Runtimes**, **External** and **Credits** open in separate macOS windows, and reopening a view focuses its existing window. The library stays usable, changes appear in every window, and the native close controls or Cmd-W close the focused window. The [launcher UI guide](development/UI_GUIDE.md) describes every window, menu and shortcut.
+**Settings**, **Runtimes**, **External** and **Credits** each have one nonmodal macOS window. Settings, Runtimes and Credits remain open together when opened in quick succession; reopening a view focuses its existing window. Controls and data load asynchronously while the library stays usable. Changes appear in every open window, and the native close controls or Cmd-W close the focused window. The [launcher UI guide](development/UI_GUIDE.md) describes every window, menu and shortcut.
 
 ### Native runtime references
 
