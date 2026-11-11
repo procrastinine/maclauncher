@@ -1,14 +1,14 @@
 ---
 title: Mac apps, retro and more
-description: "Native macOS apps and scripts, 32-bit Mac apps, DOS games on DOSBox Staging, ScummVM adventure games, Infinity Engine games on GemRB, Half-Life on Xash3D FWGS, MUGEN, HashLink and video playback."
+description: "Native macOS apps and scripts, 32-bit Mac apps, DOS games on DOSBox Staging, Doom-engine games on UZDoom, Build-engine games on Raze, LucasArts games on DREAMM, ScummVM adventure games, Infinity Engine games on GemRB, Half-Life on Xash3D FWGS, MUGEN, HashLink and video playback."
 head:
   - tag: title
-    content: "32-bit Mac apps, DOS, ScummVM and Infinity Engine games on Mac | MacLauncher"
+    content: "32-bit Mac apps, DOS, Doom, Duke Nukem 3D, ScummVM and Infinity Engine games on Mac | MacLauncher"
 sidebar:
   order: 5
 ---
 
-This page covers the remaining game types that MacLauncher plays on a Mac, from Mac apps you already have to DOS games, classic adventure games and videos.
+This page covers the remaining game types that MacLauncher plays on a Mac, from Mac apps you already have to DOS games, classic shooters, classic adventure games and videos.
 
 ## Mac apps and scripts
 
@@ -29,9 +29,34 @@ Guides: [macOS Game](https://github.com/procrastinine/maclauncher/blob/master/do
 
 DOS games run on [DOSBox Staging](https://www.dosbox-staging.org/). This one really is an emulator, which is fine: these games are tiny, and the PCs they expect no longer exist. Import the game's folder, or its `.exe`, `.com` or `.bat` file when the folder has several programs, and play.
 
+Some DOS games have a better option than emulation. When a DOS game's folder holds the main data file of a Doom-engine, Build-engine or DREAMM game, that engine shows up as another runtime in the game's inspector, so the same entry can run natively through the source port below. MacLauncher checks the folder each time the library loads, so DOS games you imported earlier get the choice too.
+
 **Example games:** DOOM, Prince of Persia.
 
 Guide: [DOS](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/DOS.md)
+
+## Doom-engine and Build-engine games
+
+The famous 1990s shooters from id Software and 3D Realms no longer need DOS at all. Their engines were released as source code long ago, and community **source ports** have turned them into modern programs that read the original game data. MacLauncher uses two of them, both as the publisher's own native macOS app:
+
+- [UZDoom](https://github.com/UZDoom/UZDoom) plays Doom-engine games: Doom, Doom II, Final Doom, Heretic, Hexen, Strife, Chex Quest, Freedoom and other games that ship a main game file, which the engine calls an IWAD. Import the `.wad`, `.ipk3` or `.pk3` file, or the folder that holds it.
+- [Raze](https://github.com/ZDoom/Raze) plays Build-engine games: Duke Nukem 3D and its add-ons, Blood, Shadow Warrior, Redneck Rampage, PowerSlave (Exhumed), NAM and World War II GI. Import the game's `.grp` file (or Blood's `BLOOD.RFF`, PowerSlave's `STUFF.DAT`), or the folder that holds it.
+
+When a folder holds several main game files, such as Freedoom's two phases or Duke Nukem 3D with an add-on, import asks which one you mean, and each becomes its own entry. Both engines are downloaded from their GitHub releases the first time you press **Play**. Your game files stay as they are: each engine's configuration, saves, screenshots and logs live with the game in MacLauncher's data, and **Stop** asks the engine to quit normally. Video, audio and controls are set in the engine's own menus, and UZDoom loads add-ons from **Launch arguments**, for example `-file <path>`.
+
+**Example games:** DOOM, Heretic, Duke Nukem 3D, Blood.
+
+Guides: [Doom engine (UZDoom)](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/DOOM_ENGINE.md), [Build engine (Raze)](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/BUILD_ENGINE.md)
+
+## LucasArts games on DREAMM
+
+[DREAMM](https://dreamm.aarongiles.com/) is Aaron Giles' emulator for LucasArts, Lucasfilm and Lucas Learning games. It runs as a native Mac app, emulates the original DOS or Windows release, and reads the game's files in place. MacLauncher uses it for the LucasArts titles that no other game type covers: Star Wars: Dark Forces, Outlaws, Star Wars: Yoda Stories and Indiana Jones and His Desktop Adventures. Import the game's main data file, such as `DARK.GOB`, or its folder; DREAMM works out the exact release, language or demo by itself. The SCUMM adventures stay with ScummVM, below.
+
+DREAMM is freeware, downloaded from its own site the first time you press **Play**. Saves and DREAMM's settings stay with the game in MacLauncher's data, and the game folder isn't changed.
+
+**Example games:** Star Wars: Dark Forces, Outlaws.
+
+Guide: [LucasArts (DREAMM)](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/DREAMM.md)
 
 ## Classic adventure games
 

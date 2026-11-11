@@ -23,9 +23,9 @@ Every game in MacLauncher has a game type, such as Ren'Py, Unity or PlayStation 
 | --- | --- |
 | [Desktop engines](/maclauncher/games/desktop-engines/) | [RPG Maker](https://www.rpgmakerweb.com/) (MV and MZ, XP/VX/VX Ace, 2000/2003), WOLF RPG Editor, [Ren'Py](https://www.renpy.org/), [Godot](https://github.com/godotengine/godot), [GameMaker](https://gamemaker.io/), [Unity](https://unity.com/), [LÖVE](https://love2d.org/), [XNA](https://en.wikipedia.org/wiki/Microsoft_XNA)/[FNA](https://fna-xna.github.io/), Java, Flash, and the web game types: Construct, Tyrano, GameMaker HTML5 and Web |
 | [Visual novels](/maclauncher/games/visual-novels/) | KiriKiri, Siglus / RealLive, NScripter, AliceSoft, MAGES., Nitroplus, Minori, FAVORITE / FVP, AI5WIN, VNDS, BGI / Ethornell, CatSystem2 |
-| [Windows games through WINE](/maclauncher/games/windows/) | Windows Game, plus the Windows executables of other game types, played with [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) ([WINE](https://www.winehq.org/)) or [CrossOver](https://www.codeweavers.com/crossover/) |
+| [Windows games through WINE](/maclauncher/games/windows/) | Windows Game, plus the Windows executables of other game types, played with [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) ([WINE](https://www.winehq.org/)), [CrossOver](https://www.codeweavers.com/crossover/) or [WineCX](https://github.com/dappermint/winecx-gptk) |
 | [Mobile and consoles](/maclauncher/games/mobile-and-consoles/) | Android, iOS / iPadOS, PlayStation 5, Nintendo Switch |
-| [Mac apps, retro and more](/maclauncher/games/more/) | macOS Game (including 32-bit apps), DOS, ScummVM, Infinity Engine, Half-Life (Xash3D FWGS), MUGEN / Ikemen GO, [HashLink](https://hashlink.haxe.org/), Haxe native build, Video |
+| [Mac apps, retro and more](/maclauncher/games/more/) | macOS Game (including 32-bit apps), DOS, Doom engine (UZDoom), Build engine (Raze), LucasArts (DREAMM), ScummVM, Infinity Engine, Half-Life (Xash3D FWGS), MUGEN / Ikemen GO, [HashLink](https://hashlink.haxe.org/), Haxe native build, Video |
 
 ## How a game finds its runtime
 
@@ -37,7 +37,7 @@ The game's inspector then shows the runtime MacLauncher picked, along with the a
 
 Wherever there's a native runtime, MacLauncher prefers it. Speed and battery life are part of the reason, since no translation layer sits between the game and your Mac. A native runtime also behaves like a Mac app: window management, fullscreen, mouse and audio work the way macOS expects, and those are the areas where WINE can be erratic. A game whose own Mac `.app` fails to open because of signing or packaging problems can still run on a native runtime, which plays the same game data.
 
-When there is no native runtime, Sikarugir and CrossOver are always available as a fallback, and you can switch at any time. [Choosing a runtime](/maclauncher/background/choosing-a-runtime/) talks through the trade-offs.
+When there is no native runtime, the WINE runtimes, Sikarugir, CrossOver and WineCX, are there as a fallback, and you can switch at any time. [Choosing a runtime](/maclauncher/background/choosing-a-runtime/) talks through the trade-offs.
 
 ## Runtimes come from catalogs
 

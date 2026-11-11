@@ -40,13 +40,13 @@ An **emulator** recreates a different machine's hardware in software: its CPU, i
 
 This is the classic way to play old consoles and old computers, and a good emulator is very faithful. It is also expensive, because every instruction of the original machine has to be imitated, often with many real instructions for each one. For a 1990s DOS game that cost doesn't matter, because a modern Mac has power to spare. For a modern 3D game, full hardware emulation is usually far too slow.
 
-MacLauncher uses one emulator on purpose: [DOSBox Staging](https://www.dosbox-staging.org/) for DOS games, because those games are tiny and the machine they expect no longer exists.
+MacLauncher uses emulators on purpose in two places, where the games are tiny and the machine they expect no longer exists: [DOSBox Staging](https://www.dosbox-staging.org/) for DOS games, and [DREAMM](https://dreamm.aarongiles.com/) for a handful of LucasArts games. The best-known DOS shooters, Doom and Duke Nukem 3D among them, don't even need that, because their engines' source ports read the original data natively.
 
 ## Compatibility layers: translate the conversation
 
 A **[compatibility layer](https://en.wikipedia.org/wiki/Compatibility_layer)** doesn't imitate a whole computer. It lets the game's code run on the real CPU and *translates the game's requests to the operating system*. When a Windows game asks Windows to open a file or create a window, the compatibility layer does the equivalent thing on macOS.
 
-The best-known compatibility layer is WINE, whose name stands for "Wine Is Not an Emulator". WINE reimplements the Windows APIs on top of macOS and Linux. CrossOver is a commercial, polished distribution of WINE, and [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) is a free one that MacLauncher can download and manage for you. Graphics are translated too: DirectX calls become Metal calls, either directly, as Apple's D3DMetal (part of its [Game Porting Toolkit](https://developer.apple.com/games/game-porting-toolkit/)) and [DXMT](https://github.com/3Shain/dxmt) do, or through Vulkan with [DXVK](https://github.com/doitsujin/dxvk) on top of [MoltenVK](https://github.com/KhronosGroup/MoltenVK).
+The best-known compatibility layer is WINE, whose name stands for "Wine Is Not an Emulator". WINE reimplements the Windows APIs on top of macOS and Linux. CrossOver is a commercial, polished distribution of WINE, and [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) and [WineCX](https://github.com/dappermint/winecx-gptk) are free ones that MacLauncher can download and manage for you. Graphics are translated too: DirectX calls become Metal calls, either directly, as Apple's D3DMetal (part of its [Game Porting Toolkit](https://developer.apple.com/games/game-porting-toolkit/)) and [DXMT](https://github.com/3Shain/dxmt) do, or through Vulkan with [DXVK](https://github.com/doitsujin/dxvk) on top of [MoltenVK](https://github.com/KhronosGroup/MoltenVK).
 
 Apple Silicon adds one more step. Windows games are x86-64 code, and an M-series chip runs ARM64. Apple's Rosetta 2 translates x86-64 instructions into ARM64, both ahead of time and while the program runs. On a modern Mac, a Windows game in CrossOver therefore goes through two translations: Rosetta for the CPU and WINE for the operating system.
 
@@ -97,8 +97,8 @@ A decomp or recomp project is a native runtime for exactly one game, where a nat
 | Approach | What runs the game's code | What it costs | In MacLauncher |
 | --- | --- | --- | --- |
 | Virtual machine | A whole second operating system | Memory, disk, slow graphics; ARM-only guests on Apple Silicon | Not used |
-| Emulator | Software imitating the original hardware | A lot of CPU time | DOSBox Staging for DOS games |
-| Compatibility layer | Your real CPU (directly or through Rosetta), with OS calls translated | Translation gaps, some odd behavior | Sikarugir and CrossOver for Windows; AnyPS5, nxnative, the Android runtimes and PlayCover for consoles and phones |
+| Emulator | Software imitating the original hardware | A lot of CPU time | DOSBox Staging for DOS games, DREAMM for LucasArts games |
+| Compatibility layer | Your real CPU (directly or through Rosetta), with OS calls translated | Translation gaps, some odd behavior | Sikarugir, CrossOver and WineCX for Windows; AnyPS5, nxnative, the Android runtimes and PlayCover for consoles and phones |
 | Native runtime | The engine's own macOS build | Needs the right engine and version | Ren'Py, RPG Maker, Godot, GameMaker, Unity, LÖVE, visual-novel engines and many more |
 | Decompilation / recompilation | The game itself, rebuilt as a native program | A separate project for each game, almost always an older one | Not packaged: one project per game |
 
