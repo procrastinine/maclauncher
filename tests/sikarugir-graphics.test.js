@@ -214,6 +214,13 @@ test("D3DMetal DLSS requires the engine's actual path conversion exports before 
   const result = await Graphics.prepareGraphicsView(options);
   assert.equal(result.dlss.d3dmetal, true);
   assert.equal(result.env.D3DM_ENABLE_METALFX, "1");
+  assert.equal(result.env.D3DM_VENDOR_ID, undefined, "a Wine without adapter identity support reports its own adapter");
+  // A Wine whose win32u reads the identity variables reports an NVIDIA
+  // adapter, so the game offers DLSS for D3DMetal to perform.
+  const identity = await Graphics.prepareGraphicsView({ ...options, install: { ...f.install, capabilities: { ...f.install.capabilities, adapterIdentity: true } },
+    viewRoot: viewRoot + "-identity" });
+  assert.deepEqual([identity.env.D3DM_VENDOR_ID, identity.env.D3DM_DEVICE_ID], ["0x10de", "0x2684"]);
+  assert.equal(optional.env.D3DM_VENDOR_ID, undefined, "the identity follows the D3DMetal DLSS route only");
   // Ordinary D3DMetal rendering does not need NGX discovery.
   fs.writeFileSync(ntdll, image({ cpu: X64 }));
   const plain = await Graphics.prepareGraphicsView({ ...options, settings: { graphicsBackend: "d3dmetal" }, viewRoot: viewRoot + "-off" });

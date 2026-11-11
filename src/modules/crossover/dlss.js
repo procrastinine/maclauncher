@@ -77,6 +77,14 @@ function selection(settings, { backend, dxmt = false, d3dmetal = false,
 function environment(selection) {
   return { DXMT_ENABLE_NVEXT: selection.dxmt ? "1" : "0", D3DM_ENABLE_METALFX: selection.d3dmetal ? "1" : "0" };
 }
+// Games offer DLSS only on an NVIDIA adapter. A Wine whose win32u reads the
+// D3DM_* identity variables reports this one to D3DMetal while D3DMetal
+// performs the game's DLSS with MetalFX. Variables set in Settings or the
+// game's Runtime Settings replace these values.
+const NVIDIA_ADAPTER = Object.freeze({ D3DM_VENDOR_ID: "0x10de", D3DM_DEVICE_ID: "0x2684", D3DM_DEVICE_DESCRIPTION: "NVIDIA GeForce RTX 4090" });
+function adapterEnvironment(selection, capabilities) {
+  return selection?.d3dmetal === true && capabilities?.adapterIdentity === true ? { ...NVIDIA_ADAPTER } : {};
+}
 
 function hasPlanLibraries(plan, engine) {
   return [usedForApi(plan, "d3d11"), usedForApi(plan, "d3d12")].filter(selected => selected?.engine === engine).some(selected => {
@@ -94,4 +102,4 @@ async function hasD3DMetalPathBridge(engineRoot) {
   } catch { return false; }
 }
 
-module.exports = { DLLS, ENVIRONMENT, needsSceneInputs, withTemporalSelection, hasLibraries, hasPlanLibraries, checkSelection, environment, hasD3DMetalPathBridge };
+module.exports = { DLLS, ENVIRONMENT, needsSceneInputs, withTemporalSelection, hasLibraries, hasPlanLibraries, checkSelection, environment, adapterEnvironment, NVIDIA_ADAPTER, hasD3DMetalPathBridge };

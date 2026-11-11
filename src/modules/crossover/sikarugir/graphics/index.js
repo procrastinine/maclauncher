@@ -332,7 +332,7 @@ async function prepareGraphicsView({ source = require("../../sources").get("sika
     DYLD_FALLBACK_LIBRARY_PATH: libraryPaths.join(path.delimiter),
     ...(native.frameworks.length || external ? { DYLD_FALLBACK_FRAMEWORK_PATH: [...native.frameworks, ...(external ? [external] : [])].join(path.delimiter) } : {}),
     GST_REGISTRY_1_0: path.join(viewRoot, "gstreamer-registry.bin") };
-  Object.assign(env, DLSS.environment(dlss));
+  Object.assign(env, DLSS.environment(dlss), DLSS.adapterEnvironment(dlss, install?.capabilities));
   if (selection.components.includes("dxmt") && dlss.dxmt) Object.assign(env, require("../../temporal").environment(cameraBridge, dllRoot));
   if (gstreamer) {
     env.GST_PLUGIN_SYSTEM_PATH_1_0 = gstreamer.plugins;
