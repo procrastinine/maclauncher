@@ -217,11 +217,12 @@ test("the inspector worker is prepared with the launcher and stays open while id
 
 test("the inspector worker prepares recently played modules first and waits for requests between modules", async () => {
   const calls = [], modules = { alpha: {}, beta: {}, gamma: {} };
-  for (const id of Object.keys(modules)) modules[id].warmBackendLane = () => { calls.push(id); };
+  // Each hook can wait for requests between its own steps too.
+  for (const id of Object.keys(modules)) modules[id].warmBackendLane = async context => { calls.push(id); if (id === "alpha") await context.whenIdle(); };
   const registry = { ...require("../src/modules/registry"), listModuleIds: () => Object.keys(modules), getModule: id => modules[id] || null };
   const operations = createBackendOperations({ userDataDir: os.tmpdir(), registry, whenIdle: async () => { calls.push("idle"); } });
   assert.equal(await operations.warmInspectorLane({}, ["beta", "unknown"]), true);
-  assert.deepEqual(calls, ["beta", "idle", "alpha", "idle", "gamma", "idle"]);
+  assert.deepEqual(calls, ["beta", "idle", "alpha", "idle", "idle", "gamma", "idle"]);
 });
 
 test("a spare worker becomes the next game's lane and another starts after it", { timeout: 10000 }, async t => {

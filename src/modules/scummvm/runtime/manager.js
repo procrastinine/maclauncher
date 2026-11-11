@@ -58,6 +58,19 @@ function createManager({ dependencies = {} } = {}) {
       if (!selection.install || checked(selection.install,options)) return selection;
       return {...selection,install:null,ready:false,requiresDownload:true,reason:'The installed ScummVM files changed. Install the selected version again.'};
     },
+    // Hashes each installed ScummVM's files and checks its signature without
+    // holding the worker's thread, so later checks in this worker reuse them.
+    // A failure is left to those checks, which report it.
+    async prepareVerification({ userDataDir, whenIdle } = {}) {
+      for (const { directory } of base.core.listInstallDirs({ userDataDir })) {
+        try {
+          const record = JSON.parse(fs.readFileSync(path.join(directory,'runtime.json'),'utf8'));
+          const executablePath = record.source === 'local' ? record.runtimePath : path.resolve(directory,record.executableRelative || '');
+          if (fs.statSync(executablePath).isFile()) await Native.hashFileAsync(executablePath);
+          await verify.prepare({...record,executablePath},{whenIdle});
+        } catch {}
+      }
+    },
     getState(options={}) {
       const state = base.getState(options);
       const installed = state.installed.map(row => row.ready && !checked(row,{verification:'status'})

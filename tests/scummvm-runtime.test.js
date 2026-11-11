@@ -231,9 +231,17 @@ test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without 
   const Revision=require('../src/core/runtime-inventory-revision');
   Revision.activate({retainReads:true});t.after(()=>Revision.activate({retainReads:false}));
   const requirements=()=>Signing.launchRequirements(offline.resolveSelection(entry,{},userDataDir).install);
-  offline.getState({userDataDir});const expected=requirements();
   let walks=0;const readdir=fs.readdirSync;
-  const walking=t.mock.method(fs,'readdirSync',function(target,...args){if(String(target).startsWith(installedApp))walks++;return readdir.call(this,target,...args);});
+  const countWalks=()=>t.mock.method(fs,'readdirSync',function(target,...args){if(String(target).startsWith(installedApp))walks++;return readdir.call(this,target,...args);});
+  // Preparation hashes and checks the signature asynchronously; the
+  // synchronous checks that follow in the worker reuse it.
+  const fresh=createManager({dependencies:{downloadToFile:()=>assert.fail('Preparation stays offline')}});
+  await fresh.prepareVerification({userDataDir});
+  const preparedWalks=countWalks();
+  fresh.getState({userDataDir});assert.equal(fresh.resolveSelection(entry,{},userDataDir).ready,true);
+  assert.equal(walks,0,'Prepared verification is reused without walking the application');preparedWalks.mock.restore();
+  offline.getState({userDataDir});const expected=requirements();
+  const walking=countWalks();
   offline.getState({userDataDir});assert.deepEqual(requirements(),expected);assert.deepEqual(requirements(),expected);
   assert.equal(walks,0,'The inspector worker does not walk a verified application again');walking.mock.restore();
   Revision.advance();

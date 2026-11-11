@@ -220,17 +220,25 @@ async function repairLegacyInstallation(install, { signal, pin: selectedPin, pre
 
 function createVerifier() {
   const cache = new Map();
-  return function verify(install, { verification = 'full' } = {}) {
+  function signedApp(install) {
     const metadata = install?.installationMetadata;
     // Existing explicit local/publisher registrations retain their identity.
     // Their signature is not silently changed by selection or offline reuse.
-    if (!metadata?.signing) return install;
+    if (!metadata?.signing) return null;
     if (metadata.signing.policy !== POLICY || metadata.signing.identity !== '-' || metadata.signing.hardenedRuntime !== false ||
         !/^[a-f0-9]{64}$/.test(metadata.signedTreeSha256 || '') || !Array.isArray(metadata.signing.nativeFiles))
       throw new Error('ScummVM installation signing metadata changed.');
     const app = appRoot(install.executablePath);
     if (!app) throw new Error('ScummVM installation has no application bundle.');
-    const previous = cache.get(app), metadataSha256 = digest(JSON.stringify(metadata)), revision = InventoryRevision.retained();
+    return { metadata, app, metadataSha256: digest(JSON.stringify(metadata)) };
+  }
+  const recorded = (full, metadata) => full.sha256 === metadata.signedTreeSha256 && metadata.signing.nativeFiles.every(file =>
+    full.files.some(member => member.path === file.path && member.sha256 === file.sha256));
+  function verify(install, { verification = 'full' } = {}) {
+    const signed = signedApp(install);
+    if (!signed) return install;
+    const { metadata, app, metadataSha256 } = signed;
+    const previous = cache.get(app), revision = InventoryRevision.retained();
     // The inspector's worker keeps a verified application until the runtime
     // inventory changes; every other worker observes the files again.
     if (revision !== null && previous?.revision === revision && previous.metadataSha256 === metadataSha256) return install;
@@ -240,11 +248,27 @@ function createVerifier() {
       return install;
     }
     const full = inventory(app);
-    if (full.sha256 !== metadata.signedTreeSha256 || metadata.signing.nativeFiles.some(file =>
-      !full.files.some(member => member.path === file.path && member.sha256 === file.sha256))) throw new Error('The installed ScummVM files changed.');
+    if (!recorded(full, metadata)) throw new Error('The installed ScummVM files changed.');
     execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',app],{stdio:'pipe',timeout:30000});
     cache.set(app,{identity:current.identity,metadataSha256,revision});
     return install;
+  }
+  // Verifies an installation as verify does, hashing its files and checking
+  // its signature without holding the thread; verify reuses a success.
+  verify.prepare = async (install, { whenIdle = async () => {} } = {}) => {
+    const signed = signedApp(install);
+    if (!signed) return;
+    const { metadata, app, metadataSha256 } = signed, revision = InventoryRevision.retained();
+    const current = inventory(app,{hashFiles:false}), previous = cache.get(app);
+    if (previous?.identity === current.identity && previous?.metadataSha256 === metadataSha256) { cache.set(app,{...previous,revision}); return; }
+    const root = fs.realpathSync(app);
+    for (const file of current.files) if (!file.link) await Native.hashFileAsync(path.join(root, file.path));
+    await whenIdle();
+    const full = inventory(app);
+    if (full.identity !== current.identity || !recorded(full, metadata)) return;
+    await execute('/usr/bin/codesign',['--verify','--deep','--strict',app],{timeout:30000});
+    cache.set(app,{identity:current.identity,metadataSha256,revision});
   };
+  return verify;
 }
 module.exports = { POLICY, appRoot, inventory, launchRequirements, prepareInstall, repairLegacyInstallation, createVerifier };

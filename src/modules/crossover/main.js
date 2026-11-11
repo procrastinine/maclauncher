@@ -53,6 +53,7 @@ async function currentPlan(entry, runtimeId, context, install) {
 // inspector requests then reuse them.
 async function warmBackendLane(context) {
   for (const source of Sources.all()) {
+    await context.whenIdle?.();
     const selected = source.manager().resolveSelection({}, context.settings, context.userDataDir, {});
     if (selected?.ready === false || !selected?.install) continue;
     await Translators.optionsInventory(selected.install, source.id, { ...context, runtimeSettings: {} }, { reuse: true });

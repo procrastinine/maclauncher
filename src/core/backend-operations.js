@@ -261,7 +261,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       for (const id of registry.listModuleIds().sort((a, b) => rank(a) - rank(b))) {
         const warm = registry.getModule(id)?.warmBackendLane;
         if (typeof warm !== "function") continue;
-        try { await warm({ settings, userDataDir, logger }); }
+        try { await warm({ settings, userDataDir, logger, whenIdle }); }
         catch (error) { logger.debug?.(`[backend] ${id} lane preparation failed`, error.message); }
         // Requests that arrived during one module's preparation finish before the next module's starts.
         await whenIdle();

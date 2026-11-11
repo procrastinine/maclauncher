@@ -131,3 +131,25 @@ test("digest reuse keeps full payload policy checks and rehashes changed or unce
   assert.equal(observed.verify("entry", options), changed);
   assert.equal(verifications, 2);
 });
+
+test("an asynchronous digest is reused by the synchronous digest until the file changes", async t => {
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "runtime-identity-async-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, "runtime");
+  const bytes = crypto.randomBytes(3 * 1024 * 1024 + 17);
+  fs.writeFileSync(file, bytes, { mode: 0o755 });
+  const expected = crypto.createHash("sha256").update(bytes).digest("hex");
+  let interleaved = false;
+  setImmediate(() => { interleaved = true; });
+  assert.equal(await Native.hashFileAsync(file), expected);
+  assert.equal(interleaved, true, "other work ran while the file was read");
+  const readSync = fs.readSync;
+  let reads = 0;
+  t.mock.method(fs, "readSync", function (...args) { reads++; return readSync.apply(this, args); });
+  assert.equal(Native.hashFile(file), expected);
+  assert.equal(reads, 0, "the synchronous digest reused the asynchronous result");
+  fs.appendFileSync(file, "changed");
+  assert.equal(Native.hashFile(file), crypto.createHash("sha256").update(Buffer.concat([bytes, Buffer.from("changed")])).digest("hex"));
+  assert.ok(reads > 0, "a changed file is read again");
+  await assert.rejects(Identity.fileDigestAsync(file, { maximum: 16 }), /limit/);
+});

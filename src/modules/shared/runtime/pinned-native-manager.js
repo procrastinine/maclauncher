@@ -1081,6 +1081,11 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       listCatalog: ({ userDataDir } = {}) => { loadCatalog(userDataDir); return versions.map(version => entries.get(version)); },
       listDiscoveredCatalog: ({ userDataDir } = {}) => { loadCatalog(userDataDir); return remoteEntries.slice(); },
       getInstallDir: ({ userDataDir, version }) => { loadCatalog(userDataDir); return installDir(userDataDir, version); },
+      // Installed version folders, without reading or verifying their contents.
+      listInstallDirs: ({ userDataDir } = {}) => {
+        loadCatalog(userDataDir);
+        return installedVersions(userDataDir).map(version => ({ version, directory: installDir(userDataDir, version) }));
+      },
       get catalog() { return [...entries.values()]; } }
   };
   if (!customRuntime) { manager.customRuntime = false; return manager; }

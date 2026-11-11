@@ -95,4 +95,37 @@ function fileDigest(file, { maximum = Number.MAX_SAFE_INTEGER, noFollow = false 
   return result;
 }
 
-module.exports = { createVerifiedIdentityCache, fileIdentity, fileDigest };
+// The same digest read in chunks between which the thread runs other work.
+// A completed result is reused by fileDigest under the same identity rules.
+async function fileDigestAsync(file, { maximum = Number.MAX_SAFE_INTEGER, noFollow = false } = {}) {
+  const absolute = path.resolve(file), key = JSON.stringify([absolute, noFollow]);
+  const result = await digests.verify(key, {
+    identity: () => fileIdentity(absolute),
+    async verify() {
+      const handle = await fs.promises.open(absolute, fs.constants.O_RDONLY | (noFollow ? fs.constants.O_NOFOLLOW || 0 : 0));
+      try {
+        const before = await handle.stat({ bigint: true });
+        if (!before.isFile() || before.size > BigInt(maximum)) throw Error("Runtime file is not regular or exceeds its limit.");
+        const buffer = Buffer.alloc(1024 * 1024);
+        const read = async () => {
+          const hash = crypto.createHash("sha256");
+          let position = 0, count;
+          while ((count = (await handle.read(buffer, 0, buffer.length, position)).bytesRead) > 0) {
+            hash.update(buffer.subarray(0, count)); position += count;
+          }
+          if (BigInt(position) !== before.size) throw Error("Runtime file changed while being read.");
+          return hash.digest("hex");
+        };
+        const sha256 = await read();
+        if (!hasFineChangeTime(before) && await read() !== sha256) throw Error("Runtime file changed while being read.");
+        if (JSON.stringify(statFacts(before)) !== JSON.stringify(statFacts(await handle.stat({ bigint: true }))))
+          throw Error("Runtime file changed while being read.");
+        return Object.freeze({ size: Number(before.size), mode: Number(before.mode & 0o777n), sha256 });
+      } finally { await handle.close(); }
+    }
+  });
+  if (result.size > maximum) { digests.clear(key); throw Error("Runtime file exceeds its limit."); }
+  return result;
+}
+
+module.exports = { createVerifiedIdentityCache, fileIdentity, fileDigest, fileDigestAsync };

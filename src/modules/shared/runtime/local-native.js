@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { fileDigest } = require("./verified-identity");
+const { fileDigest, fileDigestAsync } = require("./verified-identity");
 const AppBundle = require("./app-bundle");
 
 const CPU_NAMES = new Map([[0x01000007, "x86_64"], [0x0100000c, "arm64"]]);
@@ -63,6 +63,10 @@ function readMachOArchitectures(executablePath, { allowLibrary = false } = {}) {
 
 function hashFile(filePath) {
   return fileDigest(filePath).sha256;
+}
+// Reads the digest without holding the thread; hashFile reuses the result.
+async function hashFileAsync(filePath) {
+  return (await fileDigestAsync(filePath)).sha256;
 }
 
 function resolveLocalRuntime({ runtimePath, runtimeVersion, upstreamRevision, expectedSha256, preferredExecutable, requiredArchitecture, runtimeLabel = "Runtime", allowLibrary = false, platform = process.platform, arch, hostArchitecture } = {}) {
@@ -130,4 +134,4 @@ async function launchLocalRuntime({ runtimePath, runtimeVersion, upstreamRevisio
   return child;
 }
 
-module.exports = { readMachOArchitectures, hashFile, resolveLocalRuntime, getLocalRuntimeStatus, launchLocalRuntime };
+module.exports = { readMachOArchitectures, hashFile, hashFileAsync, resolveLocalRuntime, getLocalRuntimeStatus, launchLocalRuntime };
