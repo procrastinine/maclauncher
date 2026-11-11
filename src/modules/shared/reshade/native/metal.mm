@@ -1841,9 +1841,10 @@ __attribute__((constructor)) static void loadMetal() { @autoreleasepool {
     if(explicitHost()) return;
     macfx::DiagnosticScope diagnostics(macfx::DiagnosticStage::Hooks,1);
     if(!macfx::liveEffects() && !macfx::effectRequested() && !macfx::timingEnabled() && !macfx::graphicsRequested() && !macfx::FrameCapture::configured()) return;
-    // The screenshot channel's request file is watched from load, so a
-    // request is seen while the hooks are dormant.
-    if(macfx::FrameCapture::configured())(void)macfx::captureTriggerPending();
+    // The screenshot request file is watched from the first frame check, also
+    // while the hooks are dormant, never from load: Wine loads this library
+    // into every process of a game, and a helper that presents no frames would
+    // consume the request that the game's own process has to answer.
     if(@available(macOS 26.0,*))if(macfx::timingEnabled())hookMetal4Feedback();
     try { if(macfx::effectRequested())prepareLaunchEffect(); }
     catch(const std::exception &error) { log("Effect preload failed: "+std::string(error.what())); return; }

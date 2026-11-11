@@ -5,6 +5,7 @@
 #import <objc/runtime.h>
 #include "live-controls.hpp"
 #include "native-layer.h"
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <chrono>
@@ -12,6 +13,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
+#include <spawn.h>
+#include <sys/wait.h>
 #include <fstream>
 #include <thread>
 #include <unistd.h>
@@ -65,7 +68,29 @@ id fake;
 id device(id,SEL){++deviceQueries;return fake;}
 int nativeFrame(void*,void*,void*){return 0;}
 }
+extern char **environ;
+// Wine loads the library into every process of a game. Helpers that load it
+// with the screenshot channel and present no frames leave a request for the
+// process that presents.
+int presentingProcessOnly(const char *self,const char *library){
+    char directory[1024];temporaryPath(directory,"macfx-dormant-helpers-XXXXXX");assert(mkdtemp(directory));
+    const auto capture=std::string(directory)+"/frame-capture",trigger=capture+".request",log=std::string(directory)+"/reshade.log";
+    setenv("RESHADE_CAPTURE_PREFIX",capture.c_str(),1);setenv("RESHADE_CAPTURE_TRIGGER",trigger.c_str(),1);setenv("RESHADE_CAPTURE_FINAL","1",1);setenv("RESHADE_LOG",log.c_str(),1);
+    std::array<pid_t,3> helpers{};
+    for(auto &pid:helpers){char *arguments[]={const_cast<char*>(self),const_cast<char*>(library),const_cast<char*>("--helper"),nullptr};assert(posix_spawn(&pid,self,nullptr,nullptr,arguments,environ)==0);}
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    {std::ofstream request(trigger);request<<"capture";}
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    const bool kept=access(trigger.c_str(),F_OK)==0;
+    for(const auto pid:helpers){int status=0;assert(waitpid(pid,&status,0)==pid&&WIFEXITED(status)&&WEXITSTATUS(status)==0);}
+    unlink(trigger.c_str());unlink(log.c_str());rmdir(directory);
+    if(!kept){std::fputs("A helper process that presents no frames consumed the screenshot request\n",stderr);return 1;}
+    std::puts("helper processes: the library loaded with the screenshot channel and no frames leaves the request for the presenting process");
+    return 0;
+}
 int main(int argc,char **argv){@autoreleasepool {
+    if(argc==3&&!std::strcmp(argv[2],"--helper")){if(!dlopen(argv[1],RTLD_NOW|RTLD_LOCAL))return 1;std::this_thread::sleep_for(std::chrono::milliseconds(1500));return 0;}
+    if(argc==3&&!std::strcmp(argv[2],"--helpers"))return presentingProcessOnly(argv[0],argv[1]);
     assert(argc==2||(argc==3&&(!std::strcmp(argv[2],"--installed-hooks")||!std::strcmp(argv[2],"--readability-formats"))));
     const bool readabilityFormats=argc==3&&!std::strcmp(argv[2],"--readability-formats");installedHooks=argc==3;
     char directory[1024];temporaryPath(directory,"macfx-dormant-activation-XXXXXX");assert(mkdtemp(directory));
