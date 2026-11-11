@@ -85,26 +85,30 @@ int main(int argc,char **argv){@autoreleasepool{
     assert(replaceFile(first,control));publish(plan,@"a",.2);[NSApplication sharedApplication];assert([NSApp setActivationPolicy:NSApplicationActivationPolicyRegular]);[NSApp finishLaunching];auto device=MTLCreateSystemDefaultDevice();auto queue=[device newCommandQueue];assert(device&&queue);
     const auto initialUntil=CACurrentMediaTime()+3;
     NSWindow *window=[[NSWindow alloc]initWithContentRect:NSMakeRect(80,100,256,192)styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];window.releasedWhenClosed=NO;
-    auto layer=[CAMetalLayer layer];layer.device=device;layer.pixelFormat=MTLPixelFormatBGRA8Unorm;layer.opaque=YES;layer.displaySyncEnabled=YES;window.contentView.wantsLayer=YES;window.contentView.layer=layer;
-    // An unbundled executable defaults to prohibited activation. Ordered
-    // windows can remain fully occluded and correctly report a zero display
-    // timestamp. Establish the actual physical-display precondition first.
-    // From macOS 14 activation is cooperative: [NSApp activate] is a request
-    // that the active application may decline.
-    [window makeKeyAndOrderFront:nil];if(@available(macOS 14.0,*))[NSApp activate];else [NSApp activateIgnoringOtherApps:YES];
-    [NSRunningApplication.currentApplication activateWithOptions:NSApplicationActivateAllWindows|NSApplicationActivateIgnoringOtherApps];
-    while((!NSApp.active||!window.keyWindow||!(window.occlusionState&NSWindowOcclusionStateVisible))&&CACurrentMediaTime()<initialUntil)idle(.005);
-    std::fprintf(stderr,"Hold window ready: active=%u key=%u occlusion=%lu window=%ld\n",NSApp.active,window.keyWindow,(unsigned long)window.occlusionState,(long)window.windowNumber);
-    assert(NSApp.active&&window.keyWindow&&(window.occlusionState&NSWindowOcclusionStateVisible));
-    std::fprintf(stderr,"Hold layer before display: viewNeedsDisplay=%u layerNeedsDisplay=%u redrawPolicy=%ld assigned=%u layer=%p viewLayer=%p\n",window.contentView.needsDisplay,layer.needsDisplay,(long)window.contentView.layerContentsRedrawPolicy,window.contentView.layer==layer,(__bridge void*)layer,(__bridge void*)window.contentView.layer);
+    auto layer=[CAMetalLayer layer];layer.device=device;layer.pixelFormat=MTLPixelFormatBGRA8Unorm;layer.opaque=YES;layer.displaySyncEnabled=YES;window.contentView.wantsLayer=YES;window.contentView.layer=[CALayer layer];layer.frame=window.contentView.bounds;[window.contentView.layer addSublayer:layer];
+    // Keep the CAMetalLayer below the view backing layer: AppKit owns the
+    // backing layer contents and may clear a drawable during view display.
+    // A fully occluded window correctly reports a zero display timestamp, so
+    // the window must actually be visible on a display. Activation is not
+    // needed for that and is not available everywhere (another process may
+    // hold secure input, and from macOS 14 activation is a request the active
+    // application may decline): the window is ordered above ordinary windows
+    // without activating the fixture.
+    window.level=NSStatusWindowLevel;[window orderFrontRegardless];
+    while(!(window.occlusionState&NSWindowOcclusionStateVisible)&&CACurrentMediaTime()<initialUntil)idle(.005);
+    std::fprintf(stderr,"Hold window ready: occlusion=%lu window=%ld\n",(unsigned long)window.occlusionState,(long)window.windowNumber);
+    assert(window.isVisible&&(window.occlusionState&NSWindowOcclusionStateVisible));
     [window display];[window.contentView displayIfNeeded];layer.drawableSize=CGSizeMake(128,96);[CATransaction flush];
-    std::fprintf(stderr,"Hold layer after display: viewNeedsDisplay=%u layerNeedsDisplay=%u redrawPolicy=%ld assigned=%u layer=%p viewLayer=%p size=%.0fx%.0f\n",window.contentView.needsDisplay,layer.needsDisplay,(long)window.contentView.layerContentsRedrawPolicy,window.contentView.layer==layer,(__bridge void*)layer,(__bridge void*)window.contentView.layer,layer.drawableSize.width,layer.drawableSize.height);
-    assert(window.contentView.layer==layer);
+    assert(layer.superlayer==window.contentView.layer);
     int owner=0;uint64_t epoch=0;macfx::FramePresenter presenter(layer,&owner);const auto preparations=std::make_shared<std::atomic<unsigned>>(0);presenter.setPreparationObserver([preparations](const macfx::EffectPreparationNotice&){++*preparations;});auto source=image(device,128,96);macfx::PresentationHoldCommand begin{++epoch,"transaction","hold",a,b};
     const auto finish=[&](const std::string&transaction,const macfx::PresentationContract&expected){macfx::PresentationHoldCommand value{++epoch,transaction,"finish",expected,{}};auto status=presenter.resumePresentationHold(value);assert(status.state=="finished"&&!status.holding&&!presenter.presentationHeld());};
     const auto unsupported=presenter.beginPresentationHold(begin);assert(unsupported.state=="failed"&&!unsupported.holding&&!presenter.presentationHeld());
-    auto warm=[queue commandBuffer];assert(presenter.submitDisplayFrame(warm,source,1,CACurrentMediaTime(),true).encoded);commit(warm);
-    while(presenter.snapshot().lastPresentedFrame!=1&&CACurrentMediaTime()<initialUntil)idle(.005);
+    // The plan's resources prepare off the frame path; the first frame waits for them.
+    id<MTLCommandBuffer> warm=nil;auto warmed=presenter.submitDisplayFrame(warm=[queue commandBuffer],source,1,CACurrentMediaTime(),true);
+    for(const auto preparedUntil=CACurrentMediaTime()+5;!warmed.encoded&&warmed.busy&&CACurrentMediaTime()<preparedUntil;){idle(.005);warmed=presenter.submitDisplayFrame(warm=[queue commandBuffer],source,1,CACurrentMediaTime(),true);}
+    if(!warmed.encoded)std::fprintf(stderr,"Hold first frame: busy=%u %s\n",warmed.busy,warmed.reason.c_str());assert(warmed.encoded);commit(warm);
+    const auto shownUntil=CACurrentMediaTime()+10;
+    while(presenter.snapshot().lastPresentedFrame!=1&&CACurrentMediaTime()<shownUntil)idle(.005);
     const auto initial=presenter.snapshot();std::fprintf(stderr,"Hold initial display: submitted=%llu encoded=%llu completed=%llu real=%llu generated=%llu dropped=%llu pending=%u frame=%llu stopped=%u size=%.0fx%.0f bounds=%.0fx%.0f visible=%u transaction=%u reason=%s\n",(unsigned long long)initial.submitted,(unsigned long long)initial.encoded,(unsigned long long)initial.completedReal,(unsigned long long)initial.presentedReal,(unsigned long long)initial.presentedGenerated,(unsigned long long)initial.dropped,initial.pending,(unsigned long long)initial.lastPresentedFrame,initial.stopped,layer.drawableSize.width,layer.drawableSize.height,layer.bounds.size.width,layer.bounds.size.height,window.visible,layer.presentsWithTransaction,initial.reason.c_str());
     assert(presenter.snapshot().lastPresentedFrame==1);
     auto late=[queue commandBuffer];assert(presenter.submitDisplayFrame(late,source,2,CACurrentMediaTime(),true).encoded);const auto before=presenter.snapshot();
