@@ -134,25 +134,26 @@ int main(int argc,char **argv){@autoreleasepool{
     auto blocked=[queue commandBuffer];auto busy=presenter.submitDisplayFrame(blocked,source,3,CACurrentMediaTime(),true);assert(!busy.encoded&&busy.busy);
     assert(replaceFile(second,control));publish(plan,@"c",.8);macfx::PresentationHoldCommand resume{++epoch,"transaction","present",b,{}};
     assert(presenter.resumePresentationHold(resume).state=="presenting");blocked=[queue commandBuffer];busy=presenter.submitDisplayFrame(blocked,source,3,CACurrentMediaTime(),true);assert(!busy.encoded&&busy.busy&&presenter.snapshot().lastPresentedFrame==1);
-    publish(plan,@"b",.8);id<MTLCommandBuffer>current=nil;
-    const auto candidateUntil=CACurrentMediaTime()+5;std::string candidateReason;
-    for(;;){current=[queue commandBuffer];const auto result=presenter.submitDisplayFrame(current,source,4,CACurrentMediaTime(),true);if(result.encoded)break;
-        if(candidateReason!=result.reason){candidateReason=result.reason;std::fprintf(stderr,"Hold frame 4 not encoded: busy=%u reason=%s\n",result.busy,result.reason.c_str());}
-        assert(result.busy&&CACurrentMediaTime()<candidateUntil&&presenter.snapshot().lastPresentedFrame==1);
-        commit(current);idle(.005);
-    }commit(current);awaitState(presenter,"presented");
+    const auto preparedSubmission=[&](uint64_t frame,id<MTLCommandBuffer> __strong &commands){
+        const auto until=CACurrentMediaTime()+5;const auto cover=presenter.snapshot().lastPresentedFrame;std::string reason;
+        for(;;){commands=[queue commandBuffer];const auto result=presenter.submitDisplayFrame(commands,source,frame,CACurrentMediaTime(),true);if(result.encoded)return;
+            if(reason!=result.reason){reason=result.reason;std::fprintf(stderr,"Hold frame %llu not encoded: busy=%u reason=%s\n",(unsigned long long)frame,result.busy,result.reason.c_str());}
+            assert(result.busy&&CACurrentMediaTime()<until&&presenter.snapshot().lastPresentedFrame==cover);commit(commands);idle(.005);
+        }
+    };
+    publish(plan,@"b",.8);id<MTLCommandBuffer>current=nil;preparedSubmission(4,current);commit(current);awaitState(presenter,"presented");
     const auto accepted=presenter.presentationHoldStatus();assert(presenter.presentationHeld()&&accepted.holding&&accepted.frameId==4&&accepted.presentedTime>0&&accepted.contract==b);
     blocked=[queue commandBuffer];assert(presenter.submitDisplayFrame(blocked,source,5,CACurrentMediaTime(),true).busy);finish("transaction",b);
     const auto prepared=preparations->load();begin={++epoch,"transaction-two","hold",b,b};assert(presenter.beginPresentationHold(begin).state=="held");
-    resume={++epoch,"transaction-two","cancel",b,{}};assert(presenter.resumePresentationHold(resume).state=="presenting");current=[queue commandBuffer];assert(presenter.submitDisplayFrame(current,source,5,CACurrentMediaTime(),true).encoded);commit(current);awaitState(presenter,"cancelled");const auto readyUntil=CACurrentMediaTime()+3;while(preparations->load()<=prepared&&CACurrentMediaTime()<readyUntil)idle(.005);assert(preparations->load()>prepared);const auto cancelled=presenter.presentationHoldStatus();assert(cancelled.frameId==5&&cancelled.contract==b&&cancelled.presentedTime>0);finish("transaction-two",b);
+    resume={++epoch,"transaction-two","cancel",b,{}};assert(presenter.resumePresentationHold(resume).state=="presenting");preparedSubmission(5,current);commit(current);awaitState(presenter,"cancelled");const auto readyUntil=CACurrentMediaTime()+3;while(preparations->load()<=prepared&&CACurrentMediaTime()<readyUntil)idle(.005);assert(preparations->load()>prepared);const auto cancelled=presenter.presentationHoldStatus();assert(cancelled.frameId==5&&cancelled.contract==b&&cancelled.presentedTime>0);finish("transaction-two",b);
     begin={++epoch,"resize","hold",b,a};assert(presenter.beginPresentationHold(begin).state=="held");layer.drawableSize=CGSizeMake(160,104);source=image(device,160,104);
     // A new epoch must accept one immediate paused redraw, without waiting
     // for the ordinary100ms reader interval or issuing a second source frame.
     assert(replaceFile(first,control));publish(plan,@"a",.2,true,false);resume={++epoch,"resize","present",a,{}};assert(presenter.resumePresentationHold(resume).state=="presenting");current=[queue commandBuffer];assert(presenter.submitDisplayFrame(current,source,6,CACurrentMediaTime(),true).encoded);commit(current);awaitState(presenter,"presented");assert(presenter.presentationHoldStatus().width==160&&presenter.presentationHoldStatus().height==104);finish("resize",a);
     auto off=packet(false);macfx::PresentationContract empty{[hex(@"d")UTF8String],hash(off)};begin={++epoch,"no-removal","hold",a,empty};assert(presenter.beginPresentationHold(begin).state=="held");
     assert(replaceFile(off,control));publish(plan,@"d",0,false,false);resume={++epoch,"no-removal","present",empty,{}};assert(presenter.resumePresentationHold(resume).state=="presenting");blocked=[queue commandBuffer];busy=presenter.submitDisplayFrame(blocked,source,7,CACurrentMediaTime(),true);assert(!busy.encoded&&busy.busy&&presenter.presentationHeld()&&presenter.presentationHoldStatus().state=="failed"&&presenter.presentationHoldStatus().holding);
-    assert(replaceFile(first,control));publish(plan,@"a",.2,true,false);resume={++epoch,"no-removal","cancel",a,{}};assert(presenter.resumePresentationHold(resume).state=="presenting");current=[queue commandBuffer];assert(presenter.submitDisplayFrame(current,source,8,CACurrentMediaTime(),true).encoded);commit(current);awaitState(presenter,"cancelled");finish("no-removal",a);
+    assert(replaceFile(first,control));publish(plan,@"a",.2,true,false);resume={++epoch,"no-removal","cancel",a,{}};assert(presenter.resumePresentationHold(resume).state=="presenting");preparedSubmission(8,current);commit(current);awaitState(presenter,"cancelled");finish("no-removal",a);
     begin={++epoch,"stopped","hold",a,b};assert(presenter.beginPresentationHold(begin).state=="held");assert(replaceFile(second,control));publish(plan,@"b",.8);resume={++epoch,"stopped","present",b,{}};assert(presenter.resumePresentationHold(resume).state=="presenting");
-    late=[queue commandBuffer];assert(presenter.submitDisplayFrame(late,source,9,CACurrentMediaTime(),true).encoded);const auto shown=presenter.snapshot();presenter.stop();commit(late);idle(.1);assert(!presenter.presentationHeld()&&!presenter.presentationHoldStatus().holding&&presenter.presentationHoldStatus().state=="failed"&&presenter.snapshot().presentedReal==shown.presentedReal);
+    preparedSubmission(9,late);const auto shown=presenter.snapshot();presenter.stop();commit(late);idle(.1);assert(!presenter.presentationHeld()&&!presenter.presentationHoldStatus().holding&&presenter.presentationHoldStatus().state=="failed"&&presenter.snapshot().presentedReal==shown.presentedReal);
     [window close];std::puts("Presentation hold: actual display ACK, late-buffer retirement, matching publication, same-contract history reset, resize, fail-closed removal, rollback and Stop passed");
 }}
