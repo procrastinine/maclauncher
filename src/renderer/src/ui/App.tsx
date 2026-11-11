@@ -111,9 +111,7 @@ export default function App() {
     try { return api?.initialState?.() || null; } catch { return null; }
   });
   const [state, setState] = useState<LauncherState | null>(() => initialState && restoreLauncherState(initialState));
-  // Settings, Runtimes and Credits windows hold all three views and display
-  // one, so a hidden window opened for any of them only changes which one is
-  // displayed. Its state names the view it shows.
+  // Each kept utility page holds all three views for a direct DOM switch.
   const keptUtility = Boolean(utilityWindowContext && KEPT_UTILITY_VIEWS.includes(utilityWindowContext.view));
   const utilityView = utilityWindowContext ? state?.utilityWindow?.view || utilityWindowContext.view : null;
   const runtimesOpen = keptUtility || utilityView === "runtimes";
@@ -123,27 +121,23 @@ export default function App() {
   if (utilityView && utilityRevision !== undefined) utilityNavigation.current[utilityView] = utilityRevision;
   useEffect(() => {
     if (!keptUtility || !api?.onUtilityViewSwitch) return;
-    // The main process switches the displayed view directly, without a render,
-    // then shows the window once the frame holding it has been produced: the
-    // task after the next frame callback. A window that receives no frames
-    // while hidden reports after one frame interval instead.
-    let frame = 0, timer = 0;
+    const channel = new MessageChannel();
+    channel.port1.onmessage = event => api.utilityWindowDrawn?.(event.data);
     const unsubscribe = api.onUtilityViewSwitch(({ view, revision }) => {
       for (const slot of document.querySelectorAll<HTMLElement>("[data-utility-view]")) slot.hidden = slot.dataset.utilityView !== view;
-      cancelAnimationFrame(frame); clearTimeout(timer);
-      let reported = false;
-      const report = () => { if (reported) return; reported = true; cancelAnimationFrame(frame); clearTimeout(timer); api.utilityWindowDrawn?.(revision); };
-      frame = requestAnimationFrame(() => { const channel = new MessageChannel(); channel.port1.onmessage = report; channel.port2.postMessage(0); });
-      timer = window.setTimeout(report, 20);
+      // Posted messages run in hidden, throttled pages without a frame callback.
+      channel.port2.postMessage(revision);
     });
-    return () => { cancelAnimationFrame(frame); clearTimeout(timer); unsubscribe(); };
+    return () => { unsubscribe(); channel.port1.close(); channel.port2.close(); };
   }, [api, keptUtility]);
   useEffect(() => {
     if (!utilityView || utilityRevision === undefined || !api?.utilityWindowDrawn) return;
-    // Reported once the view for this request has been drawn, so its window can show it.
-    let second = 0;
-    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => api.utilityWindowDrawn?.(utilityRevision)); });
-    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+    // Effects run after React commits the requested view. Posted messages run
+    // in hidden, throttled pages too; animation frames and timers may not.
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => { api.utilityWindowDrawn?.(utilityRevision); channel.port1.close(); channel.port2.close(); };
+    channel.port2.postMessage(0);
+    return () => { channel.port1.close(); channel.port2.close(); };
   }, [api, utilityView, utilityRevision]);
   const gamePaths = useMemo(() => new Set((state?.recents || []).map(game => game.gamePath)), [state?.recents]);
   const latestState = useRef(state);

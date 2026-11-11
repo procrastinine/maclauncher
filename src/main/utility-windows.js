@@ -12,7 +12,7 @@ const { normalizeUtilityWindowRequest, utilityWindowDefinition } = require("../c
 // The hidden window receives every state like any other, so nothing renders
 // on open; a request that navigates within a view (a section or runtime) is
 // sent with beforeShow and drawn before the window shows. A new spare is
-// prepared in idle time after each opening.
+// prepared as soon as a spare is taken.
 // Closing a kept view hides its window at once; it becomes the spare, or, when
 // a spare exists already, it is destroyed in idle time. While isQuitting() is
 // true windows close normally. onHidden runs after a close hides a window.
@@ -22,7 +22,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
   const windows = new Map();
   const byWindow = new WeakMap();
   const kept = new Set(keptViews);
-  let revision = 0, spare = null, sparing = false;
+  let revision = 0, spare = null;
   function context(request) { return { ...request, revision: ++revision }; }
   function forget(record) {
     if (windows.get(record.context.view) === record) windows.delete(record.context.view);
@@ -80,15 +80,17 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
   async function reveal(record, activate, switched, navigation) {
     if (spare === record) spare = null;
     record.hidden = false;
+    // Begin the replacement before waiting for this view to be presented.
+    void ensureSpare();
     const { win } = record;
-    if (!record.loaded && !switched) {
+    if (!record.loaded) {
       focus(win, activate);
       record.shown = true;
       await record.ready;
+      // The page may have read its initial state before this request arrived.
+      if (switched || navigation) onContextChange(win);
       return win;
     }
-    // A spare switched while loading draws the view from the first state it reads.
-    if (!record.loaded) await record.ready;
     if (navigation) beforeShow(win);
     if (present) await present(win, { view: record.context.view, revision: record.context.revision, switched, navigation, shown: record.shown, activate });
     else focus(win, activate);
@@ -123,31 +125,28 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     if (record) {
       record.revealing = reveal(record, activate, switched, navigation);
       try { return await record.revealing; }
-      finally { record.revealing = null; idle(() => { void ensureSpare(); }); }
+      finally { record.revealing = null; }
     }
     record = create(request, activate);
     // A view opened with no window to show draws its native frame at once in
     // its background color and its view with its first state, which the page
     // reads with its request; nothing is resent.
     record.hidden = false;
+    void ensureSpare();
     focus(record.win,activate);
     record.shown = true;
-    try { await record.ready; }
-    finally { idle(() => { void ensureSpare(); }); }
+    await record.ready;
     return record.win;
   }
 
   // One hidden window for a kept view that has none, loaded once.
   async function ensureSpare() {
-    if (sparing || isQuitting() || (spare && !spare.win.isDestroyed())) return;
+    if (isQuitting() || (spare && !spare.win.isDestroyed())) return;
     const view = [...kept].find(item => !windows.has(item));
     if (!view) return;
-    sparing = true;
-    try {
-      const record = create(normalizeUtilityWindowRequest({ view }), false);
-      spare = record;
-      await record.ready.catch(() => {});
-    } finally { sparing = false; }
+    const record = create(normalizeUtilityWindowRequest({ view }), false);
+    spare = record;
+    await record.ready.catch(() => {});
   }
   function isHidden(win) { const record = byWindow.get(win); return Boolean(record?.hidden || record?.retiring); }
   function isRetiring(win) { return Boolean(byWindow.get(win)?.retiring); }

@@ -38,7 +38,7 @@ function closeWindow(win) {
   return prevented;
 }
 
-test("one hidden spare serves Settings, Runtimes and Credits: switched on open, refilled when idle, closed windows hidden at once", async () => {
+test("one hidden spare serves Settings, Runtimes and Credits: switched on open, replacement starts when taken, closed windows hidden at once", async () => {
   const shownWith = [], hidden = [], adapted = [], idle = [], presented = [];
   let quitting = false, holdLoad = null;
   const f = fixture({ kept: ["settings", "runtimes", "credits"], beforeShow: win => shownWith.push(f.controller.stateForWindow(win, {}).utilityWindow),
@@ -60,7 +60,8 @@ test("one hidden spare serves Settings, Runtimes and Credits: switched on open, 
   assert.deepEqual(adapted.map(item => [item.view, item.title]), [["runtimes", "Runtimes"]]);
   assert.equal(shownWith.at(-1).view, "runtimes", "Its state names the new view before it shows");
   assert.equal(shownWith.at(-1).managerId, "wine");
-  assert.equal(runtimes.shows, 1); assert.equal(f.loads.length, 1, "Switching loads nothing");
+  assert.equal(runtimes.shows, 1);
+  assert.equal(f.windows.length, 2, "Replacement constructed during open, without idle work");
   await runIdle();
   assert.equal(f.windows.length, 2, "A new spare is prepared when idle");
   assert.equal(f.loads[1].request.view, "settings", "for a kept view without a window");
@@ -92,7 +93,7 @@ test("one hidden spare serves Settings, Runtimes and Credits: switched on open, 
   assert.equal(reopened.destroyed, true);
   assert.equal(live().length, 1, "Idle, one hidden window remains");
 
-  // A spare still loading is already partway: it takes the requested view once loaded.
+  // A spare still loading shows its native frame immediately for the new view.
   live()[0].destroy();
   let release; holdLoad = new Promise(resolve => { release = resolve; });
   void f.controller.prepare();
@@ -101,14 +102,13 @@ test("one hidden spare serves Settings, Runtimes and Credits: switched on open, 
   const count = f.windows.length;
   const opening = f.controller.open({ view: "credits" });
   await settle();
-  assert.equal(f.windows.length, count, "No fresh window while the spare loads");
-  assert.equal(loading.shows, 0, "It shows only after its load");
+  assert.equal(f.windows.length, count + 1, "A replacement starts even while the taken spare loads");
+  assert.equal(loading.shows, 1, "Its native frame shows before load completes");
   assert.equal(f.controller.stateForWindow(loading, {}).utilityWindow.view, "credits", "Its first state names the requested view");
   release(); holdLoad = null;
   const credits = await opening;
   assert.equal(credits, loading);
   assert.equal(credits.shows, 1);
-  assert.equal(presented.at(-1).switched, true);
   await runIdle();
 
   // With no other hidden window, a closed view stays as the spare.
@@ -652,4 +652,40 @@ test('utility windows receive the launcher state without library rows, other win
   assert.equal(sent.runtimeManagers, state.runtimeManagers);
   assert.equal(sent.utilityWindow.managerId, 'translator-dxvk');
   assert.equal(f.controller.stateForWindow({}, state), state, 'the library and per-game windows keep every game');
+});
+
+test("a hidden throttled utility page acknowledges committed navigation through a posted message", async () => {
+  const { MessageChannel } = require("node:worker_threads");
+  const reported = [];
+  let cleanup;
+  const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/App.tsx"), "utf8");
+  const start = source.indexOf('  useEffect(() => {\n    if (!utilityView');
+  const effect = source.slice(start, source.indexOf('  const gamePaths', start));
+  vm.runInNewContext(effect, {
+    MessageChannel, utilityView: "runtimes", utilityRevision: 42,
+    api: { utilityWindowDrawn: revision => reported.push(revision) },
+    useEffect: effect => { cleanup = effect(); }
+  });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.deepEqual(reported, [42]);
+  cleanup();
+});
+
+test("a hidden spare switches its DOM slots and acknowledges without frame callbacks or timers", async () => {
+  const { MessageChannel } = require("node:worker_threads");
+  const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/App.tsx"), "utf8");
+  const start = source.indexOf('  useEffect(() => {\n    if (!keptUtility');
+  const effect = source.slice(start, source.indexOf('  useEffect(() => {', start + 5)).replaceAll('<HTMLElement>', '');
+  const slots = ["settings", "runtimes", "credits"].map(view => ({ dataset: { utilityView: view }, hidden: false }));
+  let switchView, cleanup, unsubscribed = false, resolve;
+  const ack = new Promise(done => { resolve = done; });
+  vm.runInNewContext(effect, {
+    MessageChannel, keptUtility: true, document: { querySelectorAll: () => slots },
+    api: { utilityWindowDrawn: resolve, onUtilityViewSwitch: callback => { switchView = callback; return () => { unsubscribed = true; }; } },
+    useEffect: callback => { cleanup = callback(); }
+  });
+  switchView({ view: "credits", revision: 73 });
+  assert.deepEqual(slots.map(slot => slot.hidden), [true, true, false]);
+  assert.equal(await ack, 73);
+  cleanup(); assert.equal(unsubscribed, true);
 });

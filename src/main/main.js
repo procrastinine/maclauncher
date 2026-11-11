@@ -2270,11 +2270,8 @@ function utilityViewDrawn(win, revision, limitMs) {
     setTimeout(() => { entry.waiters = entry.waiters.filter(item => item !== waiter); resolve(false); }, limitMs).unref?.();
   });
 }
-// A Settings, Runtimes or Credits page holds all three views, kept current by
-// every state, so switching only changes which one is displayed; a request
-// that navigates is drawn from the state sent with it. These pages keep
-// drawing while hidden, so the window shows once its page reports that the
-// frame holding the request has been produced.
+// Each prepared page holds all three views. Hidden pages acknowledge a DOM
+// switch through a posted message while background throttling stays enabled.
 async function presentUtilityWindow(win, { view, revision, switched, navigation, activate }) {
   if (switched && !navigation && !win.isDestroyed()) win.webContents.send("launcher:utilityViewSwitch", { view, revision });
   if (switched || navigation) await utilityViewDrawn(win, revision, 300);
@@ -2289,12 +2286,8 @@ const utilityWindows = createUtilityWindowController({
       ...(request?.view === "appAction" ? { title: moduleAppActions.title(request.moduleId, request.actionId) || options.title } : {}),
       ...utilityWindowSize(options),
       backgroundColor: nativeTheme.shouldUseDarkColors ? "#111318" : "#f5f6f8",
-      // A Settings, Runtimes or Credits window may wait hidden for its next
-      // view; it keeps drawing and running its frame callbacks while hidden.
-      ...(KEPT_UTILITY_VIEWS.includes(request?.view) ? { paintWhenInitiallyHidden: true } : {}),
       webPreferences: { preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
-        nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: devtoolsEnabled,
-        ...(KEPT_UTILITY_VIEWS.includes(request?.view) ? { backgroundThrottling: false } : {}) }
+        nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: devtoolsEnabled }
     });
   },
   loadView: (win, request) => loadLauncherView(win, request),
@@ -2307,7 +2300,7 @@ const utilityWindows = createUtilityWindowController({
   },
   onContextChange: win => sendState(win),
   // Settings, Runtimes and Credits share one hidden window prepared after the
-  // startup inventory and again after each opening; closing one hides it.
+  // startup inventory; its replacement starts when taken. Closing one hides it.
   keptViews: KEPT_UTILITY_VIEWS,
   adaptWindow: (win, options, request) => {
     win.__maclauncherWindowType = request.view;

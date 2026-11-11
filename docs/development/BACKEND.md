@@ -126,6 +126,10 @@ Each worker counts runtime inventory changes. A runtime action, a runtime or set
 
 Modules can be imported both on the main Node thread and in backend workers. A module with its own worker uses a dedicated entry file, and only that entry file installs task handlers or closes its message port.
 
+### Prepared utility windows
+
+Settings, Runtimes and Credits share one hidden native window loaded after the startup runtime inventory. Each page holds all three views with current state. Taking the hidden window starts loading its replacement immediately. A loaded page switches its displayed view and acknowledges through a posted message, which runs with background throttling enabled. A page still loading shows its native frame immediately in the window background color and draws the requested view when loaded. Closing hides the window at once; one hidden window remains, and excess closed windows are destroyed in idle time. The last visible launcher window closing still quits the app.
+
 ### State updates
 
 Launcher windows receive state over two channels. Structural library and runtime changes arrive through `launcher:state`, while download, preparation, import and running-process updates use the smaller `launcher:activity` channel, and the renderer merges only those activity fields into its existing game and catalog objects. Activity that arrives before the first snapshot is buffered, and a newer full broadcast replaces an older pending snapshot. Settings, Runtimes, Credits and the other utility windows receive the state without library rows and icon previews. A new utility window reads its request with its first state, and a changed request, such as opening Runtimes on another manager, is sent only to that window. Only the Credits window collects acknowledgments.
