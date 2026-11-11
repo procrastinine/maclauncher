@@ -23,7 +23,7 @@ function fixture(options = {}) {
   const controller = createUtilityWindowController({
     createWindow: configuration => { const win = new Window(configuration); windows.push(win); return win; },
     registerWindow: (win, view) => registrations.push({ win, view }),
-    loadView: async (win, request) => { loads.push({ win, request }); await options.load?.(win, request); },
+    loadView: async (win, request) => { loads.push({ win, request }); return await options.load?.(win, request); },
     onContextChange: options.changed,
     ...(options.kept ? { keptViews: options.kept, beforeShow: options.beforeShow, onHidden: options.hidden, isQuitting: options.quitting,
       adaptWindow: options.adapt, idle: options.idle, present: options.present } : {})
@@ -661,7 +661,7 @@ test("utility switches acknowledge the mounted DOM without frame callbacks or ti
   const effect = source.slice(start, source.indexOf('  const initiallyPainted',start+5)).replaceAll('<HTMLElement>','');
   const slots=['settings','runtimes','credits'].map(view=>({dataset:{utilityView:view},hidden:false}));
   let switchView, cleanup; const reported=[];
-  vm.runInNewContext(effect,{utilityRevision:1,allViews:true,api:{onUtilityViewSwitch:callback=>{switchView=callback;return ()=>{};},utilityWindowDrawn:revision=>reported.push(revision)},
+  vm.runInNewContext(effect,{utilityRevision:1,allViews:true,initiallyPainted:{current:true},api:{onUtilityViewSwitch:callback=>{switchView=callback;return ()=>{};},utilityWindowDrawn:revision=>reported.push(revision)},
     document:{querySelectorAll:()=>slots},useLayoutEffect:callback=>{cleanup=callback();}});
   switchView({view:'credits',revision:73});
   assert.deepEqual(slots.map(slot=>slot.hidden),[true,true,false]);
@@ -709,10 +709,13 @@ test('the utility preload paints its shell before fetching state and retains a n
   api.utilityShellReady();assert.equal(heading.textContent,'Settings');assert.equal(shell.dataset.utilityShellView,'settings');
   assert.equal(fetches,0,'Drawing the shell does not fetch or serialize the full state');
   const loading=api.initialStateReady();assert.equal(fetches,1);
+  assert.equal(api.initialStateReady(),loading,'Concurrent bootstrap reads share the in-flight transfer');
   const latest={view:'credits',revision:2};ipc.emit('launcher:utilityViewSwitch',{},latest);
   assert.equal(heading.textContent,'Credits');
   finish({recents:[],utilityWindow:request});
   assert.equal((await loading).utilityWindow,latest);
+  assert.equal(api.initialState(),null,'The preload keeps no full utility snapshot after transferring it');
+  await api.initialStateReady();assert.equal(fetches,2,'The fulfilled bootstrap promise is released');
   const replay=[];const stop=api.onUtilityViewSwitch(value=>replay.push(value),1);
   assert.equal(replay[0],latest,'Mounting controls receive a request newer than their snapshot');stop();
   const prepared={...latest,prepared:true};ipc.emit('launcher:utilityViewSwitch',{},prepared);
@@ -908,6 +911,7 @@ test('a cold second view returns and shows before constructing its next spare', 
   assert.equal(f.windows.length,2,'No third native constructor runs on the second open path');
   assert.equal(credits.shows,1);
   credits.emit('show');
+  await Promise.resolve();
   assert.equal(f.windows.length,2,'The native show notification finishes before refill');
   assert.equal(idle.length,1);
   idle.shift()();
@@ -975,7 +979,7 @@ test('independent refill controls and state start together without frame waits',
   assert.equal(imports,4);assert.equal(state,1);
 });
 
-test('a requested Credits page renders its content without decoding or mounting other utility views', async () => {
+test('a requested Credits page uses its bootstrap snapshot without a second bridge copy or runtime catalogs', async () => {
   const {build}=require('vite'),Module=require('node:module'),React=require('react');
   const {renderToStaticMarkup}=require('react-dom/server');
   const bundle=await build({configFile:false,logLevel:'silent',build:{ssr:path.resolve(__dirname,'../src/renderer/src/ui/UtilityApp.tsx'),write:false,
@@ -986,9 +990,9 @@ test('a requested Credits page renders its content without decoding or mounting 
   state.utilityWindow={view:'credits',revision:3,prepared:false};
   state.runtimeManagers=new Proxy({}, {ownKeys(){assert.fail('Credits must not decode or enumerate runtime catalogs before its content');}});
   const previous=globalThis.window;
-  globalThis.window={location:{search:'?view=settings'},MacLauncher:{launcher:{initialState:()=>state}}};
+  globalThis.window={location:{search:'?view=settings'},MacLauncher:{launcher:{initialState:()=>assert.fail('The bootstrap snapshot must not cross the bridge a second time')}}};
   try {
-    const markup=renderToStaticMarkup(React.createElement(compiled.exports.default||compiled.exports));
+    const markup=renderToStaticMarkup(React.createElement(compiled.exports.default||compiled.exports,{initialState:state}));
     assert.match(markup,/data-utility-view="credits"/);
     assert.doesNotMatch(markup,/data-utility-view="settings"|data-utility-view="runtimes"/);
     assert.match(markup,/class="ackTable"/);
@@ -1033,4 +1037,76 @@ test('a requested view retained as the hidden spare prepares all views for later
     navigate({view:'runtimes',managerId:'fixture-manager',revision:2});harness.render();
     assert.equal(reported.at(-1),2,'Navigation remains committed before showing a retained spare');
   } finally {harness?.close();globalThis.document=previous.document;globalThis.window=previous.window;globalThis.requestAnimationFrame=previous.raf;globalThis.cancelAnimationFrame=previous.cancel;}
+});
+
+test('a shell-only second window shows now and defers the next constructor until its controls draw', async t => {
+  t.mock.timers.enable({apis:['setTimeout','Date'],now:0});
+  const windows=[],created=[];let first=true;
+  const controller=createUtilityWindowController({keptViews:['settings','runtimes','credits'],
+    createWindow:options=>{const win=new Window(options);windows.push(win);created.push(Date.now());return win;},
+    loadView:async()=>{if(first){first=false;return;}return {contentReady:new Promise(resolve=>setTimeout(()=>resolve(true),100))};},
+    idle:callback=>callback(),present:async win=>win.show()});
+  const flush=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
+  await controller.prepare();
+  const runtimes=await controller.open({view:'runtimes'});await flush();
+  t.mock.timers.tick(10);
+  const credits=await controller.open({view:'credits'});await flush();
+  assert.notEqual(runtimes,credits);assert.equal(credits.shows,1);
+  assert.equal(windows.length,2,'Neither shell load nor native show may start another constructor before content');
+  t.mock.timers.tick(89);await flush();assert.equal(windows.length,2);
+  t.mock.timers.tick(1);await flush();assert.equal(windows.length,3);
+  assert.equal(created[2],100,'The next renderer starts after the content acknowledgement');
+});
+
+test('shell acknowledgement does not settle a full-controls draw waiter', async () => {
+  const source=fs.readFileSync(path.join(__dirname,'../src/main/main.js'),'utf8');
+  const start=source.indexOf('const utilityDrawn = new WeakMap();');
+  const code=source.slice(start,source.indexOf('// All three views are mounted.',start));
+  const ipcMain=new EventEmitter(),win={};
+  const context={ipcMain,BrowserWindow:{fromWebContents:()=>win},setTimeout:()=>({unref(){}})};
+  vm.runInNewContext(code,context);
+  let controls=false;
+  const shell=context.utilityViewDrawn(win,7,1000),full=context.utilityViewDrawn(win,7,1000,true).then(value=>{controls=value;return value;});
+  ipcMain.emit('launcher:utilityWindowDrawn',{sender:{}},7,'shell');
+  assert.equal(await shell,true);await Promise.resolve();assert.equal(controls,false);
+  ipcMain.emit('launcher:utilityWindowDrawn',{sender:{}},7);
+  assert.equal(await full,true);
+});
+
+test('the utility entry hands its fetched snapshot directly to the first React render', async () => {
+  const source=fs.readFileSync(path.join(__dirname,'../src/renderer/src/utility.tsx'),'utf8');
+  const state={utilityWindow:{view:'credits',revision:3,prepared:false}},root={};let rendered;
+  const React={Suspense:'suspense',createElement:(type,props,...children)=>({type,props:{...props,children}})};
+  const modules={react:React,'react-dom/client':{createRoot:target=>{assert.equal(target,root);return {render:element=>{rendered=element;}};}},'./ui/UtilityApp':{default:()=>{}},'./ui/styles.css':{}};
+  const runnable=source.replace('void Promise.all','Promise.all').replace(/import\(([^)]+)\)/g,'load($1)').replace('document.getElementById("root")!','document.getElementById("root")');
+  await vm.runInNewContext(runnable,{performance:{mark(){}},document:{getElementById:()=>root},window:{MacLauncher:{launcher:{initialStateReady:async()=>state}}},
+    load:async id=>modules[id],console:{error:error=>assert.fail(String(error))}});
+  assert.equal(rendered.props.children[0].props.initialState,state);
+});
+
+test('the bootstrap follow-up keeps prepared metadata stable instead of decoding unchanged catalogs', async () => {
+  const {subscribeLauncherState}=require('../src/renderer/src/ui/launcher-state-model.mjs');
+  const f=fixture({kept:['credits']});
+  const win=await f.controller.open({view:'credits'});
+  const state={recents:[],runtimeManagers:{fixture:{runtimeSnapshotVersion:1,installed:[]}}};
+  const delivered=f.controller.stateForWindow(win,state);
+  const bootstrap={...delivered,utilityWindow:{...delivered.utilityWindow,prepared:false}};
+  const received=[];
+  const stop=subscribeLauncherState({onState:()=>()=>{},getState:async()=>structuredClone(f.controller.stateForWindow(win,state))},
+    next=>received.push(next),error=>assert.fail(String(error)),bootstrap);
+  await new Promise(resolve=>setImmediate(resolve));stop();
+  assert.equal(received.length,0,'An unchanged follow-up must retain the first rendered state, not restore every runtime catalog');
+});
+
+test('a switch during first mounting waits for the first content frame acknowledgement', () => {
+  const source=fs.readFileSync(path.join(__dirname,'../src/renderer/src/ui/UtilityApp.tsx'),'utf8');
+  const start=source.indexOf('  useLayoutEffect(() => {\n    if (!api?.onUtilityViewSwitch)');
+  const effect=source.slice(start,source.indexOf('  const initiallyPainted',start+5)).replaceAll('<HTMLElement>','');
+  let navigate,request;const reported=[];
+  vm.runInNewContext(effect,{utilityRevision:1,allViews:true,initiallyPainted:{current:false},
+    api:{onUtilityViewSwitch:callback=>{navigate=callback;return ()=>{};},utilityWindowDrawn:revision=>reported.push(revision)},
+    document:{querySelectorAll:()=>[]},setNavigationRequest:value=>{request=value;},useLayoutEffect:callback=>callback()});
+  navigate({view:'credits',revision:2,prepared:false});
+  assert.equal(reported.length,0,'A mounting DOM is not yet a drawn page');
+  assert.equal(request.revision,2,'The first-frame effect reports the latest request');
 });

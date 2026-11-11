@@ -2252,20 +2252,21 @@ function utilityWindowSize(options) {
 }
 // The request revision each utility page last reported drawn, and who waits for one.
 const utilityDrawn = new WeakMap();
-ipcMain.on("launcher:utilityWindowDrawn", (event, revision) => {
+ipcMain.on("launcher:utilityWindowDrawn", (event, revision, phase) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win || !Number.isSafeInteger(revision)) return;
-  const entry = utilityDrawn.get(win) || { revision: 0, waiters: [] };
+  const entry = utilityDrawn.get(win) || { revision: 0, contentRevision: 0, waiters: [] };
   entry.revision = Math.max(entry.revision, revision);
-  entry.waiters = entry.waiters.filter(waiter => entry.revision >= waiter.revision ? (waiter.resolve(true), false) : true);
+  if (phase !== "shell") entry.contentRevision = Math.max(entry.contentRevision, revision);
+  entry.waiters = entry.waiters.filter(waiter => (waiter.content ? entry.contentRevision : entry.revision) >= waiter.revision ? (waiter.resolve(true), false) : true);
   utilityDrawn.set(win, entry);
 });
-function utilityViewDrawn(win, revision, limitMs) {
-  const entry = utilityDrawn.get(win) || { revision: 0, waiters: [] };
+function utilityViewDrawn(win, revision, limitMs, content = false) {
+  const entry = utilityDrawn.get(win) || { revision: 0, contentRevision: 0, waiters: [] };
   utilityDrawn.set(win, entry);
-  if (entry.revision >= revision) return Promise.resolve(true);
+  if ((content ? entry.contentRevision : entry.revision) >= revision) return Promise.resolve(true);
   return new Promise(resolve => {
-    const waiter = { revision, resolve };
+    const waiter = { revision, content, resolve };
     entry.waiters.push(waiter);
     setTimeout(() => { entry.waiters = entry.waiters.filter(item => item !== waiter); resolve(false); }, limitMs).unref?.();
   });
@@ -2312,6 +2313,9 @@ const utilityWindows = createUtilityWindowController({
     if (KEPT_UTILITY_VIEWS.includes(request.view) && revision && !await utilityViewDrawn(win, revision, 10000)) {
       throw new Error("Utility view did not become ready.");
     }
+    // A cold window can show its shell now; refill construction waits for controls.
+    return KEPT_UTILITY_VIEWS.includes(request.view) && revision
+      ? { contentReady: utilityViewDrawn(win, revision, 10000, true) } : undefined;
   },
   registerWindow: (win, view,{activate=true}={}) => {
     win.__maclauncherWindowType = view;

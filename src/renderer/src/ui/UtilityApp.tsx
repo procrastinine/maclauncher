@@ -12,11 +12,11 @@ const SettingsView = React.lazy(() => import("./components/SettingsView").then(m
 const UtilityRuntimesView = React.lazy(() => import("./components/RuntimesView").then(module => ({default: module.UtilityRuntimesView})));
 
 performance.mark("launcher:utility-module-ready");
-export default function UtilityApp() {
+export default function UtilityApp({initialState: bootState}: {initialState?: LauncherState | null}) {
   const api = window.MacLauncher?.launcher;
   const utilityWindowContext = useMemo(() => readUtilityWindowContext(window.location.search)!, []);
   const [initialState] = useState<LauncherState | null>(() => {
-    const first = api?.initialState?.() || null;
+    const first = bootState === undefined ? api?.initialState?.() || null : bootState;
     performance.mark("launcher:first-state-read");
     return first;
   });
@@ -52,7 +52,7 @@ export default function UtilityApp() {
         return;
       }
       for (const slot of document.querySelectorAll<HTMLElement>("[data-utility-view]")) slot.hidden = slot.dataset.utilityView !== view;
-      if (request.managerId || request.sectionId || request.shaderCategory || request.moduleId) {
+      if (!initiallyPainted.current || request.managerId || request.sectionId || request.shaderCategory || request.moduleId) {
         setNavigationRequest(request);
         return;
       }

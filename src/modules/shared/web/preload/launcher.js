@@ -66,10 +66,9 @@ function primeUtilityState() {
   if (!firstUtilityStatePromise) {
     globalThis.performance?.mark("launcher:first-state-request");
     firstUtilityStatePromise = ipcRenderer.invoke("launcher:getState").then(state => {
-      firstUtilityState = state;
       globalThis.performance?.mark("launcher:first-state");
-      return initialUtilityState();
-    });
+      return utilityRequest ? {...state, utilityWindow: utilityRequest} : state;
+    }).finally(() => { firstUtilityStatePromise = null; });
   }
   return firstUtilityStatePromise;
 }
@@ -77,7 +76,7 @@ function primeUtilityState() {
 contextBridge.exposeInMainWorld("MacLauncher", {
   launcher: {
     getState: () => ipcRenderer.invoke("launcher:getState"),
-    // A utility view's state for its first render; null for other views.
+    // Legacy dedicated routes use a synchronous snapshot; utility bootstrap transfers state once.
     initialState: initialUtilityState,
     initialStateReady: primeUtilityState,
     utilityShellReady: () => {

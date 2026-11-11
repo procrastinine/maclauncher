@@ -63,7 +63,12 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     });
     try {
       registerWindow(win, request.view,{activate});
-      record.ready = Promise.resolve().then(() => loadView(win, request)).then(() => { record.loaded = true; }, error => {
+      record.ready = Promise.resolve().then(() => loadView(win, request)).then(result => {
+        record.loaded = true;
+        record.contentReady = result?.contentReady;
+        record.contentLoaded = !record.contentReady;
+        if (record.contentReady) void record.contentReady.then(ready => { record.contentLoaded = ready !== false; });
+      }, error => {
         forget(record);
         if (!win.isDestroyed()) win.destroy();
         throw error;
@@ -81,14 +86,16 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     if (spare === record) spare = null;
     record.hidden = false;
     // A prepared page refills immediately; a cold page first presents its shell.
-    const wasLoaded = record.loaded;
-    if (wasLoaded) void ensureSpare();
+    const wasReady = record.loaded && record.contentLoaded;
+    if (wasReady) void ensureSpare();
     const { win } = record;
     if (!record.loaded) {
       await record.ready;
       if (switched && !navigation) onContextChange(win);
     }
-    if (!wasLoaded) win.once("show", () => idle(() => { void ensureSpare(); }));
+    if (!wasReady) win.once("show", () => {
+      void Promise.resolve(record.contentReady).then(ready => { if (ready !== false) idle(() => { void ensureSpare(); }); });
+    });
     if (navigation) beforeShow(win);
     if (present) await present(win, { view: record.context.view, revision: record.context.revision, switched, navigation, shown: record.shown, activate });
     else focus(win, activate);
@@ -130,7 +137,9 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     record.hidden = false;
     if (kept.has(request.view)) {
       await record.ready;
-      record.win.once("show", () => idle(() => { void ensureSpare(); }));
+      record.win.once("show", () => {
+        void Promise.resolve(record.contentReady).then(ready => { if (ready !== false) idle(() => { void ensureSpare(); }); });
+      });
       if (present) await present(record.win, {view: request.view, revision: record.context.revision, switched: false, navigation: false, shown: false, activate});
       else focus(record.win, activate);
     } else {
@@ -158,7 +167,8 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
   // rows, so their state leaves out the games and their icon previews.
   function stateForWindow(win, state) {
     const request = byWindow.get(win)?.context;
-    return request && state ? { ...state, recents: [], utilityWindow: { ...request } } : state;
+    return request && state ? { ...state, recents: [], utilityWindow: { ...request,
+      ...(kept.has(request.view) ? { prepared: isHidden(win) } : {}) } } : state;
   }
   return { open, prepare: ensureSpare, isHidden, isRetiring, stateForWindow };
 }
