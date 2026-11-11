@@ -48,11 +48,16 @@ function fixture(t, {live = false} = {}) {
       assert.equal(id, "../modules/shared/reshade/live-controls");return { write: entry => calls.push(["controls", entry]) };
     },
     backendService: {invalidateGraphicsPreparation: async entry => {invalidated.push(entry.gameId);return false;},
-      request: async (lane, method, requested, action) => {
+      request: async (lane, method, requested, action, ...rest) => {
         // A stopped game's editor discovery runs in the inspector's worker with data options only.
         if (method === "gameEffectsInfo") {
           assert.equal(lane, "inspector");
           return structuredClone(context.EffectsRuntime.info(structuredClone(requested), structuredClone(action)));
+        }
+        // Shader parameters are described there too, for running and stopped games.
+        if (method === "gameEffectParameters") {
+          assert.equal(lane, "inspector");
+          return structuredClone(await context.EffectsRuntime.describe(structuredClone(requested), action, structuredClone(rest[0]), structuredClone(rest[1])));
         }
         assert.deepEqual([lane, method, action], [`game:${entry.gameId}`, "moduleAction", "graphicsInputs"]);return structuredClone(context.graphicsInputsResult);
       }},
@@ -137,7 +142,8 @@ test("effects metadata resolves graphics inputs on the game's backend lane and k
   assert.equal(options.prepareEffectsEntry, undefined, "editor discovery receives data only");
   await f.invoke("getGameEffectParameters", f.entry.gamePath, "node", shaderPlan());
   options = f.calls.filter(row => row[0] === "describe").at(-1)[3];
-  assert.equal(options.prepareEffectsEntry, prepareEffectsEntry);assert.equal(options.withGraphicsUpdate, withGraphicsUpdate);
+  assert.equal(options.prepareEffectsEntry, undefined, "shader parameters are described from data options off main");
+  assert.equal(options.withGraphicsUpdate, undefined);assert.deepEqual(options.graphicsInputs, { depth: true });
   assert.deepEqual(callbacks, [f.entry.gameId, f.entry.gameId]);
   f.context.graphicsInputsResult = { runtimeId: "player", graphicsInputs: null, filesUnavailable: true };
   await f.invoke("getGameEffectParameters", f.entry.gamePath, "node", shaderPlan());

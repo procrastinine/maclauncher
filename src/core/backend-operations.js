@@ -264,6 +264,11 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     gameEffectsInfo(entry, options) {
       return require("../modules/shared/effects/runtime").info(entry, { ...options, userDataDir, app: null });
     },
+    // A shader row's parameters. Describing verifies the included graphics
+    // runtime's files and compiles the shader, which stays off main.
+    gameEffectParameters(entry, nodeId, draft, options) {
+      return require("../modules/shared/effects/runtime").describe(entry, nodeId, draft, { ...options, userDataDir, app: null });
+    },
     // Modules prepare in the given order, then in registry order.
     async warmInspectorLane(settings, order = []) {
       const rank = id => { const index = order.indexOf(id); return index < 0 ? order.length : index; };

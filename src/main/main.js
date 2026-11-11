@@ -4392,10 +4392,14 @@ ipcMain.handle("launcher:getGameGraphicsStatus", (_event, gamePath) => {
   if (result?.contexts?.some(context => context.stages?.some(stage => stage.gpu))) effectsPresets.measured(storedGraphicsPlan(entry).plan, result.contexts);
   return result;
 });
+// Describing a shader row verifies the included graphics runtime's files, so
+// it runs in the inspector's worker, as the editor's discovery does.
 ipcMain.handle("launcher:getGameEffectParameters", async (_event, gamePath, nodeId, draftPlan) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
   if (!entry) throw new Error("Game not found in library.");
-  return EffectsRuntime.describe(entry, nodeId, draftPlan, await gameEffectsOptions(entry));
+  const options = await gameEffectsOptions(entry);
+  return backendService.request("inspector", "gameEffectParameters", entry, nodeId, draftPlan,
+    Object.fromEntries(EFFECTS_INFO_OPTIONS.filter(key => options[key] !== undefined).map(key => [key, options[key]])));
 });
 ipcMain.handle("launcher:setGameEffects", (_event, gamePath, value, request = {}) => setGameEffects(gamePath, value, request));
 // The Graphics editor and the bypass shortcut save and publish through here.
