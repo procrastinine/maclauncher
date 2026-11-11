@@ -102,7 +102,7 @@ test("one hidden spare serves Settings, Runtimes and Credits: switched on open, 
   const count = f.windows.length;
   const opening = f.controller.open({ view: "credits" });
   await settle();
-  assert.equal(f.windows.length, count + 1, "A replacement starts even while the taken spare loads");
+  assert.equal(f.windows.length, count, "A cold page paints its shell before starting another refill");
   assert.equal(loading.shows, 0, "A loading page never exposes an empty frame");
   assert.equal(f.controller.stateForWindow(loading, {}).utilityWindow.view, "credits", "Its first state names the requested view");
   release(); holdLoad = null;
@@ -661,7 +661,7 @@ test("utility switches acknowledge the mounted DOM without frame callbacks or ti
   const effect = source.slice(start, source.indexOf('  const initiallyPainted',start+5)).replaceAll('<HTMLElement>','');
   const slots=['settings','runtimes','credits'].map(view=>({dataset:{utilityView:view},hidden:false}));
   let switchView, cleanup; const reported=[];
-  vm.runInNewContext(effect,{api:{onUtilityViewSwitch:callback=>{switchView=callback;return ()=>{};},utilityWindowDrawn:revision=>reported.push(revision)},
+  vm.runInNewContext(effect,{utilityRevision:1,api:{onUtilityViewSwitch:callback=>{switchView=callback;return ()=>{};},utilityWindowDrawn:revision=>reported.push(revision)},
     document:{querySelectorAll:()=>slots},useLayoutEffect:callback=>{cleanup=callback();}});
   switchView({view:'credits',revision:73});
   assert.deepEqual(slots.map(slot=>slot.hidden),[true,true,false]);
@@ -695,18 +695,27 @@ test('navigation to a mounting spare is delivered after its initial snapshot was
   assert.equal(sent.at(-1)?.sectionId,'installed');
 });
 
-test('utility preload captures the first request once before the renderer reads it', () => {
-  const ipc = new EventEmitter(), first = {recents:[], utilityWindow:{view:'settings',revision:1}};
-  let api, requests=0;
-  ipc.sendSync=channel=>{assert.equal(channel,'launcher:initialState');requests++;return first;};
+test('the utility preload paints its shell before fetching state and retains a newer request', async () => {
+  const ipc=new EventEmitter(),messages=[];let api,fetches=0,finish;
+  const pending=new Promise(resolve=>{finish=resolve;});
+  const request={view:'settings',revision:1},heading={textContent:''},shell={dataset:{},querySelector:()=>heading};
+  ipc.sendSync=channel=>{assert.equal(channel,'launcher:utilityWindowRequest');return request;};
+  ipc.send=(...args)=>messages.push(args);ipc.invoke=channel=>{assert.equal(channel,'launcher:getState');fetches++;return pending;};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../src/modules/shared/web/preload/launcher.js'),'utf8'),{
-    window:{location:{search:'?view=settings'}},URLSearchParams,
+    window:{location:{search:'?view=settings'}},URLSearchParams,document:{getElementById:()=>shell},
     require:()=>({ipcRenderer:ipc,contextBridge:{exposeInMainWorld:(_name,value)=>{api=value.launcher;}}})
   });
-  assert.equal(requests,1);
-  assert.equal(api.initialState(),first);
-  assert.equal(api.initialState(),first);
-  assert.equal(requests,1,'Rendering does not add another synchronous IPC request');
+  assert.equal(fetches,0);assert.equal(api.initialState(),null);
+  api.utilityShellReady();assert.equal(heading.textContent,'Settings');assert.equal(shell.dataset.utilityShellView,'settings');
+  assert.equal(fetches,0,'Drawing the shell does not fetch or serialize the full state');
+  const loading=api.initialStateReady();assert.equal(fetches,1);
+  const latest={view:'credits',revision:2};ipc.emit('launcher:utilityViewSwitch',{},latest);
+  assert.equal(heading.textContent,'Credits');
+  finish({recents:[],utilityWindow:request});
+  assert.equal((await loading).utilityWindow,latest);
+  const replay=[];const stop=api.onUtilityViewSwitch(value=>replay.push(value),1);
+  assert.equal(replay[0],latest,'Mounting controls receive a request newer than their snapshot');stop();
+  assert.equal(messages.at(-1)[0],'launcher:utilityWindowDrawn');
 });
 
 test('the utility renderer holds all three views without loading the library or inspector', async () => {
@@ -732,47 +741,7 @@ test('the utility renderer holds all three views without loading the library or 
   } finally {globalThis.window=previous;}
 });
 
-test('a rapid second utility open retargets the just-taken page while refill is pending', async () => {
-  let hold=false,release;
-  const loading=new Promise(resolve=>{release=resolve;});
-  const presented=[];
-  const f=fixture({kept:['settings','runtimes','credits'],load:()=>hold?loading:null,
-    present:async(win,request)=>{presented.push(request.view);win.show();}});
-  await f.controller.prepare();hold=true;
-  const first=await f.controller.open({view:'runtimes'});
-  const refill=f.windows[1];
-  assert.equal(f.windows.length,2);
-  const second=await f.controller.open({view:'credits'});
-  assert.equal(second,first,'The second request does not wait for another renderer');
-  assert.equal(f.windows.length,2,'Only the single refill loads');
-  assert.equal(refill.shows,0,'The loading refill is never shown empty');
-  assert.deepEqual(presented,['runtimes','credits']);
-  assert.equal(f.controller.stateForWindow(second,{}).utilityWindow.view,'credits');
-  // Retargeting to the refill's own name must not steal its native window either.
-  assert.equal(await f.controller.open({view:'settings'}),first);
-  assert.equal(refill.shows,0);
-  release();await new Promise(resolve=>setImmediate(resolve));
-});
-
-test('concurrent rapid opens finish the first presentation before retargeting its page', async () => {
-  let refill=false,releaseRefill,releaseFirst;
-  const loading=new Promise(resolve=>{releaseRefill=resolve;});
-  const firstPaint=new Promise(resolve=>{releaseFirst=resolve;});
-  const presented=[];
-  const f=fixture({kept:['settings','runtimes','credits'],load:()=>refill?loading:null,
-    present:async(win,request)=>{if(request.view==='runtimes')await firstPaint;presented.push(request.view);win.show();}});
-  await f.controller.prepare();refill=true;
-  const first=f.controller.open({view:'runtimes'});
-  const second=f.controller.open({view:'credits'});
-  assert.deepEqual(presented,[]);
-  releaseFirst();
-  assert.equal(await first,await second);
-  assert.deepEqual(presented,['runtimes','credits']);
-  assert.equal(f.windows.length,2);
-  releaseRefill();await new Promise(resolve=>setImmediate(resolve));
-});
-
-test('a fresh utility page produces a content frame before acknowledging its initial readiness', () => {
+test('full utility controls produce a content frame before acknowledging their readiness', () => {
   const source=fs.readFileSync(path.join(__dirname,'../src/renderer/src/ui/UtilityApp.tsx'),'utf8');
   const start=source.indexOf('  useLayoutEffect(() => {\n    if (utilityRevision');
   const effect=source.slice(start,source.indexOf('  useLayoutEffect(() => { performance.mark',start));
@@ -815,22 +784,6 @@ test('Settings and Runtimes navigation commits its selection without waiting for
   assert.equal(selected.runtimeManagerId,'other-manager');
   assert.equal(selected.runtimeSectionId,null);
   assert.deepEqual(next.runtimeManagers,state.runtimeManagers,'Navigation does not alter automatic choices or defaults');
-});
-
-test('a third rapid request cannot overwrite a second presentation still in progress', async () => {
-  let hold=false,releaseRefill,releaseFirst,releaseSecond;
-  const loading=new Promise(resolve=>{releaseRefill=resolve;});
-  const firstPaint=new Promise(resolve=>{releaseFirst=resolve;});
-  const secondPaint=new Promise(resolve=>{releaseSecond=resolve;});
-  const f=fixture({kept:['settings','runtimes','credits'],load:()=>hold?loading:null,
-    present:async(win,request)=>{if(request.view==='runtimes')await firstPaint;if(request.view==='credits')await secondPaint;win.show();}});
-  await f.controller.prepare();hold=true;
-  const first=f.controller.open({view:'runtimes'}),second=f.controller.open({view:'credits'}),third=f.controller.open({view:'settings'});
-  releaseFirst();await first;await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(f.controller.stateForWindow(f.windows[0],{}).utilityWindow.view,'credits','The second request owns its presentation until complete');
-  releaseSecond();assert.equal(await second,await third);
-  assert.equal(f.controller.stateForWindow(f.windows[0],{}).utilityWindow.view,'settings');
-  releaseRefill();await new Promise(resolve=>setImmediate(resolve));
 });
 
 test('prepared Settings navigation sends only the request instead of a full launcher snapshot', () => {
@@ -886,4 +839,55 @@ test('a Settings navigation commits its request without rebuilding the mounted R
     assert.deepEqual(slots.map(slot=>slot.hidden),[false,true,true],'A targeted request restores the view after an intervening DOM-only switch');
     assert.equal(reported.at(-1),19);
   } finally {harness?.close();globalThis.document=previous.document;globalThis.window=previous.window;globalThis.requestAnimationFrame=previous.raf;globalThis.cancelAnimationFrame=previous.cancel;}
+});
+
+test('two different views requested zero milliseconds apart open distinct windows with their own views', async () => {
+  const f=fixture({kept:['settings','runtimes','credits'],adapt:(win,options,request)=>{win.title=options.title;win.view=request.view;},
+    present:async win=>win.show()});
+  await f.controller.prepare();
+  const first=f.controller.open({view:'runtimes'}),second=f.controller.open({view:'credits'});
+  const [runtimes,credits]=await Promise.all([first,second]);
+  assert.notEqual(runtimes,credits,'A second click never replaces the first view');
+  assert.equal(f.controller.stateForWindow(runtimes,{}).utilityWindow.view,'runtimes');
+  assert.equal(f.controller.stateForWindow(credits,{}).utilityWindow.view,'credits');
+  assert.equal(runtimes.title,'Runtimes');assert.equal(credits.title,'Credits');
+  assert.equal(runtimes.shows,1);assert.equal(credits.shows,1);
+});
+
+test('a different view can show its own shell while the first view is still being presented', async () => {
+  let release;const firstPresentation=new Promise(resolve=>{release=resolve;});
+  const f=fixture({kept:['settings','runtimes','credits'],present:async(win,request)=>{if(request.view==='runtimes')await firstPresentation;win.show();}});
+  await f.controller.prepare();
+  const first=f.controller.open({view:'runtimes'});
+  let credits;const second=f.controller.open({view:'credits'}).then(win=>{credits=win;return win;});
+  try {
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.ok(credits,'The second window does not wait for the first presentation');
+    assert.equal(f.controller.stateForWindow(credits,{}).utilityWindow.view,'credits');
+    assert.equal(f.controller.stateForWindow(f.windows[0],{}).utilityWindow.view,'runtimes');
+  } finally {release();await first;await second;}
+});
+
+test('three simultaneous utility requests keep one distinct window for each view', async () => {
+  const f=fixture({kept:['settings','runtimes','credits']});
+  await f.controller.prepare();
+  const views=['runtimes','credits','settings'];
+  const windows=await Promise.all(views.map(view=>f.controller.open({view})));
+  assert.equal(new Set(windows).size,3);
+  assert.deepEqual(windows.map(win=>f.controller.stateForWindow(win,{}).utilityWindow.view),views);
+  assert.ok(windows.every(win=>win.shows===1));
+});
+
+test('the utility shell entry has no static React or control dependency', async () => {
+  const {build}=require('vite');
+  const bundle=await build({configFile:path.resolve(__dirname,'../vite.config.mjs'),logLevel:'silent',build:{write:false}});
+  const chunks=new Map(bundle.output.filter(item=>item.type==='chunk').map(item=>[item.fileName,item]));
+  const entry=[...chunks.values()].find(chunk=>chunk.isEntry&&chunk.name==='utility');
+  assert.ok(entry);
+  const queue=[entry],seen=new Set(),modules=[];
+  while(queue.length){const chunk=queue.pop();if(seen.has(chunk.fileName))continue;seen.add(chunk.fileName);modules.push(...chunk.moduleIds);for(const name of chunk.imports)if(chunks.has(name))queue.push(chunks.get(name));}
+  assert.ok(!modules.some(id=>/node_modules\/(?:react|react-dom)|\/ui\/UtilityApp\.tsx/.test(id)), 'Showing the shell does not wait for the controls or React graph');
+  assert.ok(entry.dynamicImports.length>0,'The controls load asynchronously');
+  const html=bundle.output.find(item=>item.type==='asset'&&item.fileName==='utility.html').source;
+  assert.match(String(html),/id="utility-shell"/);
 });

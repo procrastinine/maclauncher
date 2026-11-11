@@ -31,24 +31,72 @@ function subscribeActivity(callback) {
   };
 }
 
-globalThis.performance?.mark("launcher:first-state-request");
-// Capture the window request and first state before loading the renderer graph.
-const firstUtilityState = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("view")
-  ? ipcRenderer.sendSync("launcher:initialState") : null;
-globalThis.performance?.mark("launcher:first-state");
+// The shell needs only its request. Full state loads asynchronously with controls.
+const utilityPage = typeof window !== "undefined" && ["settings", "runtimes", "credits"].includes(new URLSearchParams(window.location.search).get("view"));
+let firstUtilityState = null, firstUtilityStatePromise = null, utilityRequest = null, utilitySwitchListening = false;
+if (!utilityPage && typeof window !== "undefined" && new URLSearchParams(window.location.search).has("view")) {
+  firstUtilityState = ipcRenderer.sendSync("launcher:initialState");
+}
+const utilitySwitchSubscribers = new Set();
+function paintUtilityShell(request) {
+  const shell = typeof document !== "undefined" && document.getElementById("utility-shell");
+  if (!shell) return false;
+  const heading = shell.querySelector("h1");
+  if (!heading) return false;
+  shell.dataset.utilityShellView = request.view;
+  const title = {settings: "Settings", runtimes: "Runtimes", credits: "Credits"}[request.view];
+  heading.textContent = title;
+  return true;
+}
+function utilitySwitchListener(_event, request) {
+  utilityRequest = request;
+  const painted = paintUtilityShell(request);
+  if (utilitySwitchSubscribers.size) {
+    for (const callback of utilitySwitchSubscribers) callback(request);
+  } else if (painted) ipcRenderer.send("launcher:utilityWindowDrawn", request.revision, "shell");
+}
+function listenUtilitySwitch() {
+  if (!utilitySwitchListening) { ipcRenderer.on("launcher:utilityViewSwitch", utilitySwitchListener); utilitySwitchListening = true; }
+}
+if (utilityPage) listenUtilitySwitch();
+function initialUtilityState() {
+  return firstUtilityState && (utilityRequest ? {...firstUtilityState, utilityWindow: utilityRequest} : firstUtilityState);
+}
+function primeUtilityState() {
+  if (!firstUtilityStatePromise) {
+    globalThis.performance?.mark("launcher:first-state-request");
+    firstUtilityStatePromise = ipcRenderer.invoke("launcher:getState").then(state => {
+      firstUtilityState = state;
+      globalThis.performance?.mark("launcher:first-state");
+      return initialUtilityState();
+    });
+  }
+  return firstUtilityStatePromise;
+}
 
 contextBridge.exposeInMainWorld("MacLauncher", {
   launcher: {
     getState: () => ipcRenderer.invoke("launcher:getState"),
     // A utility view's state for its first render; null for other views.
-    initialState: () => firstUtilityState,
+    initialState: initialUtilityState,
+    initialStateReady: primeUtilityState,
+    utilityShellReady: () => {
+      utilityRequest = ipcRenderer.sendSync("launcher:utilityWindowRequest");
+      if (utilityRequest && paintUtilityShell(utilityRequest)) {
+        ipcRenderer.send("launcher:utilityWindowDrawn", utilityRequest.revision, "shell");
+      }
+      return utilityRequest;
+    },
     // A utility view reports the request revision it has drawn.
     utilityWindowDrawn: revision => ipcRenderer.send("launcher:utilityWindowDrawn", revision),
     // The view a Settings, Runtimes or Credits window displays, switched before it shows.
-    onUtilityViewSwitch: callback => {
-      const handler = (_event, request) => callback(request);
-      ipcRenderer.on("launcher:utilityViewSwitch", handler);
-      return () => ipcRenderer.removeListener("launcher:utilityViewSwitch", handler);
+    onUtilityViewSwitch: (callback, revision = 0) => {
+      listenUtilitySwitch(); utilitySwitchSubscribers.add(callback);
+      if (utilityRequest && utilityRequest.revision > revision) callback(utilityRequest);
+      return () => {
+        utilitySwitchSubscribers.delete(callback);
+        if (!utilityPage && !utilitySwitchSubscribers.size) { ipcRenderer.removeListener("launcher:utilityViewSwitch", utilitySwitchListener); utilitySwitchListening = false; }
+      };
     },
     prioritizeGame: gamePath => ipcRenderer.invoke("launcher:prioritizeGame", gamePath),
     openUtilityWindow: request => ipcRenderer.invoke("launcher:openUtilityWindow", request),

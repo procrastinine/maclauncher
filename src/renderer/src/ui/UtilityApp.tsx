@@ -41,14 +41,14 @@ export default function UtilityApp() {
       }
       // All slots are mounted. Acknowledge the DOM switch without a hidden frame wait.
       api.utilityWindowDrawn?.(revision);
-    });
+    }, utilityRevision);
   }, [api]);
   const initiallyPainted = useRef(false);
   useLayoutEffect(() => {
     if (utilityRevision === undefined) return;
     if (initiallyPainted.current) { api?.utilityWindowDrawn?.(utilityRevision); return; }
-    // A fresh page must produce content before its first show. Later requests
-    // reuse that painted page and acknowledge their committed DOM immediately.
+    // Report full controls after their first frame; the HTML shell can already
+    // be visible. Later requests acknowledge their committed DOM immediately.
     let second = 0;
     const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => {
       initiallyPainted.current = true;
@@ -57,7 +57,7 @@ export default function UtilityApp() {
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [api, utilityView, utilityRevision]);
 
-  useLayoutEffect(() => { performance.mark("launcher:utility-commit"); }, []);
+  useLayoutEffect(() => { performance.mark("launcher:utility-commit"); if (state) document.getElementById?.("utility-shell")?.remove(); }, [Boolean(state)]);
   useEffect(() => {
     if (!api) return;
     return subscribeLauncherState(api, setState, value => setError(String(value)), initialState);

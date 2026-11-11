@@ -12,8 +12,8 @@ const { normalizeUtilityWindowRequest, utilityWindowDefinition } = require("../c
 // The hidden window receives every state like any other, so nothing renders
 // on open; a request that navigates within a view (a section or runtime) is
 // sent with beforeShow and drawn before the window shows. A new spare is
-// prepared as soon as a spare is taken. Requests arriving during refill reuse
-// the page just taken, finishing each presentation before the next switch.
+// prepared as soon as a loaded spare is taken. Each different requested view
+// owns its window; a request during refill takes only the hidden spare.
 // Closing a kept view hides its window at once; it becomes the spare, or, when
 // a spare exists already, it is destroyed in idle time. While isQuitting() is
 // true windows close normally. onHidden runs after a close hides a window.
@@ -23,12 +23,11 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
   const windows = new Map();
   const byWindow = new WeakMap();
   const kept = new Set(keptViews);
-  let revision = 0, spare = null, lastTaken = null;
+  let revision = 0, spare = null;
   function context(request) { return { ...request, revision: ++revision }; }
   function forget(record) {
     if (windows.get(record.context.view) === record) windows.delete(record.context.view);
     if (spare === record) spare = null;
-    if (lastTaken === record) lastTaken = null;
     byWindow.delete(record.win);
   }
   function focus(win,activate=true) {
@@ -77,23 +76,23 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     }
   }
 
-  // A loaded page is reused during refill. Cold pages stay hidden until ready.
+  // A taken page keeps its view. Cold pages show after their lightweight shell paints.
   async function reveal(record, activate, switched, navigation) {
     if (spare === record) spare = null;
     record.hidden = false;
-    if (record.loaded) lastTaken = record;
-    // Refill starts before the first window is presented.
-    void ensureSpare();
+    // A prepared page refills immediately; a cold page first presents its shell.
+    const wasLoaded = record.loaded;
+    if (wasLoaded) void ensureSpare();
     const { win } = record;
     if (!record.loaded) {
       await record.ready;
-      lastTaken = record;
       if (switched && !navigation) onContextChange(win);
     }
     if (navigation) beforeShow(win);
     if (present) await present(win, { view: record.context.view, revision: record.context.revision, switched, navigation, shown: record.shown, activate });
     else focus(win, activate);
     record.shown = true;
+    if (!wasLoaded) void ensureSpare();
     return win;
   }
 
@@ -101,34 +100,16 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     const {activate=true,...request} = normalizeUtilityWindowRequest(value);
     let record = windows.get(request.view);
     if (record?.win.isDestroyed()) { forget(record); record = null; }
-    // A rapid second request uses the page just taken while its refill loads.
-    // Finish the first presentation before retargeting it; neither open waits
-    // for a new renderer or exposes an empty native frame.
-    let reused = false;
-    if (kept.has(request.view) && (!record || record === spare && !record.loaded)
-      && spare && !spare.loaded && lastTaken?.loaded && !lastTaken.hidden
-      && !lastTaken.retiring && !lastTaken.win.isDestroyed()) {
-      const warm = lastTaken;
-      while (warm.revealing) await warm.revealing;
-      if (!warm.win.isDestroyed() && !warm.hidden && !warm.retiring) {
-        if (windows.get(warm.context.view) === warm) windows.delete(warm.context.view);
-        record = warm;
-        record.context = context(request);
-        windows.set(request.view, record);
-        adaptWindow(record.win, utilityWindowDefinition(request.view), request);
-        reused = true;
-      }
-    }
     const navigation = Boolean(request.managerId || request.sectionId || request.shaderCategory || request.moduleId);
     if (record?.revealing) { await record.revealing; record = windows.get(request.view) || record; }
-    if (record && !record.hidden && !reused) {
+    if (record && !record.hidden) {
       if (navigation) { record.context = context(request); onContextChange(record.win); }
       await record.ready;
       const win = focus(record.win,activate);
       record.shown = true;
       return win;
     }
-    let switched = reused;
+    let switched = false;
     // A spare still loading is already partway: it takes this view once loaded.
     if (!record && kept.has(request.view) && spare && !spare.win.isDestroyed()) {
       // The spare takes this view: its previous view no longer has a window.
@@ -138,7 +119,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
       windows.set(request.view, record);
       adaptWindow(record.win, utilityWindowDefinition(request.view), request);
       switched = true;
-    } else if (record && navigation && !reused) record.context = context(request);
+    } else if (record && navigation) record.context = context(request);
     if (record) {
       const revealing = reveal(record, activate, switched, navigation);
       record.revealing = revealing;
@@ -147,10 +128,8 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     }
     record = create(request, activate);
     record.hidden = false;
-    void ensureSpare();
     if (kept.has(request.view)) {
       await record.ready;
-      lastTaken = record;
       if (present) await present(record.win, {view: request.view, revision: record.context.revision, switched: false, navigation: false, shown: false, activate});
       else focus(record.win, activate);
     } else {
@@ -158,6 +137,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
       await record.ready;
     }
     record.shown = true;
+    void ensureSpare();
     return record.win;
   }
 

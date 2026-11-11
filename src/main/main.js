@@ -2300,9 +2300,15 @@ const utilityWindows = createUtilityWindowController({
   },
   loadView: async (win, request) => {
     const revision = utilityWindows.stateForWindow(win, {}).utilityWindow?.revision;
+    const shellPainted = KEPT_UTILITY_VIEWS.includes(request.view) ? new Promise(resolve => {
+      const cleanup = () => { win.removeListener("ready-to-show", ready); win.removeListener("closed", closed); };
+      const ready = () => { cleanup(); resolve(true); };
+      const closed = () => { cleanup(); resolve(false); };
+      win.once("ready-to-show", ready); win.once("closed", closed);
+    }) : null;
     await loadLauncherView(win, request);
-    // The utility entry imports asynchronously. Navigation completion alone
-    // does not mean its views or switch listener have mounted.
+    // The small HTML shell paints independently of the asynchronously loaded controls.
+    if (shellPainted && !await shellPainted) throw new Error("Utility window closed during loading.");
     if (KEPT_UTILITY_VIEWS.includes(request.view) && revision && !await utilityViewDrawn(win, revision, 10000)) {
       throw new Error("Utility view did not become ready.");
     }
@@ -3541,8 +3547,12 @@ async function init() {
 
 ipcMain.handle("launcher:getState", event =>
   utilityWindows.stateForWindow(BrowserWindow.fromWebContents(event.sender), getLauncherState()));
-// A utility view's first render reads its state synchronously, so its first
-// drawing is the view itself; other views receive null and use getState.
+// The lightweight utility shell reads only its window request before painting.
+// Other dedicated routes retain their synchronous first-state snapshot.
+ipcMain.on("launcher:utilityWindowRequest", event => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  event.returnValue = launcherWindows.has(win) ? utilityWindows.stateForWindow(win, {}).utilityWindow || null : null;
+});
 ipcMain.on("launcher:initialState", event => {
   try {
     const win = BrowserWindow.fromWebContents(event.sender);

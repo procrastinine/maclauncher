@@ -2,16 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MacLauncher</title>
+    <style>
+      html,body{margin:0;height:100%;background:#f5f6f8;color:#24262b;font:13px -apple-system,BlinkMacSystemFont,sans-serif}
+      @media(prefers-color-scheme:dark){html,body{background:#111318;color:#e7e9ed}}
+      #utility-shell{box-sizing:border-box;position:absolute;inset:0;padding:20px;display:grid;grid-template-columns:160px 1fr;gap:20px}
+      #utility-shell h1{grid-column:1/-1;margin:0 0 12px;font-size:18px;font-weight:600}
+      .shell-lines{display:flex;flex-direction:column;gap:16px}.shell-lines i{display:block;height:12px;border-radius:4px;background:currentColor;opacity:.06}
+      .shell-lines i:nth-child(2n){width:72%}#utility-error{grid-column:1/-1}
+    </style>
   </head>
   <body>
+    <main id="utility-shell" aria-labelledby="utility-shell-title"><h1 id="utility-shell-title"></h1>
+      <div class="shell-lines" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="shell-lines" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <p id="utility-error" role="alert" hidden></p>
+    </main>
     <div id="root"></div>
-    <script>performance.mark("launcher:entry-start");</script>
+    <script>performance.mark("launcher:entry-start");window.MacLauncher?.launcher.utilityShellReady?.();</script>
     <script type="module" src="/src/utility.tsx"></script>
   </body>
 </html>
-
