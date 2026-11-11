@@ -45,7 +45,7 @@ On a terminal, the command line asks for consent. Noninteractive callers receive
 
 ### Processes and output
 
-With `--wait`, the command line starts the game in a separate process group, keeps the child, forwards SIGINT and SIGTERM to the group and returns the exit status. Native hooks that use the injected spawner inherit the output, while a module's own wrappers can manage their output themselves. Without `--wait`, processes detach as they do in the launcher.
+With `--wait`, the command line starts the game in a separate process group, keeps the child, forwards SIGINT and SIGTERM to the group and returns the exit status. Captured hosted output remains attached until its streams close, including when the process has already exited. Native hooks that use the injected spawner inherit the output, while a module's own wrappers can manage their output themselves. Without `--wait`, processes detach as they do in the launcher.
 
 Native engines run directly from Node. Hosted web games use `src/runtime/electron-game.js`, which creates no launcher window and no launcher IPC endpoints. The command line finds the Electron binary among the installed files, which avoids the automatic download in Electron's npm entry point.
 

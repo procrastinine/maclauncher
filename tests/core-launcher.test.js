@@ -1001,3 +1001,43 @@ test("Play asks once for a planned download; the manager's own check for that pl
   await launcher.launchEntry(entry);
   assert.deepEqual(prompts, ["test-runtime", "other-tool"]);
 });
+
+test('CLI wait keeps captured output referenced between process exit and pipe closure', t => {
+  const {root}=fixture(t);
+  const probe=path.join(root,'wait-pipes.mjs');
+  const cliPath=require.resolve('../src/core/game-cli');
+  fs.writeFileSync(probe, `import {EventEmitter} from 'node:events';
+import {MessageChannel} from 'node:worker_threads';
+import GameCli from ${JSON.stringify(require('node:url').pathToFileURL(cliPath).href)};
+const {port1:stdout,port2:stderr}=new MessageChannel();
+for(const port of [stdout,stderr]){port.on('message',()=>{});port.unref();port.closed=false;}
+const child=Object.assign(new EventEmitter(),{ref(){},pid:process.pid,stdout,stderr,exitCode:null,signalCode:null});
+if(process.argv.includes('already-exited'))child.exitCode=7;
+const waiting=GameCli.waitForChild(child);
+child.exitCode=7;child.emit('exit',7,null);
+// Only the captured output can keep this final drain alive after process exit.
+setTimeout(()=>{process.stdout.write('pipes drained\\n');stdout.closed=stderr.closed=true;child.emit('close',7,null);},20).unref();
+process.exitCode=await waiting;
+`);
+  for(const args of [[],['already-exited']]){
+    const result=spawnSync(process.execPath,[probe,...args],{encoding:'utf8',timeout:3000});
+    assert.equal(result.status,7,result.stderr);
+    assert.match(result.stdout,/pipes drained/,'The awaited close includes the final output drain');
+    assert.doesNotMatch(result.stderr,/unsettled top-level await/);
+  }
+});
+
+test('CLI wait settles an already closed signalled process and releases captured references on error', {timeout:1000}, async () => {
+  const {EventEmitter}=require('node:events');
+  const {waitForChild}=require('../src/core/game-cli');
+  let refs=0,unrefs=0;
+  const stream={ref(){refs++;},unref(){unrefs++;}};
+  const failed=Object.assign(new EventEmitter(),{ref(){},stdout:stream,stderr:stream,exitCode:null,signalCode:null});
+  const waiting=waitForChild(failed);
+  assert.equal(refs,2);
+  failed.emit('error',Error('Fixture process failure'));
+  await assert.rejects(waiting,/Fixture process failure/);
+  assert.equal(unrefs,2);
+  const stopped=Object.assign(new EventEmitter(),{ref(){},exitCode:null,signalCode:'SIGTERM'});
+  assert.equal(await waitForChild(stopped),1);
+});

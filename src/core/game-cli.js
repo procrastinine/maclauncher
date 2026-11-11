@@ -45,6 +45,10 @@ function parseArgs(argv) {
 function waitForChild(child) {
   if (!child || typeof child.once !== "function") throw new Error("Runtime did not return a process to wait for.");
   child.ref?.();
+  // Hosted startup detaches these pipes after readiness. The process handle
+  // ends at exit, but --wait must keep their final drain alive through close.
+  const output = [child.stdout, child.stderr].filter(Boolean);
+  for (const stream of output) stream.ref?.();
   return new Promise((resolve, reject) => {
     const forward = signal => {
       try { process.kill(-child.pid, signal); }
@@ -64,6 +68,7 @@ function waitForChild(child) {
       process.off("SIGTERM", onTerminate);
       child.off("error", onError);
       child.off("close", onClose);
+      for (const stream of output) stream.unref?.();
     };
     const onError = error => { cleanup(); reject(error); };
     const onClose = async (code, signal) => {
@@ -75,7 +80,9 @@ function waitForChild(child) {
     };
     child.once("error", onError);
     child.once("close", onClose);
-    if (child.exitCode !== null && child.exitCode !== undefined) onClose(child.exitCode, child.signalCode);
+    if ((child.exitCode != null || child.signalCode != null) && output.every(stream => stream.closed === true)) {
+      onClose(child.exitCode, child.signalCode);
+    }
   });
 }
 
