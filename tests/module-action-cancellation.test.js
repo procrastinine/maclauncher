@@ -46,7 +46,8 @@ test("runtime choice IPC preserves viewed runtime and payload through normal and
   vm.runInNewContext(source.slice(start, end), {
     ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
     loadSettings: () => ({}), loadGamesHydrated: () => [entry], findGameByPath: games => games[0],
-    moduleActionRequests: requests, backendService: { request }, isAbortError: error => error?.name === "AbortError"
+    moduleActionRequests: requests, backendService: { request }, isAbortError: error => error?.name === "AbortError",
+    Modules: { getModuleInfo: () => null }, resolveModuleId: game => game.moduleId
   });
   const invoke = (payload, options) => handlers.get("launcher:moduleAction")({ sender: owner }, entry.gamePath, "choices", payload, options);
   assert.deepEqual(await invoke({}), { runtimeId: "stored-provider", storedRuntime: "stored-provider", cancellable: false });

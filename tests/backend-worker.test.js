@@ -202,18 +202,17 @@ test("a runtime change in one lane tells every other lane to read runtimes again
   assert.deepEqual(await Promise.all(["game:a", "game:b", "state"].map(lane => service.request(lane, "inventoryNotices"))), [1, 2, 1]);
 });
 
-test("a prepared spare worker becomes the next game's lane and another is prepared after it", { timeout: 10000 }, async t => {
-  const events = [], service = createBackendService({ workerPath, onEvent: (event, _payload, lane) => events.push([event, lane]) });
+test("the inspector worker is prepared with the launcher and stays open while idle game workers close", { timeout: 10000 }, async t => {
+  const events = [], service = createBackendService({ workerPath, maxIdleWorkers: 0, idleMs: 50,
+    onEvent: (event, _payload, lane) => events.push([event, lane]) });
   t.after(() => service.close());
-  assert.equal(service.prepareSpareLane({ revision: 1 }), true);
-  assert.equal(service.prepareSpareLane({ revision: 1 }), false, "one spare at a time");
-  await new Promise(resolve => setTimeout(resolve, 500));
-  assert.deepEqual(await service.request("game:first", "warmed"), { revision: 1 });
-  assert.equal(await service.request("state", "warmed"), null, "only game lanes adopt the spare");
-  await new Promise(resolve => setTimeout(resolve, 2300));
-  assert.deepEqual(await service.request("game:second", "warmed"), { revision: 1 });
-  assert.deepEqual(events, [], "a spare's events before its assignment reach no window or lane");
-  assert.equal(await service.request("game:first", "inventoryNotices"), 0);
+  assert.equal(service.prepareInspectorLane({ revision: 1 }), true);
+  assert.deepEqual(await service.request("inspector", "warmed"), { revision: 1 });
+  assert.deepEqual(events, [["runtimeInventoryChanged", "inspector"]], "the inspector worker reports like any other");
+  await Promise.all(["game:a", "game:b"].map(lane => service.request(lane, "echo")));
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.deepEqual(await service.request("inspector", "warmed"), { revision: 1 }, "the prepared worker still serves the inspector");
+  assert.equal(await service.request("game:a", "warmed"), null, "an idle game worker closed and a new one starts unprepared");
 });
 
 test("native host callbacks roundtrip asynchronously and preserve structured errors", async t => {

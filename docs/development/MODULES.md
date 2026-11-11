@@ -519,7 +519,7 @@ These hooks start a game's processes and decide how they stop.
 ### Graphics
 
 - `resolveGraphicsInputs(entry, context)` optionally describes the selected renderer's inputs to the graphics service, including `{ cameraProjection, source, methods }` for a camera integration. The service intersects these methods with the installed providers and the selected presentation host.
-- `warmBackendLane({ settings, userDataDir, logger })` optionally reads what the module's games share, such as installed runtimes, in a spare backend worker before a game is assigned to it. Failures are ignored, and the game's own requests read anything the hook did not.
+- `warmBackendLane({ settings, userDataDir, logger })` optionally reads what the module's games share, such as installed runtimes, in the inspector's backend worker when the launcher starts. Failures are ignored, and the inspector's requests read anything the hook did not.
   - Native video can advertise `nativeVideo`, `sourceResolution: false`, its spatial filter registry and `shaderBindingsNextLaunch`.
   - A module that prepares its own integration can set `context.graphicsInputs` before applying the graphics environment, and setting it to `null` turns off additional inputs for that launch.
   - A source can also provide `generationDefaults`, the settings that new frame-generation rows start from; the window module, for example, sets `keepStaticContent: true`. Saved rows keep their explicit settings.

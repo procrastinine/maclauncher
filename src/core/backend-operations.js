@@ -179,13 +179,15 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
   function context(settings) { return { settings, runtimeSettings: settings?.runtimes, userDataDir, logger, app, ui, fs, path, downloads }; }
   // A state whose installed and included rows differ from the last one this
   // lane reported is an inventory change; other lanes then read runtimes again.
+  // A manager's first report has nothing to differ from: the other lanes read
+  // the same files, and changes made since then report their own events.
   const inventoryFingerprints = new Map();
   function emitRuntimeState(manager, state) {
     emit("runtimeState", { id: manager.id, state });
     const fingerprint = JSON.stringify([state.installed, state.references, state.sections?.map(section => [section.installed, section.references])]);
-    if (inventoryFingerprints.get(manager.id) === fingerprint) return;
+    const previous = inventoryFingerprints.get(manager.id);
     inventoryFingerprints.set(manager.id, fingerprint);
-    emit("runtimeInventoryChanged", { managerId: manager.id });
+    if (previous !== undefined && previous !== fingerprint) emit("runtimeInventoryChanged", { managerId: manager.id });
   }
   function managerState(manager, settings, referenceStates) {
     try {
@@ -250,9 +252,9 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       await Promise.allSettled(localPreparations);
       return true;
     },
-    // A spare game worker lets each module read what its games share, such as
-    // installed runtimes, before a game is assigned to the worker.
-    async warmGameLane(settings) {
+    // The inspector worker lets each module read what its games share, such as
+    // installed runtimes, before the first game is selected.
+    async warmInspectorLane(settings) {
       for (const id of registry.listModuleIds()) {
         const warm = registry.getModule(id)?.warmBackendLane;
         if (typeof warm !== "function") continue;

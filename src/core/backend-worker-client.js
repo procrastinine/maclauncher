@@ -238,7 +238,9 @@ class BackendWorkerClient extends EventEmitter {
 }
 
 /** Lazy lanes keep one game's resolution independent of other game jobs. */
-const SPARE = "spare", SPARE_DELAY_MS = 2000;
+// The state and inspector lanes stay open: the library's runtime inventory and
+// the inspector's reads of installed runtimes keep their caches between uses.
+const PERSISTENT = new Set(["state", "inspector"]);
 function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
   idleMs = 120000, maxIdleWorkers = 2, workerPath, runtimeCoordinator } = {}) {
   const coordinator = runtimeCoordinator || (userDataDir ? coordinatorFor(userDataDir) : createRuntimeCoordinator());
@@ -252,8 +254,8 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
   function idle(lane, client) {
     if (clients.get(lane) !== client) return;
     cancelIdle(lane);
-    if (client.pending.size || client.retainedProcesses || lane === "state" || lane === SPARE) return;
-    const idleClients = [...clients].filter(([key, value]) => key !== "state" && key !== SPARE && !value.pending.size && !value.retainedProcesses);
+    if (client.pending.size || client.retainedProcesses || PERSISTENT.has(lane)) return;
+    const idleClients = [...clients].filter(([key, value]) => !PERSISTENT.has(key) && !value.pending.size && !value.retainedProcesses);
     for (const [key, value] of idleClients.slice(0, Math.max(0, idleClients.length - maxIdleWorkers))) {
       cancelIdle(key); clients.delete(key); downloads.delete(key); void value.close();
     }
@@ -264,22 +266,18 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
     }, idleMs);
     timer.unref(); timers.set(lane, timer);
   }
-  // Each client records its lane; a spare worker's lane is assigned when a
-  // game first needs one.
   function create(lane) {
     const coordination = coordinator.client();
     const coordinationCallbacks = Object.fromEntries(["acquireMutation", "extendMutation", "acquireUse", "acquireGameUse", "acquireGameRemoval", "completeGameRemoval", "release", "bindUse", "applySettings"].map(method =>
       [`runtimeCoordinator.${method}`, (...args) => coordination[method](...args)]));
     const client = new BackendWorkerClient({ workerPath, workerData: { userDataDir, appInfo, lane, running: currentRunning },
       callbacks: { ...callbacks, ...coordinationCallbacks } });
-    client.lane = lane;
     clients.set(lane, client);
     // Reject queued coordination work during shutdown. Bound game/editor
     // leases become PID-tracked orphans and keep their independent lifecycle.
     client.on("shutdown", () => coordination.close());
     client.on("event", (event, payload) => {
-      const lane = client.lane;
-      if (clients.get(lane) !== client || lane === SPARE) return;
+      if (clients.get(lane) !== client) return;
       if (event === "downloads") downloads.set(lane, payload);
       if ((event === "toolLaunch" || event === "gameProcess") && payload.process) payload = { ...payload, child: client.process(payload.process) };
       // Other lanes stop reusing display inventories after a runtime change.
@@ -288,10 +286,9 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
       onEvent?.(event, payload, lane);
       if (event === "activity") idle(lane, client);
     });
-    client.on("idle", () => idle(client.lane, client));
+    client.on("idle", () => idle(lane, client));
     client.on("closed", () => {
       coordination.close();
-      const lane = client.lane;
       if (clients.get(lane) === client) {
         clients.delete(lane); downloads.delete(lane); cancelIdle(lane);
       }
@@ -303,23 +300,15 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
     if (shuttingDown) throw createAbortError("Launcher is closing.");
     cancelIdle(lane);
     let client = clients.get(lane);
-    if (!client || client.closed) {
-      const spare = lane.startsWith("game:") && clients.get(SPARE);
-      if (spare && !spare.closed) {
-        clients.delete(SPARE); spare.lane = lane; clients.set(lane, spare); client = spare;
-        if (spareSettings) setTimeout(() => prepareSpare(spareSettings), SPARE_DELAY_MS).unref();
-      } else client = create(lane);
-    }
+    if (!client || client.closed) client = create(lane);
     return client;
   }
-  // A game's first inspector request otherwise waits for a new worker to load
-  // its modules and read installed runtimes. One spare worker does that work
-  // in advance and becomes the next game's lane.
-  let spareSettings = null;
-  function prepareSpare(settings) {
-    spareSettings = settings;
-    if (disposed || shuttingDown || clients.get(SPARE) && !clients.get(SPARE).closed) return false;
-    create(SPARE).request("warmGameLane", settings).catch(() => {});
+  // The first selected game's inspector requests otherwise wait for a worker
+  // to load its modules and read installed runtimes. The inspector worker
+  // starts with the launcher and does that work before any selection.
+  function prepareInspector(settings) {
+    if (disposed || shuttingDown) return false;
+    get("inspector").request("warmInspectorLane", settings).catch(() => {});
     return true;
   }
   return {
@@ -351,7 +340,7 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
       await Promise.all([...clients.values()].map(client => client.shutdownTemporaryProcesses()));
     },
     async close() { disposed = true; for (const lane of timers.keys()) cancelIdle(lane); await Promise.all([...clients.values()].map(client => client.close())); clients.clear(); },
-    prepareSpareLane: settings => prepareSpare(settings),
+    prepareInspectorLane: settings => prepareInspector(settings),
     // State propagation is a cheap message; workers never query Electron synchronously.
     updateRunning: running => { currentRunning = running; for (const client of clients.values()) if (!client.closed) client.worker.postMessage({ type: "running", running }); }
   };

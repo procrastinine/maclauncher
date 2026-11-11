@@ -3158,8 +3158,9 @@ async function init() {
     syncCheatsFiles(games);
     // The window paints stored records immediately. Backend inventories and
     // metadata validation never delay opening Electron or handle selection.
-    // After the startup inventory, one spare worker prepares the next game's lane.
-    void readRuntimeInventory().then(() => backendService.prepareSpareLane(loadSettings()));
+    // The inspector worker reads installed runtimes alongside the inventory.
+    backendService.prepareInspectorLane(loadSettings());
+    void readRuntimeInventory();
     void refreshModuleSnapshots();
     void refreshLibraryMetadata(games, settings);
     void moduleAppActions.maintain({ userDataDir, logger });
@@ -3797,11 +3798,12 @@ async function gameEffectsOptions(entry, settings = loadSettings()) {
   // Device metadata does not hold the graph editor or any graphics edit open.
   // A newer included helper can query hardware for an older active processor.
   void Hardware.inspect(hardwareRoot).then(() => graphicsCatalog.refresh());
-  // A launch binding records its graphics inputs. Otherwise the game's backend
-  // lane resolves them, so game files and translator plans stay off this thread.
+  // A launch binding records its graphics inputs. Otherwise the inspector's
+  // backend lane resolves them, as for the inspector, so game files and
+  // translator plans stay off this thread.
   const effective = launch?.runtimeId ? {...entry, runtimeId: launch.runtimeId} : entry;
   const recorded = launch && Object.hasOwn(launch, "graphicsInputs");
-  const result = recorded ? null : await backendService.request(`game:${entry.gameId || entry.gamePath}`, "moduleAction", effective, "graphicsInputs", {}, settings);
+  const result = recorded ? null : await backendService.request("inspector", "moduleAction", effective, "graphicsInputs", {}, settings);
   // Module graphics callbacks prepare game content, so they wait for the game's files.
   const callbacks = result?.filesUnavailable ? {} : launcherService.graphicsCallbacks(effective, settings);
   const graphicsHardware = Hardware.snapshot(hardwareRoot);
@@ -4781,9 +4783,10 @@ ipcMain.handle("launcher:moduleAction", async (event, gamePath, action, payload,
 
   try {
     const actionOptions = { ...options };
-    // The inspector's Automatic version reads installed runtimes in its own
-    // lane, so it never delays the game's actions, Play or an install.
-    const lane = action === "runtimeAutomaticVersion" ? "inspector" : `game:${entry.gameId || entry.gamePath}`;
+    // The inspector's runtime reads share one worker that keeps installed
+    // runtimes read between games, so they never start a worker or wait
+    // behind the game's actions, Play or an install.
+    const lane = inspectorReads(entry).has(action) ? "inspector" : `game:${entry.gameId || entry.gamePath}`;
     const result = options?.requestId !== undefined ? await moduleActionRequests.run(event.sender, options.requestId,
       lane, [entry, action, payload, settings], actionOptions) :
       await backendService.request(lane, "moduleAction", entry, action, payload, settings, actionOptions);
@@ -4793,6 +4796,16 @@ ipcMain.handle("launcher:moduleAction", async (event, gamePath, action, payload,
     throw e;
   }
 });
+
+// The requests the inspector makes for a selected game: its runtime's status
+// action as the module declares it, graphics inputs, the recommended version
+// and the version Play uses without a choice.
+function inspectorReads(entry) {
+  const runtime = Modules.getModuleInfo(resolveModuleId(entry))?.runtime;
+  return new Set(["graphicsInputs", "runtimeRecommendation", "runtimeAutomaticVersion",
+    ...Object.values(runtime?.entries || {}).map(item => item?.statusAction),
+    ...Object.values(runtime?.preLaunch || {}).map(item => item?.statusAction)].filter(Boolean));
+}
 
 ipcMain.handle("launcher:setCheats", async (_event, gamePath, cheats) => {
   const settings = loadSettings();

@@ -48,9 +48,9 @@ function recordedLaunch(entry, runtimeId, context, install) {
 async function currentPlan(entry, runtimeId, context, install) {
   return Translators.optionsPlan(await Translators.optionsInventory(install, runtimeId, context, { entry, reuse: true }), context);
 }
-// A spare backend lane reads the installed default Wine runtimes' translator
-// choices before a game is assigned to it; the game's first inspector request
-// then reuses them.
+// The inspector's backend lane reads the installed default Wine runtimes'
+// translator choices when the launcher starts; the first selected game's
+// inspector requests then reuse them.
 async function warmBackendLane(context) {
   for (const source of Sources.all()) {
     const selected = source.manager().resolveSelection({}, context.settings, context.userDataDir, {});
