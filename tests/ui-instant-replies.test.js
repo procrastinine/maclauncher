@@ -100,3 +100,25 @@ test("a Tools button patch that fails restores the earlier choice and reports th
   assert.deepEqual(f.broadcasts, [true, false]);
   assert.equal(f.saved.moduleData.kept, 1);
 });
+
+test("opening a runtime's settings again focuses its window instead of loading another", async () => {
+  const windows = [], loads = [];
+  class BrowserWindow {
+    constructor() { this.listeners = {}; this.destroyed = false; this.focused = 0; this.webContents = {}; windows.push(this); }
+    on(name, fn) { this.listeners[name] = fn; } isDestroyed() { return this.destroyed; } isMinimized() { return false; }
+    show() {} focus() { this.focused++; }
+  }
+  const context = { BrowserWindow, runtimeSettingsWindows: new Map(), nativeTheme: { shouldUseDarkColors: false }, path, __dirname: "/app/src/main",
+    registerLauncherWindow: () => {}, attachWebContentsLogging: () => {}, attachDevToolsShortcut: () => {}, attachDevToolsAutoOpen: () => {},
+    isDebug: false, loadLauncherView: async (_win, view) => loads.push(JSON.stringify(view)) };
+  vm.runInNewContext(slice("async function createRuntimeSettingsWindow(", "\nasync function createSaveEditorWindow("), context);
+  const game = { scope: "game", moduleId: "engine", runtimeId: "player", gamePath: "/Games/A" };
+  const first = await context.createRuntimeSettingsWindow(game);
+  assert.equal(await context.createRuntimeSettingsWindow({ ...game }), first);
+  assert.equal(first.focused, 1);assert.equal(windows.length, 1);assert.equal(loads.length, 1);
+  const other = await context.createRuntimeSettingsWindow({ ...game, gamePath: "/Games/B" });
+  assert.notEqual(other, first);assert.equal(windows.length, 2);
+  first.destroyed = true;first.listeners.closed();
+  assert.notEqual(await context.createRuntimeSettingsWindow(game), first, "a closed window is replaced");
+  assert.equal(windows.length, 3);
+});

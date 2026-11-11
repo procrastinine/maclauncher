@@ -189,6 +189,7 @@ function createLogger() {
 
 const logger = createLogger();
 const gamePreparations = new Map();
+const runtimeSettingsWindows = new Map();
 const gameRemovals = new Map();
 const importProgress = new Map();
 const graphicsImportControllers = new Map();
@@ -2735,7 +2736,15 @@ async function ensureLauncherWindow({background=false}={}) {
   return win;
 }
 
+// One runtime settings window per game or module runtime; opening it again
+// focuses that window instead of loading another.
 async function createRuntimeSettingsWindow({ scope, moduleId, runtimeId, gamePath }) {
+  const key = JSON.stringify([scope, moduleId, runtimeId, gamePath || ""]), existing = runtimeSettingsWindows.get(key);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.show();existing.focus();
+    return existing;
+  }
   const win = new BrowserWindow({
     width: 560,
     height: 600,
@@ -2750,6 +2759,8 @@ async function createRuntimeSettingsWindow({ scope, moduleId, runtimeId, gamePat
     }
   });
   win.__maclauncherWindowType = "runtime-settings";
+  runtimeSettingsWindows.set(key, win);
+  win.on("closed", () => { if (runtimeSettingsWindows.get(key) === win) runtimeSettingsWindows.delete(key); });
   registerLauncherWindow(win);
 
   attachWebContentsLogging(win.webContents, "runtime-settings");
