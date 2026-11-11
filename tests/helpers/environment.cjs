@@ -57,6 +57,14 @@ const PROBES = {
     denial: /Device not configured/,
     reason: 'This environment denies creating disk images (hdiutil create: Device not configured); run the suite outside the sandbox.',
   },
+  pasteboard: {
+    command: ['/usr/bin/osascript', '-l', 'JavaScript', '-e', 'ObjC.import("AppKit"); const board = $.NSPasteboard.pasteboardWithUniqueName; ' +
+      'if (board.isNil()) throw new Error("pasteboard denied"); const stored = board.setStringForType($("probe"), $.NSPasteboardTypeString); ' +
+      'const text = board.stringForType($.NSPasteboardTypeString); board.releaseGlobally; ' +
+      'if (!stored || text.isNil() || ObjC.unwrap(text) !== "probe") throw new Error("pasteboard denied"); "ok"'],
+    denial: /pasteboard denied/,
+    reason: 'This environment denies the macOS pasteboard server (a private NSPasteboard cannot be created or read); run the suite outside the sandbox.',
+  },
   seatbelt: {
     command: ['/usr/bin/sandbox-exec', '-p', '(version 1)(allow default)', '/usr/bin/true'],
     denial: /sandbox_apply: Operation not permitted/,
@@ -68,7 +76,7 @@ const results = new Map();
 function denied(name) {
   const probe = PROBES[name];
   if (!probe) throw new Error('Unknown environment probe: ' + name);
-  if (process.platform !== 'darwin' && ['seatbelt', 'atomicWrite', 'sysctl', 'userCaches', 'metal', 'diskImage', 'ps'].includes(name)) return false;
+  if (process.platform !== 'darwin' && ['seatbelt', 'atomicWrite', 'sysctl', 'userCaches', 'metal', 'diskImage', 'ps', 'pasteboard'].includes(name)) return false;
   if (!results.has(name)) {
     const [command, ...args] = typeof probe.command === 'function' ? probe.command() : probe.command;
     const result = spawnSync(command, args, { encoding: 'utf8', timeout: 10000 });

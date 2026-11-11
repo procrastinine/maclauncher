@@ -17,7 +17,9 @@ static NSString* observedPath;
 static CGEventFlags fixtureFlags(CGEventSourceStateID){
  int pid=inputPid.load(),operation=inputOperation.load();
  static int previousPid=-1,previousOperation=-1;
- if(pid!=previousPid||operation!=previousOperation){[[NSString stringWithFormat:@"%d %d",pid,operation]writeToFile:observedPath atomically:YES encoding:NSUTF8StringEncoding error:nil];previousPid=pid;previousOperation=operation;}
+ // A plain write: the test polls for the exact text, and an atomic replacement needs a
+ // temporary-items directory that restricted environments refuse.
+ if(pid!=previousPid||operation!=previousOperation){[[NSString stringWithFormat:@"%d %d",pid,operation]writeToFile:observedPath atomically:NO encoding:NSUTF8StringEncoding error:nil];previousPid=pid;previousOperation=operation;}
  return operation?kCGEventFlagMaskCommand:0;
 }
 static bool fixtureKey(CGEventSourceStateID,CGKeyCode);
