@@ -39,6 +39,9 @@ function createManager({ discoverCatalog = Catalog.discover, dependencies = {} }
     resolveExecutable: root => path.join(root, Payload.WINE, "bin", "wine"),
     verifyArtifact: options => verifyChecksumFile(options, dependencies),
     prepareInstall: options => Payload.preparePayload(options, dependencies),
+    // Each launch checks the sealed file inventory that only a managed
+    // installation records, so no folder can be registered as a version.
+    customRuntime: false,
     dependencies: { ...dependencies, extractArchive: dependencies.extractArchive || extractArchive }
   });
   const resolvePayload = Payload.createPayloadResolver(dependencies);

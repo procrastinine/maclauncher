@@ -155,6 +155,13 @@ test("WineCX reads a release's macOS floor from the start of its archive before 
   assert.equal(manager.core.listInstalled(userDataDir).length, 0, "nothing was downloaded or installed");
 });
 
+test("WineCX offers no custom registration, since a launch needs a managed installation's file inventory", t => {
+  const manager = fixtureManager(), state = manager.getState({ userDataDir: path.join(temporary(t), "profile"), componentSummaries: false });
+  assert.equal(manager.customRuntime, false);
+  assert.equal(manager.registerCustomRuntime, undefined);
+  assert.ok(!state.customRuntime && state.sections.every(section => !section.customRuntime), "the Runtimes tab shows no Register custom… control");
+});
+
 test("WineCX checksum verification reads the release's checksum file", async () => {
   const pin = { asset: { filename: "Libraries.tar.gz" }, checksum: { filename: "Libraries.tar.gz.sha256", url: "https://example.invalid/Libraries.tar.gz.sha256" } };
   const reply = text => async (_listed, target) => { fs.writeFileSync(target, text); };
