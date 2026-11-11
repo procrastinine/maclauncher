@@ -193,6 +193,9 @@ const runtimeSettingsWindows = new Map();
 // Play's file check for each game, before the backend launch exists; Cancel
 // during the check marks it stopped.
 const playFileChecks = new Map();
+// Tools button patches in progress for each game: the latest request and the
+// last choice whose patch succeeded.
+const toolsButtonPatches = new Map();
 const gameRemovals = new Map();
 const importProgress = new Map();
 const graphicsImportControllers = new Map();
@@ -4942,19 +4945,28 @@ ipcMain.handle("launcher:setGameModuleData", async (_event, gamePath, patch) => 
   cachedState = buildState(settings, games);
   broadcastState();
   if (patcher) {
+    const requested = entry.moduleData?.toolsButtonVisibleOverride;
+    const patches = toolsButtonPatches.get(gamePath) || { latest: 0, applied: previousOverride };
+    const request = ++patches.latest;
+    toolsButtonPatches.set(gamePath, patches);
     try {
       await backendService.request(`game:${entry.gameId || gamePath}`, "patcher", entry, "cheats", "updateVisibility",
         { toolsButtonVisible: resolveToolsButtonVisible(entry, settings) });
+      patches.applied = requested;
     } catch (error) {
+      // Only the latest request restores, and only while the record still
+      // holds its choice; it restores the last choice whose patch succeeded.
       const restored = loadGamesHydrated({ persist: false }), current = findGameByPath(restored, gamePath);
-      if (current) {
-        updateEntryModuleData(current, { toolsButtonVisibleOverride: previousOverride ?? null });
+      if (current && patches.latest === request && current.moduleData?.toolsButtonVisibleOverride === requested) {
+        updateEntryModuleData(current, { toolsButtonVisibleOverride: patches.applied ?? null });
         current.updatedAt = Date.now();
         saveGameRecord(current);
         cachedState = buildState(loadSettings(), restored);
         broadcastState();
       }
       throw error;
+    } finally {
+      if (patches.latest === request && toolsButtonPatches.get(gamePath) === patches) toolsButtonPatches.delete(gamePath);
     }
   }
   return true;

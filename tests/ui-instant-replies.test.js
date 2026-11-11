@@ -64,23 +64,28 @@ test("Play clears the starting state when the game's files are unavailable", asy
   assert.equal(f.context.pendingGameCompletions.has("/Games/Slow"), true);
 });
 
-function moduleDataFixture({ fail = false } = {}) {
-  let saved = { gameId: "g", gamePath: "/Games/Tools", moduleId: "engine", moduleData: { toolsButtonVisibleOverride: false, kept: 1 } };
+function moduleDataFixture({ fail = false, initial = false, unset = false, perRequest = false } = {}) {
+  let saved = { gameId: "g", gamePath: "/Games/Tools", moduleId: "engine", moduleData: { ...(unset ? {} : { toolsButtonVisibleOverride: initial }), kept: 1 } };
   let finishPatch;
   const patching = new Promise(resolve => { finishPatch = resolve; });
-  const broadcasts = [], patches = [], handlers = new Map();
+  const broadcasts = [], patches = [], handlers = new Map(), outcomes = [];
   const context = {
     Date, loadSettings: () => ({}), loadGamesHydrated: () => [structuredClone(saved)],
     findGameByPath: (games, gamePath) => games.find(game => game.gamePath === gamePath), resolveModuleId: game => game.moduleId,
     getCheatsPatcherIfSupported: () => ({}), resolveToolsButtonVisible: entry => entry.moduleData.toolsButtonVisibleOverride === true,
     saveGameRecord: entry => { saved = structuredClone(entry); },
-    backendService: { request: async (...args) => { patches.push(args[5]); await patching; if (fail) throw new Error("patch failed"); } },
+    backendService: { request: async (...args) => {
+      patches.push(args[5]);
+      if (perRequest) { const failed = await new Promise(resolve => outcomes.push(resolve)); if (failed) throw new Error("patch failed"); return; }
+      await patching; if (fail) throw new Error("patch failed");
+    } },
+    toolsButtonPatches: new Map(),
     buildState: (_settings, games) => ({ recents: games }), broadcastState: () => broadcasts.push(saved.moduleData.toolsButtonVisibleOverride ?? null),
     ipcMain: { handle: (name, handler) => handlers.set(name, handler) }, cachedState: null
   };
   vm.runInNewContext(slice("function updateEntryModuleData(", "\nfunction updateEntryRuntimeData("), context);
   vm.runInNewContext(slice('ipcMain.handle("launcher:setGameModuleData",', 'ipcMain.handle("launcher:setGameRuntimeData",'), context);
-  return { get saved() { return saved; }, broadcasts, patches, finishPatch,
+  return { get saved() { return saved; }, broadcasts, patches, finishPatch, outcomes,
     invoke: patch => handlers.get("launcher:setGameModuleData")(null, "/Games/Tools", patch) };
 }
 
@@ -137,4 +142,30 @@ test("Cancel during Play's file check stops the launch before it starts", async 
   assert.equal(f.context.gamePreparations.size, 0);assert.equal(f.context.playFileChecks.size, 0);
   assert.deepEqual(f.activity.at(-1), {});
   assert.equal(await f.context.stopGameRuns("/Games/Slow"), false, "nothing is left to stop");
+});
+
+test("a failed Tools patch never restores over a newer choice and restores the last choice that was applied", async () => {
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  // Unset, then off (request 1), then on (request 2); request 1 fails first.
+  let f = moduleDataFixture({ unset: true, perRequest: true });
+  const off = f.invoke({ toolsButtonVisibleOverride: false }), on = f.invoke({ toolsButtonVisibleOverride: true });
+  await settle();f.outcomes[0](true);
+  await assert.rejects(off, /patch failed/);
+  assert.equal(f.saved.moduleData.toolsButtonVisibleOverride, true, "the newer choice stays");
+  f.outcomes[1](true);
+  await assert.rejects(on, /patch failed/);
+  assert.equal(f.saved.moduleData.toolsButtonVisibleOverride, undefined, "no patch succeeded, so the original unset value returns");
+  // Off succeeds, then on fails: the files show off, so off returns.
+  f = moduleDataFixture({ unset: true, perRequest: true });
+  const first = f.invoke({ toolsButtonVisibleOverride: false }), second = f.invoke({ toolsButtonVisibleOverride: true });
+  await settle();f.outcomes[0](false);assert.equal(await first, true);
+  f.outcomes[1](true);await assert.rejects(second, /patch failed/);
+  assert.equal(f.saved.moduleData.toolsButtonVisibleOverride, false);
+  // Off, on, off: the first request failing while the record holds the third's equal value restores nothing.
+  f = moduleDataFixture({ initial: true, perRequest: true });
+  const a = f.invoke({ toolsButtonVisibleOverride: false }), b = f.invoke({ toolsButtonVisibleOverride: true }), c = f.invoke({ toolsButtonVisibleOverride: false });
+  await settle();f.outcomes[0](true);await assert.rejects(a, /patch failed/);
+  assert.equal(f.saved.moduleData.toolsButtonVisibleOverride, false, "the third request owns the record");
+  f.outcomes[1](false);f.outcomes[2](false);assert.equal(await b, true);assert.equal(await c, true);
+  assert.equal(f.saved.moduleData.toolsButtonVisibleOverride, false);
 });
