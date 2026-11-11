@@ -2272,6 +2272,12 @@ function utilityViewDrawn(win, revision, limitMs) {
 }
 // All three views are mounted. A switch acknowledges its DOM change directly;
 // navigation acknowledges after its React commit, without a hidden-frame wait.
+function sendUtilityWindowRequest(win) {
+  if (win.isDestroyed()) return;
+  const request = utilityWindows.stateForWindow(win, {}).utilityWindow;
+  if (request && KEPT_UTILITY_VIEWS.includes(request.view)) win.webContents.send("launcher:utilityViewSwitch", request);
+  else sendState(win);
+}
 async function presentUtilityWindow(win, { view, revision, switched, navigation, activate }) {
   if (switched && !navigation && !win.isDestroyed()) win.webContents.send("launcher:utilityViewSwitch", { view, revision });
   if ((switched || navigation) && !await utilityViewDrawn(win, revision, 300)) throw new Error("Utility view did not acknowledge its content.");
@@ -2308,7 +2314,7 @@ const utilityWindows = createUtilityWindowController({
     attachDevToolsShortcut(win);
     if (activate) attachDevToolsAutoOpen(win, view);
   },
-  onContextChange: win => sendState(win),
+  onContextChange: sendUtilityWindowRequest,
   // Settings, Runtimes and Credits share one hidden window prepared after the
   // startup inventory; its replacement starts when taken. Closing one hides it.
   keptViews: KEPT_UTILITY_VIEWS,
@@ -2319,7 +2325,7 @@ const utilityWindows = createUtilityWindowController({
     const { width, height } = utilityWindowSize(options);
     win.setSize(width, height);
   },
-  beforeShow: win => sendState(win),
+  beforeShow: sendUtilityWindowRequest,
   present: presentUtilityWindow,
   onHidden: () => quitWithoutVisibleWindows(),
   isQuitting: () => launcherQuitting

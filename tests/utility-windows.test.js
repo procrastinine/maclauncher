@@ -832,3 +832,58 @@ test('a third rapid request cannot overwrite a second presentation still in prog
   assert.equal(f.controller.stateForWindow(f.windows[0],{}).utilityWindow.view,'settings');
   releaseRefill();await new Promise(resolve=>setImmediate(resolve));
 });
+
+test('prepared Settings navigation sends only the request instead of a full launcher snapshot', () => {
+  const source=fs.readFileSync(path.join(__dirname,'../src/main/main.js'),'utf8');
+  const controller=source.indexOf('const utilityWindows = createUtilityWindowController');
+  const start=source.indexOf('  beforeShow: ',controller)+'  beforeShow: '.length;
+  const callback=source.slice(start,source.indexOf('\n',start)).trim().replace(/,$/,'');
+  const helperStart=source.indexOf('function sendUtilityWindowRequest(');
+  const helper=helperStart<0?'':source.slice(helperStart,source.indexOf('async function presentUtilityWindow(',helperStart));
+  const request={view:'settings',sectionId:'launcher',revision:17},messages=[];
+  const win={isDestroyed:()=>false,webContents:{send:(...args)=>messages.push(args)}};
+  vm.runInNewContext(helper+'\n('+callback+')(win);',{win,KEPT_UTILITY_VIEWS:['settings','runtimes','credits'],
+    utilityWindows:{stateForWindow:()=>({utilityWindow:request})},sendState:()=>assert.fail('A prepared navigation must not serialize and render the launcher snapshot')});
+  assert.equal(messages.length,1);
+  assert.equal(messages[0][0],'launcher:utilityViewSwitch');
+  assert.equal(messages[0][1],request);
+});
+
+test('a Settings navigation commits its request without rebuilding the mounted Runtimes and Credits panels', async () => {
+  const {build}=require('vite'),Module=require('node:module');
+  const {react,componentHarness}=require('./helpers/renderer-component');
+  const testReact={...react,useLayoutEffect:react.useEffect};
+  const bundle=await build({configFile:false,logLevel:'silent',build:{ssr:path.resolve(__dirname,'../src/renderer/src/ui/UtilityApp.tsx'),write:false,
+    rollupOptions:{external:id=>/^react(?:-dom)?(?:\/|$)/.test(id),output:{format:'cjs',codeSplitting:false}}}});
+  const compiled=new Module(path.join(__dirname,'utility-navigation.cjs'),module);compiled.paths=module.paths;
+  compiled.require=id=>id==='react'?testReact:Module.prototype.require.call(compiled,id);
+  compiled._compile(bundle.output.find(chunk=>chunk.type==='chunk').code,compiled.id);
+  const state=require('./library-layout-fixture').createLibraryFixture();state.recents=[];state.utilityWindow={view:'settings',revision:1};
+  let navigate,requests=0;const reported=[],frames=[];
+  const slots=["settings","runtimes","credits"].map(view=>({dataset:{utilityView:view},hidden:view!=="settings"}));
+  const previous={document:globalThis.document,window:globalThis.window,raf:globalThis.requestAnimationFrame,cancel:globalThis.cancelAnimationFrame};
+  globalThis.document={querySelectorAll:()=>slots};
+  globalThis.requestAnimationFrame=callback=>{frames.push(callback);return frames.length;};globalThis.cancelAnimationFrame=()=>{};
+  globalThis.window={location:{search:'?view=settings'},MacLauncher:{launcher:{initialState:()=>state,getState:async()=>{requests++;return state;},
+    onState:()=>()=>{},onUtilityViewSwitch:callback=>{navigate=callback;return ()=>{};},utilityWindowDrawn:revision=>reported.push(revision)}}};
+  const pane=(tree,view)=>{const queue=[tree];while(queue.length){const node=queue.shift();if(node?.props?.['data-utility-view']===view)return node.props.children;const children=node?.props?.children;if(children)queue.push(...[children].flat(Infinity));}throw Error('Missing '+view);};
+  let harness;
+  try {
+    harness=componentHarness(compiled.exports.default||compiled.exports,{});
+    harness.render();frames.shift()();frames.shift()();
+    const before=await harness.settle(),runtimes=pane(before,'runtimes'),credits=pane(before,'credits'),initialRequests=requests;
+    navigate({view:'settings',sectionId:'launcher',revision:17});
+    const after=harness.render();
+    assert.equal(pane(after,'settings').props.sectionId,'launcher');
+    assert.equal(pane(after,'runtimes'),runtimes,'Settings navigation retains the already mounted Runtimes tree');
+    assert.equal(pane(after,'credits'),credits);
+    assert.equal(requests,initialRequests,'Navigation requests no full state');
+    assert.equal(state.utilityWindow.revision,1,'The live snapshot is not replaced by navigation');
+    assert.equal(reported.at(-1),17,'The target is committed before acknowledgement');
+    navigate({view:'credits',revision:18});
+    assert.deepEqual(slots.map(slot=>slot.hidden),[true,true,false]);
+    navigate({view:'settings',sectionId:'launcher',revision:19});harness.render();
+    assert.deepEqual(slots.map(slot=>slot.hidden),[false,true,true],'A targeted request restores the view after an intervening DOM-only switch');
+    assert.equal(reported.at(-1),19);
+  } finally {harness?.close();globalThis.document=previous.document;globalThis.window=previous.window;globalThis.requestAnimationFrame=previous.raf;globalThis.cancelAnimationFrame=previous.cancel;}
+});

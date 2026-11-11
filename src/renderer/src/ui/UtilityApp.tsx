@@ -1,5 +1,5 @@
 import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
-import type {LauncherState} from "./types";
+import type {LauncherState, UtilityWindowContext} from "./types";
 import {readUtilityWindowContext} from "../../../core/utility-window-model.mjs";
 import {restoreLauncherState, subscribeLauncherState} from "./launcher-state-model.mjs";
 import {SettingsView} from "./components/SettingsView";
@@ -21,15 +21,24 @@ export default function UtilityApp() {
   });
   const [state, setState] = useState<LauncherState | null>(() => initialState && restoreLauncherState(initialState));
   const [error, setError] = useState<string | null>(null);
-  const utilityView = state?.utilityWindow?.view || utilityWindowContext.view;
-  const utilityRevision = state?.utilityWindow?.revision;
+  const [navigationRequest, setNavigationRequest] = useState<UtilityWindowContext | null>(null);
+  const request: UtilityWindowContext = navigationRequest && (navigationRequest.revision || 0) >= (state?.utilityWindow?.revision || 0)
+    ? navigationRequest : state?.utilityWindow || utilityWindowContext;
+  const utilityView = request.view;
+  const utilityRevision = request.revision;
+  const runtimeState = useMemo(() => state && ({...state, utilityWindow: request}), [state, request]);
   const keptUtility = true, runtimesOpen = true, creditsOpen = true;
   const utilityNavigation = useRef<Record<string, number>>({});
   if (utilityRevision !== undefined) utilityNavigation.current[utilityView] = utilityRevision;
   useLayoutEffect(() => {
     if (!api?.onUtilityViewSwitch) return;
-    return api.onUtilityViewSwitch(({view, revision}) => {
+    return api.onUtilityViewSwitch(request => {
+      const {view, revision} = request;
       for (const slot of document.querySelectorAll<HTMLElement>("[data-utility-view]")) slot.hidden = slot.dataset.utilityView !== view;
+      if (request.managerId || request.sectionId || request.shaderCategory || request.moduleId) {
+        setNavigationRequest(request);
+        return;
+      }
       // All slots are mounted. Acknowledge the DOM switch without a hidden frame wait.
       api.utilityWindowDrawn?.(revision);
     });
@@ -57,7 +66,7 @@ export default function UtilityApp() {
   const {addDropActive, onAppDragEnter, onAppDragLeave, onAppDragOver, onDropAdd} = useLauncherDrop(api, importBatches, setError);
   const {runtimeManagerId, setRuntimeManagerId, runtimeSectionId, setRuntimeSectionId, runtimeUi,
     updateRuntimeUiSection, onRuntimeRefresh, onRuntimeInstall, onRuntimeImport, onRuntimeRegister,
-    onRuntimeSetupAction, onRuntimeInstalledAction, onRuntimeSetDefault, onRuntimeUninstall} = useRuntimeManagement(api, state, true, utilityWindowContext.managerId);
+    onRuntimeSetupAction, onRuntimeInstalledAction, onRuntimeSetDefault, onRuntimeUninstall} = useRuntimeManagement(api, runtimeState, true, utilityWindowContext.managerId);
   const runtimeManagers = useMemo(() => Object.values(state?.runtimeManagers || {}), [state?.runtimeManagers]);
   const acknowledgments = useMemo(() => collectAcknowledgments(state?.modules || [], sharedAcknowledgments), [state?.modules]);
   const canOpenExternal = Boolean(api?.openExternal);
@@ -85,6 +94,23 @@ export default function UtilityApp() {
     }
   }
 
+  // A targeted Settings request does not invalidate the other mounted views.
+  const runtimesPanel = useMemo(() => state && <RuntimesView
+        state={state} settingsApi={api} getPathForFile={api?.getPathForFile}
+        runtimeManagers={runtimeManagers} runtimeUi={runtimeUi} runtimeManagerId={runtimeManagerId}
+        navigationKey={utilityNavigation.current.runtimes}
+        runtimeSectionId={runtimeSectionId} downloadTasks={downloadTasks} setRuntimeManagerId={setRuntimeManagerId}
+        setRuntimeSectionId={setRuntimeSectionId} updateRuntimeUiSection={updateRuntimeUiSection}
+        onRuntimeRefresh={onRuntimeRefresh} onRuntimeInstall={onRuntimeInstall} onRuntimeImport={onRuntimeImport} onRuntimeRegister={onRuntimeRegister}
+        onRuntimeSetupAction={onRuntimeSetupAction} onRuntimeInstalledAction={onRuntimeInstalledAction}
+        onRuntimeSetDefault={onRuntimeSetDefault} onRuntimeUninstall={onRuntimeUninstall}
+        onCancelDownload={id => api?.cancelDownload(id)} onOpenSource={canOpenExternal ? onOpenAcknowledgmentsLink : undefined}
+      />,
+    [state, api, runtimeManagers, runtimeUi, runtimeManagerId, runtimeSectionId, downloadTasks, utilityNavigation.current.runtimes]);
+  const creditsPanel = useMemo(() => <CreditsView
+        acknowledgments={acknowledgments} canOpenExternal={canOpenExternal} onOpenLink={onOpenAcknowledgmentsLink}
+      />, [acknowledgments, canOpenExternal, api]);
+
     return <div className="app utilityWindow" onDragEnter={onAppDragEnter} onDragLeave={onAppDragLeave}
       onDragOver={onAppDragOver} onDrop={onDropAdd}>
       {addDropActive && <div className="dropOverlay">
@@ -95,25 +121,13 @@ export default function UtilityApp() {
       {!state && !error && <div className="empty" role="status">Loading…</div>}
       {state && (keptUtility || utilityView === "settings") && <div className="utilityViewSlot" data-utility-view="settings" hidden={utilityView !== "settings"}><SettingsView
         state={state} api={api || undefined} showIcons={showIcons} showNonDefaultTags={showNonDefaultTags}
-        sectionId={utilityView === "settings" ? state.utilityWindow?.sectionId || utilityWindowContext.sectionId : undefined}
-        shaderCategory={utilityView === "settings" ? state.utilityWindow?.shaderCategory || utilityWindowContext.shaderCategory : undefined}
+        sectionId={utilityView === "settings" ? request.sectionId : undefined}
+        shaderCategory={utilityView === "settings" ? request.shaderCategory : undefined}
         navigationKey={utilityNavigation.current.settings}
         onSetLauncherSettings={onSetLauncherSettings} onSetModuleSettings={onSetModuleSettings}
         onAppUpdate={api?.appUpdate ? action => { void api.appUpdate(action).catch((e: any) => setError(String(e?.message || e))); } : undefined}
       /></div>}
-      {state && creditsOpen && <div className="utilityViewSlot" data-utility-view="credits" hidden={utilityView !== "credits"}><CreditsView
-        acknowledgments={acknowledgments} canOpenExternal={canOpenExternal} onOpenLink={onOpenAcknowledgmentsLink}
-      /></div>}
-      {state && runtimesOpen && <div className="utilityViewSlot" data-utility-view="runtimes" hidden={utilityView !== "runtimes"}><RuntimesView
-        state={state} settingsApi={api} getPathForFile={api?.getPathForFile}
-        runtimeManagers={runtimeManagers} runtimeUi={runtimeUi} runtimeManagerId={runtimeManagerId}
-        navigationKey={utilityNavigation.current.runtimes}
-        runtimeSectionId={runtimeSectionId} downloadTasks={downloadTasks} setRuntimeManagerId={setRuntimeManagerId}
-        setRuntimeSectionId={setRuntimeSectionId} updateRuntimeUiSection={updateRuntimeUiSection}
-        onRuntimeRefresh={onRuntimeRefresh} onRuntimeInstall={onRuntimeInstall} onRuntimeImport={onRuntimeImport} onRuntimeRegister={onRuntimeRegister}
-        onRuntimeSetupAction={onRuntimeSetupAction} onRuntimeInstalledAction={onRuntimeInstalledAction}
-        onRuntimeSetDefault={onRuntimeSetDefault} onRuntimeUninstall={onRuntimeUninstall}
-        onCancelDownload={id => api?.cancelDownload(id)} onOpenSource={canOpenExternal ? onOpenAcknowledgmentsLink : undefined}
-      /></div>}
+      {state && creditsOpen && <div className="utilityViewSlot" data-utility-view="credits" hidden={utilityView !== "credits"}>{creditsPanel}</div>}
+      {state && runtimesOpen && <div className="utilityViewSlot" data-utility-view="runtimes" hidden={utilityView !== "runtimes"}>{runtimesPanel}</div>}
     </div>;
 }
