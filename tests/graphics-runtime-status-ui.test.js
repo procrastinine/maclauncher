@@ -49,8 +49,8 @@ test('requested rows settle in the merged rows, whichever matching current conte
 // A renderer's scene intake runs the temporal row; the window chain that
 // receives its upscaled image reports the same row passed through.
 const missing='Needs matching renderer depth, motion and jitter';
-const intake=()=>({...observation([{id:'temporal',requestedMethod:'metalfx',activeMethod:'metalfx',phase:'completed',completed:30,encoded:30,reason:'',observedAt:2000}]).contexts[0],id:'intake'});
-const windowChain=(observedAt=2000)=>({...observation([{id:'temporal',requestedMethod:'metalfx',activeMethod:'passthrough',phase:'bypassed',completed:0,encoded:0,reason:missing,observedAt}]).contexts[0],id:'window'});
+const intake=()=>({...observation([{id:'temporal',requestedMethod:'metalfx',activeMethod:'metalfx',phase:'completed',completed:30,encoded:30,reason:'',observedAt:2000}]).contexts[0],id:'intake',frameSource:{source:'renderer-scene',inputs:['depth','motion','jitter','camera'],observedAt:2000}});
+const windowChain=(observedAt=2000)=>({...observation([{id:'temporal',requestedMethod:'metalfx',activeMethod:'passthrough',phase:'bypassed',completed:0,encoded:0,reason:missing,observedAt}]).contexts[0],id:'window',frameSource:{source:'metal-drawable',inputs:[],observedAt}});
 for(const [name,order] of [['window chain first',()=>[windowChain(),intake()]],['intake first',()=>[intake(),windowChain()]]])
  test(`a row one context runs is active while another context bypasses it (${name})`,async t=>{
   const f=fixture(t);f.props.game.effects.video=[{id:'temporal',kind:'temporal',method:'metalfx',enabled:true,settings:{}}];f.harness.render();
@@ -58,7 +58,8 @@ for(const [name,order] of [['window chain first',()=>[windowChain(),intake()]],[
   assert.match(markup,/Selected · Completed processing reported/);assert.doesNotMatch(markup,/Some effects are not running/);
   assert.equal(f.timers.size,0);assert.equal(f.reported.at(-1).rows.temporal.running,true);
   // The details keep the window chain's pass-through as that context's state, not the row's.
-  assert.match(markup,/metalfx: Running/);assert.match(markup,/In this context · metalfx → passthrough: Bypassed · [^<]*Needs matching renderer depth, motion and jitter/);
+  assert.match(markup,/metalfx: Running/);assert.match(markup,/In presentation · metalfx → passthrough: Bypassed · [^<]*Needs matching renderer depth, motion and jitter/);
+  assert.match(markup,/In scene intake · metalfx: Completed/);
  });
 test('an early bypass stops counting once encoded frames follow, without a new revision',async t=>{
  const f=fixture(t);f.props.game.effects.video=[{id:'temporal',kind:'temporal',method:'metalfx',enabled:true,settings:{}}];f.props.inspectDetails=true;f.harness.render();
@@ -114,4 +115,22 @@ test('explicit matching failure stays visible with a repair route without treati
  f.replies.shift()(failed);await f.harness.settle();assert.match(f.markup(),/Selected · Processing failed/);assert.match(f.markup(),/off and on to retry/);assert.match(f.markup(),/The GPU command timed out/);assert.equal(f.timers.size,0);
  f.props.requestKey='new request';f.harness.render();f.replies.shift()({state:'historical',contexts:[{...failed.contexts[0],phase:'completed',historical:true}]});await f.harness.settle();assert.match(f.markup(),/Selected · No recent processing confirmation/);assert.doesNotMatch(f.markup(),/Selected · Processing failed|off and on to retry/);
  f.tick();f.replies.shift()({state:'unavailable',contexts:[]});await f.harness.settle();assert.match(f.markup(),/Selected · Status unavailable/);assert.doesNotMatch(f.markup(),/Selected · Processing failed/);
+});
+// Run-5's contexts: the game layer's frame admission, two stopped contexts
+// from before the first frame, the scene intake and the presenter.
+test('status details name each context and show only what that context reports',async t=>{
+ const f=fixture(t);f.props.game.effects.video=[{id:'temporal',kind:'temporal',method:'metalfx',enabled:true,settings:{}}];f.props.inspectDetails=true;f.harness.render();
+ const empty={pid:42,phase:'stopped',input:{width:0,height:0},output:{width:0,height:0},encoded:0,completed:0,presentedReal:0,presentedGenerated:0,presentedTime:0,reason:'Preparing graphics resources',observedAt:1000,identityState:'matching',historical:true,stages:[]};
+ const admission={...empty,id:'layer',phase:'unknown',historical:false,reason:'',identityState:'unverified',
+  admission:{reason:'owner-published-unchanged',width:2560,height:1440,format:80,queue:'7f',generation:1,counts:{'frame-owner-accepted':1420}},
+  stages:[{id:'framebuffer-memory',requestedMethod:'image-memory',activeMethod:'admitted',reason:'',phase:'prepared',input:{width:0,height:0},output:{width:0,height:0}}]};
+ const scene={...intake(),input:{width:640,height:360},output:{width:1280,height:720}};
+ f.replies.shift()({state:'observed',contexts:[admission,{...empty,id:'early-a'},{...empty,id:'early-b'},scene,{...windowChain(),presentedReal:3,presentedTime:5}]});await f.harness.settle();const markup=f.markup();
+ assert.match(markup,/<strong>Game frame admission<\/strong>/);assert.match(markup,/In game frame admission · Framebuffer copy memory: Admitted/);
+ assert.doesNotMatch(markup,/image-memory|Settings version not confirmed|Not reported · Input/);
+ assert.match(markup,/2 earlier contexts stopped before reporting a frame\./);assert.doesNotMatch(markup,/Preparing graphics resources|Historical observation/);
+ assert.match(markup,/<strong>Scene intake<\/strong> · Source: Renderer scene · depth, motion, jitter, camera/);
+ assert.match(markup,/<strong>Presentation<\/strong> · Source: Metal drawable/);
+ assert.equal((markup.match(/Presentation has not been reported/g)||[]).length,0);
+ assert.match(markup,/class="detailMeta statusDetails"/);
 });

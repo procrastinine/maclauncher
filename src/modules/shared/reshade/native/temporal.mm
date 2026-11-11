@@ -330,10 +330,21 @@ auto&sceneOwners=*new std::unordered_map<void*,std::shared_ptr<SceneOwner>>;
 // unconsumed receipt keeps them here. A stopped encoder retires its context,
 // so acceptance never waits for it.
 struct OrderedSceneOwner{std::mutex mutex;macfx::EffectPlanExecutor plan;std::atomic<bool> statusReported{false};};
-void acceptEncodedScene(uintptr_t context,const macfx::EffectExecution&execution,uint64_t frameId){
-    const auto controls=macfx::presentationControlsDigest();
+// The scene's own extents and inputs, and its completion on the GPU.
+void acceptEncodedScene(uintptr_t context,const macfx::EffectExecution&execution,const RSTemporalFrame&frame,id<MTLCommandBuffer>commands){
+    const auto controls=macfx::presentationControlsDigest();const std::string revision=execution.revision();
+    const uint64_t frameId=frame.frameId;const unsigned iw=frame.renderWidth,ih=frame.renderHeight,ow=frame.outputWidth,oh=frame.outputHeight;
     macfx::RuntimeStatusEvent event;event.context=context;event.processing=true;event.resourceAccepted=true;event.phase=macfx::RuntimeStatusPhase::Encoded;
-    event.frameId=frameId;event.planRevision=execution.revision();event.controlsDigest=controls;macfx::observeRuntimeStatus(event);
+    event.frameId=frameId;event.planRevision=revision;event.controlsDigest=controls;event.inputWidth=iw;event.inputHeight=ih;event.outputWidth=ow;event.outputHeight=oh;macfx::observeRuntimeStatus(event);
+    uint32_t inputs=0;if(frame.depth)inputs|=macfx::RuntimeInputDepth;if(frame.motion)inputs|=macfx::RuntimeInputMotion;if(frame.jitterX!=0||frame.jitterY!=0)inputs|=macfx::RuntimeInputJitter;
+    if(frame.flags&RS_TEMPORAL_CAMERA_VALID)inputs|=macfx::RuntimeInputCamera;if(frame.exposure)inputs|=macfx::RuntimeInputExposure;
+    macfx::observeRuntimeFrameSource(context,macfx::RuntimeFrameSource::RendererScene,inputs);
+    [commands addCompletedHandler:^(id<MTLCommandBuffer>completed){
+        macfx::RuntimeStatusEvent done;done.context=context;done.processing=true;done.asynchronous=true;done.frameId=frameId;done.planRevision=revision;done.controlsDigest=controls;
+        done.phase=completed.status==MTLCommandBufferStatusCompleted?macfx::RuntimeStatusPhase::Completed:macfx::RuntimeStatusPhase::Failed;
+        if(completed.status!=MTLCommandBufferStatusCompleted)done.reason="The scene command buffer did not complete";
+        done.inputWidth=iw;done.inputHeight=ih;done.outputWidth=ow;done.outputHeight=oh;macfx::observeRuntimeStatus(done);
+    }];
 }
 void stopEncoderStatus(uintptr_t context,std::atomic<bool>&reported){if(reported.exchange(false,std::memory_order_acq_rel))macfx::retireRuntimeStatus(context);}
 auto&orderedSceneOwners=*new std::unordered_map<void*,std::shared_ptr<OrderedSceneOwner>>;
@@ -532,7 +543,7 @@ static int processSelectedTemporalFrame(const RSTemporalFrame*f,const RSImageCol
         auto capture=macfx::FrameCapture::begin(commands,selected.execution->replacesTemporal()?color:output,f->frameId,false,&description);bool displayMapped=early&&early->displayMapped();
         const auto encoded=originalRetained?selected.execution->encodeRecordedScene(frame,*f,&displayMapped,&guide):selected.execution->encodeScene(frame,*f,&displayMapped,&guide,displayMapped);if(!encoded.encoded)return answer(r,encoded.busy?RS_TEMPORAL_BUSY:RS_TEMPORAL_FAILED,encoded.reason.c_str());
         if(destination)macfx::publishTemporalSceneContinuation(commands,*destination,*f,selected.execution,displayMapped);else macfx::publishTemporalOutputWithDepth(commands,output,f->frameId,selected.execution,std::move(capture),&guide,displayMapped,f);
-        acceptEncodedScene(statusContext,*selected.execution,f->frameId);owner->statusReported.store(true,std::memory_order_release);r->encoded=1;r->reset=bool(f->flags&RS_TEMPORAL_RESET);return answer(r,RS_TEMPORAL_OK,"");
+        acceptEncodedScene(statusContext,*selected.execution,*f,commands);owner->statusReported.store(true,std::memory_order_release);r->encoded=1;r->reset=bool(f->flags&RS_TEMPORAL_RESET);return answer(r,RS_TEMPORAL_OK,"");
     }catch(const std::exception&e){return answer(r,RS_TEMPORAL_FAILED,e.what());}}@catch(NSException*e){return answer(r,RS_TEMPORAL_FAILED,e.reason.UTF8String?:"Ordered scene encoding failed");}}
 }
 // Frame-local fallback is a pipeline policy, not a provider capability or a
@@ -693,7 +704,7 @@ void encodeDenoisedTemporal(id scaler,SEL selector,id<MTLCommandBuffer>commands,
     auto capture=macfx::FrameCapture::begin(commands,selected.execution->replacesTemporal()?source.colorTexture:source.outputTexture,frame.frameId,false,&color);bool mapped=false;const auto encoded=selected.execution->encodeScene(context,frame,&mapped,&depth);
     if(!encoded.encoded){if(!originalEncoded)fallback(encoded.reason);else state->originalReset=false;return;}if(source.fence){auto update=[commands computeCommandEncoder];[update updateFence:source.fence];[update endEncoding];}
     if(destination)macfx::publishTemporalSceneContinuation(commands,*destination,frame,selected.execution,mapped);else macfx::publishTemporalOutputWithDepth(commands,source.outputTexture,frame.frameId,selected.execution,std::move(capture),&depth,mapped,&frame);state->reset=false;
-    acceptEncodedScene(reinterpret_cast<uintptr_t>((__bridge void*)state),*selected.execution,frame.frameId);state->statusReported.store(true,std::memory_order_release);state->originalReset=true;state->reported=false;return;
+    acceptEncodedScene(reinterpret_cast<uintptr_t>((__bridge void*)state),*selected.execution,frame,(id<MTLCommandBuffer>)commands);state->statusReported.store(true,std::memory_order_release);state->originalReset=true;state->reported=false;return;
    }
   }
   if(controls.method!=RS_TEMPORAL_METALFX_DENOISED){fallback("the selected replacement does not declare this noisy scene reconstruction contract");return;}
@@ -850,7 +861,7 @@ void encodeTemporal(id scaler,SEL selector,id commands){
                             group.end();
                             if(destination)macfx::publishTemporalSceneContinuation(commands,*destination,f,selected.execution,displayMapped);
                             else macfx::publishTemporalOutputWithDepth(commands,s.outputTexture,f.frameId,selected.execution,std::move(capture),&depth,displayMapped,&f);
-                            acceptEncodedScene(reinterpret_cast<uintptr_t>((__bridge void*)state),*selected.execution,f.frameId);state->statusReported.store(true,std::memory_order_release);
+                            acceptEncodedScene(reinterpret_cast<uintptr_t>((__bridge void*)state),*selected.execution,f,(id<MTLCommandBuffer>)commands);state->statusReported.store(true,std::memory_order_release);
                             if(!state->replacementReported){macfx::nativeLog("Temporal scene replacement active: frame="+std::to_string(f.frameId)+(selected.execution->replacesTemporal()?" replaces the original scaler":" observes the original scaler"));state->replacementReported=true;}
                             // A transient first-frame fallback must not silence a later failure reason.
                             state->reset=false;state->originalReset=true;state->reported=false;return;

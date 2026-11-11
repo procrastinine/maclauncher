@@ -1275,6 +1275,12 @@ button:focus-visible,
   color: var(--muted);
 }
 
+/* Status details stack each observation and context block on its own line. */
+.detailMeta.statusDetails {
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
 .detailActions {
   display: flex;
   gap: 8px;

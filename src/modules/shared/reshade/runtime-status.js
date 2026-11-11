@@ -6,7 +6,7 @@ const identity = value => typeof value === "string" && /^[\w-]{1,128}$/.test(val
 const digest = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const hash = value => crypto.createHash("sha256").update(value).digest("hex");
 const phases = ["unknown", "prepared", "encoded", "completed", "presented", "bypassed", "failed", "stopped", "preparing", "hidden"];
-const frameSources = ["unknown", "metal-drawable", "opengl-framebuffer", "layer-surface", "software-bitmap", "window-stream", "explicit-texture", "decoded-video", "external-window"];
+const frameSources = ["unknown", "metal-drawable", "opengl-framebuffer", "layer-surface", "software-bitmap", "window-stream", "explicit-texture", "decoded-video", "external-window", "renderer-scene"];
 function supported(root) {
   try {return require("./runtime-record").read(root).features?.graphics?.runtimeStatusAPI === 1;} catch {return false;}
 }

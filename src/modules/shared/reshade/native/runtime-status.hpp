@@ -9,7 +9,8 @@ namespace macfx {
 // Hidden: macOS reports the game's window hidden and the game is not drawing
 // to it; no change is accepted while such a context is current.
 enum class RuntimeStatusPhase : uint32_t {Prepared=1,Encoded=2,Completed=3,Presented=4,Bypassed=5,Failed=6,Stopped=7,Preparing=8,Hidden=9};
-enum class RuntimeFrameSource : uint32_t {Unknown=0,MetalDrawable=1,OpenGLFramebuffer=2,LayerSurface=3,SoftwareBitmap=4,BrowserWindow=5,ExplicitTexture=6,DecodedVideo=7,ExternalWindow=8};
+// RendererScene: a renderer's temporal scene frame, before its final image.
+enum class RuntimeFrameSource : uint32_t {Unknown=0,MetalDrawable=1,OpenGLFramebuffer=2,LayerSurface=3,SoftwareBitmap=4,BrowserWindow=5,ExplicitTexture=6,DecodedVideo=7,ExternalWindow=8,RendererScene=9};
 enum RuntimeFrameInput : uint32_t {RuntimeInputDepth=1,RuntimeInputMotion=2,RuntimeInputJitter=4,RuntimeInputCamera=8,RuntimeInputExposure=16,RuntimeInputViewMatrix=32,RuntimeInputProjectionMatrix=64};
 enum class RuntimeAdaptiveQualityState : uint32_t {Pending=1,Active=2,Off=3};
 enum class RuntimeAdaptiveQualityScope : uint32_t {Unknown=0,SourceAndProcessing=1,ImageProcessing=2,FinalProcessing=3,OfflineFrame=4,ExternalProcessing=5};

@@ -363,7 +363,7 @@ export type GraphicsContextStatus = {pid: number; id: string; phase: GraphicsPro
   acceptedRevision?: string; acceptedControlsDigest?: string; acceptedAt?: number;
   adaptiveQuality?: {nodeId:string;state:"pending"|"active"|"off";scale:number;meanMilliseconds:number;
     scope:"unknown"|"source-and-processing"|"image-processing"|"final-processing"|"offline-frame"|"external-processing";reason:string;observedAt:number};
-  frameSource?: {source: "metal-drawable" | "opengl-framebuffer" | "layer-surface" | "software-bitmap" | "window-stream" | "explicit-texture" | "decoded-video" | "external-window" | "unknown"; inputs: string[]; observedAt: number};
+  frameSource?: {source: "metal-drawable" | "opengl-framebuffer" | "layer-surface" | "software-bitmap" | "window-stream" | "explicit-texture" | "decoded-video" | "external-window" | "renderer-scene" | "unknown"; inputs: string[]; observedAt: number};
   admission?: {reason: string; observedAt: number; counts: Record<string, number>; queue: string; generation: number; format: number; width: number; height: number}};
 export type GameGraphicsStatus = {state: "off" | "stopped" | "unbound" | "unavailable" | "preparing" | "prepared" | "observed" | "historical" | "unverified" | "failed"; reason?: string; launchId?: string; launchPid?: number;
   prepared?: {mode: "simple" | "advanced"; planRevision: string; controlsDigest: string;shaderGroups?:Array<{members:string[]}>} | null;
