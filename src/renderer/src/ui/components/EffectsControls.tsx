@@ -11,7 +11,7 @@ import {EffectsPresetMenuItems, EffectsPresetSaveForm} from "./EffectsPresetPick
 import {GraphicsRuntimeStatus} from "./GraphicsRuntimeStatus";
 import {GraphicsStatusLabel} from "./GraphicsStatusLabel";
 import {SimpleEffectsView} from "./SimpleEffectsView";
-import {AdvancedEffectsView} from "./AdvancedEffectsView";
+import {AdvancedEffectsView, effectRowName} from "./AdvancedEffectsView";
 import {OutputPolicyControls, SourcePolicyControls} from "./OutputPolicyControls";
 import {graphicsSummary} from "./inspector-sections-model";
 
@@ -145,7 +145,7 @@ export function EffectsControls({footer, visible = true, warnings = [], children
       <GraphicsRuntimeStatus game={{...game, effects: plan}} running={running} visible={visible && open} live={live}
         inspectDetails={view === "simple" ? editor.simpleOptions !== null : plan.video.some(node => editor.expandedSteps[node.id])}
         requestKey={`${graphics.status?.desiredRevision || ""}:${graphics.status?.phase || ""}`}
-        onStatus={graphics.observe} />
+        onStatus={graphics.observe} rowName={id => {const node = plan.video.find(row => row.id === id);return node && effectRowName(editor, node);}} />
       {footer}
     </div>
   </section>;

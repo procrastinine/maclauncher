@@ -78,12 +78,22 @@ export function AdvancedEffectsView({editor}: {editor: EffectsEditor}) {
   </div>}</>;
 }
 
+// The method a row runs and the row's name, as the editor shows them.
+// Status details name the same rows with effectRowName.
+function effectMethodName(editor: EffectsEditor, node: VideoEffectNode) {
+  const choice = editor.choiceFor(node);
+  return resizeKind(node.kind) && node.kind !== "shader" && node.kind !== "neural"
+    ? spatialMethodLabel(node.method, choice ? {[node.method]: choice.label} : {}, true)
+    : choice ? implementationName(choice, editor.typeOf(node)) : node.kind === "shader" ? node.shader.preset : node.method;
+}
+export function effectRowName(editor: EffectsEditor, node: VideoEffectNode) {
+  const methodName = effectMethodName(editor, node);
+  return node.kind === "downsample" || node.kind === "upscale" ? `${kindLabels[node.kind]} · ${methodName}` : methodName;
+}
 function advancedRow(editor: EffectsEditor, node: VideoEffectNode, index: number) {
   const {plan, catalog, reshade: status, graphics, running, game} = editor, type = editor.typeOf(node);
-  const choice = editor.choiceFor(node), methodName = resizeKind(node.kind) && node.kind !== "shader" && node.kind !== "neural"
-    ? spatialMethodLabel(node.method, choice ? {[node.method]: choice.label} : {}, true)
-    : choice ? implementationName(choice, type) : node.kind === "shader" ? node.shader.preset : node.method;
-  const name = node.kind === "downsample" || node.kind === "upscale" ? `${kindLabels[node.kind]} · ${methodName}` : methodName, summary = sizeSummary(node, choice);
+  const choice = editor.choiceFor(node), methodName = effectMethodName(editor, node);
+  const name = effectRowName(editor, node), summary = sizeSummary(node, choice);
   const filter = node.kind === "shader" ? status?.filters?.find(row => `filter:${row.id}` === node.shader.preset) : undefined;
   const stage = graphics.stage(node.id), attention = editor.attention(node.id);
   // Native code keeps a row's previous working version when an edit to it fails.

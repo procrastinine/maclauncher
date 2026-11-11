@@ -5,11 +5,11 @@ const extent = (value: {width: number; height: number}) => value.width > 0 && va
 const admissionLabel = (value: string) => value.replace(/-/g, " ").replace(/^./, letter => letter.toUpperCase());
 const phases = {unknown: "Not reported", preparing: "Preparing…", prepared: "Prepared", encoded: "Encoded", completed: "Completed", presented: "Presented", bypassed: "Bypassed", failed: "Failed", stopped: "Stopped", hidden: "Window hidden"};
 // A row's own GPU time, or the command buffer it shares with the named rows.
-const gpuCost = (row: GraphicsStageStatus, rows: GraphicsStageStatus[]) => {
+const gpuCost = (row: GraphicsStageStatus, rows: GraphicsStageStatus[], name: RowName) => {
   if (!row.gpu) return "";
   const time = `GPU ${row.gpu.milliseconds.toFixed(2)} ms`;
   if (row.gpu.scope === "row") return ` · ${time}`;
-  const shared = rows.filter(other => other.id !== row.id && other.gpu?.scope === "section" && other.gpu.section === row.gpu?.section).map(other => other.requestedMethod || other.id);
+  const shared = rows.filter(other => other.id !== row.id && other.gpu?.scope === "section" && other.gpu.section === row.gpu?.section).map(name);
   return ` · ${time} for its command buffer${shared.length ? `, shared with ${shared.join(", ")}` : ""}`;
 };
 // A merged row that ran, or that no context runs and that has its reason.
@@ -26,14 +26,19 @@ const contextRole = (context: Context) => context.frameSource?.source === "rende
 const emptyHistory = (context: Context) => (context.historical || context.phase === "stopped") && !reportedFrames(context) && !context.stages.length;
 // Image memory that a context admits for its own copies, rather than an effect row.
 const memoryLabels: Record<string, string> = {"framebuffer-memory": "Framebuffer copy memory"};
-const stageLine = (row: GraphicsStageStatus, rows: GraphicsStageStatus[], place: string) => row.requestedMethod === "image-memory"
+// The editor's name for a row, or its method when the row is not in the shown plan.
+type RowName = (row: {id: string; requestedMethod?: string}) => string;
+const stageLine = (row: GraphicsStageStatus, rows: GraphicsStageStatus[], place: string, name: RowName) => row.requestedMethod === "image-memory"
   ? `In ${place} · ${memoryLabels[row.id] || "Image memory"}: ${row.activeMethod === "admitted" ? "Admitted" : phases[row.phase]}${row.reason ? ` · ${row.reason}` : ""}`
-  : `In ${place} · ${row.requestedMethod || row.id}${row.activeMethod === "retained" ? " (previous version)" : row.activeMethod && row.activeMethod !== row.requestedMethod ? ` → ${row.activeMethod}` : ""}: ${phases[row.phase]}`
-    + ` · ${extent(row.input)} → ${extent(row.output)}${gpuCost(row, rows)}${row.reason ? ` · ${row.reason}` : ""}`;
-export function GraphicsRuntimeStatus({game, running, visible, live, onStatus, requestKey = "", inspectDetails = false}: {
+  : `In ${place} · ${name(row)}${row.activeMethod === "retained" ? " (previous version)" : row.activeMethod && row.activeMethod !== row.requestedMethod ? ` → ${row.activeMethod}` : ""}: ${phases[row.phase]}`
+    + ` · ${extent(row.input)} → ${extent(row.output)}${gpuCost(row, rows, name)}${row.reason ? ` · ${row.reason}` : ""}`;
+export function GraphicsRuntimeStatus({game, running, visible, live, onStatus, requestKey = "", inspectDetails = false, rowName}: {
   game: Pick<RecentGame, "gamePath" | "effects" | "graphics" | "reshade">; running: boolean; visible: boolean; live?: boolean;
   onStatus?: (status: GameGraphicsStatus | null) => void; requestKey?: string; inspectDetails?: boolean;
+  /** The graphics editor's display name for a plan row. */
+  rowName?: (id: string) => string | undefined;
 }) {
+  const name: RowName = row => rowName?.(row.id) || row.requestedMethod || row.id;
   const [open, setOpen] = useState(false), [observation, setObservation] = useState<{key: string; value: GameGraphicsStatus} | null>(null);
   const [failure, setFailure] = useState<{key: string; message: string} | null>(null);
   const watching = open || inspectDetails;
@@ -87,6 +92,10 @@ export function GraphicsRuntimeStatus({game, running, visible, live, onStatus, r
     : bypassed ? "Some effects are not running" : pending ? "Some selected settings are pending" : confirmed ? "Completed processing reported"
     : status?.state === "historical" ? "No recent processing confirmation" : status?.state === "unverified" ? "Current settings not confirmed"
     : !status && live === false && !open ? "Processing reported in Status details" : "Current settings not yet confirmed";
+  const shownContexts = status?.contexts.filter(context => !emptyHistory(context)) || [];
+  // The panel states one report age: that of its newest current report.
+  const observedAt = Math.max(0, ...shownContexts.filter(context => !context.historical).map(context => context.observedAt || 0));
+  const presenting = shownContexts.some(context => contextRole(context) === "Presentation");
   const details = <details className="effectNodeSettings" onToggle={event => setOpen(event.currentTarget.open)}>
     <summary>Status details</summary>
     <div className="detailMeta statusDetails">
@@ -101,19 +110,22 @@ export function GraphicsRuntimeStatus({game, running, visible, live, onStatus, r
           : status.state === "unverified" ? <p>Completed work is reported, but its settings version could not be confirmed.</p>
           : status.state === "off" ? <p>Graphics are off.</p> : status.state === "stopped" ? <p>Game stopped.</p>
           : <p>Completed processing has been reported. Counts cover observed work while status is open, not game or display frame rate.</p>}
-        {status.preparation?.pending?.map(row => <p key={`pending:${row.id}`}>{row.method}: Pending. {row.reason}{row.retained ? " The previous setting is retained." : ""}</p>)}
+        {status.preparation?.pending?.map(row => <p key={`pending:${row.id}`}>{name({id: row.id, requestedMethod: row.method})}: Pending. {row.reason}{row.retained ? " The previous setting is retained." : ""}</p>)}
         {status.preparation?.output?.pending?.map(row => <p key={`output:${row.id}`}>Output: Pending. {row.reason}</p>)}
-        {status.preparation?.skipped?.map(row => <p key={`skipped:${row.id}`}>Last preparation · {row.id}: {row.reason}</p>)}
-        {Object.entries(rows).map(([id, row]) => <p key={`row:${id}`}>{row.requestedMethod || id}: {row.running ? "Running" : row.pending ? "Pending" : "Not running"}{!row.running && row.reason ? ` · ${row.reason}` : ""}</p>)}
-        {status.contexts.filter(context => !emptyHistory(context)).map(context => {
+        {status.preparation?.skipped?.map(row => <p key={`skipped:${row.id}`}>Last preparation · {name(row)}: {row.reason}</p>)}
+        {Object.entries(rows).map(([id, row]) => <p key={`row:${id}`}>{name({...row, id})}: {row.running ? "Running" : row.pending ? "Pending" : "Not running"}{!row.running && row.reason ? ` · ${row.reason}` : ""}</p>)}
+        {observedAt > 0 && <p>{Math.max(0, Math.floor((Date.now() - observedAt) / 1000))} s since the last report. Counts may stay unchanged while paused.</p>}
+        {shownContexts.map(context => {
           const role = contextRole(context), frames = reportedFrames(context), place = role.toLowerCase();
+          // A scene intake's frames are presented by the presentation context that receives them.
+          const presents = role !== "Scene intake" || context.presentedReal > 0 || context.presentedGenerated > 0;
           return <div key={`${context.pid}:${context.processStart?.seconds}:${context.processStart?.microseconds}:${context.id}`} className="statusContext">
             <p><strong>{role}</strong>{context.frameSource ? ` · Source: ${sourceLabels[context.frameSource.source]}${context.frameSource.inputs.length ? ` · ${context.frameSource.inputs.join(", ")}` : ""}` : ""}</p>
             {(frames || context.phase !== "unknown") && <p>{phases[context.phase]} · Input {extent(context.input)} → Output {extent(context.output)}
               {!frames ? "" : context.identityState === "previous" ? " · Previous settings" : context.identityState === "unverified" ? " · Settings version not confirmed" : ""}</p>}
             {context.historical && <p>Historical observation</p>}
-            {frames && <p>Encoded {context.encoded} · Completed {context.completed} · Presented {context.presentedReal} real / {context.presentedGenerated} generated</p>}
-            {context.observedAt > 0 && <p>{Math.max(0, Math.floor((Date.now() - context.observedAt) / 1000))} s since the last report. Counts may stay unchanged while paused.</p>}
+            {frames && <p>Encoded {context.encoded} · Completed {context.completed}{presents ? ` · Presented ${context.presentedReal} real / ${context.presentedGenerated} generated`
+              : presenting ? " · Presented frames are counted under Presentation" : ""}</p>}
             {role === "Presentation" && context.presentedTime <= 0 && <p>Presentation has not been reported for this context.</p>}
             {context.reason && !context.historical && context.phase !== "stopped" && <p>{context.reason}</p>}
             {context.admission && <details>
@@ -122,7 +134,7 @@ export function GraphicsRuntimeStatus({game, running, visible, live, onStatus, r
               <p>Last event: {admissionLabel(context.admission.reason)} · Source {extent(context.admission)} · Format {context.admission.format} · Queue identity {context.admission.queue} · Ownership {context.admission.generation}</p>
               {Object.entries(context.admission.counts).filter(([, count]) => count > 0).map(([reason, count]) => <p key={reason}>{admissionLabel(reason)}: {count}</p>)}
             </details>}
-            {context.stages.map(row => <p key={row.id}>{stageLine(row, context.stages, place)}</p>)}
+            {context.stages.map(row => <p key={row.id}>{stageLine(row, context.stages, place, name)}</p>)}
           </div>;
         })}
         {status.contexts.some(emptyHistory) && <p>{status.contexts.filter(emptyHistory).length} earlier {status.contexts.filter(emptyHistory).length === 1 ? "context" : "contexts"} stopped before reporting a frame.</p>}

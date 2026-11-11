@@ -119,7 +119,8 @@ test('explicit matching failure stays visible with a repair route without treati
 // Run-5's contexts: the game layer's frame admission, two stopped contexts
 // from before the first frame, the scene intake and the presenter.
 test('status details name each context and show only what that context reports',async t=>{
- const f=fixture(t);f.props.game.effects.video=[{id:'temporal',kind:'temporal',method:'metalfx',enabled:true,settings:{}}];f.props.inspectDetails=true;f.harness.render();
+ const f=fixture(t);f.props.game.effects.video=[{id:'temporal',kind:'temporal',method:'metalfx',enabled:true,settings:{}}];f.props.inspectDetails=true;
+ f.props.rowName=id=>id==='temporal'?'MetalFX Temporal':undefined;f.harness.render();
  const empty={pid:42,phase:'stopped',input:{width:0,height:0},output:{width:0,height:0},encoded:0,completed:0,presentedReal:0,presentedGenerated:0,presentedTime:0,reason:'Preparing graphics resources',observedAt:1000,identityState:'matching',historical:true,stages:[]};
  const admission={...empty,id:'layer',phase:'unknown',historical:false,reason:'',identityState:'unverified',
   admission:{reason:'owner-published-unchanged',width:2560,height:1440,format:80,queue:'7f',generation:1,counts:{'frame-owner-accepted':1420}},
@@ -133,4 +134,11 @@ test('status details name each context and show only what that context reports',
  assert.match(markup,/<strong>Presentation<\/strong> · Source: Metal drawable/);
  assert.equal((markup.match(/Presentation has not been reported/g)||[]).length,0);
  assert.match(markup,/class="detailMeta statusDetails"/);
+ // Rows carry the editor's names, and the panel states one report age.
+ assert.match(markup,/MetalFX Temporal: Running/);assert.match(markup,/In scene intake · MetalFX Temporal: Completed/);assert.match(markup,/In presentation · MetalFX Temporal → passthrough: Bypassed/);
+ assert.doesNotMatch(markup,/metalfx:|· metalfx/);
+ assert.equal((markup.match(/since the last report/g)||[]).length,1);
+ // The scene intake's frames are presented, and counted, by the presentation context.
+ assert.match(markup,/Encoded 1 · Completed 1 · Presented frames are counted under Presentation/);
+ assert.match(markup,/Presented 3 real \/ 0 generated/);assert.equal((markup.match(/Presented 0 real/g)||[]).length,0);
 });
