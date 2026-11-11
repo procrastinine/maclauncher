@@ -823,6 +823,14 @@ function loadGamesHydrated({ persist = true } = {}) {
   return structuredClone(games);
 }
 
+// One library record for a request about one game, without copying the
+// whole library.
+function loadGameHydrated(gamePath) {
+  if (!gameRecordsCache) loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(gameRecordsCache, gamePath);
+  return entry ? structuredClone(entry) : null;
+}
+
 function orderGames(games, library) {
   return LibraryState.buildOrderedGames(games, library).ordered;
 }
@@ -4777,8 +4785,7 @@ const moduleActionRequests = createModuleActionRequests({ request: (...args) => 
 ipcMain.handle("launcher:cancelModuleAction", (event, requestId) => moduleActionRequests.cancel(event.sender, requestId));
 ipcMain.handle("launcher:moduleAction", async (event, gamePath, action, payload, options) => {
   const settings = loadSettings();
-  const games = loadGamesHydrated({ persist: false });
-  const entry = findGameByPath(games, gamePath);
+  const entry = loadGameHydrated(gamePath);
   if (!entry) throw new Error("Game not found in library");
 
   try {
@@ -4827,8 +4834,7 @@ ipcMain.handle("launcher:setCheats", async (_event, gamePath, cheats) => {
 });
 
 ipcMain.handle("launcher:getCheatsPatchStatus", async (_event, gamePath) => {
-  const games = loadGamesHydrated({ persist: false });
-  const entry = findGameByPath(games, gamePath);
+  const entry = loadGameHydrated(gamePath);
   if (!gamePath) return null;
   try {
     return await backendService.request(`game:${entry?.gameId || gamePath}`, "patcher", entry || { gamePath, importPath: gamePath }, "cheats", "status");
@@ -4891,9 +4897,7 @@ ipcMain.handle("launcher:setGameLibVersion", async (_event, gamePath, depId, ver
 });
 
 ipcMain.handle("launcher:getLibsPatchStatus", async (_event, gamePath) => {
-  const settings = loadSettings();
-  const games = loadGamesHydrated({ persist: false });
-  const entry = findGameByPath(games, gamePath) || { gamePath, importPath: gamePath };
+  const entry = loadGameHydrated(gamePath) || { gamePath, importPath: gamePath };
   return backendService.request(`game:${entry.gameId || gamePath}`, "patcher", entry, "libs", "status");
 });
 
@@ -4952,7 +4956,7 @@ ipcMain.handle("launcher:resetSaveDir", async (_event, gamePath) => {
 });
 
 ipcMain.handle("launcher:getSaveInfo", async (_event, gamePath) => {
-  const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
+  const entry = loadGameHydrated(gamePath);
   if (!entry) throw new Error("Game not found in library.");
   return backendService.request(`game:${entry.gameId || gamePath}`, "saveInfo", entry, loadSettings());
 });

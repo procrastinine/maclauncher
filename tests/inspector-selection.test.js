@@ -30,8 +30,8 @@ test("selected games read through the one inspector worker while the launcher's 
   const service = createBackendService({ workerPath, onEvent() {} });
   t.after(() => service.close());
   const lanes = [], request = (lane, ...args) => { lanes.push(lane); return service.request(lane, ...args); };
-  const handler = moduleActionHandler({ loadSettings: () => ({}), loadGamesHydrated: () => structuredClone(games),
-    findGameByPath: (list, gamePath) => list.find(game => game.gamePath === gamePath) || null,
+  const handler = moduleActionHandler({ loadSettings: () => ({}),
+    loadGameHydrated: gamePath => structuredClone(games.find(game => game.gamePath === gamePath) || null),
     moduleActionRequests: createModuleActionRequests({ request }), backendService: { request }, gameGraphicsLive: () => false,
     isAbortError: error => error?.name === "AbortError", Modules: { getModuleInfo: id => id === "fixture" ? info : null },
     resolveModuleId: game => game.moduleId });

@@ -45,7 +45,7 @@ test("runtime choice IPC preserves viewed runtime and payload through normal and
   assert.ok(start >= 0 && end > start);
   vm.runInNewContext(source.slice(start, end), {
     ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
-    loadSettings: () => ({}), loadGamesHydrated: () => [entry], findGameByPath: games => games[0],
+    loadSettings: () => ({}), loadGameHydrated: () => entry,
     moduleActionRequests: requests, backendService: { request }, isAbortError: error => error?.name === "AbortError",
     Modules: { getModuleInfo: () => null }, resolveModuleId: game => game.moduleId
   });
