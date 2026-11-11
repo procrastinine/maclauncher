@@ -512,9 +512,14 @@ test("the game's Wine loader runs from a games-category bundle that keeps the lo
   const info = fs.readFileSync(path.join(contents, "Info.plist"), "utf8"), value = key => new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`).exec(info)?.[1];
   assert.equal(value("LSApplicationCategoryType"), "public.app-category.games");
   assert.equal(value("CFBundleExecutable"), "wine");
-  assert.equal(value("CFBundleIdentifier"), "com.maclauncher.wine-game");
-  assert.match(value("NSLocalNetworkUsageDescription"), /^Windows games started by MacLauncher use the local network/,
+  assert.equal(value("CFBundleIdentifier"), "com.maclauncher.wine-game.sikarugir");
+  assert.equal(value("NSLocalNetworkUsageDescription"), "Windows games that MacLauncher starts with Sikarugir use the local network to find and join games, players and devices nearby.",
     "the Local Network permission request names what asks and why");
+  // macOS keeps one Local Network answer per identifier: one per Wine source, shared by its Wine versions.
+  const Sources = require("../src/modules/crossover/sources"), identifier = source => /<key>CFBundleIdentifier<\/key>\s*<string>([^<]*)</.exec(Graphics.gameBundleInfo("", Sources.get(source)))[1];
+  assert.equal(identifier("winecx"), "com.maclauncher.wine-game.winecx");
+  assert.match(Graphics.gameBundleInfo("", Sources.get("winecx")), /starts with WineCX use the local network/);
+  assert.throws(() => Graphics.gameBundleInfo("", { id: "../other", label: "Other" }), /no valid identifier/);
   assert.equal(value("NSPrincipalClass"), "WineApplication", "the loader's own properties are kept");
   assert.equal(value("LSUIElement"), "1");
   // A loader without embedded properties gets a minimal games-category bundle.

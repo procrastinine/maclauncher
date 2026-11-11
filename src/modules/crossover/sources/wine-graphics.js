@@ -185,19 +185,25 @@ function embeddedInfo(bytes) {
 }
 // macOS turns on Game Mode for a full-screen application in the games
 // category. The application properties are the loader's own, with the bundle's
-// executable name, a MacLauncher identifier, that category and the text that
-// macOS shows when it asks for local network access for the bundle.
+// executable name, that category, an identifier for the Wine source and the
+// text that macOS shows when it asks for local network access. macOS keeps a
+// Local Network answer per identifier, so each source is asked at most once
+// and its Wine versions share the answer.
 const GAME_BUNDLE = "MacLauncher Game.app";
-const LOCAL_NETWORK_USE = "Windows games started by MacLauncher use the local network to find and join games, players and devices nearby.";
+const gameIdentifier = source => {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(source?.id || "")) fail("The Wine source has no valid identifier.");
+  return `com.maclauncher.wine-game.${source.id}`;
+};
+const localNetworkUse = source => `Windows games that MacLauncher starts with ${source.label} use the local network to find and join games, players and devices nearby.`;
 // Views of an earlier layout are never reused; a new layout gets new paths.
 const VIEW_LAYOUT = 4;
-function gameBundleInfo(embedded) {
+function gameBundleInfo(embedded, source) {
   const value = (key, text) => `    <key>${key}</key>\n    <string>${text}</string>\n`;
   let text = /^\s*<\?xml[\s\S]*<dict>[\s\S]*<\/dict>\s*<\/plist>\s*$/.test(embedded || "") ? embedded.trim() + "\n" :
     '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' +
     '<plist version="1.0">\n<dict>\n' + value("CFBundleName", "MacLauncher Game") + value("CFBundlePackageType", "APPL") + '</dict>\n</plist>\n';
-  for (const [key, setting] of [["CFBundleExecutable", "wine"], ["CFBundleIdentifier", "com.maclauncher.wine-game"], ["LSApplicationCategoryType", "public.app-category.games"],
-    ["NSLocalNetworkUsageDescription", LOCAL_NETWORK_USE]]) {
+  for (const [key, setting] of [["CFBundleExecutable", "wine"], ["CFBundleIdentifier", gameIdentifier(source)], ["LSApplicationCategoryType", "public.app-category.games"],
+    ["NSLocalNetworkUsageDescription", localNetworkUse(source)]]) {
     const pattern = new RegExp(`(<key>${key}</key>\\s*<string>)[^<]*(</string>)`);
     text = pattern.test(text) ? text.replace(pattern, `$1${setting}$2`) : text.replace(/<\/dict>\s*<\/plist>\s*$/, value(key, setting) + "</dict>\n</plist>\n");
   }
@@ -212,7 +218,7 @@ function gameBundleInfo(embedded) {
 // the files beside ntdll.so, and the bin and share folders it derives two
 // levels up. A single-file loader starts the game itself from the bundle and
 // keeps the view's ntdll.so.
-async function prepareGameBundle({ loader, engine, wineRoot, dllRoot, layout, separate, signal }) {
+async function prepareGameBundle({ loader, engine, wineRoot, dllRoot, layout, separate, source, signal }) {
   const bundle = path.join(wineRoot, GAME_BUNDLE), contents = path.join(bundle, "Contents"), macos = path.join(contents, "MacOS");
   const unix = path.join(dllRoot, layout.unixName), engineUnix = path.join(engine, "lib", "wine", layout.unixName);
   for (const directory of [bundle, contents, macos]) ownDirectory(directory);
@@ -229,7 +235,7 @@ async function prepareGameBundle({ loader, engine, wineRoot, dllRoot, layout, se
     await linkFile(path.join(unix, "ntdll.so"), path.join(macos, "ntdll.so"), signal);
     await linkDirectory(path.join(wineRoot, "lib"), path.join(contents, "lib"), signal);
   }
-  const info = path.join(contents, "Info.plist"), text = gameBundleInfo(embeddedInfo(await fs.promises.readFile(loader)));
+  const info = path.join(contents, "Info.plist"), text = gameBundleInfo(embeddedInfo(await fs.promises.readFile(loader)), source);
   if (fs.existsSync(info) && fs.lstatSync(info).isSymbolicLink()) fail("The private Wine application properties must be a regular file.");
   if (!fs.existsSync(info) || fs.readFileSync(info, "utf8") !== text) Writable.atomicWrite(info, text, { root: wineRoot });
   return executable;
@@ -268,7 +274,7 @@ async function keepBundleLoader(executable, ntdll, temporary) {
     return entry;
   } catch { return null; }
 }
-async function prepareLoaderView(engine, viewRoot, install, signal) {
+async function prepareLoaderView(engine, viewRoot, install, signal, source) {
   const wineRoot = path.join(viewRoot, "wine"), dllRoot = path.join(wineRoot, "lib", "wine");
   const layout = wineLayout(install), bin = path.join(wineRoot, "bin"), unix = path.join(dllRoot, layout.unixName);
   for (const directory of [wineRoot, bin, path.join(wineRoot, "lib"), dllRoot,
@@ -293,7 +299,7 @@ async function prepareLoaderView(engine, viewRoot, install, signal) {
   // Either loader runs the game from the Game Mode bundle.
   const unixLoader = path.join(engine, "lib", "wine", layout.unixName, "wine"), separate = fs.existsSync(unixLoader);
   if (!separate) await cloneLoaderFile(path.join(engine, "lib", "wine", "x86_64-unix", "ntdll.so"), path.join(unix, "ntdll.so"), signal);
-  const gameLoader = await prepareGameBundle({ loader: separate ? unixLoader : executablePath, engine, wineRoot, dllRoot, layout, separate, signal });
+  const gameLoader = await prepareGameBundle({ loader: separate ? unixLoader : executablePath, engine, wineRoot, dllRoot, layout, separate, source, signal });
   if (separate) {
     await linkFile(path.join(path.dirname(gameLoader), "ntdll.so"), path.join(unix, "ntdll.so"), signal);
     await linkFile(gameLoader, path.join(unix, "wine"), signal);
@@ -401,7 +407,7 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     helperNames.add(item.name); helpers.push({ name: item.name, windows, unix });
   }
   // Every game runs from the private loader view and its Game Mode bundle.
-  const loader = await prepareLoaderView(engine, viewRoot, install, signal);
+  const loader = await prepareLoaderView(engine, viewRoot, install, signal, source);
   const dllRoot = loader.dllRoot, dllOverrides = [], selectedUnix = [];
   ownDirectory(dllRoot);
   for (const architecture of [...layout.windows, layout.unixName]) ownDirectory(path.join(dllRoot, architecture));
@@ -498,5 +504,5 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath };
 }
 
-module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, keepBundleLoader, prepareGraphicsView, capabilitiesFor,
+module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, keepBundleLoader, gameBundleInfo, prepareGraphicsView, capabilitiesFor,
   __test: { capabilitiesFor, selectGraphics, ownDirectory, CORE_DLLS } };
