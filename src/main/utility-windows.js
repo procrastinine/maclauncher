@@ -7,9 +7,12 @@ const { normalizeUtilityWindowRequest, utilityWindowDefinition } = require("../c
 // Runtimes and Credits) the controller keeps at most one hidden window, the
 // spare: prepared ahead of use, or the window of the view closed last. Opening
 // that view shows the spare as it is; opening another kept view switches the
-// spare to it (adaptWindow sets its title and size, and the page draws the new
-// view from the state beforeShow sends) and shows it once present() has seen
-// that view drawn. A new spare is prepared in idle time after each opening.
+// spare to it: adaptWindow sets its title and size, and present() displays
+// the view the page already holds and shows the window once that is drawn.
+// The hidden window receives every state like any other, so nothing renders
+// on open; a request that navigates within a view (a section or runtime) is
+// sent with beforeShow and drawn before the window shows. A new spare is
+// prepared in idle time after each opening.
 // Closing a kept view hides its window at once; it becomes the spare, or, when
 // a spare exists already, it is destroyed in idle time. While isQuitting() is
 // true windows close normally. onHidden runs after a close hides a window.
@@ -74,7 +77,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
 
   // Shows a hidden window with the view its context names. One still loading
   // shows its frame at once and draws with the first state it reads.
-  async function reveal(record, activate, switched) {
+  async function reveal(record, activate, switched, navigation) {
     if (spare === record) spare = null;
     record.hidden = false;
     const { win } = record;
@@ -84,8 +87,8 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
       await record.ready;
       return win;
     }
-    beforeShow(win);
-    if (present) await present(win, { revision: record.context.revision, switched, shown: record.shown, activate });
+    if (navigation) beforeShow(win);
+    if (present) await present(win, { view: record.context.view, revision: record.context.revision, switched, navigation, shown: record.shown, activate });
     else focus(win, activate);
     record.shown = true;
     return win;
@@ -116,7 +119,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
       switched = true;
     } else if (record && navigation) record.context = context(request);
     if (record) {
-      record.revealing = reveal(record, activate, switched);
+      record.revealing = reveal(record, activate, switched, navigation);
       try { return await record.revealing; }
       finally { record.revealing = null; idle(() => { void ensureSpare(); }); }
     }
@@ -145,6 +148,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     } finally { sparing = false; }
   }
   function isHidden(win) { const record = byWindow.get(win); return Boolean(record?.hidden || record?.retiring); }
+  function isRetiring(win) { return Boolean(byWindow.get(win)?.retiring); }
 
   // Settings, Runtimes, Credits and the other utility views show no library
   // rows, so their state leaves out the games and their icon previews.
@@ -152,7 +156,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     const request = byWindow.get(win)?.context;
     return request && state ? { ...state, recents: [], utilityWindow: { ...request } } : state;
   }
-  return { open, prepare: ensureSpare, isHidden, stateForWindow };
+  return { open, prepare: ensureSpare, isHidden, isRetiring, stateForWindow };
 }
 
 module.exports = { createUtilityWindowController };

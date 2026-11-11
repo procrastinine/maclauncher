@@ -2260,17 +2260,21 @@ function utilityViewDrawn(win, revision, limitMs) {
     setTimeout(() => { entry.waiters = entry.waiters.filter(item => item !== waiter); resolve(false); }, limitMs).unref?.();
   });
 }
-// A switched view shows once its page has drawn it. A page that is drawing
-// while hidden reports it before the window shows; one hidden after it was
+// A Settings, Runtimes or Credits page holds all three views, kept current by
+// every state, so switching only changes which one is displayed; a request
+// that navigates is drawn from the state sent with it. Either way the window
+// shows once its page reports the request drawn. A page never shown draws
+// while hidden and reports before the window shows; one hidden after it was
 // shown draws only while visible, so its window shows transparent until then.
-async function presentUtilityWindow(win, { revision, switched, shown, activate }) {
+async function presentUtilityWindow(win, { view, revision, switched, navigation, shown, activate }) {
   const show = () => {
     if (win.isDestroyed()) return;
     if (!activate) { win.showInactive(); return; }
     if (win.isMinimized()) win.restore();
     win.show(); win.focus();
   };
-  if (!switched) { show(); return; }
+  if (!switched && !navigation) { show(); return; }
+  if (switched && !navigation && !win.isDestroyed()) win.webContents.send("launcher:utilityViewSwitch", { view, revision });
   if (!shown) { await utilityViewDrawn(win, revision, 500); show(); return; }
   if (win.isDestroyed()) return;
   win.setOpacity(0);
@@ -2307,7 +2311,7 @@ const utilityWindows = createUtilityWindowController({
     const { width, height } = utilityWindowSize(options);
     win.setSize(width, height);
   },
-  beforeShow: win => sendState(win, undefined, { hidden: true }),
+  beforeShow: win => sendState(win),
   present: presentUtilityWindow,
   onHidden: () => quitWithoutVisibleWindows(),
   isQuitting: () => launcherQuitting
@@ -2510,9 +2514,10 @@ function broadcastActivity({ runningChanged = false } = {}) {
   }
 }
 
-// A hidden utility window receives the state just before it shows instead.
-function sendState(win, state = getLauncherState(), { hidden = false } = {}) {
-  if (!launcherWindows.has(win) || (!hidden && utilityWindows.isHidden(win))) return;
+// The hidden utility window receives each state too, so it shows current data
+// at once; one closed and waiting to be removed receives none.
+function sendState(win, state = getLauncherState()) {
+  if (!launcherWindows.has(win) || utilityWindows.isRetiring(win)) return;
   try {
     activityDelivery.supersede(win);
     win.webContents.send("launcher:state", utilityWindows.stateForWindow(win, state));

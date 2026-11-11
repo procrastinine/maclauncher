@@ -151,6 +151,15 @@ body {
   min-height: 0;
 }
 
+/* Settings, Runtimes and Credits windows hold all three views; one is displayed. */
+.utilityViewSlot {
+  display: contents;
+}
+
+.utilityViewSlot[hidden] {
+  display: none;
+}
+
 .launcherView {
   display: flex;
   flex: 1;

@@ -37,6 +37,12 @@ contextBridge.exposeInMainWorld("MacLauncher", {
     initialState: () => ipcRenderer.sendSync("launcher:initialState"),
     // A utility view reports the request revision it has drawn.
     utilityWindowDrawn: revision => ipcRenderer.send("launcher:utilityWindowDrawn", revision),
+    // The view a Settings, Runtimes or Credits window displays, switched before it shows.
+    onUtilityViewSwitch: callback => {
+      const handler = (_event, request) => callback(request);
+      ipcRenderer.on("launcher:utilityViewSwitch", handler);
+      return () => ipcRenderer.removeListener("launcher:utilityViewSwitch", handler);
+    },
     prioritizeGame: gamePath => ipcRenderer.invoke("launcher:prioritizeGame", gamePath),
     openUtilityWindow: request => ipcRenderer.invoke("launcher:openUtilityWindow", request),
     appActionPickerState: () => ipcRenderer.invoke("launcher:appActionPickerState"),

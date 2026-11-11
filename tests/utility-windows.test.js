@@ -26,7 +26,7 @@ function fixture(options = {}) {
     loadView: async (win, request) => { loads.push({ win, request }); await options.load?.(win, request); },
     onContextChange: options.changed,
     ...(options.kept ? { keptViews: options.kept, beforeShow: options.beforeShow, onHidden: options.hidden, isQuitting: options.quitting,
-      adaptWindow: options.adapt, idle: options.idle } : {})
+      adaptWindow: options.adapt, idle: options.idle, present: options.present } : {})
   });
   return { controller, windows, registrations, loads };
 }
@@ -39,11 +39,12 @@ function closeWindow(win) {
 }
 
 test("one hidden spare serves Settings, Runtimes and Credits: switched on open, refilled when idle, closed windows hidden at once", async () => {
-  const shownWith = [], hidden = [], adapted = [], idle = [];
+  const shownWith = [], hidden = [], adapted = [], idle = [], presented = [];
   let quitting = false, holdLoad = null;
   const f = fixture({ kept: ["settings", "runtimes", "credits"], beforeShow: win => shownWith.push(f.controller.stateForWindow(win, {}).utilityWindow),
     hidden: win => hidden.push(win), quitting: () => quitting, adapt: (win, options, request) => adapted.push({ win, title: options.title, view: request.view }),
-    idle: callback => idle.push(callback), load: () => holdLoad });
+    idle: callback => idle.push(callback), load: () => holdLoad,
+    present: async (win, request) => { presented.push(request); win.show(); } });
   const settle = () => new Promise(resolve => setImmediate(resolve));
   const runIdle = async () => { await settle(); while (idle.length) { await idle.shift()(); await settle(); } };
   Window.prototype.hide = function () { this.hides = (this.hides || 0) + 1; };
@@ -64,9 +65,12 @@ test("one hidden spare serves Settings, Runtimes and Credits: switched on open, 
   assert.equal(f.windows.length, 2, "A new spare is prepared when idle");
   assert.equal(f.loads[1].request.view, "settings", "for a kept view without a window");
 
+  assert.deepEqual(presented.at(-1), { view: "runtimes", revision: shownWith.at(-1).revision, switched: true, navigation: true, shown: false, activate: true });
   const settings = await f.controller.open({ view: "settings" });
   assert.equal(settings, f.windows[1], "Opening the spare's own view shows it unchanged");
   assert.equal(adapted.length, 1);
+  assert.equal(shownWith.length, 1, "A plain opening sends no state; the hidden window's is current");
+  assert.deepEqual(presented.at(-1), { view: "settings", revision: presented.at(-1).revision, switched: false, navigation: false, shown: false, activate: true });
   await runIdle();
   assert.equal(f.windows.length, 3); assert.equal(f.loads[2].request.view, "credits");
 
@@ -82,6 +86,7 @@ test("one hidden spare serves Settings, Runtimes and Credits: switched on open, 
 
   const reopened = await f.controller.open({ view: "runtimes" });
   assert.equal(reopened, f.windows[2], "The Credits spare becomes Runtimes");
+  assert.equal(presented.at(-1).switched, true); assert.equal(presented.at(-1).navigation, false, "Switching displays the view the page holds");
   await runIdle();
   assert.equal(closeWindow(reopened), true); await runIdle();
   assert.equal(reopened.destroyed, true);

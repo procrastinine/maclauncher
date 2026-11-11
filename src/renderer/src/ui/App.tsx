@@ -98,6 +98,8 @@ function DropGameHint({ className, title, action, modules }: DropGameHintProps) 
   );
 }
 
+const KEPT_UTILITY_VIEWS = ["settings", "runtimes", "credits"];
+
 export default function App() {
   const api = window.MacLauncher?.launcher;
   const importBatches = useImportBatches(api || undefined);
@@ -108,10 +110,27 @@ export default function App() {
     try { return api?.initialState?.() || null; } catch { return null; }
   });
   const [state, setState] = useState<LauncherState | null>(() => initialState && restoreLauncherState(initialState));
-  // A prepared utility window can be switched to another view; its state names the view it shows.
+  // Settings, Runtimes and Credits windows hold all three views and display
+  // one, so a hidden window opened for any of them only changes which one is
+  // displayed. Its state names the view it shows.
+  const keptUtility = Boolean(utilityWindowContext && KEPT_UTILITY_VIEWS.includes(utilityWindowContext.view));
   const utilityView = utilityWindowContext ? state?.utilityWindow?.view || utilityWindowContext.view : null;
-  const runtimesOpen = utilityView === "runtimes";
+  const runtimesOpen = keptUtility || utilityView === "runtimes";
   const utilityRevision = state?.utilityWindow?.revision;
+  // Each view navigates only for requests made to it.
+  const utilityNavigation = useRef<Record<string, number>>({});
+  if (utilityView && utilityRevision !== undefined) utilityNavigation.current[utilityView] = utilityRevision;
+  useEffect(() => {
+    if (!keptUtility || !api?.onUtilityViewSwitch) return;
+    // The main process switches the displayed view directly, without a render, then shows the window once drawn.
+    let frames: number[] = [];
+    const unsubscribe = api.onUtilityViewSwitch(({ view, revision }) => {
+      for (const slot of document.querySelectorAll<HTMLElement>("[data-utility-view]")) slot.hidden = slot.dataset.utilityView !== view;
+      frames.forEach(cancelAnimationFrame);
+      frames = [requestAnimationFrame(() => { frames.push(requestAnimationFrame(() => api.utilityWindowDrawn?.(revision))); })];
+    });
+    return () => { frames.forEach(cancelAnimationFrame); unsubscribe(); };
+  }, [api, keptUtility]);
   useEffect(() => {
     if (!utilityView || utilityRevision === undefined || !api?.utilityWindowDrawn) return;
     // Reported once the view for this request has been drawn, so its window can show it.
@@ -696,7 +715,7 @@ export default function App() {
   }, [state?.modules]);
 
   // Only the Credits window lists acknowledgments.
-  const creditsOpen = utilityView === "credits";
+  const creditsOpen = keptUtility || utilityView === "credits";
   const acknowledgments = useMemo(
     () => creditsOpen ? collectAcknowledgments(state?.modules || [], sharedAcknowledgments) : [],
     [creditsOpen, state?.modules]
@@ -2045,29 +2064,29 @@ export default function App() {
       {state && api && utilityView === "external" && <React.Suspense fallback={<div className="empty" role="status">Loading External…</div>}>
         <ExternalView api={api} />
       </React.Suspense>}
-      {state && utilityView === "settings" && <SettingsView
+      {state && (keptUtility || utilityView === "settings") && <div className="utilityViewSlot" data-utility-view="settings" hidden={utilityView !== "settings"}><SettingsView
         state={state} api={api || undefined} showIcons={showIcons} showNonDefaultTags={showNonDefaultTags}
-        sectionId={state.utilityWindow?.sectionId || utilityWindowContext.sectionId}
-        shaderCategory={state.utilityWindow?.shaderCategory || utilityWindowContext.shaderCategory}
-        navigationKey={state.utilityWindow?.revision}
+        sectionId={utilityView === "settings" ? state.utilityWindow?.sectionId || utilityWindowContext.sectionId : undefined}
+        shaderCategory={utilityView === "settings" ? state.utilityWindow?.shaderCategory || utilityWindowContext.shaderCategory : undefined}
+        navigationKey={utilityNavigation.current.settings}
         onSetLauncherSettings={onSetLauncherSettings} onSetModuleSettings={onSetModuleSettings}
         onAppUpdate={api?.appUpdate ? action => { void api.appUpdate(action).catch((e: any) => setError(String(e?.message || e))); } : undefined}
-      />}
+      /></div>}
       {api && utilityView === "appAction" && <AppActionPicker api={api} />}
-      {state && utilityView === "credits" && <CreditsView
+      {state && creditsOpen && <div className="utilityViewSlot" data-utility-view="credits" hidden={utilityView !== "credits"}><CreditsView
         acknowledgments={acknowledgments} canOpenExternal={canOpenExternal} onOpenLink={onOpenAcknowledgmentsLink}
-      />}
-      {state && runtimesOpen && <RuntimesView
+      /></div>}
+      {state && runtimesOpen && <div className="utilityViewSlot" data-utility-view="runtimes" hidden={utilityView !== "runtimes"}><RuntimesView
         state={state} settingsApi={api} getPathForFile={api?.getPathForFile}
         runtimeManagers={runtimeManagers} runtimeUi={runtimeUi} runtimeManagerId={runtimeManagerId}
-        navigationKey={state.utilityWindow?.revision}
+        navigationKey={utilityNavigation.current.runtimes}
         runtimeSectionId={runtimeSectionId} downloadTasks={downloadTasks} setRuntimeManagerId={setRuntimeManagerId}
         setRuntimeSectionId={setRuntimeSectionId} updateRuntimeUiSection={updateRuntimeUiSection}
         onRuntimeRefresh={onRuntimeRefresh} onRuntimeInstall={onRuntimeInstall} onRuntimeImport={onRuntimeImport} onRuntimeRegister={onRuntimeRegister}
         onRuntimeSetupAction={onRuntimeSetupAction} onRuntimeInstalledAction={onRuntimeInstalledAction}
         onRuntimeSetDefault={onRuntimeSetDefault} onRuntimeUninstall={onRuntimeUninstall}
         onCancelDownload={id => api?.cancelDownload(id)} onOpenSource={canOpenExternal ? onOpenAcknowledgmentsLink : undefined}
-      />}
+      /></div>}
     </div>;
   }
 
