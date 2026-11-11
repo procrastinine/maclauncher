@@ -61,6 +61,8 @@ While a game is unavailable, **Play** explains why it can't start, and patches a
 
 When the drive comes back at the same location, the game is ready again, with no restart or new import. MacLauncher notices the next time you switch to its window, press **Play** or use **Detect all missing**, and then refreshes the game's details as it does at startup. If the drive disappears while a game is running and the game stops, MacLauncher keeps running and tells you the game's files became unavailable.
 
+MacLauncher also remembers which games were unavailable when it last checked. At the next start, those games show as unavailable as soon as the library appears, and a row changes only if its own check finds the files back.
+
 If a game has moved for good, to another folder or another drive, press **Locate…** beside the **Files unavailable** notice in the game's inspector and choose the new location. MacLauncher checks that the game there is the same kind of game, then points the library entry at it. The game keeps its saves, snapshots, settings, notes, favorite, runtime choices and effects, and shortcuts you saved for it keep opening it. A location without a game of the same kind, or one that another library entry already uses, is refused with the reason, and the entry stays as it was. [Unavailable game files](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GAME_PREPARATION.md#unavailable-game-files) has the full rules, including [what Locate… updates](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GAME_PREPARATION.md#locating-moved-files).
 
 ## The inspector
@@ -104,6 +106,6 @@ Notes are plain text of your own, kept with the game in the library. They're sav
 - **External** finds games installed from stores and downloads ones you own. See [Stores and downloads](/maclauncher/tools/stores-and-downloads/).
 - **Credits** lists every project MacLauncher builds on, with links. See [Credits](/maclauncher/about/credits/).
 
-Each window opens once, and opening it again brings the existing window forward. Closing the library leaves the other windows open, and the Dock icon or **View → Library** brings it back. **Help → Show Log in Finder** reveals MacLauncher's log for troubleshooting.
+Each window opens once, and opening it again brings the existing window forward. Settings, Runtimes and Credits open without a loading pause: MacLauncher keeps one of these windows ready in the background, already drawn with your current settings and runtimes, and shows it with the view or section you asked for. Closing the library leaves the other windows open, and the Dock icon or **View → Library** brings it back. **Help → Show Log in Finder** reveals MacLauncher's log for troubleshooting.
 
 MacLauncher's [UI guide](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md) describes every control in full, including the [library](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md#library) and the [inspector](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md#inspector).

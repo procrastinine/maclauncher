@@ -34,7 +34,7 @@ MacLauncher downloads WineCX releases from GitHub after asking, just like Sikaru
 
 Each release comes with DXMT, DXVK, MoltenVK and GStreamer video codecs. The DXVK in the current release has no 64-bit DXGI library, so MacLauncher offers it to 32-bit games only. D3DMetal isn't included: install a D3DMetal version in **Runtimes → Graphics → DirectX → Metal**, for example from Sikarugir's Template releases or your own copy of Apple's Game Porting Toolkit, and pick it for Direct3D 11 or 12. Every other translator in Runtimes works with WineCX as it does with Sikarugir, including the DXVK and vkd3d-proton releases that pair with MacLauncher KosmicKrisp. Left on its automatic choice, WineCX uses its DXMT for Direct3D 10 and 11, WineD3D for Direct3D 8 and 9, WINE's own vkd3d for Direct3D 12 and its MoltenVK for Vulkan.
 
-Current WineCX releases need macOS 26 or later. MacLauncher reads that requirement from the first few megabytes of a release before downloading the rest, so a version your Mac can't run is listed with **Requires macOS 26 or later** and never downloaded. WineCX has no wrapper or bottle format of its own, so each game always gets a private Windows environment.
+Current WineCX releases need macOS 26 or later. MacLauncher reads that requirement from the first few megabytes of a release before downloading the rest, so a version your Mac can't run is listed with **Requires macOS 26 or later** and never downloaded. WineCX has no wrapper or bottle format of its own, so each game always gets a private Windows environment. Every WineCX launch is checked against the list of files MacLauncher recorded when it installed that version, so WineCX versions come only from these downloads, and **Runtimes → WineCX** has no **Register custom…** button.
 
 ## Which one to use
 
@@ -51,6 +51,14 @@ That environment belongs to the game, not to the WINE version. Updating CrossOve
 MacLauncher normally starts the original Windows executable. The exception is a camera or XeSS adapter that has to replace a DLL next to the executable; [Effects and upscaling](/maclauncher/windows/effects-and-upscaling/) explains what these adapters are for. Such an adapter needs a small, separate launch folder with the executable and DLLs, although the game still runs in its original folder. Files that a game writes next to the adapted executable stay in that launch folder. The [runtime reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md) describes how the adapters handle files.
 
 Removing a game from your library removes the Windows environments MacLauncher created for it and leaves the game files alone. Bottles and wrappers you made yourself are never removed; [Existing bottles and wrappers](/maclauncher/windows/existing-bottles/) explains how to run a game in one.
+
+## Game Mode and local network access
+
+macOS has a Game Mode for games played full screen: it gives the game top priority on the CPU and GPU and lowers Bluetooth latency for wireless controllers and AirPods. macOS switches it on only for apps it knows are games, and a WINE program doesn't count as one by itself. For Sikarugir and WineCX games, MacLauncher therefore starts the game from a small app bundle of its own, filed in the games category. Once the game is full screen and in front, macOS turns Game Mode on. CrossOver games run from CrossOver's own WINE program, which doesn't declare itself a game.
+
+Because macOS treats that bundle as an app, macOS 15 and later also ask you whether it may use the local network, the same question any Mac app gets before it can find devices nearby. Each WINE runtime has its own bundle, so the question comes at most once for Sikarugir and once for WineCX, the first time one of their games uses the local network, and its explanation names the runtime. Your answer covers every game and every version of that runtime, and **System Settings → Privacy & Security → Local Network** can change it later. Play never waits for it, because WINE's background programs start outside the bundle; only the game's own local network use waits until you answer. Most games use the local network only for LAN multiplayer or nearby devices, and Internet access doesn't depend on it.
+
+The game's **Network access** checkbox still applies on top of this answer. With it off, the game stays cut off from your local network whatever you answered, as [Network and privacy](/maclauncher/tools/network-and-privacy/#network-access-for-each-game) explains.
 
 ## Rosetta
 

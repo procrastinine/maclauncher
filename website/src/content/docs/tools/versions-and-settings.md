@@ -31,7 +31,7 @@ An Apple Silicon build runs only on an Apple Silicon Mac, while Intel builds als
 
 ### Your own copies
 
-Some runtimes can use a copy you already have. **Register custom…** adds your own executable, app or runtime folder to a runtime's choices, and CrossOver has **Add CrossOver…** and **Find installed applications**. Those copies stay where they are, because MacLauncher only points to them, and removing one only forgets it.
+Some runtimes can use a copy you already have. **Register custom…** adds your own executable, app or runtime folder to a runtime's choices, and CrossOver has **Add CrossOver…** and **Find installed applications**. WineCX has no **Register custom…**, because it runs only versions that MacLauncher installed itself. Those copies stay where they are, because MacLauncher only points to them, and removing one only forgets it.
 
 ### Downloads
 

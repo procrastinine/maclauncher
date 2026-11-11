@@ -33,6 +33,8 @@ Games can go online too, and MacLauncher controls that separately for each game.
 
 The block applies to the game and everything it starts, including native libraries and helper programs, and works the same way in every runtime. If MacLauncher can't put it in place, the game doesn't start. It covers only the game's own processes, though: it isn't a firewall for your whole Mac, and it doesn't affect the Steam client, a browser or downloads that MacLauncher makes before the game starts. The [network isolation reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/NETWORK_ISOLATION.md) describes what stays reachable, such as WINE's own local communication.
 
+Since macOS 15, the system has a Local Network permission of its own and asks for it the first time an app looks for devices nearby. Sikarugir and WineCX games run from an app bundle that MacLauncher prepares for each of those runtimes, so macOS asks about them once per runtime, as [Game Mode and local network access](/maclauncher/windows/crossover-and-sikarugir/#game-mode-and-local-network-access) explains. That answer and the **Network access** checkbox both apply: with the checkbox off, the game stays off your local network whatever you answered.
+
 ## No telemetry
 
 MacLauncher has no telemetry, analytics or crash reporting. It doesn't send usage data anywhere, and there's no account to create for MacLauncher itself.
