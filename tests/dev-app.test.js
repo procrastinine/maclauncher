@@ -109,8 +109,11 @@ test("development branding preserves the original installation and caches a matc
   const legacy = path.join(options.cacheRoot, 'd08e6a18a87f1d3b7daddaea');
   fs.mkdirSync(legacy);fs.writeFileSync(path.join(legacy,'ready.json'),'{}');
   const {pruneDevelopmentApps}=await import('../scripts/dev-app.mjs');
+  pruneDevelopmentApps(options.cacheRoot,path.dirname(app),{processes:legacy+'/MacLauncher.app/Contents/MacOS/MacLauncher',alive:()=>false});
+  assert(fs.existsSync(legacy), 'A running legacy generation stays');
   pruneDevelopmentApps(options.cacheRoot,path.dirname(app),{processes:'',alive:()=>false});
-  assert(fs.existsSync(legacy), 'Stable preparation preserves legacy generations');
+  assert(!fs.existsSync(legacy), 'Stable preparation removes unused legacy generations');
+  assert(fs.existsSync(app), 'The stable bundle stays');
 
 });
 

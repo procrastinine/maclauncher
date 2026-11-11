@@ -20,11 +20,12 @@ export function pruneDevelopmentApps(cacheRoot,current,{processes=generationProc
     if(!entry.isDirectory())continue;
     const file=path.join(cacheRoot,entry.name),staging=/^\.prepare-(\d+)-/.exec(entry.name);
     if(staging){if(!alive(Number(staging[1])))fs.rmSync(file,{recursive:true,force:true});continue;}
-    if(path.basename(current)==='stable')continue;
     if(!/^[a-f0-9]{24}$/.test(entry.name)||!fs.existsSync(path.join(file,'ready.json')))continue;
     generations.push({file,at:fs.statSync(path.join(file,'ready.json')).mtimeMs});
   }
-  const fallback=generations.filter(row=>row.file!==current).sort((a,b)=>b.at-a.at)[0]?.file;
+  // The stable bundle replaces the per-identity generations; a running or leased
+  // legacy generation stays until its process ends.
+  const fallback=path.basename(current)==='stable'?null:generations.filter(row=>row.file!==current).sort((a,b)=>b.at-a.at)[0]?.file;
   for(const {file}of generations)if(file!==current&&file!==fallback&&!generationReferenced(file,paths,processes))fs.rmSync(file,{recursive:true,force:true});
 }
 
