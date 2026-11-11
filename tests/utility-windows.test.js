@@ -723,7 +723,7 @@ test('the utility preload paints its shell before fetching state and retains a n
 
 test('the utility renderer holds all three views without loading the library or inspector', async () => {
   const {build}=require('vite'),Module=require('node:module'),React=require('react');
-  const {renderToStaticMarkup}=require('react-dom/server');
+  const {renderToReadableStream}=require('react-dom/server');
   const bundle=await build({configFile:false,logLevel:'silent',build:{
     ssr:path.resolve(__dirname,'../src/renderer/src/ui/UtilityApp.tsx'),write:false,
     rollupOptions:{external:id=>/^react(?:-dom)?(?:\/|$)/.test(id),output:{format:'cjs',codeSplitting:false}}
@@ -737,7 +737,8 @@ test('the utility renderer holds all three views without loading the library or 
   const previous=globalThis.window;
   globalThis.window={location:{search:'?view=runtimes'},MacLauncher:{launcher:{initialState:()=>state}}};
   try {
-    const markup=renderToStaticMarkup(React.createElement(compiled.exports.default || compiled.exports));
+    const stream=await renderToReadableStream(React.createElement(React.Suspense,{fallback:null},React.createElement(compiled.exports.default || compiled.exports)));
+    await stream.allReady;const markup=await new Response(stream).text();
     for(const view of ['settings','runtimes','credits'])assert.ok(markup.includes(`data-utility-view="${view}"`));
     assert.match(markup,/data-utility-view="runtimes"><main/);
     assert.doesNotMatch(markup,/game-search-input|gameRow|>Loading…</);
@@ -930,7 +931,7 @@ test('a second request renders independently without waiting for the first windo
   const source=fs.readFileSync(path.join(__dirname,'../src/main/main.js'),'utf8');
   const start=source.indexOf('  createWindow: ',source.indexOf('const utilityWindows = createUtilityWindowController'))+'  createWindow: '.length;
   const callback=source.slice(start,source.indexOf('\n  loadView:',start)).trim().replace(/,$/,'');
-  const windows=[],registered=new Set(),shown=[];let initial=true,fullRefillDone=false;
+  const windows=[],registered=new Set(),shown=[];let initial=true,fullRefillDone=false,firstReturned=false;
   const contents=warm=>({warm,getURL:()=>warm?'file:///utility.html':'',clone:()=>contents(true)});
   class NativeWindow extends Window {
     constructor(options){super(options);this.webContents=options.webContents||contents(false);windows.push(this);}
@@ -947,20 +948,22 @@ test('a second request renders independently without waiting for the first windo
       // A cloned renderer queues its work behind the first document until 350 ms.
       setTimeout(()=>{fullRefillDone=true;},300);
       await new Promise(resolve=>setTimeout(resolve,win.webContents.warm?350:130));
-    },present:async win=>win.show()});
+    },present:async(win,request)=>{win.show();if(request.view==='runtimes')await new Promise(resolve=>setTimeout(resolve,300));}});
   const flush=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
   await controller.prepare();
-  const first=controller.open({view:'runtimes'});await flush();
+  const first=controller.open({view:'runtimes'}).then(win=>{firstReturned=true;return win;});await flush();
   t.mock.timers.tick(1);
   const requestedAt=Date.now();let credits;
   const second=controller.open({view:'credits'}).then(win=>{credits=win;});
   t.mock.timers.tick(129);await flush();
   assert.ok(credits,'The second view must not wait behind another document on the first renderer');
-  assert.notEqual(credits,await first);
+  assert.equal(firstReturned,false,'The first open still awaits its post-show work');
+  assert.notEqual(credits,windows[0]);
   assert.equal(credits.webContents.warm,false,'Separate native windows also keep independent renderer threads');
   assert.ok(shown.find(row=>row.win===credits).at-requestedAt<=179);
   assert.equal(fullRefillDone,false);
   await second;
+  t.mock.timers.tick(300);await flush();await first;
 });
 
 test('independent refill controls and state start together without frame waits', () => {
@@ -992,18 +995,17 @@ test('a requested Credits page renders its content without decoding or mounting 
   } finally {globalThis.window=previous;}
 });
 
-test('development utility controls use one prebundled graph before any renderer opens', async t => {
-  const {createServer,optimizeDeps}=require('vite');
-  const cacheDir=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'utility-controls-'));
-  t.after(()=>fs.rmSync(cacheDir,{recursive:true,force:true}));
-  const server=await createServer({configFile:path.resolve(__dirname,'../vite.config.mjs'),cacheDir,logLevel:'silent',server:{middlewareMode:true}});
-  try {
-    const graph=await optimizeDeps(server.config,true,true);
-    assert.ok(graph.optimized['@utility-controls'],'The controls are compiled before a window can request them');
-    const script=await server.transformRequest('/src/utility.tsx');
-    assert.match(script.code,/deps\/@utility-controls\.js/);
-    assert.doesNotMatch(script.code,/import\("\/src\/ui\/UtilityApp\.tsx"\)/,'A refill does not request every UI source module');
-  } finally {await server.close();}
+test('the first Credits control graph excludes Settings and Runtimes code', async () => {
+  const {build}=require('vite');
+  const bundle=await build({configFile:path.resolve(__dirname,'../vite.config.mjs'),logLevel:'silent',build:{write:false}});
+  const chunks=new Map(bundle.output.filter(item=>item.type==='chunk').map(item=>[item.fileName,item]));
+  const root=[...chunks.values()].find(chunk=>chunk.moduleIds.some(id=>id.endsWith('/ui/UtilityApp.tsx')));
+  assert.ok(root);
+  const queue=[root],seen=new Set(),modules=[];
+  while(queue.length){const chunk=queue.pop();if(seen.has(chunk.fileName))continue;seen.add(chunk.fileName);modules.push(...chunk.moduleIds);for(const name of chunk.imports)if(chunks.has(name))queue.push(chunks.get(name));}
+  assert.ok(modules.some(id=>id.endsWith('/components/CreditsView.tsx')));
+  assert.ok(!modules.some(id=>/\/components\/(SettingsView|RuntimesView|EffectsControls)\.tsx$/.test(id)),'Requested Credits must not parse the other views before its table');
+  assert.ok(root.dynamicImports.length>=2,'Other views remain available for the prepared spare');
 });
 
 test('a requested view retained as the hidden spare prepares all views for later switches', async () => {

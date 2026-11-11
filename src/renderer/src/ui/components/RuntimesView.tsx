@@ -969,3 +969,18 @@ export function useRuntimeManagement(api: NonNullable<Window["MacLauncher"]>["la
     updateRuntimeUiSection, onRuntimeRefresh, onRuntimeInstall, onRuntimeImport, onRuntimeRegister,
     onRuntimeSetupAction, onRuntimeInstalledAction, onRuntimeSetDefault, onRuntimeUninstall};
 }
+
+// The native utility entry loads this component only when Runtimes is needed.
+export function UtilityRuntimesView({state, api, navigationKey, onOpenSource}: {
+  state: LauncherState;
+  api: NonNullable<Window["MacLauncher"]>["launcher"] | undefined;
+  navigationKey?: number;
+  onOpenSource?: (url: string) => void;
+}) {
+  const management = useRuntimeManagement(api, state, true, state.utilityWindow?.managerId);
+  const runtimeManagers = useMemo(() => Object.values(state.runtimeManagers || {}), [state.runtimeManagers]);
+  const downloadTasks = useMemo(() => (state.downloads || []).filter(task => task.status === "downloading"), [state.downloads]);
+  return <RuntimesView {...management} state={state} settingsApi={api} getPathForFile={api?.getPathForFile}
+    runtimeManagers={runtimeManagers} navigationKey={navigationKey} downloadTasks={downloadTasks}
+    onCancelDownload={id => api?.cancelDownload(id)} onOpenSource={onOpenSource} />;
+}

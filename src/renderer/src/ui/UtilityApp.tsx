@@ -2,13 +2,14 @@ import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from "reac
 import type {LauncherState, UtilityWindowContext} from "./types";
 import {readUtilityWindowContext} from "../../../core/utility-window-model.mjs";
 import {restoreLauncherState, subscribeLauncherState} from "./launcher-state-model.mjs";
-import {SettingsView} from "./components/SettingsView";
 import {CreditsView} from "./components/CreditsView";
-import {RuntimesView, useRuntimeManagement} from "./components/RuntimesView";
 import {ImportBatches, useImportBatches, DropGameHint, useLauncherDrop} from "./components/ImportBatch";
 import {ErrorText} from "./components/ErrorText";
 import {collectAcknowledgments} from "./acknowledgments-model";
 import sharedAcknowledgments from "../../../modules/shared/acknowledgments.json";
+
+const SettingsView = React.lazy(() => import("./components/SettingsView").then(module => ({default: module.SettingsView})));
+const UtilityRuntimesView = React.lazy(() => import("./components/RuntimesView").then(module => ({default: module.UtilityRuntimesView})));
 
 performance.mark("launcher:utility-module-ready");
 export default function UtilityApp() {
@@ -28,7 +29,8 @@ export default function UtilityApp() {
     ? navigationRequest : state?.utilityWindow || utilityWindowContext;
   const utilityView = request.view;
   const utilityRevision = request.revision;
-  const runtimeState = useMemo(() => state && ({...state, utilityWindow: request}), [state, request]);
+  const runtimeRequest = utilityView === "runtimes" ? request : null;
+  const runtimeState = useMemo(() => state && (runtimeRequest ? {...state, utilityWindow: runtimeRequest} : state), [state, runtimeRequest]);
   const keptUtility = allViews, runtimesOpen = allViews || utilityView === "runtimes", creditsOpen = allViews || utilityView === "credits";
   const utilityNavigation = useRef<Record<string, number>>({});
   if (utilityRevision !== undefined) utilityNavigation.current[utilityView] = utilityRevision;
@@ -39,9 +41,14 @@ export default function UtilityApp() {
       // A requested replacement mounts its own view first. If retained as the
       // hidden spare it prepares every view before the next use.
       if (!allViews && (request.prepared || view !== utilityView)) {
-        setState(value => value && restoreLauncherState(value));
-        setAllViews(true);
-        setNavigationRequest(request);
+        const prepare = () => {
+          setState(value => value && restoreLauncherState(value));
+          setAllViews(true);
+          setNavigationRequest(request);
+        };
+        // Keep the current view drawable if reopened during hidden preparation.
+        if (request.prepared) React.startTransition(prepare);
+        else prepare();
         return;
       }
       for (const slot of document.querySelectorAll<HTMLElement>("[data-utility-view]")) slot.hidden = slot.dataset.utilityView !== view;
@@ -74,15 +81,10 @@ export default function UtilityApp() {
   }, [api, initialState]);
   const importBatches = useImportBatches(api);
   const {addDropActive, onAppDragEnter, onAppDragLeave, onAppDragOver, onDropAdd} = useLauncherDrop(api, importBatches, setError);
-  const {runtimeManagerId, setRuntimeManagerId, runtimeSectionId, setRuntimeSectionId, runtimeUi,
-    updateRuntimeUiSection, onRuntimeRefresh, onRuntimeInstall, onRuntimeImport, onRuntimeRegister,
-    onRuntimeSetupAction, onRuntimeInstalledAction, onRuntimeSetDefault, onRuntimeUninstall} = useRuntimeManagement(api, runtimeState, runtimesOpen, utilityWindowContext.managerId);
-  const runtimeManagers = useMemo(() => runtimesOpen ? Object.values(state?.runtimeManagers || {}) : [], [state?.runtimeManagers, runtimesOpen]);
   const acknowledgments = useMemo(() => creditsOpen ? collectAcknowledgments(state?.modules || [], sharedAcknowledgments) : [], [state?.modules, creditsOpen]);
   const canOpenExternal = Boolean(api?.openExternal);
   const showIcons = state?.launcherSettings?.showIcons !== false;
   const showNonDefaultTags = state?.launcherSettings?.showNonDefaultTags !== false;
-  const downloadTasks = useMemo(() => (state?.downloads || []).filter(task => task.status === "downloading"), [state?.downloads]);
   function onOpenAcknowledgmentsLink(url: string) { api?.openExternal?.(url).catch(() => {}); }
   async function onSetModuleSettings(moduleId: string, patch: Record<string, any>) {
     if (!api) return;
@@ -105,18 +107,10 @@ export default function UtilityApp() {
   }
 
   // A targeted Settings request does not invalidate the other mounted views.
-  const runtimesPanel = useMemo(() => state && runtimesOpen && <RuntimesView
-        state={state} settingsApi={api} getPathForFile={api?.getPathForFile}
-        runtimeManagers={runtimeManagers} runtimeUi={runtimeUi} runtimeManagerId={runtimeManagerId}
-        navigationKey={utilityNavigation.current.runtimes}
-        runtimeSectionId={runtimeSectionId} downloadTasks={downloadTasks} setRuntimeManagerId={setRuntimeManagerId}
-        setRuntimeSectionId={setRuntimeSectionId} updateRuntimeUiSection={updateRuntimeUiSection}
-        onRuntimeRefresh={onRuntimeRefresh} onRuntimeInstall={onRuntimeInstall} onRuntimeImport={onRuntimeImport} onRuntimeRegister={onRuntimeRegister}
-        onRuntimeSetupAction={onRuntimeSetupAction} onRuntimeInstalledAction={onRuntimeInstalledAction}
-        onRuntimeSetDefault={onRuntimeSetDefault} onRuntimeUninstall={onRuntimeUninstall}
-        onCancelDownload={id => api?.cancelDownload(id)} onOpenSource={canOpenExternal ? onOpenAcknowledgmentsLink : undefined}
-      />,
-    [state, api, runtimeManagers, runtimeUi, runtimeManagerId, runtimeSectionId, downloadTasks, utilityNavigation.current.runtimes, runtimesOpen]);
+  const runtimesPanel = useMemo(() => runtimeState && runtimesOpen && <UtilityRuntimesView
+        state={runtimeState} api={api} navigationKey={utilityNavigation.current.runtimes}
+        onOpenSource={canOpenExternal ? onOpenAcknowledgmentsLink : undefined}
+      />, [runtimeState, api, runtimesOpen, utilityNavigation.current.runtimes]);
   const creditsPanel = useMemo(() => <CreditsView
         acknowledgments={acknowledgments} canOpenExternal={canOpenExternal} onOpenLink={onOpenAcknowledgmentsLink}
       />, [acknowledgments, canOpenExternal, api]);
