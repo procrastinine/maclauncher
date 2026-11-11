@@ -13,6 +13,20 @@ const {info: infoGraphics} = require("../graphics-warning");
 const digest = value => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const {preservesCoordinates: declaredPreserving} = require("../reshade/shader-settings");
 function file(entry, userDataDir) { return path.join(path.dirname(Live.file(entry, userDataDir)), "effect-plan.json"); }
+// One byte beside the plan: "1" while the published document has an enabled
+// row or output options, so the graphics library processes the game's frames,
+// and "0" otherwise. Windows upscaler adapters that can return a dispatch to
+// the game's own implementation read it without parsing the plan.
+function activityFile(planFile) { return path.join(path.dirname(planFile), "effect-plan.active"); }
+const activity = document => document.nodes.some(node => node.enabled === true) || Boolean(document.output) ? "1" : "0";
+// Both files are written by the same publication. The plan stays the last
+// write, its activation, after its selections, controls and this byte.
+function writeDocument(target, document, {root, publication}) {
+  for (const [name, bytes, activation] of [[activityFile(target), activity(document), false], [target, JSON.stringify(document), true]]) {
+    if (publication) publication.write(name, bytes, {root, activation});
+    else Writable.atomicWrite(name, bytes, {root});
+  }
+}
 function supported(root) {
   try { return RuntimeRecord.read(root).features?.graphics?.effectPlanAPI === 1; }
   catch { return false; }
@@ -812,8 +826,7 @@ async function prepare(entry, options = {}) {
         acceptedRevision: accepted?.revision, root: ctx.userDataDir, publication: options.publication});
     }
   } catch (error) {warn(options.logger, `Live graphics history is unavailable: ${error.message}`);}
-  if (options.publication) options.publication.write(file(entry, ctx.userDataDir), JSON.stringify(document), {root: ctx.userDataDir, activation: true});
-  else Writable.atomicWrite(file(entry, ctx.userDataDir), JSON.stringify(document), { root: ctx.userDataDir });
+  writeDocument(file(entry, ctx.userDataDir), document, {root: ctx.userDataDir, publication: options.publication});
   const appliedPlan = {...plan, ...(processingReduction ? {video: [processingReduction, ...plan.video]} : {})};
   if(output)appliedPlan.output=output;else delete appliedPlan.output;
   if (appliedResolution && !appliedResolution.automatic) appliedPlan.renderResolution = appliedResolution;
@@ -889,8 +902,7 @@ const emptyDocument = () => ({schema: 1, mode: "advanced", revision: digest([]),
 function publishSimple(entry, userDataDir, {publication, running, launchBinding} = {}) {
   const document = emptyDocument(), target = file(entry, userDataDir);
   if (running && launchBinding?.effectPlanLiveResources?.xess) releaseXess(launchBinding.effectPlanLiveResources.xess, publication);
-  if (publication) publication.write(target, JSON.stringify(document), {root: userDataDir, activation: true});
-  else Writable.atomicWrite(target, JSON.stringify(document), { root: userDataDir });
+  writeDocument(target, document, {root: userDataDir, publication});
   Writable.assertOwnDirectory(userDataDir, path.join(path.dirname(target), "plan-nodes"));
   if (publication) {publication.metadata.sourceResolutionCandidate = null;publication.metadata.sourceResolutionControl = null;}
   return target;
@@ -901,4 +913,4 @@ function releaseXess(binding, publication) {
   const Broker = require("../runtime/gpu-compute-broker"), before = Broker.demand(binding, false);
   if (before) publication?.onRollback?.(() => Broker.demand(binding, true));
 }
-module.exports = { file, supported, info, templates, facts, describe, stageSettings, prepare, publishSimple, emptyDocument, acceptance, outcomes, acceptanceReason, preparation };
+module.exports = { file, activityFile, supported, info, templates, facts, describe, stageSettings, prepare, publishSimple, emptyDocument, acceptance, outcomes, acceptanceReason, preparation };

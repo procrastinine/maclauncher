@@ -32,7 +32,7 @@ Further reading:
 
 ## The graphics chain
 
-Each game's chain is edited in the game inspector, under its **Graphics** heading. A checkbox in that heading turns the whole chain on or off, and while it is off, the chain keeps its rows, sizes, parameters and model choices. The heading's **⋯** menu also holds the [presets](#presets) and **Clear effects**.
+Each game's chain is edited in the game inspector, under its **Graphics** heading. A checkbox in that heading turns the whole chain on or off, and while it is off, the chain keeps its rows, sizes, parameters and model choices. Turning it off in a running game whose FidelityFX upscaling MacLauncher performs through the [FidelityFX API adapter](../runtimes/CROSSOVER.md#fidelityfx-api-adapter) also hands those dispatches back to the game's own FidelityFX library until it is turned on again. The heading's **⋯** menu also holds the [presets](#presets) and **Clear effects**.
 
 ### Simple and Advanced
 

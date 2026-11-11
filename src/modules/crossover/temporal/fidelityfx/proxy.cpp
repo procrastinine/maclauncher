@@ -5,7 +5,11 @@
 // frame and MacLauncher's selected upscaler writes its output: on Vulkan as a
 // VkTemporalFrameInfoMVK in a vkCmdPipelineBarrier2 (vk_temporal_frame.h), on
 // Direct3D 12 through VKD3D-Proton's ID3D12GraphicsCommandListMetalFX
-// (vkd3d_metalfx.h). Otherwise the original dispatch runs. Each backend's
+// (vkd3d_metalfx.h). Otherwise the original dispatch runs. While the game's
+// Graphics are off (graphics-state.hpp), every dispatch goes to the original,
+// so the game looks as it does without MacLauncher; turning them on takes the
+// next dispatch again. Each switch restarts the history of the implementation
+// that takes over. Each backend's
 // proxy is its own build: profile.hpp names the original library and sets
 // MACLAUNCHER_FFX_BACKEND_VK for the Vulkan proxy.
 #define NOMINMAX
@@ -18,6 +22,7 @@
 #include "vk_temporal_frame.h"
 #endif
 #include "carrier.hpp"
+#include "../graphics-state.hpp"
 #include <atomic>
 #include <cstring>
 #include <memory>
@@ -43,6 +48,7 @@ struct Context {
 #else
  ID3D12MetalFXScaler*scaler=nullptr;        // made at the first recorded upscale
 #endif
+ bool original=false; // the last dispatch went to the original while Graphics were off
  std::mutex lock;
 };
 std::mutex contextsLock;
@@ -132,7 +138,8 @@ extern "C" FFX_API_ENTRY ffxReturnCode_t ffxCreateContext(ffxContext*context,ffx
   next->identity=nextContext.fetch_add(1,std::memory_order_relaxed);
   if(!(next->barrier=carrierBarrier(metadata.vulkan)))return result;
 #endif
-  std::lock_guard lock(contextsLock);contexts[*context]=std::move(next);
+  {std::lock_guard lock(contextsLock);contexts[*context]=std::move(next);}
+  maclauncher::graphics::LiveState::start();
  }catch(...){}
  return result;
 }
@@ -158,9 +165,14 @@ extern "C" FFX_API_ENTRY ffxReturnCode_t ffxQuery(ffxContext*context,ffxQueryDes
 extern "C" FFX_API_ENTRY ffxReturnCode_t ffxDispatch(ffxContext*context,const ffxDispatchDescHeader*desc){
  const auto call=original<PfnFfxDispatch>("ffxDispatch");if(!call)return FFX_API_RETURN_NO_PROVIDER;
  if(context&&desc&&desc->type==FFX_API_DISPATCH_DESC_TYPE_UPSCALE&&!desc->pNext)if(const auto current=lookup(*context))try{
-  const auto&dispatch=*reinterpret_cast<const ffxDispatchDescUpscale*>(desc);
+  auto dispatch=*reinterpret_cast<const ffxDispatchDescUpscale*>(desc);
   std::lock_guard lock(current->lock);
+  const bool active=maclauncher::graphics::LiveState::active(),switched=current->original==active;
+  if(switched)dispatch.reset=true;
+  if(!active){current->original=true;return call(context,&dispatch.header);}
+  current->original=false;
   if(dispatch.commandList&&record(*current,dispatch))return FFX_API_RETURN_OK;
+  return call(context,&dispatch.header);
  }catch(...){}
  return call(context,desc);
 }

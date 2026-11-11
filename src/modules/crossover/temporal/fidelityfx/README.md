@@ -20,7 +20,11 @@ MacLauncher's selected upscaler then writes the dispatch's output:
   `ID3D12GraphicsCommandListMetalFX::TemporalUpscale` (`vkd3d_metalfx.h`). The
   context's scaler is destroyed with the context.
 
-A dispatch that cannot be recorded runs the original. `carrier.hpp` maps a
+A dispatch that cannot be recorded runs the original. While the game's
+Graphics are off, every dispatch runs the original, and the first dispatch after
+each switch has its reset flag set. `../graphics-state.hpp` gives that state
+without file I/O on the dispatch: it follows `effect-plan.active` beside the
+game's `RESHADE_EFFECT_PLAN` from a background thread every 100 ms. `carrier.hpp` maps a
 dispatch onto `VKD3D_METALFX_TEMPORAL_DESC`; `scalar-mapping.hpp` holds the
 scalar and flag conventions, including camera planes for inverted and infinite
 depth.

@@ -260,7 +260,7 @@ test("enabled preparation validates the full shader and writes only private per-
   assert.equal(fs.readFileSync(preparedNode(result).file, "utf8"), "prepared effect");
   assert.ok(preparedNode(result).file.startsWith(path.join(owned, "plan-nodes", "shader") + path.sep));
   assert.equal(fs.statSync(result.RESHADE_WINDOW_STATE).size, 4096);
-  assert.deepEqual(fs.readdirSync(owned).sort(), ["controls.bin", "effect-plan.json", "launch.json", "live-effects", "plan-nodes", "window-state"]);
+  assert.deepEqual(fs.readdirSync(owned).sort(), ["controls.bin", "effect-plan.active", "effect-plan.json", "launch.json", "live-effects", "plan-nodes", "window-state"]);
   const receipt = JSON.parse(fs.readFileSync(path.join(owned, "launch.json"), "utf8"));
   assert.equal(receipt.phase, "prepared");
   assert.equal(receipt.adapterVersion, "test");

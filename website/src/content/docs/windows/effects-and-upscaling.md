@@ -57,6 +57,8 @@ Games that ship AMD's FidelityFX API library, for Vulkan or Direct3D 12, can hav
 
 With the adapter in place, the graphics menus count the game's depth, motion and camera data as supplied, so temporal upscalers no longer sit under **Needs scene inputs**. Effects placed before the upscaler work on the game's smaller rendered image. The upscaled picture then goes through the rest of the chain when the game shows it, and each effect runs once per frame.
 
+Turning **Graphics** off while the game runs gives the upscaling back to the game's own FidelityFX, so the game looks just as it would without MacLauncher. Turning it back on brings MacLauncher's upscaler back from the next frame. Either way the switch takes effect within about a tenth of a second, without a restart.
+
 ## How the adapters treat your game files
 
 Most of these adapters have to replace a DLL that sits next to the game's executable. MacLauncher never changes the original: it makes a small, separate launch folder with copies of the executable and the replaced DLLs, while the rest of the game is used from its original folder. For an Unreal Engine game whose top-level `.exe` only starts the real game program, that program is copied into the launch folder too. The game's working directory is still its own folder, as under CrossOver, so logs, saves and settings it writes relative to that folder land there. Only files it writes next to the adapted executable's own path stay in the launch folder. A game that doesn't need an adapter runs straight from its original files. If an adapter can't be prepared, the game runs without it.

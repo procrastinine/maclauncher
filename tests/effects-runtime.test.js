@@ -1500,6 +1500,7 @@ test("Clear effects publishes the document of an empty advanced chain", async t 
   const target = Effects.publishSimple(empty, f.userDataDir);
   assert.equal(target, prepared.file);
   assert.deepEqual(JSON.parse(fs.readFileSync(target)), prepared.document, "native code acknowledges it as pass-through with this revision");
+  assert.equal(fs.readFileSync(Effects.activityFile(target), "utf8"), "0", "adapters see the game's frames unprocessed");
   assert.deepEqual(Effects.emptyDocument(), prepared.document);
   assert.equal(fs.existsSync(path.join(path.dirname(target), "plan-nodes")), true);
   await assert.rejects(Effects.prepare(empty, { ...f.options, live: true }), /Restart the game/);
@@ -1598,4 +1599,22 @@ test("one unreadable row is left out at launch and in the editor while the other
   assert.deepEqual(result.preparationStatus.skipped.map(row => row.id), ["broken"]);
   assert.deepEqual(entry, before, "the saved plan is kept until an edit");
 });
-
+test("each published plan writes whether the graphics library processes frames beside it", async t => {
+  const f = fixture(t);
+  Object.assign(f.record.features.graphics, {resizeAPI: 2, downsampleMethods: ["area"]});fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
+  const entry = {...f.entry, effects: {schema: 2, mode: "advanced", enabled: true, video: [
+    {id: "small", kind: "downsample", enabled: true, method: "area", extent: {relativeTo: "input", factor: .5}, settings: {}}]}};
+  const prepared = await Effects.prepare(entry, f.options), active = Effects.activityFile(prepared.file);
+  assert.equal(path.dirname(active), path.dirname(prepared.file));
+  assert.equal(fs.readFileSync(active, "utf8"), "1");
+  // Graphics off keeps the rows, disabled, and the same write path publishes "0".
+  const off = await Effects.prepare({...entry, effects: {...entry.effects, enabled: false}}, f.options);
+  assert.ok(off.document.nodes.length && off.document.nodes.every(node => node.enabled === false));
+  assert.equal(fs.readFileSync(active, "utf8"), "0");
+  await Effects.prepare(entry, f.options);assert.equal(fs.readFileSync(active, "utf8"), "1");
+  // A live publication stages both files; a rollback leaves both as they were.
+  const publication = ReShade.createPublication();
+  Effects.publishSimple(entry, f.userDataDir, {publication});
+  assert.equal(publication.read(active, "utf8"), "0");assert.equal(fs.readFileSync(active, "utf8"), "1");
+  publication.rollback();assert.equal(fs.readFileSync(active, "utf8"), "1");
+});
