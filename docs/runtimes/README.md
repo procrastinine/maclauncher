@@ -36,7 +36,7 @@ Installed versions work offline and are shared between games, while saves, accou
 
 MacLauncher's own [update check](../UPDATES.md) is separate from these downloads. It contacts GitHub only when **Check for Updates…** is chosen, or at launch when **Check for updates at launch** is on in **Settings → Launcher**, a setting that is off by default.
 
-Runtimes and tools that MacLauncher adapts for macOS are published as packages in [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds), and its [package index](https://procrastinine.github.io/maclauncher-builds/) lists every package with its published versions. [Runtime distribution](RUNTIME_DISTRIBUTION.md) describes the package format. [Release catalogs](RUNTIME_CATALOGS.md) describes how version lists are fetched and cached, and [Game preparation and storage](../library/GAME_PREPARATION.md) describes how game files are handled.
+Runtimes and tools that MacLauncher adapts for macOS are published as packages in [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds). Its [package index](https://procrastinine.github.io/maclauncher-builds/) lists every package with its latest version, and each package's own page lists its published versions and what changed in each. [Runtime distribution](RUNTIME_DISTRIBUTION.md) describes the package format. [Release catalogs](RUNTIME_CATALOGS.md) describes how version lists are fetched and cached, and [Game preparation and storage](../library/GAME_PREPARATION.md) describes how game files are handled.
 
 ## Runtime ids
 
