@@ -684,20 +684,32 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     const savedKey = savedVersion && canonicalVersion(savedVersion);
     const saved = savedVersion && (versions.includes(savedKey) || !remote.size ||
       entries.has(savedKey) && resolveInstalled({ userDataDir, version: savedKey, verification: "status" })) ? savedVersion : null;
-    const layer = selectRuntimeVersion({ manual, recommended: gameRecommendation, defaultVersion: saved,
-      fallback: manual || gameRecommendation || saved ? null : managerDefault(userDataDir, { verification, compatible }) });
-    const localVersion = versionCompatibility && installedRuntimeVersion({ ...layer,
-      version: layer.version ? canonicalVersion(layer.version) : null,
-      installed: listRuntimeRows(userDataDir).filter(row => !compatible || compatible(row.catalogEntry || entries.get(row.version))),
-      compatibility: typeof versionCompatibility === "function"
-        ? (candidate, requested, row) => versionCompatibility(candidate, requested, row, entry) : versionCompatibility });
-    const version = localVersion || (layer.version ? canonicalVersion(layer.version) : null), pin = version && entries.get(version);
-    const registered = version && pin && resolveInstalled({ userDataDir, version, verification });
-    const install = registered && (!compatible || compatible(registered.catalogEntry || pin)) ? registered : null;
+    const choose = layer => {
+      const localVersion = versionCompatibility && installedRuntimeVersion({ ...layer,
+        version: layer.version ? canonicalVersion(layer.version) : null,
+        installed: listRuntimeRows(userDataDir).filter(row => !compatible || compatible(row.catalogEntry || entries.get(row.version))),
+        compatibility: typeof versionCompatibility === "function"
+          ? (candidate, requested, row) => versionCompatibility(candidate, requested, row, entry) : versionCompatibility });
+      const version = localVersion || (layer.version ? canonicalVersion(layer.version) : null), pin = version && entries.get(version);
+      const registered = version && pin && resolveInstalled({ userDataDir, version, verification });
+      return { layer, version, pin, install: registered && (!compatible || compatible(registered.catalogEntry || pin)) ? registered : null };
+    };
+    let chosen = choose(selectRuntimeVersion({ manual, recommended: gameRecommendation, defaultVersion: saved,
+      fallback: manual || gameRecommendation || saved ? null : managerDefault(userDataDir, { verification, compatible }) }));
+    // A saved default is a preference. When it is not installed and the
+    // manager's own default finds an installed version its compatibility rule
+    // accepts, Play uses that one and asks for no download. A version chosen
+    // for the game stays exact, and Install installs exactly what was chosen.
+    let preferredVersion = null;
+    if (saved && !manual && !gameRecommendation && !chosen.install) {
+      const local = choose(selectRuntimeVersion({ fallback: managerDefault(userDataDir, { verification, compatible }) }));
+      if (local.install) { preferredVersion = chosen.version; chosen = local; }
+    }
+    const { layer, version, pin, install } = chosen;
     if (!version) return { version: null, install: null, ready: false, requiresDownload: true,
       discoveryRequired: remote.size === 0,
       reason: preferredArchitectures(remoteEntries).map(hostReason).find(Boolean) || `No ${label} versions are available to download.` };
-    return { version, install, ready: Boolean(install), requiresDownload: !install, selectionSource: layer.source || "default",
+    return { version, install, ready: Boolean(install), requiresDownload: !install, selectionSource: layer.source || "default", ...(preferredVersion ? { preferredVersion } : {}),
       discoveryRequired: !pin || !remote.has(version), reason: install ? null : !entries.has(version)
       ? `${label} ${version} is not available. Available versions: ${versions.join(", ")}.`
       : hostReason(entries.get(version)) || (compatible && !compatible(entries.get(version)) ? `${label} ${version} has an incompatible runtime profile.` : null) || includedFailures.get(version)?.error ||
@@ -993,7 +1005,13 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       // default, so one that left the release list gives way after discovery.
       const requested = typeof options.version === "string" && options.version.trim() && options.version.trim() !== "auto" ? options.version : null;
       const settings = options.settings?.runtimes ? options.settings : { runtimes: { [id]: options.settings } };
-      let selection = resolveSelection({}, settings, options.userDataDir, { version: requested });
+      // Install installs the saved default itself, not the installed version
+      // that Play would use in its place.
+      const chosen = () => {
+        const selection = resolveSelection({}, settings, options.userDataDir, { version: requested });
+        return selection.preferredVersion ? resolveSelection({}, settings, options.userDataDir, { version: selection.preferredVersion }) : selection;
+      };
+      let selection = chosen();
       let version = selection.version;
       let pin = entries.get(version), refreshed = false;
       if (!options.archiveFile && !selection.ready && (selection.discoveryRequired || projectPackages && pin && !pin.projectPackage)) {
@@ -1001,7 +1019,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         // Resolve its binary before considering an upstream source recipe.
         refreshed = true;
         await refreshCatalog({ userDataDir: options.userDataDir, logger: options.logger, signal, force: true });
-        selection = resolveSelection({}, settings, options.userDataDir, { version: requested });
+        selection = chosen();
         version = selection.version;
         pin = entries.get(version);
       }
@@ -1019,7 +1037,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
           return run(version).catch(async error => {
             if (refreshed || ![404, 410].includes(error?.statusCode)) throw error;
             await refreshCatalog({ userDataDir: options.userDataDir, logger: options.logger, signal, force: true });
-            const current = resolveSelection({}, settings, options.userDataDir, { version: requested }).version;
+            const current = chosen().version;
             if (!current || !entries.has(current)) throw error;
             return run(current);
           });

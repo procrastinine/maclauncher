@@ -49,7 +49,8 @@ function createManager({ discoverCatalog = Catalog.discover, dependencies = {} }
     const settings = options.settings?.runtimes ? options.settings : { runtimes: { sikarugir: options.settings } };
     const choose = () => {
       base.core.listCatalog({ userDataDir: options.userDataDir });
-      const version = base.resolveSelection({}, settings, options.userDataDir, { version: options.version }).version;
+      // Install installs the saved default itself, not the installed version Play would use instead.
+      const selection = base.resolveSelection({}, settings, options.userDataDir, { version: options.version }), version = selection.preferredVersion || selection.version;
       return { version, pin: base.core.catalog.find(row => row.version === version) };
     };
     let choice = choose();
@@ -64,7 +65,7 @@ function createManager({ discoverCatalog = Catalog.discover, dependencies = {} }
     ...base,
     upstream: [Catalog.engines, Catalog.templates],
     ui: { groupId: "sikarugir", tabLabel: "Sikarugir", sectionLabel: "Sikarugir", memberOrder: 0, management: "managed", order: 201 },
-    resolveSelection: require("../../sources/wine-selection").createSelection({ id: "sikarugir", base, resolvePayload, planned }),
+    resolveSelection: require("../../sources/wine-selection").createSelection({ base, resolvePayload, planned }),
     async resolveForPlay(entry, context) {
       throwIfAborted(context.signal);
       return manager.resolveSelection(entry, context.settings, context.userDataDir, { signal: context.signal });

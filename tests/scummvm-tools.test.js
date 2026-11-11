@@ -97,7 +97,9 @@ test("ScummVM Tools share native Builds defaults, alternate CPU catalogs and sav
     offline = true; const before = [catalogReads, downloads, Harness.network.requests.length];
     const reopened = createManager({dependencies});
     assert.equal(reopened.resolveSelection({}, {}, userDataDir).ready, true);
-    assert.equal(reopened.resolveSelection({}, saved, userDataDir).version, "5.0.0");
+    // The saved upstream default is not installed, so Play uses the installed Builds version.
+    const preferred = reopened.resolveSelection({}, saved, userDataDir);
+    assert.deepEqual([preferred.version, preferred.ready, preferred.preferredVersion], [installed.version, true, "5.0.0"]);
     assert.deepEqual([catalogReads, downloads, Harness.network.requests.length], before);
     offline = false;
   });

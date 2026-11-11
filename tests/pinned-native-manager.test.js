@@ -121,7 +121,9 @@ test("verified installed bytes remain available for explicit offline choices wit
   assert.equal(runtime.getState({ userDataDir: root, settings }).sections[0].supportsDefault, true);
   assert.equal(manager({ supportsDefault: false }).getState({ userDataDir: root, settings }).sections[0].supportsDefault, false);
   assert.deepEqual(settings, { defaultVersion: "1.1.0", retainedOption: true });
-  assert.equal(runtime.resolveSelection({}, { runtimes: { [runtime.id]: settings } }, root).version, "1.1.0", "The Runtimes default applies without a game choice");
+  // The removed 1.1.0 stays the saved preference, and Play uses the installed 1.2.0 without a download.
+  const preferred = runtime.resolveSelection({}, { runtimes: { [runtime.id]: settings } }, root);
+  assert.deepEqual([preferred.version, preferred.ready, preferred.preferredVersion], ["1.2.0", true, "1.1.0"], "An uninstalled Runtimes default yields to an installed version");
 });
 
 test("native downloads retain caller cancellation alongside the shared Downloads Cancel action", async t => {
@@ -874,8 +876,14 @@ test("automatic defaults use a compatible installed consumer build before a newe
     assert.equal(runtime.getState({ userDataDir: root }).defaultVersion, "1.0.0", "Runtimes and Play agree on the automatic default");
     const incompatible = select({ compatible: pin => pin.version === "3.0.0" });
     assert.equal(incompatible.version, "3.0.0");assert.equal(incompatible.ready, false);
+    // A saved default that is not installed yields to the installed version;
+    // a version chosen for the game stays exact.
     const saved = runtime.resolveSelection({}, { runtimes: { [runtime.id]: { defaultVersion: "3.0.0" } } }, root, { architecture: consumer });
-    assert.equal(saved.version, "3.0.0");assert.equal(saved.ready, false, "A listed saved choice remains explicit even when not installed");
+    assert.equal(saved.version, "1.0.0");assert.equal(saved.ready, true, "An uninstalled saved default asks for no download while an installed version is usable");
+    assert.equal(saved.preferredVersion, "3.0.0");
+    const savedIncompatible = runtime.resolveSelection({}, { runtimes: { [runtime.id]: { defaultVersion: "3.0.0" } } }, root,
+      { architecture: consumer, compatible: pin => pin.version === "3.0.0" });
+    assert.equal(savedIncompatible.version, "3.0.0");assert.equal(savedIncompatible.ready, false, "An installed version the compatibility rule rejects does not replace it");
     const withdrawn = runtime.resolveSelection({}, { runtimes: { [runtime.id]: { defaultVersion: "unavailable-choice" } } }, root, { architecture: consumer });
     assert.equal(withdrawn.version, "1.0.0");assert.equal(withdrawn.ready, true, "A withdrawn unavailable default uses the ordinary installed fallback");
     assert.equal(select({ recommendedVersion: "3.0.0" }).version, "3.0.0");
@@ -1002,4 +1010,23 @@ test("downloaded launch identities describe the current executable without pinni
   const result=selected.resolveSelection({runtimeData:{'identity-fixture':{version}}},{},root);
   assert.equal(result.ready,true);assert.notEqual(result.install.binarySha256,initial);
   assert.equal(result.install.binarySha256,result.install.sha256);
+});
+
+test("an uninstalled saved default yields to an installed version for Play while Install installs the saved default", { skip: process.platform !== "darwin" }, async t => {
+  const root = temporary(t), archive = Buffer.from("saved default archive"), digest = crypto.createHash("sha256").update(archive).digest("hex");
+  const runner = binary(process.arch === "x64" ? "x86_64" : "arm64"), local = path.join(root, "local-runner");
+  fs.writeFileSync(local, runner, { mode: 0o755 });
+  const runtime = await listed({ discoverCatalog: async () => ["1.2.0", "1.1.0"].map(version => ({ version, upstreamRevision: version,
+    asset: { url: `https://example.com/native-${version}.tar.gz`, filename: `native-${version}.tar.gz`, sha256: digest } })),
+    resolveExecutable: destination => path.join(destination, "runner"),
+    dependencies: { downloadToFile: async (_url, destination) => fs.writeFileSync(destination, archive),
+      extractArchive: async (_archive, destination) => fs.writeFileSync(path.join(destination, "runner"), runner, { mode: 0o755 }) } }, root);
+  runtime.core.registerLocal({ userDataDir: root, version: "1.1.0", runtimePath: local });
+  const settings = { runtimes: { "fixture-native": { defaultVersion: "1.2.0" } } };
+  const play = runtime.resolveSelection({}, settings, root);
+  assert.deepEqual([play.version, play.ready, play.requiresDownload, play.preferredVersion], ["1.1.0", true, false, "1.2.0"]);
+  assert.equal(runtime.resolveSelection({ runtimeData: { "fixture-native": { version: "1.2.0" } } }, settings, root).ready, false, "a game's own version stays exact");
+  const installed = await runtime.installRuntime({ userDataDir: root, settings });
+  assert.equal(installed.version, "1.2.0", "Install installs the saved default");
+  assert.equal(runtime.resolveSelection({}, settings, root).version, "1.2.0", "the installed saved default applies again");
 });

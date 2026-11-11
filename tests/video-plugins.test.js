@@ -178,7 +178,9 @@ test('uosc installation stages a native managed helper and its notices before re
   assert.ok(state.catalog.sources.find(source => source.id === 'upstream').versions.includes('5.14.0'));
   assert.ok(state.catalog.architectureCatalogs[process.arch === 'arm64' ? 'x64' : 'arm64'].versions.includes(helper.record.version));
   const saved = {runtimes: {'uosc-helper': {defaultVersion: '5.14.0'}}};
-  assert.equal(helperManager.resolveSelection({}, saved, userDataDir).version, '5.14.0');
+  // A saved default that is not installed yields to the installed helper.
+  const preferred = helperManager.resolveSelection({}, saved, userDataDir);
+  assert.deepEqual([preferred.version, preferred.ready, preferred.preferredVersion], [helper.record.version, true, '5.14.0']);
   const requests = Harness.network.requests.length;
   assert.equal(Plugins.createManager(offline()).getState({userDataDir}).sections.find(section => section.id === 'uosc').installed[0].ready, true);
   assert.equal(Harness.network.requests.length, requests);
