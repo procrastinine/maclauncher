@@ -65,6 +65,8 @@ App and executable icons are cached together with the identities and timestamps 
 | Android labels and icons | `userData/games/<gameId>/icons/`, keyed by the package inputs, the locale and the reader version. |
 | Java icons | The cache is invalidated when the archive's identity changes. |
 
+The library draws each icon as a preview of at most 128 pixels, decoded once for each version of the icon file, and every row's icon is drawn with the list rather than when the row scrolls into view. The previews are saved in `icon-previews.json` in MacLauncher's data folder, for the app version that made them, so after a restart every icon whose file is unchanged is part of the first library paint.
+
 WebP conversion, available when an image adapter is present, writes only to the launcher's own data. A metadata refresh keeps custom library titles and artwork; otherwise names and icons follow the changes observed in the source. Changing the runtime keeps the detected game type.
 
 ## Dock icons

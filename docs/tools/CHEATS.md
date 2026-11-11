@@ -4,7 +4,7 @@ Cheats are available for RPG Maker MV and MZ, RPG Maker XP/VX/VX Ace and Ren'Py 
 
 ## Cheats window
 
-The **Cheats** window groups the game type's number and toggle fields by category. It has an enable toggle and a reset to defaults. Changes are saved automatically and apply at once when the game is running. Where the game type has an in-game Tools overlay, a per-game option hides its Tools button.
+The **Cheats** window groups the game type's number and toggle fields by category. It has an enable toggle and a reset to defaults. Changes are saved automatically and apply at once when the game is running. Where the game type has an in-game Tools overlay, a per-game option hides its Tools button. This choice is saved at once. If the overlay is already patched into the game's files, the patch is then updated to match. When that update fails, the window shows the error, and the game keeps the last choice that its files were patched with.
 
 For Ren'Py, the window holds only the [cheat add-ons](#renpy-cheat-add-ons): it has no cheat fields and no save or reset buttons.
 

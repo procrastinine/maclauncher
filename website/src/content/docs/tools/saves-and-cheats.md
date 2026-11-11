@@ -47,7 +47,7 @@ For RPG Maker MV and MZ games, the **Cheats** window has a long list of switches
 | Items and shops | Infinite items, no skill costs, every item in shops, free shopping |
 | Story | Instant text, message skipping on a held key, no game over |
 
-MV and MZ games also get an in-game Tools overlay, opened with Ctrl-Shift-T or Cmd-Shift-T, with the same cheats plus searchable inventory, teleport, variable and switch pages. When the game runs on NW.js, a patch in the inspector's **Patches** section adds the overlay.
+MV and MZ games also get an in-game Tools overlay, opened with Ctrl-Shift-T or Cmd-Shift-T, with the same cheats plus searchable inventory, teleport, variable and switch pages. When the game runs on NW.js, a patch in the inspector's **Patches** section adds the overlay. The Cheats window can also hide the overlay's Tools button for one game. That choice applies right away, and MacLauncher then updates the patch in the game's files to match; if the update fails, the window shows why and the game goes back to the last choice that was patched in.
 
 RPG Maker XP, VX and VX Ace games use the same Cheats window, and add an in-game cheat menu on **F8** with extras such as item grants, teleport slots, party and enemy tools, and stat, level and gold edits. Changes made in either place stay in sync.
 

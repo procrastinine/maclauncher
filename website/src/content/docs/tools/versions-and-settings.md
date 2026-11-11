@@ -55,11 +55,13 @@ A game's inspector lets you override almost everything for that game alone.
 
 ### Runtime and version
 
-You can pick a different runtime or choose an exact version. The first entry in the version menu is the game's **Recommended** version when its files call for one, and otherwise the **Default**. [Choosing a runtime](/maclauncher/background/choosing-a-runtime/) explains which runtime suits which game.
+You can pick a different runtime or choose an exact version. The first entry in the version menu, **Automatic**, leaves the choice to MacLauncher and names the version Play will use, as in **Automatic (v3.5.2-stable)**: a compatible version you already have, or otherwise the version the game's files call for or the default. [Choosing a runtime](/maclauncher/background/choosing-a-runtime/) explains which runtime suits which game.
+
+A new runtime takes effect the moment you pick it. Different runtimes can keep the same game's saves in different places, so MacLauncher then reads the game's files to work out where the new one will save, and the **Saves** row follows a moment later. If that read fails, the game keeps its previous save locations and a note under **Play** says why.
 
 ### Runtime settings
 
-A gear next to the runtime opens that runtime's settings for this game, such as window size, language, controls or launch flags. The defaults for each game type live in **Settings**; anything you change here applies to this game only, and **Reset** returns to the defaults. Less common options sit in a collapsed **Advanced** group.
+A gear next to the runtime opens that runtime's settings for this game, such as window size, language, controls or launch flags, in a window of their own. Each game gets one such window per runtime, so pressing the gear again brings the open one forward. The defaults for each game type live in **Settings**; anything you change here applies to this game only, and **Reset** returns to the defaults. Less common options sit in a collapsed **Advanced** group.
 
 ### Launch arguments
 

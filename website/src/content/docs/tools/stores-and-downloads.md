@@ -12,7 +12,7 @@ The **External** window, next to Settings in the toolbar, connects MacLauncher t
 
 ## Games you already have
 
-The External window's **Installed** tab gathers the games installed by [Steam](https://store.steampowered.com/), [Epic Games](https://store.epicgames.com/) (including through [Heroic](https://heroicgameslauncher.com/) and [Legendary](https://github.com/legendary-gl/legendary)), [GOG](https://www.gog.com/) and [itch.io](https://itch.io/), both in their usual macOS locations and inside [CrossOver](https://www.codeweavers.com/crossover/) bottles. It reads the stores' local records, so it works offline. Tick the games you want and press **Import**. The games stay where they are, and MacLauncher adds them to your library.
+The External window's **Installed** tab gathers the games installed by [Steam](https://store.steampowered.com/), [Epic Games](https://store.epicgames.com/) (including through [Heroic](https://heroicgameslauncher.com/) and [Legendary](https://github.com/legendary-gl/legendary)), [GOG](https://www.gog.com/) and [itch.io](https://itch.io/), both in their usual macOS locations and inside [CrossOver](https://www.codeweavers.com/crossover/) bottles. It reads the stores' local records, so it works offline, and each game's artwork comes from files on your Mac and shows up with its row. Tick the games you want and press **Import**. The games stay where they are, and MacLauncher adds them to your library.
 
 Versions that MacLauncher downloaded for you appear in the **Downloaded** tab instead, which works the same way.
 

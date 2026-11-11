@@ -18,6 +18,8 @@ Each game's record and launcher data live under `games/<gameId>/`. Android appli
 | `runtimes/<runtimeId>/settings.json` | Global runtime defaults |
 | `runtimes/automatic-installs.json` | Runtime versions that Play installed on its own, for [derived data upkeep](#derived-data-upkeep) |
 | `library-availability.json` | The games last found unavailable, each with the root it was checked at and the reason, so they [show as unavailable](../library/GAME_PREPARATION.md#unavailable-game-files) from the first library paint at the next start |
+| `icon-previews.json` | Decoded 128-pixel previews of library icons, each with its file's size and timestamps, for the app version that decoded them; unchanged icons appear with the first library paint after a start, as [game icons](../library/GAME_ICONS.md#caching) describes |
+| `ui-state-cache.json` | Display snapshots of runtime and module states from the last session, for the app version, platform and CPU that wrote them, so the library appears before the startup runtime inventory finishes; see [library records](BACKEND.md#library-records) |
 | `logs/main.log` | Launcher log |
 | `updates/` | The latest update check, a downloaded update waiting to be installed, and the installation script and its log; see [app updates](../UPDATES.md#files) |
 | `graphics/reshade-filters.json` | Registered local shader files, with their names, paths and cached classification |

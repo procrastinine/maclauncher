@@ -106,6 +106,8 @@ Missing runtimes can be downloaded when you press Play, after asking for permiss
 
 If a game lives on an external drive that is unplugged, or you move or rename its folder, the game just shows as Unavailable and nothing it has stored is touched. Plug the drive back in and it comes back, or use [Locate…](docs/library/GAME_PREPARATION.md#locating-moved-files) to point it at the new location while keeping its saves, settings and effects. MacLauncher remembers which games were unavailable, so they already show that way when the library opens at startup.
 
+The launcher answers clicks right away and lets the slower work fill in afterwards. Game icons are there in the first paint of the library, since MacLauncher keeps the small previews it made last time, and local artwork in External shows up with its row. Pressing Play shows the game as starting immediately, even when a sleeping drive takes a few seconds to answer, and Cancel works from that moment. Switching a game's runtime shows up instantly too, while MacLauncher works out in the background where that runtime keeps the saves (if it can't, a note under Play tells you why). Hiding the cheat overlay's Tools button works the same way: the setting changes at once, and if patching the game to match fails, it goes back. Each game also gets one runtime settings window per runtime, so clicking the gear again just brings that window to the front.
+
 ## Unique features
 
 Most of the above runtimes are existing tools with MacLauncher managing them. However, there is also a significant amount of functionality and compatibility that you can't find anywhere else. Here are some highlights:

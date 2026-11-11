@@ -51,11 +51,13 @@ Both removals ask for confirmation once, in a macOS dialog.
 
 Every row shows the game's name, game type, last-played time and path. A **runtime** tag appears when the game uses a runtime other than its game type's default, and **Modified** appears when that runtime's settings differ from the defaults. A save label also shows whether the game uses a custom save folder. **Play**/**Stop**, **Shortcut** and **Forget** work directly from the row, without opening the inspector. When a game's files can't be found, its row says **Unavailable** and its icon is dimmed; hover over the label to see why.
 
+Icons arrive with the list itself, even far down a long library, rather than popping in as you scroll. MacLauncher keeps the small previews it made last time, so after a restart every icon whose file hasn't changed is there in the very first paint of the library.
+
 To find the icon of a Windows game in a folder, MacLauncher skips installers and crash reporters and tries the game before configuration tools or launchers. A packaged game whose file name looks like an installer's can still supply its own artwork, however.
 
 ### Games on an external drive
 
-Games are big, so many people keep them on an external drive that isn't always plugged in. When a game's files aren't on disk, because the drive is disconnected or the folder has moved, MacLauncher leaves the game exactly as it was. It stays in the library with its saves, settings, runtime versions, snapshots and effects. Nothing is detected again, rebuilt or deleted, and MacLauncher doesn't go looking through the missing folder. An icon kept in the game's folder appears only once MacLauncher has checked that the files are available.
+Games are big, so many people keep them on an external drive that isn't always plugged in. When a game's files aren't on disk, because the drive is disconnected or the folder has moved, MacLauncher leaves the game exactly as it was. It stays in the library with its saves, settings, runtime versions, snapshots and effects. Nothing is detected again, rebuilt or deleted, and MacLauncher doesn't go looking through the missing folder. An icon kept in the game's folder is read only once MacLauncher has checked that the files are available, and until then the row shows the preview saved from an earlier session.
 
 While a game is unavailable, **Play** explains why it can't start, and patches and tools that need the game's files are switched off. Favorites, notes, launch arguments, runtime choices and settings, network access, effects and **Forget** still work. Saves that MacLauncher keeps in its own storage stay usable, while saves stored inside the game folder wait for the drive.
 
@@ -81,7 +83,7 @@ Click a game to open its inspector, and click it again to close it. The inspecto
 
 This section holds the runtime, its version and settings, launch arguments, network access and, for [Steam](https://store.steampowered.com/) games, whether to start the Steam client. [Per-game choices](/maclauncher/tools/versions-and-settings/#per-game-choices) describes each one.
 
-**Play** prepares and starts the game. While it prepares, **Cancel** stops the launch, and **Stop** is available as soon as the game's process starts. If the selected runtime can only inspect a game, the inspector explains why in place of Play and keeps the inspection tools.
+**Play** prepares and starts the game. It turns into **Cancel** the moment you press it, even while MacLauncher is still checking that the game's files are there, which can take a few seconds on a drive that's waking up. Cancelling at that point stops Play before anything starts. While the game prepares, **Cancel** stops the launch, and **Stop** is available as soon as the game's process starts. If the selected runtime can only inspect a game, the inspector explains why in place of Play and keeps the inspection tools.
 
 ### Patches
 

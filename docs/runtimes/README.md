@@ -104,6 +104,8 @@ Once detection has set the game's type and metadata, MacLauncher selects a runti
 
 If the requested runtime is not supported, the first supported runtime is used. Even a supported runtime can be unavailable for a particular game, for example when a native app path is missing. When none of a game type's own runtimes can launch the game, automatic selection turns to the runtimes that serve several game types and apply to this game, such as the Wine runtimes CrossOver, Sikarugir and WineCX, in their declared order.
 
+A runtime chosen in the inspector is saved and takes effect in the library and inspector at once. Where a game's save locations depend on its runtime, MacLauncher then reads them for the new runtime from the game's files, and the earlier locations stay in place until that read returns. A read that fails leaves them unchanged and shows a notice in the inspector, and a read that a later runtime choice overtakes is discarded.
+
 The command-line launcher uses the same service. There, an explicit `--runtime <id>` is strict, so the requested runtime keeps its own input and installation requirements. [Backend and CLI](../development/BACKEND.md) describes the shared entry point.
 
 ### Versions
@@ -302,7 +304,7 @@ Runtime settings are separate from runtime managers and installations, and they 
 2. Game type defaults: `settings.modules[<moduleId>].runtimeSettings[<runtimeId>]`.
 3. Global defaults: `userData/runtimes/<runtimeId>/settings.json`.
 
-Game type defaults are edited in **Settings**, and per-game overrides with the **Runtime Settings** button next to the runtime selector in the inspector. Changes are saved as soon as a field changes.
+Game type defaults are edited in **Settings**. Per-game overrides are edited in the runtime settings window, which the gear beside the runtime selector in the inspector opens. Each game has one such window per runtime, so opening it again focuses the window that is already open. Changes are saved as soon as a field changes.
 
 Environment variables of translators have their own two levels: global values in **Settings → Environment variables** and a game's own values in its **Runtime Settings**. [Translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes them.
 
