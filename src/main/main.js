@@ -3166,8 +3166,10 @@ async function init() {
     syncCheatsFiles(games);
     // The window paints stored records immediately. Backend inventories and
     // metadata validation never delay opening Electron or handle selection.
-    // The inspector worker reads installed runtimes alongside the inventory.
+    // The inspector worker reads installed runtimes alongside the inventory,
+    // and a spare worker loads the modules the next game's worker needs.
     backendService.prepareInspectorLane(loadSettings());
+    backendService.prepareSpareLane();
     void readRuntimeInventory();
     void refreshModuleSnapshots();
     void refreshLibraryMetadata(games, settings);

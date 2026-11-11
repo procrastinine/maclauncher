@@ -24,7 +24,7 @@ callHost.withSignal = (signal, method, ...args) => requestHost(method, args, sig
 require("../modules/shared/runtime/github-transport").configureHostTransport(callHost);
 require("./json-files").onUnreadablePreserved(notice => parentPort.postMessage({ type: "event", event: "unreadablePreserved", payload: notice }));
 const InventoryRevision = require("./runtime-inventory-revision");
-InventoryRevision.activate();
+InventoryRevision.activate({ retainReads: workerData.retainReads === true });
 const operations = createBackendOperations({ ...workerData, getRunning: () => running,
   emit: (event, payload) => {
     if (InventoryRevision.EVENTS.has(event)) InventoryRevision.advance();

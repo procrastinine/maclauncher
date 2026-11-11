@@ -215,6 +215,19 @@ test("the inspector worker is prepared with the launcher and stays open while id
   assert.equal(await service.request("game:a", "warmed"), null, "an idle game worker closed and a new one starts unprepared");
 });
 
+test("a spare worker becomes the next game's lane and another starts after it", { timeout: 10000 }, async t => {
+  const events = [], service = createBackendService({ workerPath, onEvent: (event, _payload, lane) => events.push([event, lane]) });
+  t.after(() => service.close());
+  assert.equal(service.prepareSpareLane(), true);
+  assert.equal(service.prepareSpareLane(), false, "one spare at a time");
+  assert.equal((await service.request("game:first", "moduleAction", {}, "status", {})).lane, "spare", "the first game adopts the spare");
+  assert.equal((await service.request("state", "moduleAction", {}, "status", {})).lane, "state", "only game lanes adopt the spare");
+  await new Promise(resolve => setTimeout(resolve, 600));
+  assert.equal((await service.request("game:second", "moduleAction", {}, "status", {})).lane, "spare", "another spare was started");
+  assert.equal((await service.request("game:first", "moduleAction", {}, "status", {})).lane, "spare", "an adopted spare keeps serving its game");
+  assert.deepEqual(events, []);
+});
+
 test("native host callbacks roundtrip asynchronously and preserve structured errors", async t => {
   const client = new BackendWorkerClient({ workerPath, callbacks: { choose: async descriptor => ({ path: descriptor.path }) } });
   t.after(() => client.close());

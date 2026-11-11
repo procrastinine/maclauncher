@@ -83,3 +83,45 @@ test("the startup runtime inventory leaves other workers' runtime reads current"
   await operations.runtimeStates({});
   assert.equal(changes(), 1, "a report with another installed version is a change");
 });
+
+// The inspector's lane keeps listed installations and verified app bundles
+// until its runtime inventory changes; any other lane reads them again.
+test("the inspector lane keeps listed installations and verified app bundles until the runtime inventory changes", async t => {
+  const InventoryRevision = require("../src/core/runtime-inventory-revision");
+  const { memoizeRuntimeResolution } = require("../src/core/coordinated-runtime-managers");
+  const App = require("../src/modules/shared/runtime/app-bundle");
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inspector-retained-")));
+  t.after(() => { InventoryRevision.activate({ retainReads: false }); fs.rmSync(root, { recursive: true, force: true }); });
+  const app = path.join(root, "Player.app");
+  fs.mkdirSync(path.join(app, "Contents/MacOS"), { recursive: true });
+  fs.mkdirSync(path.join(app, "Contents/Resources/deep"), { recursive: true });
+  const bytes = Buffer.alloc(32);
+  bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(0x0100000c, 4); bytes.writeUInt32LE(2, 12);
+  fs.writeFileSync(path.join(app, "Contents/MacOS/player"), bytes, { mode: 0o755 });
+  fs.writeFileSync(path.join(app, "Contents/Info.plist"), "<plist version=\"1.0\"><dict><key>CFBundleExecutable</key><string>player</string></dict></plist>");
+  let observed = 0;
+  const lstat = fs.lstatSync;
+  t.mock.method(fs, "lstatSync", function (file, ...args) { if (String(file).startsWith(app)) observed++; return lstat.call(this, file, ...args); });
+  const owner = {};
+  let resolved = 0;
+  const listed = () => memoizeRuntimeResolution(owner, "installed", () => ({ listing: ++resolved }));
+
+  assert.equal(App.appBundleStatus(app).ready, true);
+  observed = 0; assert.equal(App.appBundleStatus(app).ready, true);
+  assert.ok(observed > 0, "outside the inspector lane every status observes the bundle");
+  assert.equal(listed().listing, 1); assert.equal(listed().listing, 2, "outside the inspector lane every listing resolves");
+
+  InventoryRevision.activate({ retainReads: true });
+  App.appBundleStatus(app);
+  observed = 0;
+  for (let index = 0; index < 3; index++) assert.equal(App.appBundleStatus(app).ready, true);
+  assert.equal(observed, 0, "a confirmed bundle is not observed again before an inventory change");
+  assert.equal(listed().listing, 3); assert.equal(listed().listing, 3, "a listing is kept before an inventory change");
+
+  fs.symlinkSync(path.join(root, "outside"), path.join(app, "Contents/Resources/deep/unsafe"));
+  InventoryRevision.advance();
+  assert.equal(listed().listing, 4, "an inventory change lists installations again");
+  observed = 0;
+  assert.equal(App.appBundleStatus(app).ready, false, "an inventory change validates the bundle again");
+  assert.ok(observed > 0);
+});

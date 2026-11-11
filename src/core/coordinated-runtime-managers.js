@@ -10,6 +10,7 @@ const Architecture = require("../modules/shared/runtime/architecture");
 const { isAbortError, throwIfAborted } = require("../modules/shared/runtime/download-utils");
 const { installedRuntimeAvailability, installedRuntimeReplaceable } = require("./runtime-install-availability.mjs");
 const Maintenance = require("./storage-maintenance");
+const InventoryRevision = require("./runtime-inventory-revision");
 
 const operations = new AsyncLocalStorage();
 const instrumented = new WeakSet();
@@ -379,10 +380,22 @@ function withRuntimeUseScope(runtimeUseScope, fn) {
   return operations.run({ ...operations.getStore(), runtimeUseScope }, fn);
 }
 
-// Reuse only within this launch's preparation; ordinary callers still resolve.
+// Reuse within one launch's preparation, and in the inspector's lane until
+// its runtime inventory changes; other callers resolve again. Callers copy the
+// value they receive.
+const retainedResolutions = { revision: null, owners: new Map() };
 function memoizeRuntimeResolution(owner, key, resolve) {
-  const scope = operations.getStore()?.runtimeUseScope;
-  return scope?.memoizeResolution ? scope.memoizeResolution(owner, key, resolve) : resolve();
+  const store = operations.getStore(), scope = store?.runtimeUseScope;
+  if (scope?.memoizeResolution) return scope.memoizeResolution(owner, key, resolve);
+  const revision = InventoryRevision.retained();
+  if (revision === null || store?.mutations?.length) return resolve();
+  if (retainedResolutions.revision !== revision) { retainedResolutions.revision = revision; retainedResolutions.owners.clear(); }
+  let values = retainedResolutions.owners.get(owner);
+  if (!values) retainedResolutions.owners.set(owner, values = new Map());
+  if (values.has(key)) return values.get(key);
+  const value = resolve();
+  if (value && typeof value.then !== "function") values.set(key, value);
+  return value;
 }
 
 /** Leases identify the actual selected artifact, never a manager's default. */

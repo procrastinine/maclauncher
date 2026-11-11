@@ -5,6 +5,7 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { hasFineChangeTime } = require("../file-time");
 const { createVerifiedIdentityCache } = require("./verified-identity");
+const InventoryRevision = require("../../../core/runtime-inventory-revision");
 
 function existsFile(p) {
   try {
@@ -280,19 +281,28 @@ function bundleObservationIdentity(record) {
 }
 
 const bundleStatuses = createVerifiedIdentityCache({ maximum: 64 });
+// Bundles confirmed unchanged at the inspector lane's current runtime
+// inventory revision; see runtime-inventory-revision.js.
+const confirmedBundles = { revision: null, keys: new Set() };
 function appBundleStatus(appPath, options = {}) {
   try {
     let inspected;
-    bundleStatuses.verify(JSON.stringify([appPath, options.executablePath, Boolean(options.allowContainedAbsoluteSymlinks)]), {
+    const key = JSON.stringify([appPath, options.executablePath, Boolean(options.allowContainedAbsoluteSymlinks)]);
+    const revision = InventoryRevision.retained();
+    if (confirmedBundles.revision !== revision) { confirmedBundles.revision = revision; confirmedBundles.keys.clear(); }
+    bundleStatuses.verify(key, {
       identity(previous) {
         if (inspected) return bundleObservationIdentity(inspected);
+        if (previous && revision !== null && confirmedBundles.keys.has(key)) return JSON.stringify(previous.observations);
         const unchanged = bundleObservationIdentity(previous);
-        if (unchanged) return unchanged;
+        if (unchanged) { if (revision !== null) confirmedBundles.keys.add(key); return unchanged; }
         // Discover and validate changed structure once, retaining observations
         // from before each directory walk. Warm reuse only stats these paths.
         inspected = { observations: [] };
         validateAppBundle(appPath, options, inspected.observations);
-        return bundleObservationIdentity(inspected);
+        const identity = bundleObservationIdentity(inspected);
+        if (identity && revision !== null) confirmedBundles.keys.add(key);
+        return identity;
       },
       verify: () => inspected
     });
