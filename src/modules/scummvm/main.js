@@ -111,6 +111,12 @@ async function inspectWithRuntime(entry, context, { run = execute } = {}) {
 
 module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager, toolsManager],
   normalizeRuntimeId: () => "scummvm",
+  // Verifies the default installed ScummVM and reads its native images in the
+  // inspector's worker, so the first selected game's rows reuse them.
+  warmBackendLane: context => {
+    const selection = manager.resolveSelection({}, context.settings, context.userDataDir);
+    if (selection.ready) Signing.launchRequirements(selection.install);
+  },
   resolveGraphicsInputs: (entry, context) => {
     const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
     return selection.ready ? {architecture:Signing.launchRequirements(selection.install).architecture} : null;

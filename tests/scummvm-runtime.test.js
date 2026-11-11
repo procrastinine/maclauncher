@@ -226,11 +226,23 @@ test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without 
   const mock=t.mock.method(Native,'hashFile',(...args)=>{hashes++;return originalHash(...args);});
   offline.getState({userDataDir});offline.getState({userDataDir});assert.equal(hashes,0,'Unchanged status uses identities instead of rehashing native files');
   assert.equal(offline.resolveSelection(entry,{},userDataDir).ready,true);assert.equal(hashes,0,'Warm selection does not repeat whole-tree hashes');mock.mock.restore();
+  // The inspector's worker keeps the verified application and its native
+  // images until the runtime inventory changes.
+  const Revision=require('../src/core/runtime-inventory-revision');
+  Revision.activate({retainReads:true});t.after(()=>Revision.activate({retainReads:false}));
+  const requirements=()=>Signing.launchRequirements(offline.resolveSelection(entry,{},userDataDir).install);
+  offline.getState({userDataDir});const expected=requirements();
+  let walks=0;const readdir=fs.readdirSync;
+  const walking=t.mock.method(fs,'readdirSync',function(target,...args){if(String(target).startsWith(installedApp))walks++;return readdir.call(this,target,...args);});
+  offline.getState({userDataDir});assert.deepEqual(requirements(),expected);assert.deepEqual(requirements(),expected);
+  assert.equal(walks,0,'The inspector worker does not walk a verified application again');walking.mock.restore();
+  Revision.advance();
   fs.appendFileSync(path.join(installedApp,'Contents/Resources/COPYRIGHT'),'changed');
   const damaged=offline.getState({userDataDir});
   assert.equal(damaged.installed.find(row=>row.version===version).ready,false);
   assert.equal(damaged.catalog.versionRequirements[version].available,false);
   assert.equal(offline.resolveSelection(entry,{},userDataDir).ready,false);
+  Revision.activate({retainReads:false});
   assert.equal(Signing.inventory(app).sha256,before.sha256);assert.equal(Native.hashFile(dmg),archiveSha256);
 
   // Reproduce a pre-signing installation from the same verified publisher

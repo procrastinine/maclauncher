@@ -10,6 +10,7 @@ const MachO = require('../../shared/runtime/macho-load-commands');
 const { versionAtLeast } = require('../../shared/runtime/bundled-native');
 const { throwIfAborted } = require('../../shared/runtime/download-utils');
 const { cloneOrCopy } = require('../../shared/copy-file');
+const InventoryRevision = require('../../../core/runtime-inventory-revision');
 const execute = promisify(execFile);
 const POLICY = 'ad-hoc-no-hardened-runtime-v1';
 const order = (a,b) => a < b ? -1 : a > b ? 1 : 0;
@@ -66,11 +67,22 @@ function commonArchitectures(natives) {
   return primary.architectures.filter(cpu => natives.every(image => image.architectures.includes(cpu)));
 }
 
+// The inspector's worker keeps each application's native images until the
+// runtime inventory changes; every other read, including Play, reads them again.
+let retainedNatives = { revision: null, apps: new Map() };
+function nativeImages(app) {
+  const revision = InventoryRevision.retained();
+  if (revision === null) return inventory(app,{hashFiles:false,inspectNative:true}).natives;
+  if (retainedNatives.revision !== revision) retainedNatives = { revision, apps: new Map() };
+  if (!retainedNatives.apps.has(app)) retainedNatives.apps.set(app, inventory(app,{hashFiles:false,inspectNative:true}).natives);
+  return retainedNatives.apps.get(app);
+}
+
 function launchRequirements(install, host = Host.getHostCapabilities()) {
   const app = appRoot(install.executablePath);
   // Re-read the closure, including installations recorded before closure CPUs
   // were retained. Primary-executable metadata alone cannot describe companions.
-  const natives = app ? inventory(app,{hashFiles:false,inspectNative:true}).natives
+  const natives = app ? nativeImages(app)
     : [{path:'Contents/MacOS/scummvm',architectures:Native.readMachOArchitectures(install.executablePath)}];
   const primary = natives.find(image => image.path === 'Contents/MacOS/scummvm');
   const supported = commonArchitectures(natives).filter(cpu => Host.architectureSupport(cpu,host).supported);
@@ -218,13 +230,20 @@ function createVerifier() {
       throw new Error('ScummVM installation signing metadata changed.');
     const app = appRoot(install.executablePath);
     if (!app) throw new Error('ScummVM installation has no application bundle.');
-    const current = inventory(app,{hashFiles:false}), previous = cache.get(app), metadataSha256 = digest(JSON.stringify(metadata));
-    if (previous?.identity === current.identity && previous?.metadataSha256 === metadataSha256) return install;
+    const previous = cache.get(app), metadataSha256 = digest(JSON.stringify(metadata)), revision = InventoryRevision.retained();
+    // The inspector's worker keeps a verified application until the runtime
+    // inventory changes; every other worker observes the files again.
+    if (revision !== null && previous?.revision === revision && previous.metadataSha256 === metadataSha256) return install;
+    const current = inventory(app,{hashFiles:false});
+    if (previous?.identity === current.identity && previous?.metadataSha256 === metadataSha256) {
+      cache.set(app,{...previous,revision});
+      return install;
+    }
     const full = inventory(app);
     if (full.sha256 !== metadata.signedTreeSha256 || metadata.signing.nativeFiles.some(file =>
       !full.files.some(member => member.path === file.path && member.sha256 === file.sha256))) throw new Error('The installed ScummVM files changed.');
     execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',app],{stdio:'pipe',timeout:30000});
-    cache.set(app,{identity:current.identity,metadataSha256});
+    cache.set(app,{identity:current.identity,metadataSha256,revision});
     return install;
   };
 }
