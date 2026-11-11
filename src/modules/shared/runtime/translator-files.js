@@ -11,6 +11,9 @@ const { DIRECT3D_ROLES } = require('./translator-roles');
 const sourceOf = plan => require('../../crossover/sources').get(plan?.runtime);
 const usesSelector = plan => plan?.graphicsSelector ?? Boolean(sourceOf(plan)?.graphicsSelector);
 const usesVulkanSelector = plan => plan?.vulkanLibrarySelector ?? Boolean(sourceOf(plan)?.vulkanLibrarySelector?.({}));
+// The names under which Wine's Unix side opens its Vulkan library: libMoltenVK
+// for CrossOver and WineCX, the Vulkan loader for Sikarugir.
+const VULKAN_LIBRARY_NAMES = Object.freeze(['libMoltenVK.dylib', 'libvulkan.1.dylib']);
 const cpuFolder = machine => ({ 332: 'i386-windows', 34404: 'x86_64-windows', 43620: 'aarch64-windows' })[machine];
 function selectedDescriptions(plan) {
   if (plan?.apiMode) {
@@ -103,9 +106,9 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
       if (!driver) throw new Error('The selected Vulkan driver file is missing.');
       Object.assign(env, require('../vulkan').driverEnvironment({ driver, icd: json?.path, backend: item.engine }, root));
       const library = loader || driver;
-      links[`lib/wine/${layout.unixName}/libMoltenVK.dylib`] = library;
+      links[`lib/wine/${layout.unixName}/${VULKAN_LIBRARY_NAMES[0]}`] = library;
       if (usesVulkanSelector(plan)) env.CX_LIBVULKAN = library;
-      if (!usesSelector(plan) && loader) links[`lib/wine/${layout.unixName}/libvulkan.1.dylib`] = loader;
+      if (!usesSelector(plan) && loader) links[`lib/wine/${layout.unixName}/${VULKAN_LIBRARY_NAMES[1]}`] = loader;
       continue;
     }
     if (item.component === 'video') {
@@ -193,4 +196,4 @@ async function applyNativeLibraries(view, prefixPath, { signal } = {}) {
   }
   Writable.atomicWrite(ledgerPath, JSON.stringify(next) + '\n', { root: prefixPath });
 }
-module.exports = { placesDirect3D, placedGraphicsBackend, selectedDescriptions, filesIdentity, prepareTranslatorFiles, applyNativeLibraries, cpuFolder };
+module.exports = { VULKAN_LIBRARY_NAMES, placesDirect3D, placedGraphicsBackend, selectedDescriptions, filesIdentity, prepareTranslatorFiles, applyNativeLibraries, cpuFolder };

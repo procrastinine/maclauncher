@@ -266,3 +266,20 @@ test("D3D12 DXMT adaptation preserves the independently selected D3D11 module", 
   const plain=await Loader.prepare(selected,path.join(root,"plain-game"),{execute});
   assert.deepEqual(fs.readdirSync(path.resolve(path.dirname(plain),"../loader-libraries")),["ntdll.so"]);
 });
+
+test("a selected Vulkan driver's library name joins ntdll in the private lookup folder", async t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "crossover-vulkan-name-")));t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const selected = installation(root), driver = path.join(root, "kosmickrisp/libvulkan.1.dylib");
+  fs.mkdirSync(path.dirname(driver));fs.writeFileSync(driver, "selected Vulkan loader");
+  // CrossOver's win32u opens libMoltenVK.dylib by name through an rpath to its lib64, and reads
+  // CX_LIBVULKAN only with the wined3d backend.
+  const translatorView = {identity: "vulkan-name", links: {"lib/wine/x86_64-unix/libMoltenVK.dylib": driver}, env: {CX_LIBVULKAN: driver},
+    dllOverrides: [], libraryPaths: [path.dirname(driver)], frameworkPaths: []};
+  const execute = async (command, args) => ({stdout: args[0] === "-d" ? permissions : ""});
+  const loader = await Loader.prepare(selected, path.join(root, "game"), {execute, translatorView});
+  const env = Loader.environment(loader, {}, {installation: selected, translatorView});
+  const override = env.DYLD_LIBRARY_PATH.split(path.delimiter)[0];
+  assert.equal(fs.realpathSync(path.join(override, "libMoltenVK.dylib")), driver);
+  assert.deepEqual(fs.readdirSync(override).sort(), ["libMoltenVK.dylib", "ntdll.so"]);
+  assert.equal(await Loader.prepare(selected, path.join(root, "game"), {execute, translatorView}), loader, "the prepared loader is reused");
+});

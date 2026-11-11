@@ -84,8 +84,14 @@ async function prepare(installation, directory, { signal, execute = executeFile,
   // an alias whose real file stays in the renderer package. dyld resolves that
   // library's @rpath/winemac.so from the real location, so the loader's own
   // Mac driver joins the private lookup directory beside ntdll.
+  // Wine opens its Vulkan library by name, and dyld resolves that name through
+  // win32u's rpath (CrossOver's lib64) before the fallback path; CrossOver reads
+  // CX_LIBVULKAN only with the wined3d backend. A selected Vulkan driver's names
+  // therefore join the same private lookup directory.
+  const vulkanLinks = Object.fromEntries(require("../../shared/runtime/translator-files").VULKAN_LIBRARY_NAMES
+    .filter(name => Object.hasOwn(translatorView?.links || {}, `${unix}/${name}`)).map(name => [`loader-libraries/${name}`, `../${unix}/${name}`]));
   const localLinks = separateLoader ? { "loader-libraries/ntdll.so": `../${unix}/ntdll.so`,
-    ...(cameraBridge?.dxmt ? { "loader-libraries/winemac.so": `../${unix}/winemac.so` } : {}) } : {};
+    ...(cameraBridge?.dxmt ? { "loader-libraries/winemac.so": `../${unix}/winemac.so` } : {}), ...vulkanLinks } : {};
   const sourceHash = digest(JSON.stringify([6, sources, links, localLinks, helpers, translatorView?.identity, ...(winemac ? [winemac.sha256] : [])])), store = userDataDir || directory, root = path.join(store, userDataDir ? "graphics/crossover-loaders" : "graphics-loader");
   let destination = path.join(root, sourceHash.slice(0, 24));
   Writable.assertOwnDirectory(store, root);
@@ -106,7 +112,7 @@ async function prepare(installation, directory, { signal, execute = executeFile,
       }) && Object.entries(localLinks).every(([name, target]) => {
         const file = path.join(destination, name);
         return fs.lstatSync(file).isSymbolicLink() && fs.readlinkSync(file) === target &&
-          fs.realpathSync(file) === fs.realpathSync(path.join(destination, unix, "ntdll.so"));
+          fs.realpathSync(file) === fs.realpathSync(path.resolve(path.dirname(file), target));
       });
       if (record.schema === 2 && record.sourceHash === sourceHash && filesMatch && linksMatch) return path.join(destination, "bin/wineloader");
     } catch { /* An incomplete cache must not be executed. */ }

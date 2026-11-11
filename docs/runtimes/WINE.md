@@ -31,7 +31,7 @@ The installed Wine tree determines which features a source can offer. Installati
 | Minimum macOS | The deployment target of every native image | Installation stops on an older macOS, and an installed version that needs a newer one is listed as unavailable |
 | MSync, ESync | The variables that `wineserver` reads | The **Synchronization** values that are offered |
 | CrossOver graphics selector | `CX_GRAPHICS_BACKEND` in `ntdll.so` | The source chooses among its own Direct3D engines; otherwise MacLauncher places the selected libraries |
-| Vulkan library selector | `CX_LIBVULKAN` in `winevulkan.so` or `win32u.so` | The selected Vulkan driver is named through the variable instead of a library link |
+| Vulkan library selector | `CX_LIBVULKAN` in `winevulkan.so` or `win32u.so` | The selected Vulkan driver is also named through the variable, which these Wine builds read only while the WineD3D backend is active; the library link under the name that Wine opens applies with every backend |
 | D3DMetal bridge | `CX_APPLEGPTK_LIBD3DSHARED_PATH` in `ntdll.so` | A D3DMetal version from Runtimes can load in a source that does not include one |
 | Adapter identity | `D3DM_VENDOR_ID` in `win32u.so` | While D3DMetal performs a game's DLSS through [game temporal integration](SIKARUGIR.md#game-temporal-integration), the game sees an NVIDIA GeForce RTX 4090 adapter and therefore offers DLSS. `D3DM_VENDOR_ID`, `D3DM_DEVICE_ID` and `D3DM_DEVICE_DESCRIPTION` set in the [environment variables](TRANSLATOR_ENVIRONMENT.md) replace these values. |
 

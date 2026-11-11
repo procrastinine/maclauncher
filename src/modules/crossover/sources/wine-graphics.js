@@ -426,6 +426,15 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
       const own = path.join(engine, unix);
       if (fs.existsSync(own)) await linkFile(own, path.join(loader.wineRoot, unix), signal);
     }
+    // Wine opens its Vulkan library by name, and dyld resolves that name through
+    // the Unix module's own rpath (the engine's library folder) before the
+    // fallback path. Wine reads CX_LIBVULKAN only with the wined3d backend. The
+    // names of a selected Vulkan driver therefore join ntdll in the folder that
+    // DYLD_LIBRARY_PATH searches first.
+    for (const name of require('../../shared/runtime/translator-files').VULKAN_LIBRARY_NAMES) {
+      const relative = `lib/wine/${layout.unixName}/${name}`;
+      if (Object.hasOwn(translatorView.links, relative)) await linkFile(translatorView.links[relative], path.join(loader.libraryOverride, name), signal);
+    }
     dllOverrides.push(...translatorView.dllOverrides);
   }
   for (const helper of helpers) {

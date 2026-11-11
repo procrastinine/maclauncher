@@ -528,3 +528,18 @@ test("the game's Wine loader runs from a games-category bundle that keeps the lo
     host: { hardwareArch: "arm64", macOSVersion: "26.4" } });
   assert.match(fs.readFileSync(path.join(plain.wineRoot, "MacLauncher Game.app/Contents/Info.plist"), "utf8"), /<key>LSApplicationCategoryType<\/key>\s*<string>public\.app-category\.games<\/string>/);
 });
+test("a selected Vulkan driver's library names come before the Wine module's own rpath", async t => {
+  const f = await installed(t), driver = path.join(f.root, "kosmickrisp");
+  const loaderLibrary = put(path.join(driver, "libvulkan.1.dylib"), image({ cpu: X64, minimumOS: 0x000e0000 }));
+  // WineCX's and CrossOver's win32u open libMoltenVK.dylib by name and carry an rpath to the
+  // engine's own copy, which dyld searches before DYLD_FALLBACK_LIBRARY_PATH.
+  const links = { "lib/wine/x86_64-unix/libMoltenVK.dylib": loaderLibrary, "lib/wine/x86_64-unix/libvulkan.1.dylib": loaderLibrary };
+  const translatorView = { identity: "vulkan-names", links, env: { CX_LIBVULKAN: loaderLibrary }, dllOverrides: [], libraryPaths: [driver], frameworkPaths: [] };
+  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "dxmt" },
+    viewRoot: path.join(f.root, "game", "vulkan-view"), host: { hardwareArch: "arm64", macOSVersion: "26.4" }, translatorView });
+  const override = result.env.DYLD_LIBRARY_PATH.split(path.delimiter)[0];
+  for (const name of ["libMoltenVK.dylib", "libvulkan.1.dylib"])
+    assert.equal(fs.realpathSync(path.join(override, name)), fs.realpathSync(loaderLibrary), name + " resolves to the selected driver first");
+  assert.equal(fs.realpathSync(path.join(override, "ntdll.so")), fs.realpathSync(path.join(result.wineRoot, "lib/wine/x86_64-unix/ntdll.so")));
+  assert.deepEqual(fs.readdirSync(override).sort(), ["libMoltenVK.dylib", "libvulkan.1.dylib", "ntdll.so"], "no other library enters the override folder");
+});

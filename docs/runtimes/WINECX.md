@@ -27,7 +27,7 @@ Version labels name the release and the Wine version read from the installed `nt
 
 These appear as Included rows labeled **WineCX** in **Runtimes → Graphics** and in each game's translator choices. The release includes no D3DMetal. Its Wine reads `CX_APPLEGPTK_LIBD3DSHARED_PATH`, so a D3DMetal version installed in **Runtimes → Graphics → DirectX → Metal** can be selected for Direct3D 11 and 12. KosmicKrisp, vkd3d-proton and the other translator versions from Runtimes are selected the same way as for Sikarugir.
 
-The automatic choice uses the release's DXMT for Direct3D 10 and 11, WineD3D for Direct3D 8 and 9, Wine vkd3d for Direct3D 12 and its MoltenVK for Vulkan. A DXVK or vkd3d-proton version from Runtimes pairs with MacLauncher KosmicKrisp, as [Selection and loading](KOSMICKRISP.md#selection-and-loading) describes. Its Wine names the selected Vulkan driver through `CX_LIBVULKAN`.
+The automatic choice uses the release's DXMT for Direct3D 10 and 11, WineD3D for Direct3D 8 and 9, Wine vkd3d for Direct3D 12 and its MoltenVK for Vulkan. A DXVK or vkd3d-proton version from Runtimes pairs with MacLauncher KosmicKrisp, as [Selection and loading](KOSMICKRISP.md#selection-and-loading) describes. Its Wine opens `libMoltenVK.dylib` by name and reads `CX_LIBVULKAN` only while the WineD3D backend is active, so a selected Vulkan driver is placed under that name, as [Loading](TRANSLATORS.md#loading) describes.
 
 ## Private environments
 
