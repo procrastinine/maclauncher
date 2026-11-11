@@ -1759,6 +1759,10 @@ EffectExecutionSelection EffectPlanExecutor::buildSnapshot(const ShaderFrame &in
             row.preparationFrame.reset();row.preparationDepth.reset();row.preparationScene.reset();row.preparationMatrices.reset();row.preparationAovs.reset();row.reusedPreparation=false;
         }
         sceneScratch->prepareTarget(next->device,input.width,input.height,input.pixelFormat);sceneScratch->prepareTarget(next->device,output.width,output.height,output.pixelFormat);
+        // A reconstructing scene copies a colour region into an image of the
+        // render size in the source format, before any conversion to the
+        // working format. When the formats match, the input image is that one.
+        if(temporal&&reconstructs)sceneScratch->prepareTarget(next->device,temporal->renderWidth,temporal->renderHeight,frame.source.pixelFormat);
         for(const auto&row:next->rows)if(row.targetWidth&&row.targetHeight){sceneScratch->prepareTarget(next->device,row.targetWidth,row.targetHeight,row.targetFormat);if(row.spec.requirements.depth)sceneScratch->prepareDepth(next->device,row.targetWidth,row.targetHeight);}
         if(temporal&&temporal->depth)sceneScratch->prepareDepth(next->device,input.width,input.height);
         sceneScratch->clearImages();next->scratchTemplate=sceneScratch;
