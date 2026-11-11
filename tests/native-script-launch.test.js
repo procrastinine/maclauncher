@@ -1,4 +1,5 @@
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -16,7 +17,7 @@ function fixture(t) {
   return root;
 }
 
-test("ordinary import and Play run non-executable scripts with their own cwd and source intact", { skip: process.platform !== "darwin" }, async t => {
+test("ordinary import and Play run non-executable scripts with their own cwd and source intact", { skip: denied('seatbelt') }, { skip: process.platform !== "darwin" }, async t => {
   const root = fixture(t), published = [];
   const launcher = createLauncher({ userDataDir: path.join(root, "profile"),
     onGameProcessSpawn: (_entry, child) => published.push(child) });
@@ -43,7 +44,7 @@ test("ordinary import and Play run non-executable scripts with their own cwd and
   }
 });
 
-test("Play keeps the background game's session active after the script returns", { skip: process.platform !== "darwin", timeout: 5000 }, async t => {
+test("Play keeps the background game's session active after the script returns", { skip: denied('seatbelt') }, { skip: process.platform !== "darwin", timeout: 5000 }, async t => {
   const root = fixture(t), script = path.join(root, "Background.sh");
   fs.writeFileSync(script, "#!/bin/sh\nsleep 0.4 &\nexit 0\n");
   const launcher = createLauncher({ userDataDir: path.join(root, "profile") });
@@ -55,7 +56,7 @@ test("Play keeps the background game's session active after the script returns",
   await ended;
 });
 
-test("app bundles receive the same game-level arguments as scripts and bare binaries", { skip: process.platform !== "darwin" }, async t => {
+test("app bundles receive the same game-level arguments as scripts and bare binaries", { skip: denied('seatbelt') }, { skip: process.platform !== "darwin" }, async t => {
   const root = fixture(t), app = path.join(root, "Game.app"), macos = path.join(app, "Contents/MacOS");
   fs.mkdirSync(macos, { recursive: true });
   fs.writeFileSync(path.join(app, "Contents/Info.plist"), '<plist><dict><key>CFBundleExecutable</key><string>game</string></dict></plist>');
@@ -70,7 +71,7 @@ test("app bundles receive the same game-level arguments as scripts and bare bina
   assert.equal(fs.existsSync(path.join(macos, "forbidden")), false);
 });
 
-test("extensionless Mac executables import, launch with shared graphics, and export as custom commands", { skip: process.platform !== "darwin" }, async t => {
+test("extensionless Mac executables import, launch with shared graphics, and export as custom commands", { skip: denied('seatbelt') }, { skip: process.platform !== "darwin" }, async t => {
   const root = fixture(t), executable = path.join(root, "Native game ' $(literal)"), library = path.join(root, "marker.dylib");
   const source = path.join(root, "game.c"), marker = path.join(root, "marker.c");
   fs.writeFileSync(marker, "int maclauncher_bare_marker(void) { return 1; }\n");

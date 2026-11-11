@@ -2,9 +2,10 @@ const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs"), path = require("node:path"), net = require("node:net");
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const { spawnDetachedChecked } = require("../src/core/processes");
 
-test("macOS policy blocks native IP sockets and children, preserves Unix IPC and injected libraries", {
+test("macOS policy blocks native IP sockets and children, preserves Unix IPC and injected libraries", { skip: denied('privateTmp') }, {
   skip: process.platform !== "darwin", timeout: 20000
 }, async t => {
   const root = fs.mkdtempSync("/tmp/maclauncher-net-");

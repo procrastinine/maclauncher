@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const { spawnSync } = require("node:child_process");
 
 let electron;
@@ -13,7 +14,7 @@ const available = typeof electron === "string" && fs.existsSync(electron);
 // The main process's icon functions run in an actual Electron main process,
 // with Electron's ASAR-aware fs and nativeImage, against a module icon packed
 // in an app.asar as a packaged app ships it.
-test("a module icon inside app.asar decodes to a preview and its library row stops pending", { skip: !available, timeout: 30000 }, async t => {
+test("a module icon inside app.asar decodes to a preview and its library row stops pending", { skip: denied('seatbelt') }, { skip: !available, timeout: 30000 }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-icon-asar-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const relative = "src/modules/demo/resources/icon.png", source = path.join(root, "source");

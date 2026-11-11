@@ -1,4 +1,5 @@
 const test = require("node:test"), assert = require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
 const { profile, environment } = require("../src/modules/shared/runtime/macos-sandbox");
@@ -25,7 +26,7 @@ test("confined Cocoa applications can register their ordinary Dock menu endpoint
   }
 });
 
-test("confined Cocoa text UI can reach native completion and locale-specific spelling services", {
+test("confined Cocoa text UI can reach native completion and locale-specific spelling services", { skip: denied('seatbelt') }, {
   skip: process.platform !== "darwin", timeout: 15000,
 }, t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "confined-text-")));
@@ -45,7 +46,7 @@ test("confined Cocoa text UI can reach native completion and locale-specific spe
   }
 });
 
-test("confined Cocoa accessibility validation preserves peer-process isolation", {
+test("confined Cocoa accessibility validation preserves peer-process isolation", { skip: denied('seatbelt') }, {
   skip: process.platform !== "darwin", timeout: 15000,
 }, t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "confined-accessibility-")));

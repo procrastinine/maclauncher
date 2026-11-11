@@ -1,4 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const { denied } = require('./helpers/environment.cjs');
 const {resolve}=require('../src/modules/android/art/runtime');
 const definition=require('../src/modules/android/art/supplier.json');
 const {untilTestEnds}=require('./helpers/fixture-process');
@@ -369,7 +370,7 @@ test('concurrent ART processes retain their own sandbox and effect staging',asyn
  }
 });
 
-test('ART image composition retains one profile cache across runner updates without granting it to applications',async t=>{
+test('ART image composition retains one profile cache across runner updates without granting it to applications',{ skip: denied('seatbelt') }, async t=>{
  const root=fs.realpathSync(fixture(t)),profile=path.join(root,'profile'),other=path.join(root,'other-profile');
  fs.mkdirSync(profile);fs.mkdirSync(other);
  const {compositionCache}=await import('../src/modules/android/art/composition-cache.mjs');
@@ -405,7 +406,7 @@ test('ART image composition retains one profile cache across runner updates with
  }
 });
 
-test('ART graphics selection retains Metal defaults and grants only the selected Vulkan closure',async t=>{
+test('ART graphics selection retains Metal defaults and grants only the selected Vulkan closure',{ skip: denied('seatbelt') }, async t=>{
  const root=fs.realpathSync(fixture(t)),directory=path.join(root,'session'),runtime=path.join(root,'runtime'),prepared=path.join(root,'prepared'),sharedGraphics=path.join(root,'graphics'),dataRoot=path.join(root,'data'),drivers=path.join(root,'drivers');
  for(const folder of [directory,runtime,prepared,sharedGraphics,dataRoot,drivers])fs.mkdirSync(folder);
  const library=path.join(drivers,'libvulkan.dylib'),driver=path.join(drivers,'driver.dylib'),privateFile=path.join(drivers,'private');

@@ -1,4 +1,5 @@
 const test = require("node:test"), assert = require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
@@ -11,7 +12,7 @@ test("Android application bundle names preserve titles without filesystem separa
   assert.ok(Buffer.byteLength(Application.bundleName("遊".repeat(500))) <= 184);
 });
 
-test("Android bundle icons share the rounded Dock image through native IconServices", { skip: process.platform !== "darwin" }, async () => {
+test("Android bundle icons share the rounded Dock image through native IconServices", { skip: denied('atomicWrite') }, { skip: process.platform !== "darwin" }, async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-icon-"));
   try {
     const helper = path.join(root, "application-icon"), probe = path.join(root, "icon-probe"), icon = path.join(root, "icon.png");
@@ -61,7 +62,7 @@ test("Android bundle icons share the rounded Dock image through native IconServi
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test("Cosmetic icon assignment failures preserve launch and retry without rebuilding the entry", async t => {
+test("Cosmetic icon assignment failures preserve launch and retry without rebuilding the entry", { skip: denied('atomicWrite') }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-icon-retry-"));
   try {
     const javaPath = path.join(root, "jdk/bin/java"), iconFile = path.join(root, "icon.png"), iconHelper = path.join(root, "icon-helper");

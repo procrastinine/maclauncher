@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const { spawnSync } = require("node:child_process");
 const { createLauncher } = require("../src/core/launcher");
 const GameStore = require("../src/core/game-store");
@@ -862,7 +863,7 @@ test("CLI inspects a web game offline without Electron or creating launcher stat
   assert.equal(fs.existsSync(userDataDir), false);
 });
 
-test("CLI explicitly selects the standalone hosted entry and waits for its acknowledged child", t => {
+test("CLI explicitly selects the standalone hosted entry and waits for its acknowledged child", { skip: denied('loopback') }, t => {
   const { root, gamePath, userDataDir } = fixture(t);
   fs.writeFileSync(path.join(gamePath, "index.html"), "<title>Hosted test</title>");
   const host = path.join(root, "host.cjs");
@@ -883,7 +884,7 @@ setTimeout(() => process.exit(7), 100);
   assert.ok(games[0].lastPlayedAt > 0);
 });
 
-test("CLI runs a native app directly and returns its exit status without loading Electron", t => {
+test("CLI runs a native app directly and returns its exit status without loading Electron", { skip: denied('seatbelt') }, t => {
   if (process.platform !== "darwin") return t.skip("macOS app fixture");
   const { root, userDataDir } = fixture(t);
   const appPath = path.join(root, "Native Test.app");
@@ -905,7 +906,7 @@ test("CLI runs a native app directly and returns its exit status without loading
   assert.ok(games[0].lastPlayedAt > 0);
 });
 
-test("CLI imports an extensionless publisher bundle and runs its original script with native cwd", t => {
+test("CLI imports an extensionless publisher bundle and runs its original script with native cwd", { skip: denied('seatbelt') }, t => {
   if (process.platform !== "darwin") return t.skip("macOS application fixture");
   const { root, userDataDir } = fixture(t), appPath = path.join(root, "Publisher Game");
   const macos = path.join(appPath, "Contents/MacOS"), executable = path.join(macos, "runner");

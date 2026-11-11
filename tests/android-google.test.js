@@ -1,4 +1,5 @@
 const test = require("node:test"), assert = require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), net = require("node:net");
 const Accounts = require("../src/modules/android/provider-google-accounts");
 const Profile = require("../src/modules/android/google/profile");
@@ -59,7 +60,7 @@ test("account token requests use the verified canonical package identity", async
   assert.equal(calls[2].packageName, "example.original"); assert.deepEqual(calls[2].signers, signers);
   await owner.release();
 });
-test("Google broker authenticates the kernel peer and filters account/network grants", { skip: process.platform !== "darwin" }, async t => {
+test("Google broker authenticates the kernel peer and filters account/network grants", { skip: denied('loopback') }, { skip: process.platform !== "darwin" }, async t => {
   const account = { name: "fixture@example.invalid", type: "com.google" }; let tokenCalls = 0;
   const broker = await Broker.create({ networkAllowed: false, account, owner: { caller: { packageName: "example.original" },
     accounts: async () => ({ accounts: [account] }), token: async () => { tokenCalls++; return { token: "must-not-return" }; } } });
@@ -74,7 +75,7 @@ test("Google broker authenticates the kernel peer and filters account/network gr
   const wrongSecret = await exchange(broker.socket, { ...base, capability: "b".repeat(64), operation: "accounts" });
   assert.equal(wrongSecret.error.code, 9);
 });
-test("a guest-supplied process ID cannot replace the authenticated peer", async t => {
+test("a guest-supplied process ID cannot replace the authenticated peer", { skip: denied('loopback') }, async t => {
   const broker = await Broker.create({ account: null, owner: { caller: { packageName: "example.original" }, token: async () => assert.fail("No token delegation") } },
     { resolvePeerPid: async () => 6789, isDescendant: async (pid, enrolled) => { assert.equal(pid, 6789); assert.equal(enrolled, 1234); return false; } });
   t.after(() => broker.close()); broker.enroll(1234);

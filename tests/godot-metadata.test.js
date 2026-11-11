@@ -1,4 +1,5 @@
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+const { denied } = require('./helpers/environment.cjs');
 const Godot = require("../src/modules/godot/main"), Metadata = require("../src/modules/godot/metadata");
 const Icons = require("../src/core/icon-utils"), {createGameMetadataService} = require("../src/core/game-metadata");
 const GameStore = require("../src/core/game-store");
@@ -144,7 +145,7 @@ test("SVG conversion failure is optional and cancellation cleans its temporary s
   const directory = path.join(f.userDataDir, "games", "svg", "modules", "godot", "icons");
   assert.deepEqual(fs.readdirSync(directory), [], "failed conversion and cancellation publish no image or temporary snapshot");
 });
-test("AppKit rasterizes declared SVG through the normal module icon pipeline without changing source", {skip: process.platform !== "darwin"}, async t => {
+test("AppKit rasterizes declared SVG through the normal module icon pipeline without changing source", {skip: process.platform === "darwin" ? denied("atomicWrite") : "Requires macOS"}, async t => {
   const f = fixture(t), file = path.join(f.project, "icon.svg");fs.writeFileSync(file, svg);
   fs.writeFileSync(path.join(f.project, "project.godot"), '[application]\nconfig/name="Vector project"\nconfig/icon="res://icon.svg"\n');
   const entry = {...detect(f.project), gameId: "svg"};

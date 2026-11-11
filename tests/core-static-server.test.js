@@ -4,6 +4,7 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 
 const { createStaticServer } = require("../src/core/static-server");
 
@@ -51,7 +52,7 @@ function request(host, target, { method = "GET", headers = {} } = {}) {
   });
 }
 
-test("module-declared source assets allow GET/HEAD ranges while preserving view and target confinement", async t => {
+test("module-declared source assets allow GET/HEAD ranges while preserving view and target confinement", { skip: denied('loopback') }, async t => {
   const strict = await fixture(t), source = path.join(path.dirname(strict.root), "source");
   fs.mkdirSync(source); fs.writeFileSync(path.join(source, "asset.dat"), "0123456789");
   fs.symlinkSync(path.join(source, "asset.dat"), path.join(strict.root, "linked.dat"));
@@ -76,7 +77,7 @@ test("module-declared source assets allow GET/HEAD ranges while preserving view 
   await assert.rejects(createStaticServer(strict.root, { readRoots: [path.join(source, "asset.dat")] }), /Invalid/);
 });
 
-test("static server preserves the port/Promise close API and binds only loopback", async t => {
+test("static server preserves the port/Promise close API and binds only loopback", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   assert.ok(host.server instanceof http.Server);
   assert.ok(Number.isInteger(host.port) && host.port > 0);
@@ -93,7 +94,7 @@ test("static server preserves the port/Promise close API and binds only loopback
   await assert.rejects(request(host, "/"), { code: "ECONNREFUSED" });
 });
 
-test("static server maps directory indexes and keeps query strings out of filenames", async t => {
+test("static server maps directory indexes and keeps query strings out of filenames", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   fs.mkdirSync(path.join(host.root, "nested"));
   fs.writeFileSync(path.join(host.root, "nested", "index.html"), "nested game");
@@ -108,7 +109,7 @@ test("static server maps directory indexes and keeps query strings out of filena
   }
 });
 
-test("static server preserves game asset MIME types and the binary fallback", async t => {
+test("static server preserves game asset MIME types and the binary fallback", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   const cases = [
     ["JS", "text/javascript; charset=utf-8"],
@@ -138,7 +139,7 @@ test("static server preserves game asset MIME types and the binary fallback", as
   }
 });
 
-test("static server decodes UTF-8, legacy Unicode, and literal escaped names once", async t => {
+test("static server decodes UTF-8, legacy Unicode, and literal escaped names once", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   const cases = [
     ["snow 雪.txt", "/snow%20%E9%9B%AA.txt"],
@@ -158,7 +159,7 @@ test("static server decodes UTF-8, legacy Unicode, and literal escaped names onc
   }
 });
 
-test("static server rejects malformed path encodings without breaking later requests", async t => {
+test("static server rejects malformed path encodings without breaking later requests", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   for (const target of ["/bad%", "/bad%GG", "/%C3%28", "/%uZZZZ", "/%uD800", "/%00", "http://example.invalid/index.html"]) {
     const response = await request(host, target);
@@ -168,7 +169,7 @@ test("static server rejects malformed path encodings without breaking later requ
   assert.equal((await request(host, "/")).status, 200);
 });
 
-test("static server rejects raw, encoded, and legacy traversal before URL normalization", async t => {
+test("static server rejects raw, encoded, and legacy traversal before URL normalization", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   fs.mkdirSync(path.join(host.root, "nested"));
   for (const target of [
@@ -185,7 +186,7 @@ test("static server rejects raw, encoded, and legacy traversal before URL normal
   assert.equal((await request(host, "/..asset.txt")).body.toString(), "safe dotted filename");
 });
 
-test("literal-percent asset fallback retains traversal, symlink and decoding guards", async t => {
+test("literal-percent asset fallback retains traversal, symlink and decoding guards", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   fs.writeFileSync(path.join(host.outside, "secret%.txt"), "outside");
   fs.symlinkSync(path.join(host.outside, "secret%.txt"), path.join(host.root, "alias%.txt"));
@@ -198,7 +199,7 @@ test("literal-percent asset fallback retains traversal, symlink and decoding gua
   assert.equal((await request(host, "/%C3%28%.txt")).status, 400);
 });
 
-test("static server rejects file, directory, and index symlinks escaping the root", async t => {
+test("static server rejects file, directory, and index symlinks escaping the root", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   fs.symlinkSync(path.join(host.outside, "secret.txt"), path.join(host.root, "secret-link.txt"));
   fs.symlinkSync(host.outside, path.join(host.root, "outside-link"), "dir");
@@ -212,7 +213,7 @@ test("static server rejects file, directory, and index symlinks escaping the roo
   }
 });
 
-test("static server allows in-root file/directory symlinks and a symlinked root", async t => {
+test("static server allows in-root file/directory symlinks and a symlinked root", { skip: denied('loopback') }, async t => {
   const host = await fixture(t, { rootSymlink: true });
   fs.symlinkSync("media.dat", path.join(host.root, "audio.ogg"));
   fs.mkdirSync(path.join(host.root, "nested"));
@@ -229,7 +230,7 @@ test("static server allows in-root file/directory symlinks and a symlinked root"
   }
 });
 
-test("static server handles missing files, missing indexes, and broken symlinks", async t => {
+test("static server handles missing files, missing indexes, and broken symlinks", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   fs.mkdirSync(path.join(host.root, "empty-directory"));
   fs.symlinkSync("missing.txt", path.join(host.root, "broken-link"));
@@ -242,7 +243,7 @@ test("static server handles missing files, missing indexes, and broken symlinks"
   assert.equal((await request(host, "/loop-link")).status, 403);
 });
 
-test("static server supports closed, open, and suffix byte ranges with clamped ends", async t => {
+test("static server supports closed, open, and suffix byte ranges with clamped ends", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   const cases = [
     ["bytes=0-0", "0", "bytes 0-0/10"],
@@ -264,7 +265,7 @@ test("static server supports closed, open, and suffix byte ranges with clamped e
   }
 });
 
-test("static server returns 416 and the file size for invalid/unsatisfiable ranges", async t => {
+test("static server returns 416 and the file size for invalid/unsatisfiable ranges", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   for (const range of [
     "bytes=10-", "bytes=99-100", "bytes=5-2", "bytes=-0", "bytes=-",
@@ -283,7 +284,7 @@ test("static server returns 416 and the file size for invalid/unsatisfiable rang
   assert.equal(complete.headers["content-range"], undefined);
 });
 
-test("static server serves empty files but rejects every byte range on them", async t => {
+test("static server serves empty files but rejects every byte range on them", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   fs.writeFileSync(path.join(host.root, "empty.dat"), "");
   const response = await request(host, "/empty.dat");
@@ -298,7 +299,7 @@ test("static server serves empty files but rejects every byte range on them", as
   }
 });
 
-test("static server HEAD sends GET metadata without a body and ignores Range", async t => {
+test("static server HEAD sends GET metadata without a body and ignores Range", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   const get = await request(host, "/media.dat");
   for (const headers of [{}, { Range: "bytes=2-4" }, { Range: "bytes=99-" }]) {
@@ -317,7 +318,7 @@ test("static server HEAD sends GET metadata without a body and ignores Range", a
   }
 });
 
-test("static server rejects methods other than GET and HEAD", async t => {
+test("static server rejects methods other than GET and HEAD", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   const response = await request(host, "/media.dat", { method: "POST" });
   assert.equal(response.status, 405);
@@ -325,7 +326,7 @@ test("static server rejects methods other than GET and HEAD", async t => {
   assert.equal(response.body.toString(), "Method Not Allowed");
 });
 
-test("static server streams large binary assets and survives an aborted download", async t => {
+test("static server streams large binary assets and survives an aborted download", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   const data = Buffer.alloc(4 * 1024 * 1024);
   for (let i = 0; i < data.length; i++) data[i] = i % 251;
@@ -351,7 +352,7 @@ test("static server streams large binary assets and survives an aborted download
   assert.equal((await request(host, "/media.dat")).body.toString(), "0123456789");
 });
 
-test("static server handles asynchronous stream errors with correct error headers", async t => {
+test("static server handles asynchronous stream errors with correct error headers", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   const originalOpen = fs.promises.open;
   t.mock.method(fs.promises, "open", async (...args) => {
@@ -375,7 +376,7 @@ test("static server handles asynchronous stream errors with correct error header
   assert.equal((await request(host, "/")).status, 200);
 });
 
-test("static server aborts partial responses on late read errors and closes the file", async t => {
+test("static server aborts partial responses on late read errors and closes the file", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   fs.writeFileSync(path.join(host.root, "failed.bin"), Buffer.alloc(512 * 1024, 42));
   const originalOpen = fs.promises.open;
@@ -400,13 +401,13 @@ test("static server aborts partial responses on late read errors and closes the 
   assert.equal((await request(host, "/")).status, 200);
 });
 
-test("static server rejects inaccessible or non-directory roots before listening", async t => {
+test("static server rejects inaccessible or non-directory roots before listening", { skip: denied('loopback') }, async t => {
   const host = await fixture(t);
   await assert.rejects(createStaticServer(path.join(host.root, "missing")), { code: "ENOENT" });
   await assert.rejects(createStaticServer(path.join(host.root, "media.dat")), /root must be a directory/);
 });
 
-test("static server rejects actual asynchronous listen errors", { timeout: 5000 }, async t => {
+test("static server rejects actual asynchronous listen errors", { skip: denied('loopback') }, { timeout: 5000 }, async t => {
   const host = await fixture(t);
   const originalListen = http.Server.prototype.listen;
   t.mock.method(http.Server.prototype, "listen", function (port, address) {

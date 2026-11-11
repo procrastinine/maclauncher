@@ -1,4 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
+const { denied } = require('./helpers/environment.cjs');
 const {fork}=require('node:child_process'),{once}=require('node:events');
 const path=require('node:path'),fs=require('node:fs/promises'),net=require('node:net');
 const {connectAuthority}=require('../src/modules/android/platform-services/jvm');
@@ -37,7 +38,7 @@ test('physical identity does not consume a nonexistent pre-bootstrap frame or im
   await assert.rejects(channel.processIdentity({...child,exitCode:0}),/live native owner/);
 });
 
-test('each profile service is acquired directly without circular device or KeyStore leases',{timeout:5000},async t=>{
+test('each profile service is acquired directly without circular device or KeyStore leases',{ skip: denied('privateTmp'),timeout:5000},async t=>{
   // Unix socket names include the parent path; TMPDIR can exceed sockaddr_un.
   const root=await fs.mkdtemp('/tmp/android-profile-lease-');
   const locations={},paths=require('../src/modules/android/platform-services/paths'),events=[],servers=[],sockets=new Set();
@@ -70,7 +71,7 @@ test('each profile service is acquired directly without circular device or KeySt
   await Promise.all([...sockets].map(socket=>once(socket,'close')));assert.equal(sockets.size,0);
 });
 
-test('pending profile endpoints retain one authenticated lease and join readiness or retirement',{timeout:5000},async t=>{
+test('pending profile endpoints retain one authenticated lease and join readiness or retirement',{ skip: denied('privateTmp'),timeout:5000},async t=>{
   const root=await fs.mkdtemp('/private/tmp/android-profile-ready-'),sockets=new Set(),events=[];
   const location={controllerSocket:path.join(root,'controller'),platformSocket:path.join(root,'binder'),metadata:'system'};
   const stamp={pid:process.pid,uid:process.getuid(),startedSeconds:1,startedMicros:2};
@@ -126,7 +127,7 @@ test('pending profile endpoints retain one authenticated lease and join readines
   assert.equal(sockets.size,0);
 });
 
-test('existing-owner reservations stay lazy, retain compatible owners and reject busy owners without retry',{timeout:5000},async t=>{
+test('existing-owner reservations stay lazy, retain compatible owners and reject busy owners without retry',{ skip: denied('privateTmp'),timeout:5000},async t=>{
   const root=await fs.mkdtemp('/private/tmp/android-existing-owner-'),sockets=new Set(),events=[];
   const location={controllerSocket:path.join(root,'controller'),platformSocket:path.join(root,'binder'),metadata:'owner'};
   const stamp={pid:process.pid,uid:process.getuid(),startedSeconds:1,startedMicros:2};

@@ -1,9 +1,10 @@
 const test = require("node:test"), assert = require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
 const { profile, environment } = require("../src/modules/shared/runtime/macos-sandbox");
 
-test("confined runtimes retain real native power assertion ownership with or without network access", {
+test("confined runtimes retain real native power assertion ownership with or without network access", { skip: denied('seatbelt') }, {
   skip: process.platform !== "darwin", timeout: 15000,
 }, t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "confined-power-")));

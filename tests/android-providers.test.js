@@ -1,4 +1,5 @@
 const test=require("node:test"),assert=require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs=require("node:fs"),path=require("node:path"),os=require("node:os");
 const {promisify}=require("node:util"),exec=promisify(require("node:child_process").execFile);
 const Storage=require("../src/modules/android/provider-storage"),Policy=require("../src/modules/android/policy");
@@ -32,7 +33,7 @@ test("Pixel Tablet profile and network policy default independently of launcher 
  assert.equal(Policy.resolvePolicy({networkIsolation:false}).networkAllowed,true);
 });
 
-test("native processes and descendants cannot read neighboring data or connect offline",{skip:process.platform!=="darwin"},async t=>{
+test("native processes and descendants cannot read neighboring data or connect offline",{skip:process.platform==="darwin"?denied("seatbelt"):"Requires macOS"},async t=>{
  const root=directory(t),storage=await Storage.prepareStorage({gameId:"native-policy"},root),source=path.join(root,"probe.c"),binary=path.join(root,"probe");
  const secret=path.join(root,"neighbor-secret");fs.writeFileSync(secret,"private");
  fs.writeFileSync(source,'#include <stdio.h>\n#include <fcntl.h>\n#include <errno.h>\n#include <unistd.h>\n#include <sys/socket.h>\n#include <sys/wait.h>\n#include <netinet/in.h>\nint main(int argc,char**argv){int fd=open(argv[1],O_RDONLY);if(fd>=0)return 10;int s=socket(AF_INET,SOCK_STREAM,0);struct sockaddr_in a={.sin_family=AF_INET,.sin_port=htons(9),.sin_addr.s_addr=htonl(0x7f000001)};if(connect(s,(struct sockaddr*)&a,sizeof a)!=-1||errno!=EPERM)return 11;pid_t p=fork();if(p==0){execl(argv[0],argv[0],argv[1],"child",NULL);_exit(12);}if(argc>2)return 0;int status=0;waitpid(p,&status,0);if(!WIFEXITED(status)||WEXITSTATUS(status))return 13;puts("isolated");return 0;}');

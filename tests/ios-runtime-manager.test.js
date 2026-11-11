@@ -1,6 +1,7 @@
 // Required first: it replaces the network before modules load.
 const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -123,7 +124,7 @@ test("PlayTools records bundled library closure and refuses missing or escaping 
   assert.throws(() => PlayCover.inspectPlayTools(root), /invalid or oversized/);
 });
 
-test("included PlayTools adapter redirects its container while preserving Foundation file I/O", { skip: process.platform !== "darwin" || process.arch !== "arm64" }, t => {
+test("included PlayTools adapter redirects its container while preserving Foundation file I/O", { skip: denied('atomicWrite') }, { skip: process.platform !== "darwin" || process.arch !== "arm64" }, t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "playtools-url-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const { execFileSync } = require("node:child_process"), executable = path.join(root, "probe");

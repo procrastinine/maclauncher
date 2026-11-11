@@ -1,6 +1,7 @@
 // Required first: it replaces the network before modules load.
 const Harness = require("./helpers/future-upstream.cjs");
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -145,7 +146,7 @@ test("ScummVM dmg extraction detaches after an interrupted attach", async t => {
   assert.equal(calls[1][0], "eject"); assert.equal(fs.existsSync(calls[1][1]), false);
 });
 
-test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without changing content, and verifies offline reuse', {skip:process.platform!=='darwin',timeout:120000}, async t => {
+test('ScummVM installs an actual read-only DMG, re-signs nested Sparkle without changing content, and verifies offline reuse', {skip:process.platform==='darwin'?denied('diskImage'):'Requires macOS',timeout:120000}, async t => {
   const {execFileSync,execFile}=require('node:child_process'),{promisify}=require('node:util');
   const Native=require('../src/modules/shared/runtime/local-native'),Signing=require('../src/modules/scummvm/runtime/signing');
   const root=temporary(t),volume=path.join(root,'volume'),app=path.join(volume,'ScummVM.app'),version='2.9.1';

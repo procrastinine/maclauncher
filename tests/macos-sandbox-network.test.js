@@ -1,9 +1,10 @@
 const test = require("node:test"), assert = require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path"), net = require("node:net");
 const { execFileSync, spawn } = require("node:child_process");
 const { profile, environment } = require("../src/modules/shared/runtime/macos-sandbox");
 
-test("confined Android/iOS policy actually denies network by default and permits explicit access", {
+test("confined Android/iOS policy actually denies network by default and permits explicit access", { skip: denied('loopback') }, {
   skip: process.platform !== "darwin", timeout: 15000,
 }, async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "confined-network-")));

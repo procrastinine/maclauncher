@@ -1,10 +1,11 @@
 const test=require('node:test'),assert=require('node:assert/strict');
+const { denied } = require('./helpers/environment.cjs');
 const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
 const {bootCount}=require('../src/modules/android/platform-services/boot-state');
 const {readPrivate,writePrivate}=require('../src/modules/android/platform-services/paths');
 const {execFile}=require('node:child_process'),{promisify}=require('node:util');
 
-test('profile boot count changes only across host boot sessions, not service restarts',async t=>{
+test('profile boot count changes only across host boot sessions, not service restarts',{ skip: denied('sysctl') }, async t=>{
  if(process.platform!=='darwin')return t.skip('Requires macOS boot-session identity');
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'android-boot-count-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
  assert.equal(await bootCount({root}),1);assert.equal(await bootCount({root}),1);
@@ -44,7 +45,7 @@ test('initial boot metadata reaches an application before lazy profile attachmen
  assert.deepEqual(messages.map(message=>message.op),['identity'],'Boot metadata does not start a profile process');
 });
 
-test('independent launch supervisors serialize the same private boot transaction',async t=>{
+test('independent launch supervisors serialize the same private boot transaction',{ skip: denied('sysctl') }, async t=>{
  if(process.platform!=='darwin')return t.skip('Requires macOS boot-session identity and kernel lock');
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'android-boot-workers-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
  const file=path.join(root,'boot.json'),journal=path.join(root,'operations');

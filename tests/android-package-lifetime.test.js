@@ -1,6 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const { denied } = require('./helpers/environment.cjs');
 const {spawnSync}=require('./helpers/android-java');
-test('Account framework enrollment uses runtime ownership while real prepared APKs retain their source lease',async t=>{
+test('Account framework enrollment uses runtime ownership while real prepared APKs retain their source lease',{ skip: denied('privateTmp') }, async t=>{
  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android-framework-source-owner-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const packageName='fixture.provider',uid=10000,key='a'.repeat(64),apkSha256='f'.repeat(64);
  const service=path.join(root,'android/services'),preparedRoot=path.join(root,'android/apps/provider/prepared',key),runtime=path.join(root,'runtime');

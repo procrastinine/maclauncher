@@ -6,6 +6,7 @@ const os = require('node:os');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const test = require('node:test');
+const { denied } = require('./helpers/environment.cjs');
 let dev;
 const root = path.resolve(__dirname, '..');
 test.before(async () => { dev = await import('../scripts/dev-server.mjs'); });
@@ -93,7 +94,7 @@ test('Vite cache cleanup keeps the current set and the two most recently modifie
   assert.deepEqual(dev.pruneViteCaches(cacheRoot, current), []);
   assert.deepEqual(dev.pruneViteCaches(path.join(cacheRoot, 'missing'), current), []);
 });
-test('real Vite cold startup prepares React and leaves an occupied server running', { timeout: 30000 }, async () => {
+test('real Vite cold startup prepares React and leaves an occupied server running', { skip: denied('loopback') }, { timeout: 30000 }, async () => {
   const existing = http.createServer((request, response) => response.end('existing server'));
   await new Promise(resolve => existing.listen(0, '127.0.0.1', resolve));
   const occupied = existing.address().port; let result;
@@ -111,7 +112,7 @@ test('real Vite cold startup prepares React and leaves an occupied server runnin
     assert.equal(await (await fetch(`http://127.0.0.1:${occupied}/`)).text(), 'existing server');
   } finally { await result?.server.close(); await new Promise(resolve => existing.close(resolve)); }
 });
-test('the dev command hands a ready page to Electron and closes its server on exit', { timeout: 30000 }, async () => {
+test('the dev command hands a ready page to Electron and closes its server on exit', { skip: denied('userCaches') }, { timeout: 30000 }, async () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'maclauncher-dev-startup-'));
   const stub = path.join(temporary, 'electron-stub');
   fs.writeFileSync(stub, `#!/usr/bin/env node
@@ -137,7 +138,7 @@ test('the dev command hands a ready page to Electron and closes its server on ex
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 });
 
-test('branded development Electron enforces the import boundary in its actual main process', {
+test('branded development Electron enforces the import boundary in its actual main process', { skip: denied('userCaches') }, {
   skip: process.platform !== 'darwin', timeout: 45000
 }, async t => {
   const { prepareDevelopmentApp } = await import('../scripts/dev-app.mjs');

@@ -1,4 +1,5 @@
 const test = require("node:test"), assert = require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const { execFile } = require("node:child_process"), { promisify } = require("node:util");
 const Packs = require("../src/modules/shared/reshade/shader-packs"), ReShade = require("../src/modules/shared/reshade");
@@ -54,7 +55,7 @@ test("packaged MPV assets resolve outside ASAR and retain their provider format"
   const selected = Packs.resolveEffect(null, "shader:image:color-balance", features, undefined, { ...options, moduleRoot });
   assert.equal(selected.file, dest);assert.equal(selected.format, "libplacebo");assert.deepEqual(selected.includePaths, []);
 });
-test("included MPV filters use the installed original parser and immutable live provider route", { skip: process.platform !== "darwin" }, async t => {
+test("included MPV filters use the installed original parser and immutable live provider route", { skip: denied('metal') }, { skip: process.platform !== "darwin" }, async t => {
   const root = ReShade.runtimeRoot(), helper = path.join(root, "libplacebo-prepare");
   if (!fs.existsSync(helper)) return t.skip("Requires the included libplacebo provider");
   t.mock.method(globalThis, "fetch", () => assert.fail("Included shaders never fetch"));

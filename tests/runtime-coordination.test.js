@@ -1,4 +1,5 @@
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -356,7 +357,7 @@ test("a delayed module default change preserves another runtime section's fresh 
   assert.equal(cfg.first, "2"); assert.equal(cfg.second, "3");
 });
 
-test("terminating a game worker retains its real native child's runtime until exit", async t => {
+test("terminating a game worker retains its real native child's runtime until exit", { skip: denied('ps') }, async t => {
   const env = environment(t), entry = env.game("orphan");
   const result = await env.service.launchEntry(entry); env.children.push(result.child);
   await env.service.close();
@@ -449,7 +450,7 @@ test("a cancelled tool export releases reader leases without blocking another ve
   cancelled.resolve(); await rejection; await removal;
   assert.equal(removed, true); assert.equal(coordinator.snapshot().active.length, 0);
 });
-test("forced tool-worker exit preserves both source leases and game data until the child exits", async t => {
+test("forced tool-worker exit preserves both source leases and game data until the child exits", { skip: denied('ps') }, async t => {
   const env = environment(t), entry = env.game("tool-orphan");
   require("../src/core/game-store").writeGameRecord(env.userDataDir, entry);
   await env.service.request("runtime:tool", "runtimeAction", "fixture-a", "install", { version: "1" });

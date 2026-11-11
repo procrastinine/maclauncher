@@ -1,4 +1,5 @@
 const test = require("node:test"), assert = require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
 const Metadata = require("../src/modules/android/package-metadata");
 const Runtime = require("../src/modules/android/runtime");
@@ -155,7 +156,7 @@ test("APK icon lookup preserves provider artwork after a decoder failure and res
   assert.equal(fallback, 1);
 });
 
-test("Original Android resource metadata renders adaptive icons, localizes labels and reuses disk results", async t => {
+test("Original Android resource metadata renders adaptive icons, localizes labels and reuses disk results", { skip: denied('seatbelt') }, async t => {
   if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   if (process.platform !== "darwin") return t.skip("Requires the included macOS APK reader");
   try { Reader.resolve(); } catch { return t.skip("Requires the included APK reader payload"); }

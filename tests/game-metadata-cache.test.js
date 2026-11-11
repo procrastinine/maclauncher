@@ -1,4 +1,5 @@
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -366,7 +367,7 @@ test("metadata waits for asynchronous module icon discovery", async t => {
   assert.equal(result.iconPath, icon); assert.equal(result.iconSource, "module");
 });
 
-test("APK imports resolve uncached resources without Android or Java and reuse them after restart", { skip: process.platform !== "darwin" }, async t => {
+test("APK imports resolve uncached resources without Android or Java and reuse them after restart", { skip: denied('seatbelt') }, { skip: process.platform !== "darwin" }, async t => {
   if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-apk-import-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

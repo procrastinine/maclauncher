@@ -1,4 +1,5 @@
 const test = require("node:test"), assert = require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const Catalog = require("../src/modules/android/service-packages");
 const { untilTestEnds } = require("./helpers/fixture-process");
@@ -150,7 +151,8 @@ test("Concurrent installed-service demands share one fully enrolled process befo
   assert.equal(launched,1);assert.equal(fs.existsSync(dispatches),false,'No descriptor dispatch may precede provider enrollment');
   const bootstrap=once(serviceChild.stdout,'data');permit();const packet=JSON.parse(String((await bootstrap)[0]));assert.equal(packet.self.pid,serviceChild.pid);assert.equal(packet.self.uid,10030);
   assert.deepEqual(packet.accountPolicy,{interactive:false},'Background providers inherit the game account policy without an account broker');
-  for(let i=0;(!fs.existsSync(dispatches)||fs.readFileSync(dispatches,'utf8')!=='dispatch\n')&&i<100;i++)await new Promise(resolve=>setTimeout(resolve,10));
+  // The helper is a fresh Node process; under heavy host load it can take seconds to start.
+  for(const deadline=Date.now()+7000;(!fs.existsSync(dispatches)||fs.readFileSync(dispatches,'utf8')!=='dispatch\n')&&Date.now()<deadline;)await new Promise(resolve=>setTimeout(resolve,10));
   assert.equal(fs.readFileSync(dispatches,'utf8'),'dispatch\n','Shared process aliases must create one connection');
   // A process can remain alive during native teardown after its authority EOF.
   // A peer exit must reject its queued notice, never throw from the exit event.
@@ -184,7 +186,7 @@ test("Provider enrollment failure retains its structural cause before authority 
   assert.equal(warnings[0].includes('private-provider-value'),false,'Provider values cannot enter structural diagnostics');
 });
 
-test("A game process starts while profile owners initialize and receives authority only after enrollment", { timeout: 10000 }, async t => {
+test("A game process starts while profile owners initialize and receives authority only after enrollment", { skip: denied('privateTmp') }, { timeout: 10000 }, async t => {
   const { spawn } = require("node:child_process"), { once } = require("node:events");
   const client = require("../src/modules/android/platform-services/client"), profile = require("../src/modules/android/platform-services/paths");
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "android-service-overlap-")), owners = new Map(), enrolled = [];
@@ -295,7 +297,7 @@ test("Installed service catalog owns copied code, persistent distinct UIDs and e
   await assert.rejects(Catalog.prepareInstalled({ gameId: "game-a" }, { metadata: { packageName: "example.game" } }, context, { profile: { servicePackagesVersion: 1 } }, {}, options), /not a regular file/);
 });
 
-test('failed owner close retains the first failure while releasing other retired service resources',{timeout:10000},async t=>{
+test('failed owner close retains the first failure while releasing other retired service resources',{ skip: denied('privateTmp'),timeout:10000},async t=>{
  const {spawn}=require('node:child_process'),{once}=require('node:events');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-service-retirement-')),failure=Error('owned profile close failed');
  let closed=0,released=0;

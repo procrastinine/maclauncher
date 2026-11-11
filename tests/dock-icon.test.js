@@ -1,9 +1,10 @@
 const test = require("node:test"), assert = require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const { execFileSync } = require("node:child_process");
 const Icons = require("../src/core/icon-utils"), Dock = require("../src/modules/shared/dock-icon");
 
-test("Generated Dock images round opaque artwork, preserve transparency and refresh old caches", {skip:process.platform!=="darwin"}, async t => {
+test("Generated Dock images round opaque artwork, preserve transparency and refresh old caches", {skip:process.platform==="darwin"?denied("atomicWrite"):"Requires macOS"}, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "dock-icon-"));
   t.after(() => fs.rmSync(root, {recursive:true, force:true}));
   const original = path.join(root,"original.png"), directory = path.join(root,"generated");
@@ -36,7 +37,7 @@ test("Generated Dock images round opaque artwork, preserve transparency and refr
   assert.notEqual(JSON.parse(fs.readFileSync(path.join(directory,"dock-icon.json"))).identity,receipt.identity,"Artwork changes invalidate the derivative");
 });
 
-test("Mac.apk keeps library artwork separate from its rounded generated app and environment image", {skip:process.platform!=="darwin"}, async t => {
+test("Mac.apk keeps library artwork separate from its rounded generated app and environment image", {skip:process.platform==="darwin"?denied("atomicWrite"):"Requires macOS"}, async t => {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),"dock-macapk-"));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const icon=path.join(root,"original.png"),source=Icons.encodePngBitmap({width:256,height:256,buffer:Buffer.alloc(256*256*4,255)});
   fs.writeFileSync(icon,source);
@@ -55,7 +56,7 @@ test("Mac.apk keeps library artwork separate from its rounded generated app and 
   assert.deepEqual(fs.readFileSync(icon),source);assert.equal(fs.readFileSync(executable,"utf8"),"immutable publisher entry");
 });
 
-test("Generated JVM/ART/AIM application bundles replace square cached icons once", {skip:process.platform!=="darwin"}, async t => {
+test("Generated JVM/ART/AIM application bundles replace square cached icons once", {skip:process.platform==="darwin"?denied("atomicWrite"):"Requires macOS"}, async t => {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),"dock-bundle-"));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const executable=path.join(root,"entry"),icon=path.join(root,"source.png"),directory=path.join(root,"application");
   fs.writeFileSync(executable,"owned entry");
@@ -74,7 +75,7 @@ test("Generated JVM/ART/AIM application bundles replace square cached icons once
   assert.deepEqual(fs.readFileSync(icon),bytes);
 });
 
-test("JVM Dock arguments and the shared native config receive the same rounded package image", {skip:process.platform!=="darwin"}, async t => {
+test("JVM Dock arguments and the shared native config receive the same rounded package image", {skip:process.platform==="darwin"?denied("atomicWrite"):"Requires macOS"}, async t => {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),"dock-package-"));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const metadata=require("../src/modules/android/package-metadata"),reader=require("../src/modules/android/tools/apk-metadata");
   t.mock.method(reader,"identity",()=>{throw Error("Cached package resources are available offline");});

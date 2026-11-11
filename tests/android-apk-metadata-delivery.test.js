@@ -1,10 +1,11 @@
 const test = require("node:test"), assert = require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
 const Reader = require("../src/modules/android/tools/apk-metadata");
 
 // A resources-only layout prevents a development runtime or Java installation
 // from supplying an omitted import dependency.
-test("Included APK reader works from packaged resources and rejects changed helper bytes", async t => {
+test("Included APK reader works from packaged resources and rejects changed helper bytes", { skip: denied('seatbelt') }, async t => {
   if (!require('./helpers/android-fixture-tools.cjs').metadataAvailable(t)) return;
   if (process.platform !== "darwin") return t.skip("Requires macOS native APK resource decoding");
   const pin = require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/android/distribution-included.json")).find(item => item.id === "android-apk-metadata");

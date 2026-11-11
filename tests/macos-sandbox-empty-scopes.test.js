@@ -1,9 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict');
+const { denied } = require('./helpers/environment.cjs');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {execFileSync,spawnSync}=require('node:child_process');
 const {profile,environment}=require('../src/modules/shared/runtime/macos-sandbox');
 
-test('Empty filesystem and executable scopes grant no global authority',{skip:process.platform!=='darwin'},t=>{
+test('Empty filesystem and executable scopes grant no global authority',{skip:process.platform==='darwin'?denied('seatbelt'):'Requires macOS'},t=>{
  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'empty-sandbox-scopes-')));
  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const executable=path.join(root,'probe'),canary=path.join(root,'private.canary');

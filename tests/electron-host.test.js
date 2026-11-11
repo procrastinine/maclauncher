@@ -5,6 +5,7 @@ const path = require("node:path");
 const { EventEmitter } = require("node:events");
 const { spawnSync } = require("node:child_process");
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const { createElectronGameHost } = require("../src/modules/shared/web/runtime/electron-host");
 const { parseArguments, runElectronGame } = require("../src/runtime/electron-game");
 
@@ -188,7 +189,7 @@ test("central online policy permits web requests while child-process restriction
   assert.equal(f.servers.length, 1);
 });
 
-test("host asset read roots come from the module and are passed only to its static server", async t => {
+test("host asset read roots come from the module and are passed only to its static server", { skip: denied('loopback') }, async t => {
   const f = fixture(t), source = path.join(f.temp, "original-assets"); fs.mkdirSync(source);
   f.mod.getContentReadRoots = (entry, context) => {
     assert.equal(entry, f.entry); assert.equal(context.userDataDir, f.userDataDir); return [source];
@@ -199,7 +200,7 @@ test("host asset read roots come from the module and are passed only to its stat
   assert.ok(!result.win.config.webPreferences.additionalArguments.some(value => value.includes(source)));
 });
 
-test("host attaches native owned-output visibility before loading and retires the subscription with the window", async t => {
+test("host attaches native owned-output visibility before loading and retires the subscription with the window", { skip: denied('loopback') }, async t => {
   const token = "0123456789abcdef0123456789abcdef", name = "org.maclauncher.browser-frame-visibility." + token;
   const oldToken = process.env.RESHADE_BROWSER_FRAME_TOKEN, oldState = process.env.RESHADE_BROWSER_FRAME_STATE;
   process.env.RESHADE_BROWSER_FRAME_TOKEN = token;process.env.RESHADE_BROWSER_FRAME_STATE = "/private/browser-channel";
@@ -293,7 +294,7 @@ test("core context preserves hosted configuration, metadata save override, cheat
   assert.equal(host.policies.size, 0);
 });
 
-test("save injection follows metadata rather than module IDs and UA hints avoid duplicates", async t => {
+test("save injection follows metadata rather than module IDs and UA hints avoid duplicates", { skip: denied('loopback') }, async t => {
   const { host, entry, info, windows } = fixture(t, { hosted: { userAgent: { suffix: "NW.js/1", hint: "Electron" } } });
   entry.moduleId = "mv";
   entry.saveDirOverride = "/save";
@@ -333,7 +334,7 @@ test("legacy hooks receive the original entry, settings and runtime", async t =>
   assert.equal(preloadValue(win, "cheats-file"), "/cheats.json");
 });
 
-test("container and staged roots encode each index URL segment", async t => {
+test("container and staged roots encode each index URL segment", { skip: denied('loopback') }, async t => {
   const { host, entry, temp, root, servers } = fixture(t);
   const container = path.join(temp, "game.container");
   fs.writeFileSync(container, "container");
@@ -354,7 +355,7 @@ test("container and staged roots encode each index URL segment", async t => {
   assert.equal(nested.win.url, `${nested.origin}/a%20folder%20%23%3F/index%20%23%3F%25.html`);
 });
 
-test("the core static server actually serves the encoded staged index and closes on disposal", async t => {
+test("the core static server actually serves the encoded staged index and closes on disposal", { skip: denied('loopback') }, async t => {
   const { createStaticServer } = require("../src/core/static-server");
   const { host, entry, root } = fixture(t, { hooks: { createStaticServer } });
   const indexHtml = path.join(root, "index #?%.html");
@@ -382,7 +383,7 @@ test("escaping and symlinked indexes are rejected before creating a server or wi
   assert.equal(windows.length, 0);
 });
 
-test("offline restrictions permit local HTTP and WS only on registered ports", async t => {
+test("offline restrictions permit local HTTP and WS only on registered ports", { skip: denied('loopback') }, async t => {
   const { host, entry } = fixture(t);
   const { win, origin } = await host.createGameWindow(entry);
   const netSession = win.config.webPreferences.session;
@@ -406,7 +407,7 @@ test("offline restrictions permit local HTTP and WS only on registered ports", a
   assert.equal(netSession.listener, null);
 });
 
-test("a failed first preload closes the window and rejects startup", async t => {
+test("a failed first preload closes the window and rejects startup", { skip: denied('loopback') }, async t => {
   const { host, entry, windows, servers } = fixture(t, {fakeOptions: {loadURL: async win => {
     win.webContents.emit("preload-error", {}, "/owned/preload", new Error("Native network policy unavailable"));
   }}});
@@ -415,7 +416,7 @@ test("a failed first preload closes the window and rejects startup", async t => 
   assert.equal(servers[0].closed, 1);
 });
 
-test("shared sessions retain active ports and detach restrictions after the last window", async t => {
+test("shared sessions retain active ports and detach restrictions after the last window", { skip: denied('loopback') }, async t => {
   const { host, entry, servers } = fixture(t);
   const first = await host.createGameWindow(entry);
   const second = await host.createGameWindow(entry);
@@ -432,7 +433,7 @@ test("shared sessions retain active ports and detach restrictions after the last
   await assert.rejects(host.createGameWindow(entry), /disposed/);
 });
 
-test("main can share its policy map and retain policies owned by other windows", async t => {
+test("main can share its policy map and retain policies owned by other windows", { skip: denied('loopback') }, async t => {
   const policies = new Map([[999, { allowExternal: false }]]);
   const { host, entry } = fixture(t, { hooks: { policies } });
   assert.equal(host.policies, policies);
@@ -442,7 +443,7 @@ test("main can share its policy map and retain policies owned by other windows",
   assert.deepEqual([...policies], [[999, { allowExternal: false }]]);
 });
 
-test("dispose waits for a server already closing and repeated calls share cleanup", async t => {
+test("dispose waits for a server already closing and repeated calls share cleanup", { skip: denied('loopback') }, async t => {
   let releaseClose;
   const closePromise = new Promise(resolve => { releaseClose = resolve; });
   const { host, entry } = fixture(t, { hooks: {
@@ -462,7 +463,7 @@ test("dispose waits for a server already closing and repeated calls share cleanu
   assert.equal(disposed, true);
 });
 
-test("partition setup and BrowserWindow construction failures close allocated servers", async t => {
+test("partition setup and BrowserWindow construction failures close allocated servers", { skip: denied('loopback') }, async t => {
   const failedPartition = fixture(t);
   failedPartition.entry.gameId = null;
   await assert.rejects(failedPartition.host.createGameWindow(failedPartition.entry), /partition/);
@@ -475,7 +476,7 @@ test("partition setup and BrowserWindow construction failures close allocated se
   assert.equal(failedWindow.host.policies.size, 0);
 });
 
-test("load rejection cleans the window, policy, restriction and server without a failure event", async t => {
+test("load rejection cleans the window, policy, restriction and server without a failure event", { skip: denied('loopback') }, async t => {
   const { host, entry, windows, sessions, servers, dialogs } = fixture(t, {
     fakeOptions: { loadURL: async () => { throw new Error("Load rejected"); } }
   });
@@ -487,7 +488,7 @@ test("load rejection cleans the window, policy, restriction and server without a
   assert.equal(dialogs.length, 0);
 });
 
-test("failed main-frame loads offer fallback once with a context for that runtime", async t => {
+test("failed main-frame loads offer fallback once with a context for that runtime", { skip: denied('loopback') }, async t => {
   const processRuns = [], contexts = [];
   const { host, entry, dialogs, launches, servers } = fixture(t, {
     hooks: { isSmoke: false,
@@ -515,7 +516,7 @@ test("failed main-frame loads offer fallback once with a context for that runtim
   assert.equal(servers[0].closed, 1);
 });
 
-test("subframe failures and clean exits keep the host running; crashes clean up", async t => {
+test("subframe failures and clean exits keep the host running; crashes clean up", { skip: denied('loopback') }, async t => {
   const { host, entry, dialogs, servers } = fixture(t, { hooks: { isSmoke: false } });
   const { win } = await host.createGameWindow(entry);
   win.webContents.emit("did-fail-load", {}, -7, "Subframe", "url", false);
@@ -531,7 +532,7 @@ test("subframe failures and clean exits keep the host running; crashes clean up"
   assert.equal(servers[0].closed, 1);
 });
 
-test("IPC controls and external shell opening are scoped to the owned sender", async t => {
+test("IPC controls and external shell opening are scoped to the owned sender", { skip: denied('loopback') }, async t => {
   const { host, entry, electron, externalUrls } = fixture(t);
   host.installIpc();
   host.installIpc();
@@ -563,7 +564,7 @@ test("IPC controls and external shell opening are scoped to the owned sender", a
   assert.equal(electron.ipcMain.listenerCount("maclauncher:window:show"), 0);
 });
 
-test("legacy fullscreen IPC updates only its owned game window", async t => {
+test("legacy fullscreen IPC updates only its owned game window", { skip: denied('loopback') }, async t => {
   const { host, entry, electron } = fixture(t);
   host.installIpc();
   const first = await host.createGameWindow(entry);
@@ -583,7 +584,7 @@ test("legacy fullscreen IPC updates only its owned game window", async t => {
   assert.equal(electron.ipcMain.listenerCount("maclauncher:window:setFullScreen"), 0);
 });
 
-test("Mac devtools shortcut and Tools menu target hosted windows", async t => {
+test("Mac devtools shortcut and Tools menu target hosted windows", { skip: denied('loopback') }, async t => {
   const { host, entry, electron } = fixture(t, { hooks: { platform: "darwin", devtoolsEnabled: true } });
   const { win } = await host.createGameWindow(entry);
   let prevented = 0;

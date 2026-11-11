@@ -1,4 +1,5 @@
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -48,7 +49,7 @@ int main(int argc,char **argv) {
   return 0;
 }`;
 
-test("real Intel and universal launches retain injected libraries under Rosetta and in child processes", {
+test("real Intel and universal launches retain injected libraries under Rosetta and in child processes", { skip: denied('sysctl') }, {
   skip: process.platform !== "darwin" || process.arch !== "arm64", timeout: 30000
 }, async t => {
   if (spawnSync("/usr/bin/arch", ["-x86_64", "/usr/bin/true"]).status !== 0) return t.skip("Rosetta is not installed");

@@ -1,4 +1,5 @@
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), os = require("node:os"), path = require("node:path"), net = require("node:net");
+const { denied } = require('./helpers/environment.cjs');
 const {EventEmitter, getEventListeners} = require("node:events");
 const Live = require("../src/modules/video/live"), Shaders = require("../src/modules/video/native-shaders");
 const Hold = require("../src/modules/shared/reshade/presentation-hold"), Controls = require("../src/modules/shared/reshade/live-controls");
@@ -118,7 +119,7 @@ async function mixed(t) {
   f.options = {...f.options, publication, launchBinding: {launchId, presentationHold: prepared.binding}, rollbackShared: async () => {publication.rollback();}};
   return {...f, publication, plan, before, candidate};
 }
-test("owned mpv IPC applies every native filter and ordered shader property, preserving source and pause", async t => {
+test("owned mpv IPC applies every native filter and ordered shader property, preserving source and pause", { skip: denied('loopback') }, async t => {
   const f = await player(t);let published = 0;
   assert.equal(fs.statSync(path.dirname(f.controls.socket)).mode & 0o777, 0o700);
   const result = await Live.withGraphicsUpdate(f.entry, f.context, f.options, () => {
@@ -129,7 +130,7 @@ test("owned mpv IPC applies every native filter and ordered shader property, pre
   assert.equal(result, "committed");assert.equal(published, 1);assert.equal(f.props.pause, false);
   assert.equal(fs.readFileSync(f.entry.gamePath, "utf8"), "unchanged source");
 });
-test("cancelled video preparation never connects or publishes", async t => {
+test("cancelled video preparation never connects or publishes", { skip: denied('loopback') }, async t => {
   const f = await player(t), controller = new AbortController(), reason = Error("Reset cancelled preparation");controller.abort(reason);
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, {...f.options, signal: controller.signal}, () => assert.fail("published"), {
     configuration: () => assert.fail("prepared cancelled candidate"), connect: () => assert.fail("connected cancelled candidate")
@@ -137,7 +138,7 @@ test("cancelled video preparation never connects or publishes", async t => {
   await assert.rejects(async () => Live.connect(f.controls.socket, {signal: controller.signal}), error => error === reason);
   assert.deepEqual(f.commands, []);
 });
-test("separate OSD playback wakes the paused video graph without changing pause or native properties", async t => {
+test("separate OSD playback wakes the paused video graph without changing pause or native properties", { skip: denied('loopback') }, async t => {
   const f = await player(t, {paused: true});
   const descriptor = Live.location(f.entry, f.root), record = JSON.parse(fs.readFileSync(descriptor));record.osdLayerAPI = 1;fs.writeFileSync(descriptor, JSON.stringify(record));
   const original = Object.fromEntries(["scale", "cscale", "dscale", "glsl-shaders", "glsl-shader-opts"].map(name => [name, f.props[name]]));
@@ -148,20 +149,20 @@ test("separate OSD playback wakes the paused video graph without changing pause 
   assert.ok(f.commands.some(command => command[0] === "script-message" && command[1] === "maclauncher-video-redraw"));
   assert.equal(f.props.pause, true);assert.ok(!f.commands.some(command => command[0] === "set_property"));
 });
-test("connection cancellation closes the pending socket and removes its listener", {timeout: 1000}, async t => {
+test("connection cancellation closes the pending socket and removes its listener", { skip: denied('loopback'),timeout: 1000}, async t => {
   const f = await player(t), controller = new AbortController(), reason = Error("Cancelled connection");
   const pending = Live.connect(f.controls.socket, {signal: controller.signal});controller.abort(reason);
   await assert.rejects(pending, error => error === reason);
   assert.equal(getEventListeners(controller.signal, "abort").length, 0);
 });
-test("cancellation interrupts a held IPC read without waiting for its response timeout", {timeout: 1000}, async t => {
+test("cancellation interrupts a held IPC read without waiting for its response timeout", { skip: denied('loopback'),timeout: 1000}, async t => {
   const f = await player(t), controller = new AbortController(), reason = Error("Reset cancelled IPC read");
   f.intercept(command => {if (command[0] === "get_property" && command[1] === "pid") {controller.abort(reason);return true;}});
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, {...f.options, signal: controller.signal}, () => assert.fail("published"), {configuration}),
     error => error === reason);
   assert.equal(f.commands.some(command => command[0] === "set_property"), false);assert.equal(f.props.pause, false);
 });
-for (const cancelledProperty of ["pause", "scale"]) test("cancellation after enqueued " + cancelledProperty + " restores options despite a late reply", {timeout: 1000}, async t => {
+for (const cancelledProperty of ["pause", "scale"]) test("cancellation after enqueued " + cancelledProperty + " restores options despite a late reply", {skip: denied("loopback"), timeout: 1000}, async t => {
   const f = await player(t), before = structuredClone(f.props), controller = new AbortController(), reason = Error("Reset cancelled native setter");
   let heldReply, cancelled = false, late = false;
   f.intercept((command, reply) => {
@@ -177,7 +178,7 @@ for (const cancelledProperty of ["pause", "scale"]) test("cancellation after enq
   assert.deepEqual({...f.props, "vo-passes": before["vo-passes"]}, before);
   assert.equal(fs.readFileSync(f.entry.gamePath, "utf8"), "unchanged source");
 });
-test("all-off and shared CRT-only updates leave unchanged native playback unpaused without setters or redraw queries", async t => {
+test("all-off and shared CRT-only updates leave unchanged native playback unpaused without setters or redraw queries", { skip: denied('loopback') }, async t => {
   const f = await player(t), before = structuredClone(f.props);let published = 0;
   f.entry.graphics = {spatialMethod: "off", frameGeneration: "off", temporalMethod: "off", neuralMethod: "off"};
   for (const entry of [f.entry, {...f.entry, reshade: {enabled: true, preset: "custom", effectPath: "/filters/crt.fx"}}]) {
@@ -188,17 +189,17 @@ test("all-off and shared CRT-only updates leave unchanged native playback unpaus
   assert.equal(published, 2);assert.deepEqual(f.props, before);
   assert.equal(f.commands.some(command => ["set_property", "osd-overlay"].includes(command[0]) || command[1] === "vo-passes"), false);
 });
-test("shared publication failure restores every native property and an already paused player", async t => {
+test("shared publication failure restores every native property and an already paused player", { skip: denied('loopback') }, async t => {
   const f = await player(t, {paused: true}), before = structuredClone(f.props);
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => {throw Error("invalid shared stage");}, {configuration}), /invalid shared stage/);
   assert.deepEqual({...f.props, "vo-passes": before["vo-passes"]}, before);
 });
-test("a failed resume is reported and restores native settings instead of claiming success", async t => {
+test("a failed resume is reported and restores native settings instead of claiming success", { skip: denied('loopback') }, async t => {
   const f = await player(t), before = structuredClone(f.props);f.reject((name, value) => name === "pause" && value === false);
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => true, {configuration}), /pause state could not be restored/);
   assert.deepEqual({...f.props, pause: before.pause, "vo-passes": before["vo-passes"]}, before);
 });
-test("native setter and renderer shader errors roll back without publishing settings", async t => {
+test("native setter and renderer shader errors roll back without publishing settings", { skip: denied('loopback') }, async t => {
   const f = await player(t), before = structuredClone(f.props);let published = 0;
   f.reject((name, value) => name === "dscale" && value === "hermite");
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => published++, {configuration}), /invalid parameter/);
@@ -207,7 +208,7 @@ test("native setter and renderer shader errors roll back without publishing sett
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => published++, {configuration}), /Shader compilation failed/);
   assert.deepEqual({...f.props, "vo-passes": before["vo-passes"]}, before);assert.equal(published, 0);
 });
-test("native rollback reports renderer failure instead of accepting property acknowledgments", async t => {
+test("native rollback reports renderer failure instead of accepting property acknowledgments", { skip: denied('loopback') }, async t => {
   const f = await player(t);
   f.logError((name, value) => name === "glsl-shaders" && value.length === 0);
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => {
@@ -215,14 +216,14 @@ test("native rollback reports renderer failure instead of accepting property ack
   }, {configuration}), /shared publication failed.*Previous video settings could not be restored: Shader compilation failed/);
   assert.equal(f.props.pause, false);
 });
-test("candidate errors cannot prematurely complete restoration before its asynchronous renderer result", async t => {
+test("candidate errors cannot prematurely complete restoration before its asynchronous renderer result", { skip: denied('loopback') }, async t => {
   const f = await player(t);let published = 0;
   f.logError(name => name === "glsl-shaders", true);
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => ++published, {configuration}),
     /Previous video settings could not be restored: Shader compilation failed/);
   assert.equal(published, 0);assert.equal(f.props.pause, false);
 });
-test("an IPC process/source mismatch cannot change the player or publish settings", async t => {
+test("an IPC process/source mismatch cannot change the player or publish settings", { skip: denied('loopback') }, async t => {
   const f = await player(t);f.props.pid++;
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => assert.fail("published"), {configuration}), {code: "GRAPHICS_LIVE_STALE"});
   assert.equal(f.commands.some(command => command[0] === "set_property"), false);
@@ -230,7 +231,7 @@ test("an IPC process/source mismatch cannot change the player or publish setting
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => assert.fail("published"), {configuration}), {code: "GRAPHICS_LIVE_STALE"});
   assert.equal(f.commands.some(command => command[0] === "set_property"), false);
 });
-test("a replaced launch is never restored or unpaused by an older graphics transaction", async t => {
+test("a replaced launch is never restored or unpaused by an older graphics transaction", { skip: denied('loopback') }, async t => {
   const f = await player(t);
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => {
     const file = Live.location(f.entry, f.root), record = JSON.parse(fs.readFileSync(file));record.token = "replacement";
@@ -239,7 +240,7 @@ test("a replaced launch is never restored or unpaused by an older graphics trans
   assert.equal(f.props.pause, true);assert.equal(f.props.scale, "hermite");
   assert.equal(f.commands.filter(command => command[0] === "set_property" && command[1] === "pause").length, 1);
 });
-test("deferred shared settings restore native options and missing owned IPC stays next launch", async t => {
+test("deferred shared settings restore native options and missing owned IPC stays next launch", { skip: denied('loopback') }, async t => {
   const f = await player(t), before = structuredClone(f.props);
   await Live.withGraphicsUpdate(f.entry, f.context, f.options, () => ({deferred: true}), {configuration});assert.deepEqual({...f.props, "vo-passes": before["vo-passes"]}, before);
   let calls = 0;
@@ -247,7 +248,7 @@ test("deferred shared settings restore native options and missing owned IPC stay
   assert.equal(calls, 0);
   assert.equal(await Live.withGraphicsUpdate(f.entry, f.context, {running: false}, () => ++calls), 1);
 });
-test("native candidate construction snapshots only the original prefix and uses the launched filter registry", async t => {
+test("native candidate construction snapshots only the original prefix and uses the launched filter registry", { skip: denied('loopback') }, async t => {
   const f = await player(t), first = path.join(f.root, "first.hook"), later = path.join(f.root, "later.hook");
   fs.writeFileSync(first, "//!HOOK MAIN\n//!BIND HOOKED\nvec4 hook(){return HOOKED_tex(HOOKED_pos);}\n");fs.copyFileSync(first, later);
   const shader = (id, file) => ({id, kind: "shader", enabled: true, shader: {enabled: true, preset: "custom", effectPath: file, parameters: {strength: [0.5]}}});
@@ -289,7 +290,7 @@ test("prepared native shader cache size is checked before reading cached bytes",
   t.mock.method(fs,"readFileSync",function(file,...args){assert.notEqual(file,target,"Mismatched cached length must reject without reading its contents");return Reflect.apply(read,this,[file,...args]);});
   assert.throws(()=>Shaders.snapshot(source,root),/prepared video shader/);
 });
-test("mixed updates hold before every native setter and finish only after display and pause restoration", async t => {
+test("mixed updates hold before every native setter and finish only after display and pause restoration", { skip: denied('loopback') }, async t => {
   const f = await mixed(t), events = [];
   const barrier = {...Hold, async begin(binding, contract) {
     assert.equal(binding.launchId, "mixed-launch");assert.equal(contract.changed, true);assert.equal(f.props.pause, false);
@@ -301,7 +302,7 @@ test("mixed updates hold before every native setter and finish only after displa
   assert.equal(result, "saved");assert.deepEqual(events, ["held", "published", "displayed", "finished"]);
   assert.equal(f.props.scale, "hermite");assert.equal(f.props.pause, false);
 });
-test("mixed cancellation restores the accepted contract through uncancelled hold cleanup", {timeout: 1000}, async t => {
+test("mixed cancellation restores the accepted contract through uncancelled hold cleanup", { skip: denied('loopback'),timeout: 1000}, async t => {
   const f = await mixed(t), controller = new AbortController(), reason = Error("Reset cancelled mixed update"), events = [];
   f.intercept(command => {
     if (!controller.signal.aborted && command[0] === "set_property" && command[1] === "scale" && command[2] === "hermite") {
@@ -318,7 +319,7 @@ test("mixed cancellation restores the accepted contract through uncancelled hold
   assert.deepEqual(events, ["held", "restored", "finished"]);assert.equal(f.props.scale, "bilinear");assert.equal(f.props.pause, false);
   assert.deepEqual(JSON.parse(fs.readFileSync(f.plan)), f.before);assert.equal(getEventListeners(controller.signal, "abort").length, 0);
 });
-test("unchanged native and shared bytes do no native work, and native-only updates never acquire a hold", async t => {
+test("unchanged native and shared bytes do no native work, and native-only updates never acquire a hold", { skip: denied('loopback') }, async t => {
   const f = await mixed(t);let published = 0;
   f.publication.write(f.plan, JSON.stringify(f.before), {root: f.root});
   await Live.withGraphicsUpdate(f.entry, f.context, f.options, () => {f.publication.commit();return ++published;},
@@ -330,7 +331,7 @@ test("unchanged native and shared bytes do no native work, and native-only updat
     {configuration, presentationHold: {...Hold, begin() {assert.fail("held byte-identical shared publication");}}});
   assert.equal(published, 2);
 });
-test("accepted shared-only publication wakes a paused renderer after commit without pause, seek or hold", async t => {
+test("accepted shared-only publication wakes a paused renderer after commit without pause, seek or hold", { skip: denied('loopback') }, async t => {
   const f = await mixed(t);f.props.pause = true;
   const before = structuredClone(f.props), native = Object.fromEntries(Object.keys(desired).map(name => [name, before[name]]));
   const result = await Live.withGraphicsUpdate(f.entry, f.context, f.options, () => {
@@ -344,7 +345,7 @@ test("accepted shared-only publication wakes a paused renderer after commit with
   assert.notDeepEqual(f.props["vo-passes"], before["vo-passes"], "empty owned OSD requests redraw while identical option writes do not");
   assert.deepEqual({...f.props, "vo-passes": before["vo-passes"]}, before);
 });
-test("deferred or uncommitted shared-only publications do not wake the renderer", async t => {
+test("deferred or uncommitted shared-only publications do not wake the renderer", { skip: denied('loopback') }, async t => {
   const f = await mixed(t), native = Object.fromEntries(Object.keys(desired).map(name => [name, f.props[name]]));
   for (const publish of [() => ({deferred: true}), () => true]) {
     await Live.withGraphicsUpdate(f.entry, f.context, f.options, publish, {configuration: async () => native});
@@ -354,7 +355,7 @@ test("deferred or uncommitted shared-only publications do not wake the renderer"
   assert.equal(f.commands.some(command => ["set_property", "osd-overlay"].includes(command[0]) || command[1] === "vo-passes"), false);
   assert.equal(f.publication.committed, false);
 });
-test("shared-only wake rejection rolls back published bytes through the existing graphics transaction", async t => {
+test("shared-only wake rejection rolls back published bytes through the existing graphics transaction", { skip: denied('loopback') }, async t => {
   const f = await mixed(t), native = Object.fromEntries(Object.keys(desired).map(name => [name, f.props[name]]));
   f.reject(name => name === "osd-overlay");
   const apply = require("../src/main/graphics-update").apply;
@@ -364,7 +365,7 @@ test("shared-only wake rejection rolls back published bytes through the existing
   assert.deepEqual(JSON.parse(fs.readFileSync(f.plan)), f.before);
   assert.equal(f.commands.some(command => command[0] === "set_property" && command[1] === "pause"), false);
 });
-test("mixed all-off destination and missing hold binding reject before pause or native mutation", async t => {
+test("mixed all-off destination and missing hold binding reject before pause or native mutation", { skip: denied('loopback') }, async t => {
   const f = await mixed(t);
   f.publication.write(f.plan, JSON.stringify({...f.candidate, nodes: []}), {root: f.root});
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => assert.fail("published"), {configuration}), /continuing graphics presentation/);
@@ -373,7 +374,7 @@ test("mixed all-off destination and missing hold binding reject before pause or 
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => assert.fail("published"), {configuration}), /cannot coordinate/);
   assert.equal(f.commands.some(command => command[0] === "set_property"), false);
 });
-test("mixed failure restores shared and native contracts before positive cancel and finish", async t => {
+test("mixed failure restores shared and native contracts before positive cancel and finish", { skip: denied('loopback') }, async t => {
   const f = await mixed(t), events = [];
   f.options.rollbackShared = async () => {events.push("shared rollback");f.publication.rollback();};
   const barrier = {...Hold, async begin() {events.push("held");return {
@@ -385,13 +386,13 @@ test("mixed failure restores shared and native contracts before positive cancel 
   assert.deepEqual(events, ["held", "published", "present", "shared rollback", "old displayed", "finished old"]);
   assert.equal(f.props.pause, false);
 });
-test("failed mixed compensation retains the coherent hold and does not unpause or finish", async t => {
+test("failed mixed compensation retains the coherent hold and does not unpause or finish", { skip: denied('loopback') }, async t => {
   const f = await mixed(t);f.options.rollbackShared = async () => {throw Error("accepted contract changed");};
   const barrier = {...Hold, async begin() {return {present() {assert.fail("presented");}, cancel() {assert.fail("lifted failed cover");}, finish() {assert.fail("finished failed cover");}};}};
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => {throw Error("commit failed");}, {configuration, presentationHold: barrier}), /accepted contract changed/);
   assert.equal(f.props.pause, true);assert.equal(f.commands.filter(command => command[0] === "set_property" && command[1] === "pause").length, 1);
 });
-test("mixed pause restoration failure compensates before finish instead of exposing the candidate", async t => {
+test("mixed pause restoration failure compensates before finish instead of exposing the candidate", { skip: denied('loopback') }, async t => {
   const f = await mixed(t), events = [];let failResume = true;
   f.reject((name, value) => name === "pause" && value === false && failResume);
   const barrier = {...Hold, async begin() {return {
@@ -402,7 +403,7 @@ test("mixed pause restoration failure compensates before finish instead of expos
   await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => {f.publication.commit();}, {configuration, presentationHold: barrier}), /invalid parameter/);
   assert.deepEqual(events, ["new displayed but covered", "old displayed but covered", "finished old"]);
 });
-test("terminal GPU failure restores shared/native options and original pause before acknowledged abandon", {timeout: 1500}, async t => {
+test("terminal GPU failure restores shared/native options and original pause before acknowledged abandon", { skip: denied('loopback'),timeout: 1500}, async t => {
   for (const originallyPaused of [false, true]) await t.test(String(originallyPaused), async t => {
   const f = await mixed(t), binding = f.options.launchBinding.presentationHold, events = [];binding.abandonAPI = 1;
   f.props.pause = originallyPaused;
@@ -423,7 +424,7 @@ test("terminal GPU failure restores shared/native options and original pause bef
   assert.equal(f.props["time-pos"], 1.5);assert.equal(f.props.path, f.entry.gamePath);
   });
 });
-test("failed restoration never abandons a terminal hold or unmasks an unverified original", async t => {
+test("failed restoration never abandons a terminal hold or unmasks an unverified original", { skip: denied('loopback') }, async t => {
   for (const failure of ["shared", "native", "pause"]) await t.test(failure, async t => {
     const f = await mixed(t);let abandoned = 0;
     if (failure === "shared") f.options.rollbackShared = async () => {throw Error("shared restore rejected");};
@@ -437,7 +438,7 @@ test("failed restoration never abandons a terminal hold or unmasks an unverified
   });
 });
 
-test("decoded host retains its real presentation boundary while a decoder prefix and master bypass change",async t=>{
+test("decoded host retains its real presentation boundary while a decoder prefix and master bypass change",{ skip: denied('loopback') }, async t=>{
   const f=await mixed(t),descriptor=Live.location(f.entry,f.root),record=JSON.parse(fs.readFileSync(descriptor));record.decodedFrameAPI=1;fs.writeFileSync(descriptor,JSON.stringify(record));
   f.publication.write(f.plan,JSON.stringify({...f.candidate,nodes:[]}),{root:f.root});let inspected=false;
   const barrier={...Hold,async begin(_binding,contracts){assert.equal(contracts.before.requiresPresentation,true);assert.equal(contracts.after.requiresPresentation,true,"the direct host still presents the unfiltered decoded image");inspected=true;return{async present({onReady}){await onReady();},finish(){},cancel(){assert.fail('cancelled successful bypass');}};}};

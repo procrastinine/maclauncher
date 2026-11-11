@@ -1,4 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
+const { denied } = require('./helpers/environment.cjs');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const {spawnSync} = require('node:child_process');
 
@@ -16,7 +17,7 @@ test('ART presenter retains selected graphics with or without its storage adapte
   assert.equal(entry.args[0],'DYLD_INSERT_LIBRARIES='+storage+':'+selected);
 });
 
-test('ART presenter compiles original WebKit isolation rules within private scratch storage',{
+test('ART presenter compiles original WebKit isolation rules within private scratch storage',{ skip: denied('seatbelt') }, {
   skip:process.platform!=='darwin',
 },async t=>{
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android-presenter-storage-')));

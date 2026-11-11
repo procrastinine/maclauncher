@@ -1,4 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
+const { denied } = require('./helpers/environment.cjs');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const {execFileSync, spawn} = require('node:child_process');
 const {once}=require('node:events');
@@ -64,7 +65,7 @@ test('spatial and LSFG adapters receive exact compiler caches without a neural b
   assert.equal(scoped.graphics.RESHADE_NEURAL_LIBRARY,undefined);
 });
 
-test('Seatbelt permits later imported models without granting writes, neighboring stores or escaped links', {skip: process.platform !== 'darwin',timeout:10000}, async t => {
+test('Seatbelt permits later imported models without granting writes, neighboring stores or escaped links', {skip: process.platform === 'darwin' ? denied('seatbelt') : 'Requires macOS',timeout:10000}, async t => {
   const f = fixture(t);
   for(const store of f.stores)fs.rmdirSync(store);
   const scoped = await f.isolate(f.stores);

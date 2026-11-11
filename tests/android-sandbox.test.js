@@ -1,4 +1,5 @@
 const test = require('node:test');
+const { denied } = require('./helpers/environment.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -68,7 +69,7 @@ test('installed ARM ELF execute capabilities exclude writable paths and file ali
   assert.deepEqual(await installedExecutables([native, arm32, nested, linkedRoot, path.join(ancestorAlias, 'nested')], [writableAlias]), [valid, valid32]);
 });
 
-test('Android sandbox preserves installed native ELF execute checks without host execution grants', {
+test('Android sandbox preserves installed native ELF execute checks without host execution grants', { skip: denied('seatbelt') }, {
   skip: process.platform !== 'darwin',
 }, async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'android-native-xok-')));
@@ -103,7 +104,7 @@ test('Android sandbox environment excludes launcher secrets and JVM injection se
   {PATH: '/usr/bin:/bin', LANG: 'en_US.UTF-8', LC_CTYPE: 'UTF-8'});
 });
 
-test('Android installed-code attribute access preserves adjacent file and peer denial', {
+test('Android installed-code attribute access preserves adjacent file and peer denial', { skip: denied('seatbelt') }, {
   skip: process.platform !== 'darwin',
 }, async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'android-code-attributes-')));

@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const vm = require("node:vm");
 const Construct = require("../src/modules/construct/main");
 const ConstructExtraction = require("../src/modules/construct/extract");
@@ -55,7 +56,7 @@ function snapshot(root) {
 for (const [moduleId, mod, extraction] of [
   ["construct", Construct, ConstructExtraction], ["tyrano", Tyrano, TyranoExtraction]
 ]) {
-  test(`${moduleId} directory packages read original assets without copying or extraction`, async t => {
+  test(`${moduleId} directory packages read original assets without copying or extraction`, { skip: denied('loopback') }, async t => {
     const { game, packagePath, userDataDir, extractRoot, entry } = fixture(t, moduleId);
     const before = snapshot(game);
     t.mock.method(fs, "cpSync", () => { throw new Error("A directory package must not be copied"); });

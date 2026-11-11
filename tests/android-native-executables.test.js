@@ -1,4 +1,5 @@
 const test = require("node:test"), assert = require("node:assert/strict");
+const { denied } = require('./helpers/environment.cjs');
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
 const {spawnSync} = require("node:child_process");
 const Sharing = require("../src/modules/android/prepared-sharing"), Cache = require("../src/modules/android/prepared-cache");
@@ -80,7 +81,7 @@ test("concurrent shared ELF publications preserve complete membership after sour
   assert.equal(Object.values(JSON.parse(fs.readFileSync(f.index)).nativeAliases)[0].members.length, 3);
 });
 
-test("actual sandbox keeps exact shared ELF execution checks and rejects writable/foreign aliases", {skip: process.platform !== "darwin"}, async t => {
+test("actual sandbox keeps exact shared ELF execution checks and rejects writable/foreign aliases", {skip: process.platform === "darwin" ? denied("seatbelt") : "Requires macOS"}, async t => {
   const f = fixture(t), a = f.generation("example", "a"), b = f.generation("example", "b", "jvm"), c = f.generation("other", "c");
   await f.share(b); await f.share(c);
   const runtime = path.join(f.root, "runtime"), java = path.join(runtime, "bin/java");

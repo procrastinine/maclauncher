@@ -8,13 +8,14 @@ const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { denied } = require('./helpers/environment.cjs');
 const { promisify } = require("node:util");
 
 const run = promisify(execFile);
 const bytes = Buffer.from("Synthetic proxy download artifact\n");
 const checksum = createHash("sha256").update(bytes).digest("hex");
 
-test("packaging downloads preserve proxy routing, bypasses, TLS and checksums", { timeout: 30000 }, async t => {
+test("packaging downloads preserve proxy routing, bypasses, TLS and checksums", { skip: denied('loopback') }, { timeout: 30000 }, async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "maclauncher-proxy-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const keyPath = path.join(root, "key.pem");
