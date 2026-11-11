@@ -382,18 +382,18 @@ struct EffectExecution::Impl {
         // A retired slot keeps no lease: the scene it continued belongs to
         // its final image, and its images return when that image completes.
         void clearImages(){for(auto&[key,pair]:images)pair.images={};for(auto&[key,value]:depths)value.image=nil;for(auto&[key,value]:guides)for(auto&image:value.images)image={};guideLease.reset();if(storage&&storage.use_count()==1)storage->holds.clear();else storage.reset();}
-        std::shared_ptr<Prepared>prepare(id<MTLDevice>device,unsigned width,unsigned height,MTLPixelFormat format,const char*role){
+        std::shared_ptr<Prepared>prepare(id<MTLDevice>device,unsigned width,unsigned height,MTLPixelFormat format,const char*role,unsigned warmCount=4){
             if(!preparing)throw TransientBusy("The effect image geometry requires resource preparation");
             if(!client)client=std::make_shared<ImagePoolClient>(device);
             auto descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format width:width height:height mipmapped:NO];descriptor.storageMode=MTLStorageModePrivate;descriptor.usage=MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite|MTLTextureUsageRenderTarget|MTLTextureUsagePixelFormatView;
             auto result=std::make_shared<Prepared>();result->key=client->prepare(descriptor,std::string(role)+':'+std::to_string(width)+':'+std::to_string(height)+':'+std::to_string(format),8);
-            // The retained scene and its successor each need a ping-pong pair.
-            // Warm both pairs on the worker; submission only acquires holds.
-            std::array<PooledImage,4>temporary;for(auto&hold:temporary){if(!result->key.prepare()||!(hold=result->key.acquire()))throw TransientBusy("Ordered effect image capacity is busy");}
+            // Match the declared frame capacity before accepting the graph.
+            // Four color slots each need a ping-pong pair; guide roles need one.
+            while(result->key.counts().images<warmCount)if(!result->key.grow())throw TransientBusy("Ordered effect image capacity is busy");
             return result;
         }
         id<MTLTexture>take(const std::shared_ptr<Prepared>&prepared){auto hold=prepared->acquire();if(!hold)throw TransientBusy("Ordered effect image capacity is busy");auto result=hold.texture();storage->holds.push_back(std::move(hold));return result;}
-        void prepareTarget(id<MTLDevice>d,unsigned w,unsigned h,MTLPixelFormat f){auto&pair=images[{w,h,f}];if(!pair.prepared)pair.prepared=prepare(d,w,h,f,"effect-color");}
+        void prepareTarget(id<MTLDevice>d,unsigned w,unsigned h,MTLPixelFormat f){auto&pair=images[{w,h,f}];if(!pair.prepared)pair.prepared=prepare(d,w,h,f,"effect-color",8);}
         void prepareDepth(id<MTLDevice>d,unsigned w,unsigned h){auto&value=depths[{w,h}];if(!value.prepared)value.prepared=prepare(d,w,h,MTLPixelFormatR32Float,"effect-depth");}
         SceneGuideTargets guideTargets(id<MTLDevice>device,const RSTemporalFrame&source,unsigned width,unsigned height,bool halfExposure,float exposureScale=1){
             const auto format=[](void*value){return value?((__bridge id<MTLTexture>)value).pixelFormat:MTLPixelFormatInvalid;};

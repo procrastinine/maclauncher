@@ -681,7 +681,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   auto encoder=[commands renderCommandEncoderWithDescriptor:descriptor];if(!encoder)throw std::runtime_error("Cannot encode output subframe");[encoder setRenderPipelineState:motionPipeline];[encoder setFragmentTexture:image atIndex:0];[encoder setFragmentBytes:&policy length:sizeof(policy) atIndex:0];[encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];[encoder endEncoding];
  }
  bool encodeFinal(id<MTLCommandBuffer>commands,id<CAMetalDrawable>drawable,const Display&display,bool producer,std::shared_ptr<Retirement>retirement={}){
-  struct Admission{Impl*owner;std::shared_ptr<Batch>batch;bool active=false,encoded=false;~Admission(){if(active&&!encoded){std::lock_guard lock(owner->mutex);batch->realAdmitted=false;owner->retireBatch(batch);}}}admission{this,display.batch};
+  struct Admission{Impl*owner;std::shared_ptr<Batch>batch;id<CAMetalDrawable>drawable;bool active=false,encoded=false;~Admission(){if(!encoded)owner->drawables.abandon(drawable);if(active&&!encoded){std::lock_guard lock(owner->mutex);batch->realAdmitted=false;owner->retireBatch(batch);}}}admission{this,display.batch,drawable};
   CAMetalLayer *layer=layerSnapshot();
   if(display.generated<0&&!retirement)retirement=display.batch->retirement;
   uint64_t frameHoldEpoch=0;
@@ -709,7 +709,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
    frame.opaqueDisplay=display.batch->opaqueDisplay;frame.totalSubframes=display.totalSubframes;frame.currentSubframe=display.subframe+1;
    const ImageContentStamp contentStamp{contentIdentity,display.batch->contentEpoch,display.batch->id,display.batch->imageRevision,display.generated>=0||display.batch->sourceSynthetic,displayMapped,display.generated<0&&!display.batch->sourceSynthetic?display.batch->scene:nullptr};
    const auto encoded=(display.batch->contentStamped||display.batch->scene)?display.batch->execution->encodeContentImage(frame,contentStamp,true,display.batch->redraw||display.subframe||display.repeatedCycle,&displayMapped):display.batch->redraw?display.batch->execution->encodeRealImage(frame,display.batch->execution->hasTemporal(),true):display.batch->execution->hasTemporal()?display.batch->execution->encodeAfterScene(frame,true,display.generated>=0,displayMapped,&displayMapped):display.batch->execution->encode(frame,true,display.generated>=0,displayMapped,&displayMapped);
-   if(!encoded.encoded){if(encoded.busy){std::lock_guard<std::mutex>lock(mutex);++status.dropped;return false;}throw std::runtime_error(encoded.reason);}
+   if(!encoded.encoded){if(encoded.busy){drawables.abandon(drawable);std::lock_guard<std::mutex>lock(mutex);++status.dropped;return false;}throw std::runtime_error(encoded.reason);}
    final=target;
   }
   if(comparing){
@@ -762,9 +762,11 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   const auto frameContract=display.batch->contract;const bool frameOpaque=display.batch->opaqueDisplay;const auto observedBatch=display.batch;const double displayDue=display.due;
   const auto quality=(!replay&&!subframe&&!repeatedCycle&&generated<0)?qualitySample(observedBatch,EffectQualityPoint::Final):AdaptiveQualitySample{};
   auto issued=std::make_shared<PresentationTicket>(); // Protected by Impl::mutex.
+  auto presentationIssued=std::make_shared<std::atomic<bool>>(false);
   const bool targeted=display.batch->targeted&&generated<0&&!subframe&&!repeatedCycle;const double requestedTime=display.batch->target;const double scheduleTime=display.batch->targeted?(subframe||repeatedCycle||generated>=0?display.due:requestedTime):0;
   auto retirementCompletion=retirement?std::make_shared<CompletionLease>([retirement](bool completed){if(!completed)retirement->completed(MTLCommandBufferStatusNotEnqueued);}):nullptr;
   [commands addCompletedHandler:^(id<MTLCommandBuffer>completed){held->reset();if(auto self=weak.lock()){
+    if(!presentationIssued->load(std::memory_order_acquire)||completed.status!=MTLCommandBufferStatusCompleted)self->drawables.abandon(drawable);
     completeQuality(completed,observedBatch,quality,EffectQualityPoint::Final,RuntimeAdaptiveQualityScope::FinalProcessing);
     if(completed.status==MTLCommandBufferStatusCompleted&&completed.GPUEndTime>completed.GPUStartTime)self->lastFinalGpuMs.store((completed.GPUEndTime-completed.GPUStartTime)*1000,std::memory_order_relaxed);
     if(completed.status!=MTLCommandBufferStatusCompleted){std::lock_guard<std::mutex>lock(self->mutex);
@@ -829,7 +831,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
     bool admitted=false;{std::lock_guard<std::mutex>lock(self->mutex);
      if(!self->stopping.load()&&!observedBatch->retired&&frameEpoch==self->presentationEpoch&&currentSize.width==frameWidth&&currentSize.height==frameHeight&&
         (!self->holdActive||self->holdResuming&&frameContract==self->desiredHoldContract)&&issued->reserve()){
-      admitted=true;++self->issuedPresentations;
+      admitted=true;presentationIssued->store(true,std::memory_order_release);++self->issuedPresentations;
       if(generated<0)observedBatch->realIssued=true;
      }else ++self->status.dropped;
     }
@@ -843,6 +845,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
      if(scheduleTime&&targettime::schedule(scheduleTime,CACurrentMediaTime()))[drawable presentAtTime:scheduleTime];else [drawable present];}
      catch(const std::exception&error){failure=error.what();}}
     @catch(NSException*error){failure=error.reason.UTF8String?:"Drawable presentation failed";}
+    if(!failure.empty()){presentationIssued->store(false,std::memory_order_release);if(scheduled.status>=MTLCommandBufferStatusCompleted)self->drawables.abandon(drawable);}
     const auto finalSize=layer.drawableSize;
     {std::lock_guard<std::mutex>lock(self->mutex);
      if(!failure.empty()&&issued->completed()&&self->issuedPresentations)--self->issuedPresentations;
@@ -1126,8 +1129,8 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   if(!deliveryMode.deferred){
    if(!commands||commands.status>=MTLCommandBufferStatusCommitted){result.reason="Presentation requires an unsubmitted command buffer";return result;}
    drawable=outputDrawable(layer);if(!drawable){{std::lock_guard<std::mutex>lock(mutex);++status.dropped;}result.busy=true;result.reason="Presentation layer has no available drawable";return result;}
-   if(drawable.texture.width!=batch->outputWidth||drawable.texture.height!=batch->outputHeight){std::lock_guard<std::mutex>lock(mutex);++status.dropped;result.busy=true;result.reason="Presentation size changed before encoding";return result;}
-   if(drawable.texture.pixelFormat!=layer.pixelFormat){result.reason="Presentation pixel format changed before encoding";fail(result.reason);return result;}
+   if(drawable.texture.width!=batch->outputWidth||drawable.texture.height!=batch->outputHeight){drawables.abandon(drawable);std::lock_guard<std::mutex>lock(mutex);++status.dropped;result.busy=true;result.reason="Presentation size changed before encoding";return result;}
+   if(drawable.texture.pixelFormat!=layer.pixelFormat){drawables.abandon(drawable);result.reason="Presentation pixel format changed before encoding";fail(result.reason);return result;}
   }
   struct ProducerState {std::atomic<bool>pending{false},dropped{false},generationEncoded{false},encoded{false};};
   std::weak_ptr<Impl>weak=shared_from_this();auto producer=std::make_shared<ProducerState>();
@@ -1158,7 +1161,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   if(result.encoded&&heldInputs&&batch->contract!=PresentationContract{heldInputs->plan->revision,heldInputs->controlsDigest}){
    result.encoded=false;result.reason="The encoded image does not match the held graphics publication";
   }
-  if(!result.encoded){if(result.busy){std::lock_guard<std::mutex>lock(mutex);if(!producer->dropped.exchange(true))++status.dropped;}else {
+  if(!result.encoded){drawables.abandon(drawable);if(result.busy){std::lock_guard<std::mutex>lock(mutex);if(!producer->dropped.exchange(true))++status.dropped;}else {
     if(heldInputs){if(!failHeldAttempt(heldEpoch,{heldInputs->plan->revision,heldInputs->controlsDigest},result.reason)){result.busy=true;result.reason="A newer graphics update replaced this frame";}}
     else fail(result.reason);
    }return result;}
@@ -1205,7 +1208,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
     if(retirement)retirement->completed(completed.status);
     if(auto self=weak.lock()){if(completed.status==MTLCommandBufferStatusCompleted)self->publish(*held,generatedReady);else if(completed.status==MTLCommandBufferStatusError)self->gpuFailure(*held,completed.error.localizedDescription.UTF8String?:"Source frame processing failed");}
     held->reset();}];}
-  else { {std::lock_guard<std::mutex>lock(mutex);if(batch->pacingObservation&&pacing)pacing->reportDelivery(batch->requestedGenerated,0);producer->pending.store(true);++status.pending;status.maxPending=std::max(status.maxPending,status.pending);}if(!encodeFinal(commands,drawable,{batch,-1,sourceTime},true,retirement)){result.encoded=false;result.busy=true;result.reason="Neural output is busy; the previous completed frame remains displayed";return result;} }
+  else { {std::lock_guard<std::mutex>lock(mutex);if(batch->pacingObservation&&pacing)pacing->reportDelivery(batch->requestedGenerated,0);producer->pending.store(true);++status.pending;status.maxPending=std::max(status.maxPending,status.pending);}if(!encodeFinal(commands,drawable,{batch,-1,sourceTime},true,retirement)){drawables.abandon(drawable);result.encoded=false;result.busy=true;result.reason="Neural output is busy; the previous completed frame remains displayed";return result;} }
   // Rejected/busy frames retain their identity so callers can retry unchanged.
   // An accepted encoding reserves identity even if its host later abandons it.
   producer->encoded.store(true);if(!contentTimed)observe(RuntimeStatusPhase::Encoded,batch);requestRuntimeStatusPoll(true);frameRetry.reset();lastSubmission=frameId;{std::lock_guard<std::mutex>lock(mutex);if(!redraw){if(content){interval=sourcePeriod;lastContentId=content->contentId;lastContentEpoch=content->epoch;lastContentPTS=content->pts;lastContentTimeMs=contentTimeMs;lastContentPTSUnknown=ptsUnknown;lastImageRevision=content->imageRevision;lastContentMapped=sourceMapped;lastContentDuration=sourcePeriod;lastContentMediaDuration=contentPeriod;lastContentTarget=target?target->hostTime:0;}else if(!config.sourceFrameRate&&lastSourceTime)interval=updateSourceInterval(interval,sourceTime-lastSourceTime);}lastSourceTime=sourceTime;if(!contentTimed)++status.encoded;if(target){++timing.accepted;if(target->hostTime<=targetSubmittedAt)++timing.lateAtSubmit;}if(retirement){retirements.erase(std::remove_if(retirements.begin(),retirements.end(),[](const auto&entry){auto value=entry.lock();return !value||value->done.load();}),retirements.end());retirements.push_back(retirement);retirement->arm();}}return result;

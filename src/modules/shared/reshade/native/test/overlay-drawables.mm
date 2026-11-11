@@ -75,6 +75,14 @@ int main(){@autoreleasepool{
     layer.failNext=YES;
     check(!timed(gate,layer)&&gate.held()==2,"a nil drawable returns its reservation");
     check(layer.blocked->load()==0,"no acquisition waited");
+    // Core Animation may retain a presentation handler after an unpresented
+    // drawable is returned. Explicit rejection retires admission immediately.
+    NSArray *uninvoked=[d.handlers copy];[d.handlers removeAllObjects];
+    gate.abandon((id<CAMetalDrawable>)d);d=nil;
+    check(gate.held()==1&&layer.inUse->load()==1,"a rejected image returns its reservation with its callback still retained");
+    ControlledDrawable *afterReject=timed(gate,layer);check(afterReject&&gate.held()==2&&layer.blocked->load()==0,"submission continues after rejection without waiting for its callback");
+    gate.abandon((id<CAMetalDrawable>)afterReject);afterReject=nil;
+    (void)uninvoked;
     // Concurrent producers reserve before the call and never overcommit.
     ControlledLayer *shared=[ControlledLayer new];shared.maximumDrawableCount=3;
     std::atomic<unsigned> admitted{0};NSMutableArray *kept=[NSMutableArray new];

@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <utility>
+#include <unordered_map>
 
 namespace macfx {
 // The drawables of an owned output layer that Core Animation has not taken
@@ -17,17 +18,23 @@ namespace macfx {
 // never delays the thread that submits the game's frame.
 class OverlayDrawables {
     class Hold;
-    struct State {std::mutex mutex;unsigned held=0,limit=0;std::shared_ptr<Hold> displayed;std::chrono::steady_clock::time_point refusing{};};
+    struct State {std::mutex mutex;unsigned held=0,limit=0;std::shared_ptr<Hold> displayed;std::unordered_map<void*,std::weak_ptr<Hold>> pending;std::chrono::steady_clock::time_point refusing{};};
     class Hold {
         std::weak_ptr<State> owner;std::atomic<bool> released{false};
     public:
         explicit Hold(std::weak_ptr<State> value):owner(std::move(value)){}
         Hold(const Hold&)=delete;Hold &operator=(const Hold&)=delete;
         ~Hold(){release();}
+        bool active()const{return !released.load();}
         void release(){if(released.exchange(true))return;if(auto state=owner.lock()){std::lock_guard<std::mutex>lock(state->mutex);if(state->held)--state->held;}}
     };
     const std::shared_ptr<State> state=std::make_shared<State>();
 public:
+    // A rejected image never presents, so its callback cannot retire admission.
+    void abandon(id<CAMetalDrawable>drawable)const{
+        std::shared_ptr<Hold>hold;{std::lock_guard lock(state->mutex);const auto it=state->pending.find((__bridge void*)drawable);if(it!=state->pending.end()){hold=it->second.lock();state->pending.erase(it);}}
+        if(hold)hold->release();
+    }
     unsigned held()const{std::lock_guard<std::mutex>lock(state->mutex);return state->held;}
     // Duration of the current run of refusals; zero after any admission.
     double refusingSeconds()const{
@@ -50,8 +57,12 @@ private:
     }
     id<CAMetalDrawable> track(id<CAMetalDrawable> drawable,std::shared_ptr<Hold> hold){
         if(!drawable)return nil;
+        const auto key=(__bridge void*)drawable;
+        {std::lock_guard lock(state->mutex);state->pending[key]=hold;}
         std::weak_ptr<State> weak=state;
         [drawable addPresentedHandler:^(id<MTLDrawable> presented){
+            if(auto owner=weak.lock()){std::lock_guard lock(owner->mutex);const auto it=owner->pending.find(key);if(it!=owner->pending.end()&&it->second.lock()==hold)owner->pending.erase(it);}
+            if(!hold->active())return;
             const double time=presented.presentedTime;
             if(!std::isfinite(time)||time<=0){hold->release();return;}
             std::shared_ptr<Hold> replaced;

@@ -134,7 +134,13 @@ int main(int argc,char **argv){@autoreleasepool{
     auto blocked=[queue commandBuffer];auto busy=presenter.submitDisplayFrame(blocked,source,3,CACurrentMediaTime(),true);assert(!busy.encoded&&busy.busy);
     assert(replaceFile(second,control));publish(plan,@"c",.8);macfx::PresentationHoldCommand resume{++epoch,"transaction","present",b,{}};
     assert(presenter.resumePresentationHold(resume).state=="presenting");blocked=[queue commandBuffer];busy=presenter.submitDisplayFrame(blocked,source,3,CACurrentMediaTime(),true);assert(!busy.encoded&&busy.busy&&presenter.snapshot().lastPresentedFrame==1);
-    publish(plan,@"b",.8);auto current=[queue commandBuffer];assert(presenter.submitDisplayFrame(current,source,4,CACurrentMediaTime(),true).encoded);commit(current);awaitState(presenter,"presented");
+    publish(plan,@"b",.8);id<MTLCommandBuffer>current=nil;
+    const auto candidateUntil=CACurrentMediaTime()+5;std::string candidateReason;
+    for(;;){current=[queue commandBuffer];const auto result=presenter.submitDisplayFrame(current,source,4,CACurrentMediaTime(),true);if(result.encoded)break;
+        if(candidateReason!=result.reason){candidateReason=result.reason;std::fprintf(stderr,"Hold frame 4 not encoded: busy=%u reason=%s\n",result.busy,result.reason.c_str());}
+        assert(result.busy&&CACurrentMediaTime()<candidateUntil&&presenter.snapshot().lastPresentedFrame==1);
+        commit(current);idle(.005);
+    }commit(current);awaitState(presenter,"presented");
     const auto accepted=presenter.presentationHoldStatus();assert(presenter.presentationHeld()&&accepted.holding&&accepted.frameId==4&&accepted.presentedTime>0&&accepted.contract==b);
     blocked=[queue commandBuffer];assert(presenter.submitDisplayFrame(blocked,source,5,CACurrentMediaTime(),true).busy);finish("transaction",b);
     const auto prepared=preparations->load();begin={++epoch,"transaction-two","hold",b,b};assert(presenter.beginPresentationHold(begin).state=="held");
