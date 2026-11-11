@@ -17,6 +17,7 @@ Each game's record and launcher data live under `games/<gameId>/`. Android appli
 | `runtimes/<managerId>/` | Shared runtime installations |
 | `runtimes/<runtimeId>/settings.json` | Global runtime defaults |
 | `runtimes/automatic-installs.json` | Runtime versions that Play installed on its own, for [derived data upkeep](#derived-data-upkeep) |
+| `library-availability.json` | The games last found unavailable, each with the root it was checked at and the reason, so they [show as unavailable](../library/GAME_PREPARATION.md#unavailable-game-files) from the first library paint at the next start |
 | `logs/main.log` | Launcher log |
 | `updates/` | The latest update check, a downloaded update waiting to be installed, and the installation script and its log; see [app updates](../UPDATES.md#files) |
 | `graphics/reshade-filters.json` | Registered local shader files, with their names, paths and cached classification |

@@ -395,7 +395,7 @@ The download manager menu (the down arrow at the end of the runtime search field
 
 Besides downloads, a runtime can come from an application already on the Mac or from custom files. Local applications, such as CrossOver, are listed under **Registered applications** with their versions and paths. **Add application** opens the native application picker, and **Find installed applications** refreshes local discovery without downloading anything. Each copy is a separate choice, even when two copies have the same version. **Remove** unregisters a copy and keeps its files. Defaults and per-game version choices use the same controls as downloaded runtimes.
 
-For custom files, **Register custom…** follows the Installed list and opens a native file and folder picker for the current list of compatible runtimes. Custom executables, applications and complete runtime folders then join its installed choices, and download sources use the same registration control. **Remove registration** leaves the selected files in place. [Custom runtime layouts](../runtimes/CUSTOM_RUNTIME_LAYOUTS.md) describes the files each runtime needs.
+For custom files, **Register custom…** follows the Installed list and opens a native file and folder picker for the current list of compatible runtimes. Custom executables, applications and complete runtime folders then join its installed choices, and download sources use the same registration control. A runtime that runs only from its managed installations, such as WineCX, has no **Register custom…** control. **Remove registration** leaves the selected files in place. [Custom runtime layouts](../runtimes/CUSTOM_RUNTIME_LAYOUTS.md) describes the files each runtime needs.
 
 #### Downloaded files
 

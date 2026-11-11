@@ -30,6 +30,8 @@ On macOS, isolation blocks Internet and local-network IP connections and incomin
 
 The setting applies to the game's own process tree. It is not a system-wide firewall and does not change a Steam client, a browser or another external service, including a Steam client that Play [starts for a Steam game](STEAM_API.md) after consent or with **Start automatically**. Games that require those services keep their connection and offline-mode requirements. Runtime [downloads](README.md#downloads-and-offline-use) and preparation happen before the game starts and are not affected by the game's setting.
 
+macOS's Local Network permission is separate from isolation. Sikarugir and WineCX games run from a Game Mode bundle with one identifier per Wine source, and macOS 15 and later asks once per source whether its games may use the local network, as [Wine runtimes](WINE.md#shared-behavior) describes. Both apply: with network access off, isolation blocks the game's local-network connections whatever the answer, and with it on, those connections also follow the macOS answer.
+
 ## What stays available
 
 - Local Unix-socket communication stays available for runtime coordination, including Wine's private server.

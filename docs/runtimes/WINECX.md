@@ -14,7 +14,7 @@ A release is a runtime when it offers exactly one archive together with a checks
 
 Version labels name the release and the Wine version read from the installed `ntdll.so`, in the form **WineCX 4.8.1 · Wine 11.19**. An installed version's row also names its included translators, as in **Includes DXMT 0.80 · DXVK 1.10.3 for 32-bit games · MoltenVK 1.4.2 · GStreamer 1.26.3**: DXVK and DXMT with the versions that its version plist states, MoltenVK with the version its library states and GStreamer with the version of its core library ([Graphics translators](TRANSLATORS.md#versions-and-sources)).
 
-**Install** can replace an incomplete installation of the same version, and Play offers the same repair through its download prompt. Installation records every installed file in a sealed inventory, and a changed or missing Wine file makes the version unavailable until it is installed again.
+**Install** can replace an incomplete installation of the same version, and Play offers the same repair through its download prompt. Installation records every installed file in a sealed inventory, and a changed or missing Wine file makes the version unavailable until it is installed again. Each launch checks that inventory, which only a managed installation records, so **Runtimes → WineCX** has no **Register custom…** control and no folder can be registered as a WineCX version.
 
 ## Contents
 

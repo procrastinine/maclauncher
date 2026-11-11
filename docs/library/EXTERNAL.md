@@ -4,7 +4,7 @@
 
 ## Installed games
 
-**Installed** lists the Steam, Epic Games, GOG and itch.io games installed in common macOS and CrossOver locations. It reads local store manifests, registered Steam libraries, Heroic and Legendary installation records, GOG game metadata and itch.io install receipts. Versions that MacLauncher downloaded separately appear in **Downloaded** instead. Scanning and the reload button stay offline, and the artwork comes from local files.
+**Installed** lists the Steam, Epic Games, GOG and itch.io games installed in common macOS and CrossOver locations. It reads local store manifests, registered Steam libraries, Heroic and Legendary installation records, GOG game metadata and itch.io install receipts. Versions that MacLauncher downloaded separately appear in **Downloaded** instead. Scanning and the reload button stay offline, and the artwork comes from local files, drawn with each row as it first paints. Artwork from a connected account or a store's servers loads as its row nears the view.
 
 Steam app manifests do not record what kind of app they install, so the type of each installed Steam app comes from the local app cache of the Steam client that installed it, or from another Steam client's cache when that one lacks it. Games, applications, demos, mods, soundtracks and betas are listed. Tools, configurations and Steam's own shared components, such as the Steamworks Common Redistributables, are not. An app that no local cache describes remains listed. The account library in the Steam tab applies the same rule.
 
