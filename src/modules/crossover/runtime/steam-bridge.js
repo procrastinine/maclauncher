@@ -9,6 +9,7 @@ const { readJsonObject, writeJsonAtomic } = require('../../../core/json-files');
 const Clients = require('../../shared/reshade/steam-client-models');
 const Steam = require('../../shared/runtime/steamworks/installed-client');
 const ClientStart = require('../../shared/runtime/steamworks/client-start');
+const { readGameAppId } = require('../../shared/runtime/steamworks/app-id');
 const Components = require('./steam-client-components');
 const id = 'maclauncher-steam-bridge';
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
@@ -16,6 +17,7 @@ function identify(entry) {
   for (const candidate of [entry?.gamePath, entry?.importPath, entry?.contentRootDir]) {
     if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) continue;
     let directory; try { directory = fs.realpathSync(candidate); if (!fs.statSync(directory).isDirectory()) directory = path.dirname(directory); } catch { continue; }
+    const gameRoot = directory;
     const installed = Steam.findInstalledApp(directory);
     if (installed && ClientStart.findSteamApiPlatforms(installed.installRoot).has('windows')) return installed;
     for (let depth = 0; depth < 16; ++depth) {
@@ -28,6 +30,14 @@ function identify(entry) {
         } catch { /* A removed download is not a ready Steam installation. */ }
       }
       const parent = path.dirname(directory); if (parent === directory) break; directory = parent;
+    }
+    if (ClientStart.findSteamApiPlatforms(gameRoot).has('windows')) {
+      try {
+        const identity = readGameAppId({ gameRoot });
+        const source = identity.evidence.find(row => row.kind === 'steam-appid-file');
+        if (identity.status === 'found' && !identity.errors.length && source)
+          return { appId: String(identity.value), installRoot: gameRoot, appIdPath: source.filePath };
+      } catch { /* Invalid or changing portable metadata supplies no identity. */ }
     }
   }
   return null;

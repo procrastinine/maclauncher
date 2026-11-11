@@ -4,7 +4,7 @@ The [Wine runtimes](WINE.md), CrossOver, Sikarugir and WineCX, share an optional
 
 ## Play
 
-The bridge applies to a game that includes `steam_api.dll` or `steam_api64.dll` and whose app ID is recorded in a local Steam library manifest or in a completed MacLauncher Steam download. The Steam client for Mac must also be installed. Play does not offer the bridge for any other game.
+The bridge applies to a game that includes `steam_api.dll` or `steam_api64.dll` and whose app ID is recorded in a local Steam library manifest, a completed MacLauncher Steam download or a game-local `steam_appid.txt`. Portable identity metadata must contain one consistent valid app ID. The Steam client for Mac must also be installed. Play does not offer the bridge for any other game.
 
 When the bridge package or its Windows Steam client files are missing, Play asks one question for the game, in one of two ways:
 

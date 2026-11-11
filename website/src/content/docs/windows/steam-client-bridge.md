@@ -23,7 +23,7 @@ The community project [NotProton](https://github.com/NotProtonNot/NotProton) mak
 Play offers the bridge for a Windows game in CrossOver, Sikarugir or WineCX when all of these hold:
 
 - the game includes `steam_api.dll` or `steam_api64.dll`;
-- MacLauncher knows the game's Steam app ID, either because the game is in a Steam library on your Mac or because you downloaded it with MacLauncher's Steam tab;
+- MacLauncher knows the game's Steam app ID from a local Steam library, a completed Steam download or the portable game's `steam_appid.txt`;
 - the Steam client for Mac is installed.
 
 Every other game starts without it.
