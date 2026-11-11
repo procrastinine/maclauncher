@@ -12,7 +12,6 @@ const manager = require("./manager");
 const DLSS = require("../dlss");
 const Translators = require("../../shared/runtime/wine-translators");
 const TranslatorFiles = require("../../shared/runtime/translator-files");
-const TranslatorEnvironment = require("../../shared/runtime/translator-environment-launch");
 const { wineLayout } = require("../../shared/runtime/wine-layout");
 const { findWindowsExecutable, readWindowsExecutable, inside } = require("../detect");
 
@@ -234,26 +233,11 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const executable = settings.executable ? path.resolve(match.sourceRoot, safeText(settings.executable, "Windows executable")) : match.windowsExecutablePath;
   const selectedExecutable = inside(match.sourceRoot, executable) ? readWindowsExecutable(executable) : null;
   if (!selectedExecutable) throw new Error("Windows executable must be a PE executable inside the game folder.");
-  const translatorPlan = await Translators.resolve(selected.install, 'crossover', context, { entry, executableArchitecture: selectedExecutable.executableArchitecture, host });
-  timing('translators');
-  settings = DLSS.withTemporalSelection(Translators.settingsForPlan(settings, translatorPlan), entry.effects, translatorPlan);
-  const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, "crossover")).values;
-  let translatorView = TranslatorFiles.selectedDescriptions(translatorPlan).length ? await TranslatorFiles.prepareTranslatorFiles(translatorPlan,
-    { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal }) : null;
-  const vulkanDLSS=await require("../temporal/vulkan-dlss").prepare(entry,context,settings,translatorPlan,selectedExecutable.executableArchitecture,translatorView);
-  translatorView=vulkanDLSS.view;
+  const plans = await require("../sources/launch-graphics").resolve(entry, context, { source: require("../sources").get("crossover"),
+    install: selected.install, settings, host, executableArchitecture: selectedExecutable.executableArchitecture, root: graphicsRoot, translatorFiles: "selected", timing });
+  const { translatorPlan, translatorEnvironment, translatorView, vulkanDLSS, ngxScene, scenePlan } = plans;
+  let { cameraBridge } = plans, sceneReady = Boolean(scenePlan?.packageReady);settings = plans.settings;
   const Temporal = require("../temporal");
-  const ngxScene = require("../temporal/ngx/connection").resolve({ requested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects), runtimeId: "crossover", install: selected.install, translatorPlan, executableArchitecture: selectedExecutable.executableArchitecture });
-  context.ngxSceneConnection = ngxScene;
-  const scenePlan = Temporal.resolveScenePlan(entry, context, { settings, translatorPlan, verify: true, root: graphicsRoot });
-  let sceneReady = Boolean(scenePlan?.packageReady);
-  // A Vulkan scene source does not request a different Direct3D renderer.
-  if (scenePlan) settings = { ...settings, dlss: context.runtimeSettings?.dlss === true || settings.dlssOptional === true };
-  let cameraBridge = Temporal.resolvePlan(entry, context,
-    { install: selected.install, settings, translatorPlan, runtimeId: "crossover", root: graphicsRoot, host, verify: true, automatic: settings.dlss !== true });
-  if (cameraBridge) settings = { ...settings, dlss: true };
-  if (cameraBridge?.dependency) await context.useRuntime?.(cameraBridge.dependency);
-  for (const dependency of scenePlan?.dependencies || []) await context.useRuntime?.(dependency);
   if (selectedExecutable.executableArchitecture === "arm64" && !translatorPlan.layout.windows.includes("aarch64-windows")) throw new Error("This Windows ARM64 executable is not supported by the CrossOver backend. Use an x86 or x64 Windows build.");
   const directory = runtimeDirectory(entry, context);
   const GameView = require("../temporal/game-view");GameView.clearWatch(context);

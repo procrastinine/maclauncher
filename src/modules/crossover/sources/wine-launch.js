@@ -16,7 +16,6 @@ const Detection = require("../detect");
 const DLSS = require("../dlss");
 const Translators = require("../../shared/runtime/wine-translators");
 const TranslatorFiles = require("../../shared/runtime/translator-files");
-const TranslatorEnvironment = require("../../shared/runtime/translator-environment-launch");
 
 const WINDOWS_VERSIONS = new Set(Object.keys(WineSettings.WINDOWS_VERSIONS));
 
@@ -276,25 +275,12 @@ async function prepareLaunch(entry, context, dependencies = {}) {
       executablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture });
     context.runtimeSettings = settings;
   }
-  const Temporal = require("../temporal");
   const capabilities = require("../../shared/runtime/host-capabilities").getHostCapabilities();
   const host = dependencies.host || capabilities;
-  const translatorPlan = await (dependencies.resolveTranslators || Translators.resolve)(selected.install, source.id, context, { entry, executableArchitecture: match.executableArchitecture, host });
-  settings = DLSS.withTemporalSelection(Translators.settingsForPlan(settings, translatorPlan), entry.effects, translatorPlan);
-  const translatorEnvironment = TranslatorEnvironment.forLaunch(entry, context, Translators.environmentIds(translatorPlan, source.id)).values;
-  const ngxScene = require("../temporal/ngx/connection").resolve({ requested: settings.dlss === true || DLSS.needsSceneInputs(entry.effects), runtimeId: source.id, install: selected.install, translatorPlan, executableArchitecture: match.executableArchitecture });
-  context.ngxSceneConnection = ngxScene;
-  let translatorView = await TranslatorFiles.prepareTranslatorFiles(translatorPlan, { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal });
-  const vulkanDLSS=await require("../temporal/vulkan-dlss").prepare(entry,context,settings,translatorPlan,match.executableArchitecture,translatorView);
-  translatorView=vulkanDLSS.view;
-  const scenePlan = Temporal.resolveScenePlan(entry, context, { settings, translatorPlan, verify: true, root: dependencies.graphicsRoot });
-  // A FidelityFX scene source requests no other Direct3D renderer.
-  if (scenePlan) settings = { ...settings, dlss: context.runtimeSettings?.dlss === true || settings.dlssOptional === true };
-  let cameraBridge = Temporal.resolvePlan(entry, context, { install: selected.install, settings, translatorPlan, host,
-    runtimeId: source.id, verify: true, root: dependencies.graphicsRoot, automatic: settings.dlss !== true });
-  if (cameraBridge) settings = { ...settings, dlss: true };
-  if (cameraBridge?.dependency) await context.useRuntime?.(cameraBridge.dependency);
-  for (const dependency of scenePlan?.dependencies || []) await context.useRuntime?.(dependency);
+  const plans = await require("./launch-graphics").resolve(entry, context, { source, install: selected.install, settings, host,
+    executableArchitecture: match.executableArchitecture, root: dependencies.graphicsRoot, resolveTranslators: dependencies.resolveTranslators });
+  const { translatorPlan, translatorEnvironment, translatorView, vulkanDLSS, ngxScene, scenePlan } = plans;
+  let { cameraBridge } = plans;settings = plans.settings;
   await context.flushRuntimeUses?.();
   if (selected.install.needsRosetta && !rosetta.isAvailable()) await rosetta.ensure(context);
   context.signal?.throwIfAborted();
