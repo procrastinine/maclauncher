@@ -88,11 +88,11 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
       await record.ready;
       if (switched && !navigation) onContextChange(win);
     }
+    if (!wasLoaded) win.once("show", () => idle(() => { void ensureSpare(); }));
     if (navigation) beforeShow(win);
     if (present) await present(win, { view: record.context.view, revision: record.context.revision, switched, navigation, shown: record.shown, activate });
     else focus(win, activate);
     record.shown = true;
-    if (!wasLoaded) void ensureSpare();
     return win;
   }
 
@@ -130,6 +130,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     record.hidden = false;
     if (kept.has(request.view)) {
       await record.ready;
+      record.win.once("show", () => idle(() => { void ensureSpare(); }));
       if (present) await present(record.win, {view: request.view, revision: record.context.revision, switched: false, navigation: false, shown: false, activate});
       else focus(record.win, activate);
     } else {
@@ -137,7 +138,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
       await record.ready;
     }
     record.shown = true;
-    void ensureSpare();
+    if (!kept.has(request.view)) void ensureSpare();
     return record.win;
   }
 

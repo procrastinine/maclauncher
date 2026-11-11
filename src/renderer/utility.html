@@ -5,18 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MacLauncher</title>
     <style>
-      html,body{margin:0;height:100%;background:#f5f6f8;color:#24262b;font:13px -apple-system,BlinkMacSystemFont,sans-serif}
-      @media(prefers-color-scheme:dark){html,body{background:#111318;color:#e7e9ed}}
-      #utility-shell{box-sizing:border-box;position:absolute;inset:0;padding:20px;display:grid;grid-template-columns:160px 1fr;gap:20px}
-      #utility-shell h1{grid-column:1/-1;margin:0 0 12px;font-size:18px;font-weight:600}
-      .shell-lines{display:flex;flex-direction:column;gap:16px}.shell-lines i{display:block;height:12px;border-radius:4px;background:currentColor;opacity:.06}
-      .shell-lines i:nth-child(2n){width:72%}#utility-error{grid-column:1/-1}
+      html,body{margin:0;height:100%;background:#fff;color:#202530;font:13px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+      @media(prefers-color-scheme:dark){html,body{background:#171a21;color:#e6e9ef}}
+      #utility-shell{box-sizing:border-box;position:absolute;inset:0;overflow:hidden}
+      #utility-shell h1{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+      .shell-body{box-sizing:border-box;padding:16px 18px}
+      .shell-table{border:1px solid #8883;border-radius:6px;overflow:hidden}
+      .shell-row{display:grid;grid-template-columns:minmax(180px,3fr) minmax(0,2fr);align-items:center;gap:12px;padding:10px 12px;border-top:1px solid #8883;height:39px;box-sizing:border-box}
+      .shell-row:first-child{border-top:0;height:36px;background:#8881}
+      .shell-row i{display:block;height:12px;max-width:72%;border-radius:4px;background:currentColor;opacity:.06}
+      .shell-sidebar{display:none}
+      #utility-shell:not([data-utility-shell-view="credits"]) .shell-body{padding:0;display:grid;grid-template-columns:clamp(176px,23vw,224px) minmax(0,1fr);height:100%}
+      #utility-shell:not([data-utility-shell-view="credits"]) .shell-sidebar{display:block;background:#8881;border-right:1px solid #8883;padding:16px 18px}
+      #utility-shell:not([data-utility-shell-view="credits"]) .shell-table{margin:16px 18px;align-self:start}
+      #utility-error{padding:0 18px}
     </style>
   </head>
   <body>
     <main id="utility-shell" aria-labelledby="utility-shell-title"><h1 id="utility-shell-title"></h1>
-      <div class="shell-lines" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-      <div class="shell-lines" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="shell-body" aria-hidden="true"><aside class="shell-sidebar"></aside><div class="shell-table">
+        <div class="shell-row"><i></i><i></i></div><div class="shell-row"><i></i><i></i></div>
+        <div class="shell-row"><i></i><i></i></div><div class="shell-row"><i></i><i></i></div>
+      </div></div>
       <p id="utility-error" role="alert" hidden></p>
     </main>
     <div id="root"></div>

@@ -12,8 +12,8 @@ class Window extends EventEmitter {
   isDestroyed() { return this.destroyed; }
   isMinimized() { return this.minimized; }
   restore() { this.minimized = false; this.restored = true; }
-  show() { this.shows++; }
-  showInactive() { this.inactive=(this.inactive||0)+1; }
+  show() { this.shows++; this.emit("show"); }
+  showInactive() { this.inactive=(this.inactive||0)+1; this.emit("show"); }
   focus() { this.focuses++; }
   destroy() { this.destroyed = true; this.emit("closed"); }
 }
@@ -890,4 +890,34 @@ test('the utility shell entry has no static React or control dependency', async 
   assert.ok(entry.dynamicImports.length>0,'The controls load asynchronously');
   const html=bundle.output.find(item=>item.type==='asset'&&item.fileName==='utility.html').source;
   assert.match(String(html),/id="utility-shell"/);
+});
+
+test('a cold second view returns and shows before constructing its next spare', async () => {
+  const idle=[];let release,hold;
+  const f=fixture({kept:['settings','runtimes','credits'],idle:callback=>idle.push(callback),load:()=>hold,
+    present:async win=>{win.shows++;}});
+  await f.controller.prepare();
+  hold=new Promise(resolve=>{release=resolve;});
+  await f.controller.open({view:'runtimes'});
+  const second=f.controller.open({view:'credits'});
+  release();const credits=await second;
+  assert.equal(f.windows.length,2,'No third native constructor runs on the second open path');
+  assert.equal(credits.shows,1);
+  credits.emit('show');
+  assert.equal(f.windows.length,2,'The native show notification finishes before refill');
+  assert.equal(idle.length,1);
+  idle.shift()();
+  assert.equal(f.windows.length,3,'One spare refills after the second native window is visible');
+});
+
+test('the Credits shell reserves the real table layout at the top without a visible title', () => {
+  const html=fs.readFileSync(path.join(__dirname,'../src/renderer/utility.html'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'../src/renderer/src/ui/styles.css'),'utf8');
+  const rule=(source,selector)=>{const start=source.indexOf(selector+'{')>=0?source.indexOf(selector+'{'):source.indexOf(selector+' {');assert.ok(start>=0,'Missing '+selector);return source.slice(source.indexOf('{',start)+1,source.indexOf('}',start)).replace(/\s+/g,'');};
+  const body=rule(html,'.shell-body'),realBody=rule(styles,'.launcherViewBody');
+  assert.ok(body.includes('padding:16px18px')&&realBody.includes('padding:16px18px'),'The table starts at the same content inset');
+  const row=rule(html,'.shell-row'),realRow=rule(styles,'.ackRow');
+  for(const property of ['grid-template-columns:minmax(180px,3fr)minmax(0,2fr)','gap:12px','padding:10px12px'])assert.ok(row.includes(property)&&realRow.includes(property),property);
+  assert.ok(rule(html,'#utility-shell h1').includes('clip-path:inset(50%)'),'Only the native title is visible, as in CreditsView');
+  assert.ok(!rule(html,'#utility-shell').includes('display:grid'),'Auto-sized grid rows must not spread the heading and table over the viewport');
 });
