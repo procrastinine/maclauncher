@@ -86,6 +86,8 @@ public:
     unsigned generationWidth()const;unsigned generationHeight()const;
     unsigned generationOutputWidth()const;unsigned generationOutputHeight()const;
     void setStatusContext(uintptr_t);
+    // Status context for the rows after the scene's temporal stage, which run where the scene is presented.
+    void setAfterSceneStatusContext(uintptr_t);
     bool hasTemporal() const;
     bool requiresDepth() const;
     // Ordinary owned presentation may process independent final images on its

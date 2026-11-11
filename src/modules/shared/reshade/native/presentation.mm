@@ -546,7 +546,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   if(scene.preparing){result.busy=true;result.reason=scene.reason;return false;}
   sceneCapture=std::move(scene.capture);sceneInputs=std::move(scene.scene);receiptCompletion=std::move(scene.completion);receiptSynthetic=scene.synthetic;
   if(scene.execution){receiptDepth=scene.depth;effectFrameId=scene.frameId;receiptMapped=scene.displayMapped;receiptInputs=scene.inputs;}
-  EffectExecutionSelection selected;std::shared_ptr<TemporalSceneContinuation>continuation;std::string rendererPendingReason;
+  EffectExecutionSelection selected;std::shared_ptr<TemporalSceneContinuation>continuation;std::string rendererPendingReason;bool sceneOwned=false;
   if(sceneWindow){noteSceneWindowPresenter(shared_from_this(),sceneWindow,commands.device);holdPlans.poll();const auto desired=holdPlans.snapshot();if(desired&&desired->mode=="advanced")if(auto candidate=temporalSceneContinuation(sceneWindow,source)){if(candidate->execution()->revision()==desired->revision)continuation=std::move(candidate);else if(std::any_of(desired->nodes.begin(),desired->nodes.end(),[](const auto&node){return node.enabled&&(node.kind=="temporal"||node.requirements.depth||node.requirements.motion||node.kind=="frame-generation"&&generationRequiresScene(node.method));})){rendererPendingReason="Waiting for the latest renderer scene graph; the accepted scene remains active";continuation=std::move(candidate);}}}
   // A renderer receipt owns its scene prefix. Reprepare its image-pair
   // suffix for this presenter's queue instead of reusing producer resources.
@@ -555,10 +555,10 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
    const auto prefix=scene.execution;std::optional<RSTemporalFrame>inputs;
    if(sceneInputs){std::shared_ptr<const EffectSceneLease>derived;const auto bound=prefix->bindSceneImage(commands,source,planTarget,sceneInputs,derived,config.origin);if(!bound.encoded){result.busy=bound.busy;result.reason=bound.reason;return false;}sceneInputs=std::move(derived);inputs=retainedSceneFrame(sceneInputs);if(!inputs){result.reason="The Metal 4 final image lost its exact scene lease";return false;}receiptDepth={(__bridge id<MTLTexture>)inputs->depth,inputs->frameId,config.origin};frame.depth=receiptDepth.texture?&receiptDepth:nullptr;}
    selected=plans->prepareSceneContinuation(frame,inputs?&*inputs:nullptr,colorSpace,sourceColor,prefix->sceneSuffixSnapshot(),prefix->sceneOutputIdentity(),sceneInputs);
-  }else if(scene.execution){selected.active=true;selected.execution=std::move(scene.execution);}
+  }else if(scene.execution){selected.active=true;selected.execution=std::move(scene.execution);sceneOwned=true;}
   else if(continuation){
    const auto ready=continuation->ready(commands);if(!ready.encoded){result.busy=true;result.reason=ready.reason;return false;}
-   const auto prefix=continuation->execution();prefix->setStatusContext(reinterpret_cast<uintptr_t>(owner));std::shared_ptr<const EffectSceneLease>derived;const auto bound=prefix->bindSceneImage(commands,source,planTarget,continuation->scene(),derived,config.origin);if(!bound.encoded){result.busy=bound.busy;result.reason=bound.reason;return false;}
+   const auto prefix=continuation->execution();prefix->setAfterSceneStatusContext(reinterpret_cast<uintptr_t>(owner));std::shared_ptr<const EffectSceneLease>derived;const auto bound=prefix->bindSceneImage(commands,source,planTarget,continuation->scene(),derived,config.origin);if(!bound.encoded){result.busy=bound.busy;result.reason=bound.reason;return false;}
    auto inputs=retainedSceneFrame(derived);if(!inputs){result.reason="The final image lost its renderer scene lease";return false;}
    receiptDepth={(__bridge id<MTLTexture>)inputs->depth,inputs->frameId,config.origin};frame.depth=&receiptDepth;effectFrameId=inputs->frameId;receiptInputs=continuation->inputs();receiptMapped=continuation->displayMapped();
    selected=plans->prepareSceneContinuation(frame,&*inputs,colorSpace,sourceColor,prefix->sceneSuffixSnapshot(),prefix->sceneOutputIdentity(),derived);sceneInputs=std::move(derived);sceneContinuation=continuation;
@@ -580,7 +580,9 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
     retireDelivery();
     if(generationChanged){generator=next->generator();pool.clear();historyReady=false;generationSequence=0;generationAdmission.reset();admittedGenerator=nullptr;}
     else if(historyChanged){historyReady=false;++generationSequence;}
-    outputPolicy=next->outputPolicy();execution=next;execution->setStatusContext(reinterpret_cast<uintptr_t>(owner));planMode=true;config.generation=next->graphics().generation;config.generationMethod=next->graphics().generationMethod;config.adaptive=next->graphics().adaptive;liveMultiplier=config.generation?config.generation->multiplier:0;generationEnabled=bool(generator);
+    outputPolicy=next->outputPolicy();execution=next;
+    // A renderer receipt's execution keeps its scene rows under the scene's context.
+    if(sceneOwned)execution->setAfterSceneStatusContext(reinterpret_cast<uintptr_t>(owner));else execution->setStatusContext(reinterpret_cast<uintptr_t>(owner));planMode=true;config.generation=next->graphics().generation;config.generationMethod=next->graphics().generationMethod;config.adaptive=next->graphics().adaptive;liveMultiplier=config.generation?config.generation->multiplier:0;generationEnabled=bool(generator);
     pacing=config.adaptive?std::make_unique<AdaptivePacing>(*config.adaptive):nullptr;
    }
    if(generator||outputPolicy.active())start();

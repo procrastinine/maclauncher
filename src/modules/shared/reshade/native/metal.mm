@@ -701,7 +701,7 @@ struct Runtime {
                 if(capture)capture->finish(buffer,screenshot.prepare(buffer,target,description,context.frameId),captureFlipY);if(receipt){receipt->advanced=true;receipt->planRevision=prefix->revision();}observePlanFrame(context,prefix->revision());lastFrame=now;if(captureTime>0)lastHostTime=captureTime;++frames;return;
             }
             if(scene.execution) {
-                scene.execution->setStatusContext(statusContext);
+                scene.execution->setAfterSceneStatusContext(statusContext);
                 context.frameId=scene.frameId;context.depth=scene.depth.texture?&scene.depth:nullptr;
                 auto capture=scene.capture?scene.capture:macfx::FrameCapture::begin(buffer,source,frames+1,captureFlipY,colorDescription?colorDescription:&scene.execution->imageColor());
                 const auto result=scene.execution->encodeAfterScene(context,false,false,scene.displayMapped);

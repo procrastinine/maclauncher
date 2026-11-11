@@ -38,6 +38,7 @@
 #include <utility>
 #include <set>
 #include <algorithm>
+#include <functional>
 #include <cmath>
 #include <stdexcept>
 #include <chrono>
@@ -435,7 +436,8 @@ struct EffectExecution::Impl {
         if(id.empty()||!std::isfinite(milliseconds)||milliseconds<=0||milliseconds>10000)return;
         double mean;{std::lock_guard guard(costLock);auto&cost=costs[id];const bool first=cost.id.empty()||cost.shared!=shared;
             cost.id=id;cost.milliseconds=first?milliseconds:cost.milliseconds+(milliseconds-cost.milliseconds)*.1;cost.shared=shared;cost.section=section;mean=cost.milliseconds;}
-        RuntimeStageCostEvent event;event.context=statusContext.load();event.planRevision=snapshot->revision;event.stageId=id;event.milliseconds=mean;
+        const auto row=std::find_if(rows.begin(),rows.end(),[&](const Row&value){return value.spec.id==id;});
+        RuntimeStageCostEvent event;event.context=row==rows.end()?statusContext.load():contextFor(*row);event.planRevision=snapshot->revision;event.stageId=id;event.milliseconds=mean;
         event.scope=shared?RuntimeStageCostScope::Section:RuntimeStageCostScope::Row;event.section=section;observeRuntimeStageCost(event);
     }catch(...){} }
     std::shared_ptr<ExternalQualityFrame>externalQualityFrame(const ShaderFrame&frame,const ImageContentStamp*content,bool generated,bool redraw){
@@ -482,6 +484,16 @@ struct EffectExecution::Impl {
     // still reuse; it is never encoded or adopted.
     bool donor=false;
     bool generation=false,depthRequired=false,memoryDegraded=false,sceneRequired=false;uint32_t plainDepthMask=0;std::atomic<uintptr_t>statusContext{0};
+    // The scene's rows report under the scene's own context. The rows after
+    // its temporal stage, or every row of a scene without one, run where the
+    // scene is presented, so they report under that presenter's context once
+    // one is set.
+    std::atomic<uintptr_t>afterSceneContext{0};
+    uintptr_t contextFor(const Row&row)const noexcept{
+        const auto after=afterSceneContext.load();const auto*first=rows.data();const std::less<const Row*>before;
+        if(!after||before(&row,first)||!before(&row,first+rows.size()))return statusContext.load();
+        return size_t(&row-first)>=temporalEnd?after:statusContext.load();
+    }
     unsigned generationW=0,generationH=0;ImageColorSpace colorSpace=ImageColorSpace::LegacySDR;
     ImageColorDescription colorDescription;
     std::string generationInputIdentity;
@@ -545,13 +557,13 @@ struct EffectExecution::Impl {
     void report(const Row &row,const std::string &reason,bool persistent){
         bool changed=false;{std::lock_guard<std::mutex>guard(failureLock);if(persistent)failures[row.spec.id]=reason;
             auto &last=reported[row.spec.id];if(last!=reason){last=reason;changed=true;}}
-        RuntimeStatusEvent event;event.context=statusContext;event.processing=true;event.phase=row.warming?RuntimeStatusPhase::Preparing:RuntimeStatusPhase::Bypassed;event.planRevision=snapshot->revision;
+        RuntimeStatusEvent event;event.context=contextFor(row);event.processing=true;event.phase=row.warming?RuntimeStatusPhase::Preparing:RuntimeStatusPhase::Bypassed;event.planRevision=snapshot->revision;
         event.stageId=row.spec.id;event.requestedMethod=row.spec.method.empty()?row.spec.format:row.spec.method;event.activeMethod=row.warming?"pending":"passthrough";event.reason=reason;
         observe(row,event);
         if(changed)nativeLog("Effect "+row.spec.kind+" ("+row.spec.method+") "+(row.warming?"pending: ":"bypassed: ")+reason);
     }
     void retain(const Row &row){
-        RuntimeStatusEvent event;event.context=statusContext;event.processing=true;event.phase=RuntimeStatusPhase::Prepared;event.planRevision=snapshot->revision;
+        RuntimeStatusEvent event;event.context=contextFor(row);event.processing=true;event.phase=RuntimeStatusPhase::Prepared;event.planRevision=snapshot->revision;
         event.stageId=row.spec.id;event.requestedMethod=row.spec.method.empty()?row.spec.format:row.spec.method;event.activeMethod="retained";event.reason=row.retained;
         observe(row,event);nativeLog("Effect "+row.spec.kind+" ("+row.spec.method+") keeps its previous working version: "+row.retained);
     }
@@ -624,6 +636,7 @@ ShaderResult EffectExecution::encodeGenerationSegment(const ShaderFrame&frame,si
     return encodeRange(frame,impl->stages[stage-1].row,impl->stages[stage].row,generated,nullptr,false,&stamp,content&&content->displayMapped,displayMapped);
 }
 void EffectExecution::setStatusContext(uintptr_t value){impl->statusContext=value;}
+void EffectExecution::setAfterSceneStatusContext(uintptr_t value){impl->afterSceneContext=value;}
 bool EffectExecution::hasTemporal()const{return impl->temporalEnd!=0||impl->sceneRequired;}
 bool EffectExecution::replacesTemporal()const{return impl->temporalEnd!=0;}
 std::shared_ptr<const EffectPlanSnapshot>EffectExecution::sceneSuffixSnapshot()const{return impl->continuationSnapshot;}
@@ -818,7 +831,7 @@ ShaderResult EffectExecution::encodeRange(const ShaderFrame &incoming,size_t beg
                     else if(provider->completion(row.shader.get(),message,sizeof(message))){success=false;problem=message[0]?message:"The shader provider did not complete this frame";}
                 }
                 if(!success&&problem.empty())problem=completed.error.localizedDescription.UTF8String?:"The effect command buffer did not complete";
-                RuntimeStatusEvent event;event.context=execution->statusContext;event.processing=true;event.phase=success?RuntimeStatusPhase::Completed:RuntimeStatusPhase::Failed;
+                RuntimeStatusEvent event;event.context=execution->contextFor(row);event.processing=true;event.phase=success?RuntimeStatusPhase::Completed:RuntimeStatusPhase::Failed;
                 event.frameId=frameId;event.planRevision=execution->snapshot->revision;event.stageId=row.spec.id;event.requestedMethod=row.spec.method.empty()?row.spec.format:row.spec.method;event.activeMethod=!success?std::string_view("passthrough"):!row.retained.empty()?std::string_view("retained"):observed.active?std::string_view(observed.active):event.requestedMethod;event.reason=success&&!row.retained.empty()?std::string_view(row.retained):std::string_view(problem);
                 event.inputWidth=observed.inputW;event.inputHeight=observed.inputH;event.outputWidth=observed.outputW;event.outputHeight=observed.outputH;execution->observe(row,event);
             }
@@ -919,7 +932,7 @@ ShaderResult EffectExecution::encodeRange(const ShaderFrame &incoming,size_t beg
                 const auto historyScene=temporal?temporal:sceneLease?&sceneLease->frame:held->scene?&*held->scene:nullptr;const auto historyAovs=sceneLease?sceneLease->aovs:historyScene?temporalSceneAovs(*historyScene):nullptr;
                 ShaderHistoryInput history;history.contentId=content?content->contentId:context.frameId;history.epoch=content&&content->epoch?content->epoch:historyAovs?historyAovs->value.epoch:1;history.imageRevision=content&&content->imageRevision?content->imageRevision:historyAovs?historyAovs->value.imageRevision:0;history.inputIdentity=mapped?row.mappedInputIdentity:row.inputIdentity;history.historyIdentity=mapped?row.mappedHistoryIdentity:row.historyIdentity;history.synthetic=generated||displayAdvanced||(content&&content->synthetic);history.redraw=redraw&&!displayAdvanced;history.reset=historyScene&&(historyScene->flags&RS_TEMPORAL_RESET);ShaderHistoryScope historyScope(&history);
                 ShaderCallBindings inputBindings(row.shader,row.spec.format,row.spec.sceneBindings.empty()?nullptr:&namedFrame.value);if(!inputBindings.result.encoded){transientInputs=true;throw std::runtime_error(inputBindings.result.reason);}
-                if(row.neural)setNeuralStatusContext(row.neural,impl->statusContext,row.spec.id,impl->snapshot->revision);
+                if(row.neural)setNeuralStatusContext(row.neural,impl->contextFor(row),row.spec.id,impl->snapshot->revision);
                 if(row.neural||row.spec.format=="native"){if(displayAdvanced&&!displayContentId)displayContentId=displayImageSequence.fetch_add(1,std::memory_order_relaxed);NeuralInputStamp stamp;stamp.contentId=displayAdvanced?displayContentId:content?content->contentId:context.frameId;stamp.epoch=content?content->epoch:1;stamp.observationId=frameId;stamp.imageRevision=content?content->imageRevision:0;stamp.inputIdentity=mapped?row.mappedInputIdentity:row.inputIdentity;stamp.historyIdentity=mapped?row.mappedHistoryIdentity:row.historyIdentity;stamp.synthetic=displayAdvanced||(content?content->synthetic:generated);const bool quality=externalQuality&&(impl->qualityExternalMask&(uint32_t(1)<<i)),measure=quality||costTiming&&row.externalTiming;encoded=row.neural?encodeNeuralStamped(row.neural,context,stamp,redraw&&!displayAdvanced,measure?&neuralTiming:nullptr):encodeNativeImageStamped(row.shader,context,stamp,redraw&&!displayAdvanced,mapped,&rowCompletion,measure?&neuralTiming:nullptr);if(measure&&encoded.encoded){const auto timing=std::move(neuralTiming);const auto bit=uint32_t(1)<<i;if(quality)externalQuality->expect(bit);const auto costs=costTiming?impl:nullptr;const auto rowId=row.spec.id;[frame.commands addCompletedHandler:^(id<MTLCommandBuffer>commands){const auto measured=commands.status==MTLCommandBufferStatusCompleted&&timing?timing():NeuralGpuTimingValue{};if(quality)externalQuality->reported(bit,measured.state==NeuralGpuTimingState::Complete?measured.nanoseconds:0,measured.state==NeuralGpuTimingState::NoNewWork);if(costs&&measured.state==NeuralGpuTimingState::Complete)costs->recordCost(rowId,measured.nanoseconds/1e6,false,0);}];}}
                 else if(externalQuality&&(impl->qualityExternalMask&(uint32_t(1)<<i))){
                     struct Ticket {std::shared_ptr<Impl::ExternalQualityFrame> frame;uint32_t bit;uint64_t token,frameId;};
@@ -961,7 +974,7 @@ ShaderResult EffectExecution::encodeRange(const ShaderFrame &incoming,size_t beg
             // An adapter that returned Busy after a real image denial retains
             // the same bounded resource-pressure retry as a typed refusal.
             if(encoded.busy&&threadImageDenials()!=imageDenials)impl->retryTransient(row,encoded.reason.empty()?"Waiting for graphics resources":encoded.reason);
-            if(encoded.busy){RuntimeStatusEvent event;event.context=impl->statusContext;event.processing=true;event.phase=RuntimeStatusPhase::Bypassed;event.planRevision=impl->snapshot->revision;event.stageId=row.spec.id;event.requestedMethod=row.spec.method.empty()?row.spec.format:row.spec.method;event.activeMethod="pending";event.reason=encoded.reason.empty()?std::string_view("The effect is still processing its previous image"):std::string_view(encoded.reason);event.frameId=frameId;event.inputWidth=current.width;event.inputHeight=current.height;event.outputWidth=target.width;event.outputHeight=target.height;impl->observe(row,event);return encoded;}
+            if(encoded.busy){RuntimeStatusEvent event;event.context=impl->contextFor(row);event.processing=true;event.phase=RuntimeStatusPhase::Bypassed;event.planRevision=impl->snapshot->revision;event.stageId=row.spec.id;event.requestedMethod=row.spec.method.empty()?row.spec.format:row.spec.method;event.activeMethod="pending";event.reason=encoded.reason.empty()?std::string_view("The effect is still processing its previous image"):std::string_view(encoded.reason);event.frameId=frameId;event.inputWidth=current.width;event.inputHeight=current.height;event.outputWidth=target.width;event.outputHeight=target.height;impl->observe(row,event);return encoded;}
             if(encoded.encoded&&retried){std::lock_guard guard(impl->failureLock);impl->transientBounds.erase(row.spec.id);impl->memoryRetry.erase(row.spec.id);}
             if(encoded.encoded&&row.colorIsland){mapped=mapped||row.colorIsland->mapsToDisplay();
                 if(continueSDR){if(!insideSDR)islandAlpha=current;insideSDR=true;lastIsland=row.colorIsland;islandFormat=row.targetFormat;}
@@ -979,7 +992,7 @@ ShaderResult EffectExecution::encodeRange(const ShaderFrame &incoming,size_t beg
                 const auto copied=impl->fit(frame,current,target);if(!copied.encoded)return copied;
                 impl->report(row,problem,!encoded.busy&&!transientInputs);if(reason.empty())reason=problem;
             }
-            {RuntimeStatusEvent event;event.context=impl->statusContext;event.processing=true;event.phase=encoded.encoded?RuntimeStatusPhase::Encoded:RuntimeStatusPhase::Bypassed;
+            {RuntimeStatusEvent event;event.context=impl->contextFor(row);event.processing=true;event.phase=encoded.encoded?RuntimeStatusPhase::Encoded:RuntimeStatusPhase::Bypassed;
              event.planRevision=impl->snapshot->revision;event.stageId=row.spec.id;event.requestedMethod=row.spec.method.empty()?row.spec.format:row.spec.method;
              // Neural completion supplies the effective method; enqueueing another image does not replace it.
              event.activeMethod=!encoded.encoded?"passthrough":!row.retained.empty()?"retained":row.neural?std::string_view{}:activeSpatial?std::string_view(activeSpatial):event.requestedMethod;event.reason=encoded.encoded&&!row.retained.empty()?std::string_view(row.retained):std::string_view(encoded.reason);event.frameId=frameId;
