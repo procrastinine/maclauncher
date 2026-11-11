@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { filterGames, gameTypeOptionsForModules } from "./search-utils.mjs";
 import { prioritizeDroppedPaths } from "./drop-path-utils.mjs";
 import { closePopoversForDrop, dropGameTargets, graphicsDropTargets } from "./drop-game-targets.mjs";
+import { toolsOverrideAfterFailure } from "./cheat-tools-model.mjs";
 import { createGameFailureRecovery, createInspectionRequests, restoreLauncherState, shareLauncherValue, subscribeLauncherGameFailures, subscribeLauncherState, updatePathValue } from "./launcher-state-model.mjs";
 import { useGamePathState } from "./use-game-path-state";
 import { readUtilityWindowContext } from "../../../core/utility-window-model.mjs";
@@ -179,6 +180,8 @@ export default function App() {
   const [cheatSchema, setCheatSchema] = useState<CheatsSchema | null>(null);
   const [cheatDraft, setCheatDraft] = useState<CheatsConfig | null>(null);
   const [toolsButtonOverride, setToolsButtonOverride] = useState<boolean | null>(null);
+  // A Tools button choice whose save failed; the window then follows the record.
+  const [cheatToolsFailure, setCheatToolsFailure] = useState<{ gamePath: string; failed: boolean | null } | null>(null);
   const [cheatBusy, setCheatBusy] = useState(false);
   const [cheatError, setCheatError] = useState<string | null>(null);
   const [cheatAddonStatusByPath, setCheatAddonStatusByPath] = useGamePathState<CheatsPatchStatus | null>(gamePaths);
@@ -1577,9 +1580,14 @@ export default function App() {
             lastOverride.gamePath !== payload.gamePath ||
             lastOverride.value !== payload.toolsOverride;
           if (shouldUpdateOverride) {
-            await api.setGameModuleData(payload.gamePath, {
-              toolsButtonVisibleOverride: payload.toolsOverride
-            });
+            try {
+              await api.setGameModuleData(payload.gamePath, {
+                toolsButtonVisibleOverride: payload.toolsOverride
+              });
+            } catch (error) {
+              setCheatToolsFailure({ gamePath: payload.gamePath, failed: payload.toolsOverride });
+              throw error;
+            }
             cheatAutoSaveOverrideRef.current = {
               gamePath: payload.gamePath,
               value: payload.toolsOverride
@@ -1636,6 +1644,21 @@ export default function App() {
       void refreshCheatAddonStatus(g.gamePath, moduleInfo.ui.cheatsStatusAction);
     }
   }, [modulesById, refreshCheatAddonStatus]);
+
+  // The checkbox follows the record restored after a failed Tools button
+  // save, and the next cheat edit does not send the failed choice again.
+  useEffect(() => {
+    if (!cheatToolsFailure) return;
+    if (cheatGame?.gamePath !== cheatToolsFailure.gamePath) { setCheatToolsFailure(null); return; }
+    const value = toolsOverrideAfterFailure(cheatToolsFailure, state?.recents.find(game => game.gamePath === cheatToolsFailure.gamePath));
+    if (value === undefined) return;
+    setCheatToolsFailure(null);
+    cheatAutoSaveOverrideRef.current = { gamePath: cheatToolsFailure.gamePath, value };
+    if (value !== toolsButtonOverride) {
+      cheatAutoSaveSkipRef.current = true;
+      setToolsButtonOverride(value);
+    }
+  }, [cheatToolsFailure, cheatGame, state?.recents, toolsButtonOverride]);
 
   function closeCheats() {
     setCheatGame(null);
