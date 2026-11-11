@@ -75,6 +75,17 @@ test("preset IPC is local draft storage and publishes no game plan; preload invo
   await api.deleteEffectsPreset(saved.id, saved.updatedAt);await api.getEffectsPresetParameters("node", empty());
   assert.deepEqual(calls.map(row => row[0]), ["launcher:listEffectsPresets", "launcher:saveEffectsPreset", "launcher:deleteEffectsPreset", "launcher:getEffectsPresetParameters"]);
 });
+test("the preset editor reads discovery and shader parameters in the inspector worker with data options", async t => {
+  const root = fixture(t), handlers = new Map(), requests = [], { register } = require("../src/modules/shared/effects/presets-ipc");
+  register({ ipcMain: { handle: (name, handler) => handlers.set(name, handler) }, userDataDir: root, app: { electron: true }, loadSettings: () => ({ launcher: {} }),
+    pickFile: async () => null, inventoryRevision: () => 7, inspector: async (method, ...args) => { requests.push([method, structuredClone(args)]); return { method }; } });
+  assert.deepEqual(await handlers.get("launcher:getEffectsPresetEditor")(null, null), { method: "gameEffectsInfo" });
+  assert.deepEqual(await handlers.get("launcher:getEffectsPresetParameters")(null, "node", empty()), { method: "gameEffectParameters" });
+  const data = { settings: { launcher: {} }, graphicsHost: "window", graphicsArchitecture: "arm64", inventoryRevision: 7 };
+  assert.deepEqual(requests, [["gameEffectsInfo", [{ gameId: "graphics-preset-editor", effects: { schema: 1, mode: "advanced", video: [] } }, data]],
+    ["gameEffectParameters", [{ gameId: "graphics-preset-editor", effects: { schema: 1, mode: "advanced", video: [] } }, "node", empty(), data]]],
+    "no Electron app object or launcher path crosses into the worker");
+});
 test('preset event subscriptions push exact rows and unsubscribe without IPC reads',()=>{
  let api;const listeners=new Map(),received=[];
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../src/modules/shared/web/preload/launcher.js'),'utf8'),{require:()=>({contextBridge:{exposeInMainWorld:(_,value)=>api=value.launcher},ipcRenderer:{invoke:()=>assert.fail('Subscribing is offline'),on:(name,fn)=>listeners.set(name,fn),removeListener:(name,fn)=>{assert.equal(listeners.get(name),fn);listeners.delete(name);}},webUtils:{}})});

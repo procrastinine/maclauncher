@@ -3914,7 +3914,7 @@ ipcMain.handle("launcher:setGameNetworkAccess", async (_event, gamePath, network
 });
 
 const effectsPresets = require("../modules/shared/effects/presets-ipc").register({ ipcMain, userDataDir, app, loadSettings, pickFile: pickEffectFile,
-  inventoryRevision: () => graphicsCatalog.revision(),
+  inventoryRevision: () => graphicsCatalog.revision(), inspector: (method, ...args) => backendService.request("inspector", method, ...args),
   changed: presets => {
     for (const win of launcherWindows) {
       try { if (!win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send("launcher:effectsPresetsChanged", presets); } catch {}
