@@ -4724,6 +4724,8 @@ ipcMain.handle("launcher:stopGame", async (_event, gamePath) => {
   return stopGameRuns(gamePath);
 });
 
+// The save-location notice each game's row shows after a failed read.
+const saveLocationNotices = new Map();
 ipcMain.handle("launcher:setGameRuntime", async (_event, gamePath, runtimeId) => {
   const settings = loadSettings();
   const games = loadGamesHydrated({ persist: false });
@@ -4754,14 +4756,22 @@ ipcMain.handle("launcher:setGameRuntime", async (_event, gamePath, runtimeId) =>
   // The Runtime menu shows the choice at once. Save locations come from the
   // game's files, so the game's lane reads them afterwards and its
   // entryChanged event updates the row.
-  // A failure is shown on the game's row.
+  // A failure is shown on the game's row under the runtime's name, and a
+  // later successful read removes it.
+  const runtimeLabel = moduleInfo?.runtime?.entries?.[entry.runtimeId]?.label || entry.runtimeId;
+  const showSaveLocationNotice = notice => {
+    const previous = saveLocationNotices.get(entry.gamePath), shown = gameLaunchNotices.get(entry.gamePath) || [];
+    if (notice ? previous === notice && shown.includes(notice) : !previous) return;
+    const rows = shown.filter(row => row !== previous);
+    if (notice) { rows.push(notice); saveLocationNotices.set(entry.gamePath, notice); } else saveLocationNotices.delete(entry.gamePath);
+    if (rows.length) gameLaunchNotices.set(entry.gamePath, rows); else gameLaunchNotices.delete(entry.gamePath);
+    cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
+    broadcastState();
+  };
   void backendService.request(`game:${entry.gameId || gamePath}`, "refreshSaveLocations", entry, settings)
-    .catch(error => {
+    .then(() => showSaveLocationNotice(null), error => {
       logger.warn("[runtime] Save locations could not be refreshed:", error?.message || error);
-      const notice = `Save locations for ${entry.runtimeId} could not be read: ${error?.message || error}`;
-      gameLaunchNotices.set(entry.gamePath, [...(gameLaunchNotices.get(entry.gamePath) || []).filter(row => row !== notice), notice]);
-      cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-      broadcastState();
+      showSaveLocationNotice(`Save locations for ${runtimeLabel} could not be read: ${error?.message || error}`);
     });
   return true;
 });
