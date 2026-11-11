@@ -98,6 +98,10 @@ extern "C" int rsGetFramePresenterStatus(void *opaque,RSPresenterStatus *status)
  status->submitted=current.submitted;status->encoded=current.encoded;status->completedReal=current.completedReal;status->presentedReal=current.presentedReal;status->presentedGenerated=current.presentedGenerated;
  status->dropped=current.dropped;status->lastPresentedFrame=current.lastPresentedFrame;status->pending=current.pending;status->maxPending=current.maxPending;status->stopped=current.stopped;status->lastLatencyMs=current.lastLatencyMs;message(status->reason,current.reason.c_str());return RS_FRAME_OK;
 }
+extern "C" int rsBeginFramePresenterContentEpoch(void *opaque,uint64_t epoch){
+ if(!opaque||!epoch)return RS_FRAME_INVALID_ARGUMENT;
+ try{return static_cast<PresenterHandle*>(opaque)->presenter->beginContentEpoch(epoch);}catch(...){return RS_FRAME_ENCODE_FAILED;}
+}
 extern "C" void rsDestroyFramePresenter(void *opaque){delete static_cast<PresenterHandle*>(opaque);}
 
 extern "C" int rsSubmitFramePresenterWithDepth(void *owner,const RSPresenterSubmission *submission,const RSFrameDepth *depth,RSFrameResult *result){if(!depth||depth->size<sizeof(*depth)||depth->version!=RS_DEPTH_ABI_VERSION||depth->reserved||depth->origin>RS_FRAME_BOTTOM_LEFT||!depth->texture)return RS_FRAME_INVALID_ARGUMENT;return submit(owner,submission,nullptr,result,depth);}

@@ -15,8 +15,8 @@ struct RSPresentationContent {
 // repeats the latest accepted content stamp, reruns image processing and
 // submits no frame-generator history. Duration is media seconds, or zero when
 // unknown. PTS_UNKNOWN explicitly supplies no media PTS; logical image time is
-// the first real admission time and stays fixed on redraw. Recreate the
-// presenter for a seek/new stream epoch. The host retains
+// the first real admission time and stays fixed on redraw. Begin a new content
+// epoch for a seek; recreate the presenter when the source contract changes. The host retains
 // its source image and producer synchronization through every submission.
 // imageRevision changes when producer-side processing changes the pixels of
 // that same decoded image, so downstream image caches reset without inventing
@@ -25,6 +25,10 @@ struct RSPresentationContent {
 // their physical HDR encoding/mastering metadata remains independent.
 // Observer may be null; producer and observer ownership follows the existing
 // observed-presentation API exactly. No command submission or CPU wait is added.
+// Retires the previous presentation and temporal history while retaining
+// preparation. BUSY requests a retry after submitted GPU work retires; no CPU
+// wait or command submission occurs. Epochs increase within one presenter.
+int rsBeginFramePresenterContentEpoch(void *,uint64_t epoch);
 int rsSubmitFramePresenterContent(void *,const struct RSPresenterSubmission *,
  const struct RSPresentationContent *,const struct RSPresentationObserver *,
  struct RSFrameResult *);

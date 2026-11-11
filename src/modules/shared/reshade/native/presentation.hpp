@@ -54,6 +54,7 @@ public:
  double lastRealPresentedTime()const;
  uint64_t lastRealCompletedFrameId()const;
  void stop();void setDisplay(uint32_t displayId);
+ int beginContentEpoch(uint64_t epoch);
  void setDisplayHeadroom(float);
  void setFrameSource(RuntimeFrameSource);
  // Unknown visibility remains usable. Hosts set false only for a confirmed

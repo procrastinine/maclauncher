@@ -414,6 +414,21 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   std::lock_guard lock(failureReaderMutex);if(!failureReader)failureReader=std::make_unique<EffectPlanState>();failureReader->poll();const auto plan=failureReader->snapshot();
   return failed->revision.empty()?(!plan||plan->mode=="simple"):(plan&&plan->revision==failed->revision);
  }
+ uint64_t requestedContentEpoch=0;
+ int beginContentEpoch(uint64_t epoch){
+  std::lock_guard serial(submission);std::lock_guard lock(mutex);
+  if(stopping.load()||!epoch||epoch<requestedContentEpoch||epoch<lastContentEpoch)return RS_FRAME_INVALID_ARGUMENT;
+  if(epoch!=requestedContentEpoch){
+   requestedContentEpoch=epoch;retireDelivery();historyReady=false;pendingProducerReset=true;
+   if(pacing)pacing->reset();
+  }
+  if(inFlight)return RS_FRAME_BUSY;
+  if(lastContentEpoch!=epoch){
+   lastContentEpoch=epoch;lastContentId=0;lastImageRevision=0;lastContentPTS=0;lastContentTimeMs=0;
+   lastContentDuration=0;lastContentMediaDuration=0;lastContentTarget=0;lastContentPTSUnknown=false;lastContentMapped=false;
+  }
+  return RS_FRAME_OK;
+ }
  void resetPlans(){auto next=std::make_unique<EffectPlanExecutor>();if(preparationObserver)next->setPreparationObserver(preparationObserver);plans=std::move(next);}
  bool recoverGpuFailure(id<MTLTexture>source,FrameResult&result){
   if(!gpuFailed.load())return true;const auto size=layer.drawableSize;
@@ -1040,6 +1055,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   if(!commands||!source||commands.status>=MTLCommandBufferStatusCommitted||!commands.retainedReferences){result.reason="Presentation requires an unsubmitted retaining command buffer and source";return result;}
   if(!recoverGpuFailure(source,result))return result;
   const bool redraw=content&&(content->flags&RS_PRESENT_CONTENT_REDRAW),ptsUnknown=content&&(content->flags&RS_PRESENT_CONTENT_PTS_UNKNOWN);
+  if(content&&requestedContentEpoch&&(lastContentEpoch!=requestedContentEpoch||content->epoch!=requestedContentEpoch)){result.busy=lastContentEpoch!=requestedContentEpoch;result.reason="The content epoch has not been admitted";return result;}
   if(content){if(lastContentEpoch&&lastContentEpoch!=content->epoch){result.reason="A new media epoch requires a new presenter";return result;}if(redraw&&(!lastContentId||content->contentId!=lastContentId||ptsUnknown!=lastContentPTSUnknown||(!ptsUnknown&&content->pts!=lastContentPTS))){result.reason="A redraw must retain the latest accepted content identity and PTS";return result;}if(!redraw&&lastContentId&&content->contentId<=lastContentId){result.reason="Real content identities must increase";return result;}}
   if(frameRetry.pending(CACurrentMediaTime())){result.busy=true;result.reason=frameRetry.reason;return result;}
   const double mediaDelta=content&&!redraw&&!ptsUnknown&&!lastContentPTSUnknown&&lastContentId?content->pts-lastContentPTS:0;
@@ -1259,6 +1275,7 @@ double macfx::FramePresenter::lastRealPresentedTime()const{std::lock_guard<std::
 uint64_t macfx::FramePresenter::lastRealCompletedFrameId()const{std::lock_guard<std::mutex>lock(impl->mutex);return impl->lastRealCompleted;}
 RSPresentationTiming macfx::FramePresenter::timingSnapshot()const{std::lock_guard<std::mutex>lock(impl->mutex);return impl->timing;}
 void macfx::FramePresenter::stop(){if(impl)impl->shutdown();}
+int macfx::FramePresenter::beginContentEpoch(uint64_t epoch){return impl?impl->beginContentEpoch(epoch):RS_FRAME_INVALID_ARGUMENT;}
 
 macfx::FrameResult macfx::FramePresenter::submitWithDepth(id<MTLCommandBuffer>c,id<MTLTexture>s,uint64_t f,double t,const DepthFrame&d){@autoreleasepool{try{return impl->submit(c,s,f,t,nullptr,&d);}catch(const std::exception&e){FrameResult result;result.reason=e.what();return result;}}}
 macfx::FrameResult macfx::FramePresenter::submitDisplayFrame(id<MTLCommandBuffer>c,id<MTLTexture>s,uint64_t f,double t,bool opaque,const DepthFrame*d){@autoreleasepool{try{return impl->submit(c,s,f,t,nullptr,d,nullptr,opaque);}catch(const std::exception&e){FrameResult result;result.reason=e.what();return result;}}}
