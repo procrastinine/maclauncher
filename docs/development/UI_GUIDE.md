@@ -325,7 +325,7 @@ Graphics actions can have keyboard shortcuts that work from any app. The Launche
 
 ### Runtime settings window
 
-The runtime settings window holds one game's own settings for its runtime. The gear beside a game's runtime opens it as a dedicated window for the game's saved runtime, and every field starts at the game type's default unless the game overrides it. Because the window changes only preferences and uses local state, downloads, catalog queries and tool acquisition belong in the Runtimes window.
+The runtime settings window holds one game's own settings for its runtime. The gear beside a game's runtime opens it as a dedicated window for the game's saved runtime, and every field starts at the game type's default unless the game overrides it. There is one such window for each game and runtime, and for each game type's runtime defaults; opening it again focuses the open window. Because the window changes only preferences and uses local state, downloads, catalog queries and tool acquisition belong in the Runtimes window.
 
 - Choices save automatically. Text and number fields save on Enter or when focus leaves the field, and Escape discards an edit. **Reset** clears the game's overrides.
 - Fields a game type marks as advanced follow the common fields inside one collapsed **Advanced** group, which shows how many fields it holds. The group appears only when a runtime has both kinds of field, and otherwise all fields are listed together. For RPG Maker XP/VX/VX Ace (MKXP-Z), the common fields are RTP source and path, RGSS version, Start fullscreen, Preserve aspect ratio, Resizable window, Display FPS, VSync, the default window size, F12 reset and F1 settings.
