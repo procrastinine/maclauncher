@@ -1,3 +1,4 @@
+const GameIdentity = require("../shared/runtime/game-identity");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
@@ -119,7 +120,7 @@ async function launchRuntime(runtimeId, entry, context) {
   context.onEntryChange?.({ defaultSaveDir: entry.defaultSaveDir, moduleData: entry.moduleData });
   return Native.launchLocalRuntime({ ...nativeOptions(selection), args: [dataPath, ...(saves ? ["--save-folder", saves] : []), "--renderer", "legacy-gl",
     ...(context.gameArguments || []).map(argument => `--game-arg=${argument}`)],
-    cwd: path.dirname(dataPath), env: { ...process.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" }, context });
+    cwd: path.dirname(dataPath), env: GameIdentity.environment(entry), context });
 }
 
 function rememberExport(entry, result) {

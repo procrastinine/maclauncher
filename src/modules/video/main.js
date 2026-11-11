@@ -1,3 +1,4 @@
+const GameIdentity = require("../shared/runtime/game-identity");
 const path = require("node:path");
 const manifest = require("./manifest.json"), { detectGame } = require("./detect"), manager = require("./runtime/manager");
 const { spawnForegroundNativeGame } = require("../shared/runtime/native-focus");
@@ -88,7 +89,7 @@ module.exports = {
     let env;
     try {
       await context.refreshGraphicsPreparation();
-      env = await context.applyGameEnvironment({ ...process.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" });
+      env = await context.applyGameEnvironment(GameIdentity.environment(entry));
     } catch (error) { player.cleanup();throw error; }
     if(renderHost)env.RESHADE_EXPLICIT_HOST="1";
     let controls, playbackCleanup;

@@ -1,3 +1,4 @@
+const GameIdentity = require("../shared/runtime/game-identity");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
@@ -238,7 +239,7 @@ async function launchRuntime(runtimeId, entry, context) {
     upstreamRevision: selected.install.upstreamRevision, expectedSha256: selected.install.binarySha256,
     // No override preserves the direct upstream route; a selected folder keeps
     // its final slash because KAG appends filenames to System.dataPath.
-    args: [...extraArgs, ...(override ? [`-datapath=${override}${path.sep}`] : []), detected.moduleData.launchTarget], cwd: rootDir, env: { ...process.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" }, context
+    args: [...extraArgs, ...(override ? [`-datapath=${override}${path.sep}`] : []), detected.moduleData.launchTarget], cwd: rootDir, env: GameIdentity.environment(entry), context
   });
 }
 

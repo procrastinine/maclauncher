@@ -1,3 +1,4 @@
+const GameIdentity = require("../shared/runtime/game-identity");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
@@ -153,7 +154,7 @@ async function prepareLaunch(entry, context, distribution) {
   const directory = gameDirectory(entry, context), saves = saveDirectory(entry);
   if (!path.isAbsolute(saves)) throw new Error("Minori save directory must be absolute.");
   fs.mkdirSync(directory, { recursive: true });
-  const env = { ...process.env, MACLAUNCHER_GAME_ICON: entry.iconPath || "", MACLAUNCHER_MINORI_SAVE_DIR: saves,
+  const env = { ...GameIdentity.environment(entry), MACLAUNCHER_MINORI_SAVE_DIR: saves,
     MACLAUNCHER_MINORI_CACHE_DIR: path.join(directory, "cache"), MACLAUNCHER_MINORI_TITLE: entry.name || original.data.title,
     MACLAUNCHER_MINORI_PAZ_XOR: original.data.xorKey.toString(16),
     ...(original.data.originalRunnerPath ? { MACLAUNCHER_MINORI_ORIGINAL_RUNNER: original.data.originalRunnerPath } : {}),

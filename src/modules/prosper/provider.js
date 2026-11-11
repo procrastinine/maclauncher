@@ -1,3 +1,4 @@
+const GameIdentity = require("../shared/runtime/game-identity");
 const fs = require("node:fs");
 const path = require("node:path");
 const manifest = require("./manifest.json");
@@ -48,7 +49,7 @@ function createProvider({ manager = require("./runtime/manager"), spawn = spawnF
       context.recordRuntimeUse?.({ managerId: "prosper", version: selected.version, sectionId: "default", sourcePath: selected.install.installDir });
       const args = ["--dump", prepared.dump, "--guest-executable", prepared.executable, "--no-pick", ...(context.runtimeSettings?.showFps ? ["--fps"] : []), ...(context.gameArguments || [])];
       return spawn({ context, executablePath: executable, args, needsRosetta, options: { cwd: prepared.cwd, gameArguments: false,
-        env: { ...process.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "", ...TranslatorEnvironment.forLaunch(entry, context, translatorIds(graphics)).values, ...prepared.environment,
+        env: { ...GameIdentity.environment(entry), ...TranslatorEnvironment.forLaunch(entry, context, translatorIds(graphics)).values, ...prepared.environment,
           ...vulkan.environment(graphics, prepared.root), PROSPER_VULKAN_LIB: graphics.library,
           DYLD_LIBRARY_PATH: [libraries, process.env.DYLD_LIBRARY_PATH].filter(Boolean).join(":") } } });
     }

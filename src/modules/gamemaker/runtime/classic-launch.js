@@ -1,3 +1,4 @@
+const GameIdentity = require("../../shared/runtime/game-identity");
 const fs = require("node:fs");
 const path = require("node:path");
 const Exports = require("../export");
@@ -51,7 +52,7 @@ async function launchClassic(entry, context, selection) {
     args: [prepared.gamePath, "--strict", "--singlethread", "--realtime",
       ...(prepared.override ? ["--working-directory", prepared.override] : []),
       ...(context.gameArguments || []).map(argument => `--game-arg=${argument}`)], cwd: prepared.originalRoot,
-    env: { ...process.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" }, context });
+    env: GameIdentity.environment(entry), context });
 }
 
 module.exports = { prepareClassicGame, prepareLaunch, launchClassic };

@@ -1,3 +1,4 @@
+const GameIdentity = require("../shared/runtime/game-identity");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
@@ -144,7 +145,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     const launch = prepareLaunch(entry, context, selected.install);
     context.onEntryChange?.(entry);
     return context.spawnDetachedChecked(selected.install.executablePath, [...launch.args.slice(0, -1), ...(context.gameArguments || []), launch.args.at(-1)],
-      { cwd: launch.root, env: { ...launch.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" } }, selected.install.needsRosetta);
+      { cwd: launch.root, env: GameIdentity.environment(entry, launch.env) }, selected.install.needsRosetta);
   },
   cleanupGameData: (entry, context) => { fs.rmSync(directoryFor(entry, context), { recursive: true, force: true }); return true; },
   actions: {

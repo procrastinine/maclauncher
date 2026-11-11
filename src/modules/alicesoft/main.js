@@ -1,3 +1,4 @@
+const GameIdentity = require("../shared/runtime/game-identity");
 const fs = require("node:fs");
 const path = require("node:path");
 const manifest = require("./manifest.json");
@@ -135,7 +136,7 @@ function resolveLaunchSpec(runtimeId, entry, context) {
   const pin = manager.core.listCatalog({ userDataDir: context.userDataDir }).find(row => row?.version === selected.version) || selected.install.catalogEntry;
   return { runtimePath: selected.install.runtimePath, runtimeVersion: selected.version,
     upstreamRevision: selected.install.upstreamRevision, expectedSha256: selected.install.binarySha256,
-    debugAdapter: pin?.debugAdapter, args, cwd: rootDir, env:{...require("../shared/runtime/dependency-environment").environment(selected.install), MACLAUNCHER_GAME_NAME:entry.name||"", MACLAUNCHER_GAME_ICON:entry.iconPath||""}, detected };
+    debugAdapter: pin?.debugAdapter, args, cwd: rootDir, env:GameIdentity.environment(entry, require("../shared/runtime/dependency-environment").environment(selected.install)), detected };
 }
 
 async function launchRuntime(runtimeId, entry, context) {

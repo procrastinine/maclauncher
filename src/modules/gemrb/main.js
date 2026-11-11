@@ -1,3 +1,4 @@
+const GameIdentity = require("../shared/runtime/game-identity");
 const fs = require("node:fs");
 const path = require("node:path");
 const NativeFocus = require("../shared/runtime/native-focus");
@@ -89,7 +90,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     if (!selected.ready) throw new Error(selected.reason);
     const launch = prepareLaunch(entry, context, selected.install);
     context.onEntryChange?.(entry);
-    const environment = { ...process.env, ...resolveInstalledEnvironment(selected.install), PYTHONDONTWRITEBYTECODE: "1", MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" };
+    const environment = GameIdentity.environment(entry, { ...process.env, ...resolveInstalledEnvironment(selected.install), PYTHONDONTWRITEBYTECODE: "1" });
     return NativeFocus.spawnForegroundNativeGame({ context, executablePath: selected.install.executablePath, args: ["-c", launch.configPath, ...(context.gameArguments || [])],
       options: { cwd: launch.root, env: environment }, needsRosetta: selected.install.needsRosetta });
   },

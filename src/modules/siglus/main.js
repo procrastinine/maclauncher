@@ -1,3 +1,4 @@
+const GameIdentity = require("../shared/runtime/game-identity");
 const fs = require("node:fs");
 const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
@@ -38,7 +39,7 @@ module.exports = { metadataSources: ["icon.js"], resolveGameIcon: require("./ico
     const executable = selected.install.executablePath;
     const args = runtimeId === "siglus" && context.gameArguments?.length
       ? [...prepared.args, "--", ...context.gameArguments] : prepared.args;
-    return context.spawnDetachedChecked(executable, args, { cwd: prepared.directory, env: { ...prepared.env, ...(runtimeId === "siglus" ? { MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" } : {}) } }, selected.install.needsRosetta);
+    return context.spawnDetachedChecked(executable, args, { cwd: prepared.directory, env: runtimeId === "siglus" ? GameIdentity.environment(entry, prepared.env) : prepared.env }, selected.install.needsRosetta);
   },
   cleanupGameData: (entry, context) => { fs.rmSync(Launch.moduleRoot(entry, context), { recursive: true, force: true }); return true; },
   actions: {

@@ -1,3 +1,4 @@
+const GameIdentity = require("../shared/runtime/game-identity");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
@@ -79,7 +80,7 @@ function createModule({ manager = Managers.createManager(), launchEnabled = mani
       context.onEntryChange?.({ moduleData: entry.moduleData });
       if (typeof context.spawnDetachedChecked !== "function") throw new Error("Native process launcher is unavailable.");
       return context.spawnDetachedChecked(session.executable, [...session.args, ...(context.gameArguments || [])],
-        { cwd: session.cwd, env: require("../shared/runtime/dependency-environment").environment(selected.install,{ ...process.env, ...session.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" }) }, selected.install.needsRosetta);
+        { cwd: session.cwd, env: require("../shared/runtime/dependency-environment").environment(selected.install,GameIdentity.environment(entry, { ...process.env, ...session.env })) }, selected.install.needsRosetta);
     },
     actions: { inspectArchives: entry => Inspect.inspectArchives(entry.contentRootDir), inspectScripts: entry => Inspect.inspectScripts(entry.contentRootDir), exportScripts,
       exportText: (entry, payload, context) => Tools.exportText(entry, payload, context, exportScripts),

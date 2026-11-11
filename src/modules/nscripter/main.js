@@ -1,3 +1,4 @@
+const GameIdentity = require("../shared/runtime/game-identity");
 const { spawnSync } = require("node:child_process");
 const { cloneOrCopySync } = require("../shared/copy-file");
 const fs = require("node:fs");
@@ -716,7 +717,7 @@ async function launchRuntime(runtimeId, entry, context) {
     const needsRosetta = require("../shared/runtime/architecture").requiresRosetta(install.variant);
     args.push(...(context.gameArguments || []));
     context.logger?.info?.(`[runtime] launch onsyuri ${binaryPath} ${args.join(" ")}`);
-    return context.spawnDetachedChecked(binaryPath, args, { cwd: gameRootDir, env: { ...process.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" } }, needsRosetta);
+    return context.spawnDetachedChecked(binaryPath, args, { cwd: gameRootDir, env: GameIdentity.environment(entry) }, needsRosetta);
   }
 
   if (runtimeId === "onscripter_en") {
@@ -733,7 +734,7 @@ async function launchRuntime(runtimeId, entry, context) {
     if (fontPath) args.push("--font", fontPath);
     args.push(...(context.gameArguments || []));
     return context.spawnDetachedChecked(selection.install.executablePath, args,
-      { cwd: gameRootDir, env: { ...process.env, ...resolveInstalledEnvironment(selection.install), MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" } }, selection.install.needsRosetta);
+      { cwd: gameRootDir, env: GameIdentity.environment(entry, { ...process.env, ...resolveInstalledEnvironment(selection.install) }) }, selection.install.needsRosetta);
   }
 
   if (runtimeId === "onsyuri_web") {
