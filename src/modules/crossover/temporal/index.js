@@ -243,6 +243,17 @@ function sceneLibraries(entry, settings = {}) {
   return result;
 }
 // Wine games present through the shared window adapter as x86_64 processes.
+// The scene inputs that a game's FidelityFX upscale dispatches supply where
+// they are recorded: a Vulkan library, or a Direct3D 12 library on
+// VKD3D-Proton, on a carrier-capable Vulkan driver or one this Play installs.
+// Library presence decides; the adapter is installed when a row needs it.
+function sceneSourceInputs(entry, context = {}, { settings = context.runtimeSettings || {}, translatorPlan = context.translatorPlan } = {}) {
+  try {
+    const sources = sceneLibraries(entry, settings).filter(item => item.backend === "vk" || usedForApi(translatorPlan, "d3d12")?.engine === "vkd3d-proton");
+    if (!sources.length || !require("./vulkan-dlss").carrierDriver(translatorPlan) && !translatorPlan?.vulkanPending) return null;
+    return { depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true, source: "fidelityfx" };
+  } catch { return null; }
+}
 function sceneDemand(entry, context = {}, {root} = {}) {
   return require("../../shared/effects/scene-demand").sceneDemand(entry, context, {root, graphicsHost: "window", graphicsArchitecture: "x86_64"});
 }
@@ -289,5 +300,5 @@ function requirements(entry, context, options = {}) {
   const scene = once.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings).ready && resolveScenePlan(entry, context, { root: options.root });
   return [...camera, ...(scene?.requirements || [])];
 }
-module.exports = { FILES, rendererFiles,adapter, payload, libraries, libraryAdapter, matchingSupport, resolvePlan, prepareGame, restoreGame, environment, rendererFile,
+module.exports = { FILES, rendererFiles,adapter, payload, libraries, libraryAdapter, matchingSupport, resolvePlan, sceneSourceInputs, prepareGame, restoreGame, environment, rendererFile,
   requirements, sceneLibraries, sceneDemand, resolveScenePlan, restoreLibraries };

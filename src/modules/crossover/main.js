@@ -193,9 +193,10 @@ async function resolveGraphicsInputs(entry, context = {}, resolved, plan) {
   const recorded = !translatorPlan && recordedLaunch(entry, runtimeId, context, install);
   if (recorded) return require("./graphics-inputs").inputs(install, recorded.graphicsInputs, { fallback });
   translatorPlan ||= await currentPlan(entry, runtimeId, context, install);
-  const source = require("./temporal").resolvePlan(entry, context, { install, runtimeId, translatorPlan,
-    settings: Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan), allowDownload: true })?.inputs;
-  return require("./graphics-inputs").inputs(install, source, { fallback });
+  const Temporal = require("./temporal"), settings = Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan);
+  const source = Temporal.resolvePlan(entry, context, { install, runtimeId, translatorPlan, settings, allowDownload: true })?.inputs;
+  const GraphicsInputs = require("./graphics-inputs");
+  return GraphicsInputs.inputs(install, GraphicsInputs.merge(source, Temporal.sceneSourceInputs(entry, context, { settings, translatorPlan })), { fallback });
 }
 
 module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,

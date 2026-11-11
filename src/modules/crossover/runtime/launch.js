@@ -243,7 +243,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     ({environment, overrides, dll} = buildEnvironment({...settings, dlss: false}, selected.install, directory, bottlePath,
       {executableArchitecture: selectedExecutable.executableArchitecture, host, existingEnvironment, translatorEnvironment}));
   }
-  context.graphicsInputs = require("../graphics-inputs").inputs(selected.install, cameraBridge?.inputs);
+  const GraphicsInputs = require("../graphics-inputs");
+  context.graphicsInputs = GraphicsInputs.inputs(selected.install, GraphicsInputs.merge(cameraBridge?.inputs, plans.sceneInputs));
   if (!existingEnvironment) {
     Writable.assertOwnDirectory(directory, path.dirname(bottlePath));
     await ensureBottle(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, bottlePath)), directory, settings, context, { run, translatorEnvironment });

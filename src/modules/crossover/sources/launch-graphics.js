@@ -32,7 +32,8 @@ async function resolve(entry, context, { source, install, settings, executableAr
   if (cameraBridge) settings = { ...settings, dlss: true };
   if (cameraBridge?.dependency) await context.useRuntime?.(cameraBridge.dependency);
   for (const dependency of scenePlan?.dependencies || []) await context.useRuntime?.(dependency);
-  return { settings, translatorPlan, translatorEnvironment, translatorView, vulkanDLSS, ngxScene, scenePlan, cameraBridge };
+  const sceneInputs = Temporal.sceneSourceInputs(entry, context, { settings, translatorPlan });
+  return { settings, translatorPlan, translatorEnvironment, translatorView, vulkanDLSS, ngxScene, scenePlan, cameraBridge, sceneInputs };
 }
 
 module.exports = { resolve };

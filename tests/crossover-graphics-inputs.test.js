@@ -57,3 +57,34 @@ test("FEX Wine selects arm64 native libraries while Rosetta Wine retains x64", t
   assert.equal(wineLayout({ crossoverRoot: root, architecture: 'x64' }).architecture, 'x86_64');
   assert.equal(wineLayout({ crossoverRoot: root, architecture: 'arm64' }).architecture, 'arm64');
 });
+test("scene sources merge their inputs after the first source's own fields", () => {
+  const camera = {source: "streamline", depth: true, motionVectors: true, cameraProjection: false, methods: ["fsr2", "fsr3"]};
+  const scene = {source: "fidelityfx", depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true};
+  assert.deepEqual(Graphics.merge(camera, scene), {...camera, jitter: true, exposure: true, cameraProjection: true, source: "streamline+fidelityfx"});
+  assert.equal(Graphics.merge(null, scene), scene);assert.equal(Graphics.merge(camera, null), camera);assert.equal(Graphics.merge(), null);
+});
+test("a game's FidelityFX library supplies scene inputs on a route that records its dispatches", async t => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const Temporal = require("../src/modules/crossover/temporal"), Profile = require("../src/modules/crossover/temporal/catalog").FIDELITYFX_PROFILE;
+  const Detection = require("../src/modules/crossover/detect"), PE = require("../src/modules/crossover/temporal/streamline/pe-exports");
+  const {sceneInputAvailable} = await import("../src/modules/shared/effects/operation-contracts.mjs");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-ffx-inputs-"));t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  fs.writeFileSync(path.join(root, "Game.exe"), "game");
+  const carrier = path.join(root, "libvulkan_kosmickrisp.dylib"), plain = path.join(root, "libMoltenVK.dylib");
+  fs.writeFileSync(carrier, "driver temporal-sr words");fs.writeFileSync(plain, "runtime MoltenVK");
+  t.mock.method(Detection, "cachedWindowsExecutable", () => ({sourceRoot: root, windowsExecutablePath: path.join(root, "Game.exe")}));
+  t.mock.method(PE, "inspect", () => Profile.exports.map((name, index) => ({name, ordinal: index + 1})));
+  const plan = (engine, file, d3d12) => ({components: {"vulkan-driver": {used: {engine, files: [{format: "macho", path: file}]}},
+    ...(d3d12 ? {d3d12: {used: {engine: d3d12}}} : {})}});
+  const entry = {};
+  assert.equal(Temporal.sceneSourceInputs(entry, {}, {translatorPlan: plan("kosmickrisp", carrier)}), null, "no FidelityFX library, no scene inputs");
+  fs.writeFileSync(path.join(root, Profile.libraries.vk), "game FidelityFX library");
+  const inputs = Temporal.sceneSourceInputs(entry, {}, {translatorPlan: plan("kosmickrisp", carrier)});
+  assert.equal(inputs.source, "fidelityfx");
+  for (const name of ["depth", "motion", "jitter", "exposure", "camera"]) assert.equal(sceneInputAvailable(name, inputs), true, name);
+  assert.equal(Temporal.sceneSourceInputs(entry, {}, {translatorPlan: plan("moltenvk", plain)}), null, "a driver without temporal frames records nothing");
+  assert.equal(Temporal.sceneSourceInputs(entry, {}, {translatorPlan: {...plan("moltenvk", plain), vulkanPending: true}})?.source, "fidelityfx", "a carrier this Play installs");
+  fs.rmSync(path.join(root, Profile.libraries.vk));fs.writeFileSync(path.join(root, Profile.libraries.dx12), "game FidelityFX library");
+  assert.equal(Temporal.sceneSourceInputs(entry, {}, {translatorPlan: plan("kosmickrisp", carrier, "vkd3d-proton")})?.source, "fidelityfx");
+  assert.equal(Temporal.sceneSourceInputs(entry, {}, {translatorPlan: plan("kosmickrisp", carrier, "d3dmetal")}), null, "Direct3D 12 records only through VKD3D-Proton");
+});

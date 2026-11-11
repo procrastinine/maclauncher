@@ -12,8 +12,18 @@ function architecture(install, hostArchitecture = process.arch, fallback = null)
   const host = normalize(hostArchitecture);
   return candidates.includes(host) ? host : candidates[0] || fallback;
 }
+// The scene inputs that any of a launch's scene sources supplies, after the
+// first source's own fields.
+function merge(...sources) {
+  const present = sources.filter(Boolean);
+  if (present.length < 2) return present[0] || null;
+  const result = { ...present[0] };
+  for (const source of present.slice(1)) for (const [key, value] of Object.entries(source)) if (value === true) result[key] = true;
+  result.source = present.map(source => source.source).filter(Boolean).join("+");
+  return result;
+}
 function inputs(install, source, options = {}) {
   const selected = architecture(install, options.hostArchitecture, options.fallback);
   return selected ? { ...source, architecture: selected } : source || null;
 }
-module.exports = { architecture, inputs };
+module.exports = { architecture, inputs, merge };

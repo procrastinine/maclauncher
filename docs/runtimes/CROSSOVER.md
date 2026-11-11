@@ -160,7 +160,7 @@ The FidelityFX API adapter is a MacLauncher Builds package under **Graphics** â†
 - For Vulkan, the proxy records the frame in the dispatch's command buffer. The selected Vulkan driver has to forward temporal frames, as MacLauncher KosmicKrisp and MoltenVK scene support do, and the game's device has to provide `vkCmdPipelineBarrier2`.
 - For Direct3D 12, the proxy records the frame through vkd3d-proton's MetalFX command-list interface. The selected Direct3D 12 translator has to be MacLauncher's vkd3d-proton, on a Vulkan driver that forwards temporal frames.
 
-The selected upscaler then writes the dispatch's output. When a frame cannot be recorded, the original FidelityFX dispatch runs. The adapter is prepared the same way for CrossOver, Sikarugir and WineCX launches. With DXMT, D3DMetal or the Vulkan driver included with the Wine source, the game's FidelityFX library runs unchanged. FidelityFX Super Resolution 2 libraries have a different interface and keep their original route.
+The selected upscaler then writes the dispatch's output. When a frame cannot be recorded, the original FidelityFX dispatch runs. On a route that records the dispatches, the graphics menus count depth, motion vectors, jitter, exposure and the camera as inputs that the game supplies, so temporal upscalers are not listed under **Needs scene inputs**. The adapter is prepared the same way for CrossOver, Sikarugir and WineCX launches. With DXMT, D3DMetal or the Vulkan driver included with the Wine source, the game's FidelityFX library runs unchanged. FidelityFX Super Resolution 2 libraries have a different interface and keep their original route.
 
 ### Launch folders for adapters
 

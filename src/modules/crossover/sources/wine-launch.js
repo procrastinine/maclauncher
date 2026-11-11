@@ -268,7 +268,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const folder = await Steps.launchFolder(entry, context, { source, directory, originalRoot,
     executable: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture, cameraBridge, scenePlan });
   let { view: cameraView, gameRoot, executablePath } = folder;cameraBridge = folder.cameraBridge;
-  context.graphicsInputs = require("../graphics-inputs").inputs(selected.install, cameraBridge?.inputs, { fallback: "x86_64" });
+  const GraphicsInputs = require("../graphics-inputs");
+  context.graphicsInputs = GraphicsInputs.inputs(selected.install, GraphicsInputs.merge(cameraBridge?.inputs, plans.sceneInputs), { fallback: "x86_64" });
   const nativeInputs = [selected.install.executablePath, selected.install.serverPath,
     ...(translatorPlan.layout.unixRoot ? ["ntdll.so", "wine"].map(name => path.join(translatorPlan.layout.unixRoot, name)).filter(file => fs.existsSync(file)) : [])]
     .map(file => ({ path: file, sha256: require("../../shared/runtime/verified-identity").fileDigest(file).sha256 }));
