@@ -29,8 +29,6 @@ const WINE_BACKENDS = Object.freeze({
   d3dmetal: feature("D3DMetal", "14.0", {hardwareArchitectures: Object.freeze(["arm64"])})
 });
 const TEMPLATE_RENDERERS = Object.freeze({
-  dxmt: feature("Sikarugir DXMT", "14.0.0"),
-  d3dmetal: feature("Sikarugir D3DMetal", "26.4.0", {hardwareArchitectures: Object.freeze(["arm64"])}),
   kosmickrisp: feature("KosmicKrisp", METAL4.minimumMacOS + ".0", {hardwareArchitectures: METAL4.hardwareArchitectures})
 });
 // The content picker reports the picked window and app from this release on.

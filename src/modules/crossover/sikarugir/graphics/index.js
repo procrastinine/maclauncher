@@ -39,7 +39,7 @@ function capabilitiesFor(install, support, host = {}) {
   const actual = { platform: process.platform, ...host, macOSVersion: current };
   if (Requirements.requirementSupport({ minimumMacOS: metadata.minimumBaseMacOS }, actual).supported === false)
     fail(`This graphics package requires macOS ${metadata.minimumBaseMacOS} or later.`);
-  const capable = (name, required = Requirements.TEMPLATE_RENDERERS[name] || {}) => {
+  const capable = (name, required = Requirements.TEMPLATE_RENDERERS[name] || Requirements.WINE_BACKENDS[name] || {}) => {
     // An installed Template keeps its measured floor, including an earlier
     // compatible renderer. Static defaults describe an unmeasured closure.
     const measured = floors[name] || required.minimumMacOS;

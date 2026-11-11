@@ -36,8 +36,6 @@ Each feature has a platform minimum. The package selected for a feature can stil
 | Window graphics | 15.2 | Support queried per Metal device |
 | DXMT | 14 | Support queried per Metal device |
 | D3DMetal | 14 | Apple Silicon |
-| Sikarugir DXMT | 14 | Support queried per Metal device |
-| Sikarugir D3DMetal | 26.4 | Apple Silicon |
 | KosmicKrisp | 26 | Apple Silicon |
 | Temporal upscaling in Windows games | 14 | Apple Silicon |
 | Vulkan renderers for Windows games | 26 | Apple Silicon |
