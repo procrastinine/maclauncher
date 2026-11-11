@@ -177,10 +177,13 @@ function createInventoryCheck({ label = "Wine", systemVersionSync = Host.systemV
       }
     }
     if (minimumMacOS && !Host.versionAtLeast(systemVersionSync(), minimumMacOS))
-      return { supported: false, reason: `This ${label} engine requires macOS ${minimumMacOS}.` };
+      return { supported: false, reason: requiresMacOS(minimumMacOS) };
     return { supported: true };
   };
 }
 
+// The one wording for a floor the running macOS does not meet, the same as
+// the stable platform requirements use.
+const requiresMacOS = version => `Requires macOS ${String(version).replace(/(?:\.0)+$/, "")} or later.`;
 module.exports = { INVENTORY, MAXIMUM_FILES, MAXIMUM_INVENTORY_BYTES, safeRelative, regularFile, walk, nativeInfo, inspectClosure,
-  hashAsync, writeInventory, mentions, wineCapabilities, wineVersion, createInventoryCheck, later, inside, stamp };
+  hashAsync, writeInventory, mentions, wineCapabilities, wineVersion, createInventoryCheck, requiresMacOS, later, inside, stamp };

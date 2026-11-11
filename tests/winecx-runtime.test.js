@@ -132,7 +132,7 @@ test("WineCX payload preparation refuses an external native library and a newer 
   const root = temporary(t), external = path.join(root, "external"), newer = path.join(root, "newer");
   tree(external, { dependency: "/opt/homebrew/lib/libvulkan.dylib" }); tree(newer, { minimum: 99 });
   await assert.rejects(Payload.preparePayload({ unpacked: external }, { systemVersionSync: () => "26.1" }), /external native library/);
-  await assert.rejects(Payload.preparePayload({ unpacked: newer }, { systemVersionSync: () => "26.1" }), /requires macOS 99/);
+  await assert.rejects(Payload.preparePayload({ unpacked: newer }, { systemVersionSync: () => "26.1" }), /Requires macOS 99 or later\./);
   const wrapped = path.join(root, "wrapped"); tree(path.join(wrapped, "release"));
   const metadata = await Payload.preparePayload({ unpacked: wrapped }, { systemVersionSync: () => "26.1" });
   assert.equal(metadata.root, "Libraries"); assert.ok(fs.existsSync(path.join(wrapped, "Libraries/Wine/bin/wineserver")), "a wrapped Libraries folder moves to its known place");

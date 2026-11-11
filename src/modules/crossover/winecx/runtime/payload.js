@@ -47,7 +47,7 @@ async function preparePayload({ unpacked, pin, signal, onProgress }, dependencie
   const records = Shared.walk(unpacked, signal, LABEL);
   const native = Shared.inspectClosure(unpacked, records, signal, { label: LABEL, required: REQUIRED, executableRoot: path.join(unpacked, WINE, "bin") });
   const hostVersion = (dependencies.systemVersionSync || Host.systemVersionSync)();
-  if (!Host.versionAtLeast(hostVersion, native.minimumMacOS)) throw new Error(`This WineCX runtime requires macOS ${native.minimumMacOS}.`);
+  if (!Host.versionAtLeast(hostVersion, native.minimumMacOS)) throw new Error(Shared.requiresMacOS(native.minimumMacOS));
   const versions = readVersionFile(path.join(unpacked, ROOT)), wineRoot = path.join(unpacked, WINE);
   const inventory = await Shared.writeInventory(unpacked, records, signal, LABEL);
   return { schemaVersion: 1, root: ROOT, wineRoot: WINE, inventory, minimumMacOS: native.minimumMacOS, architectures: native.architectures,

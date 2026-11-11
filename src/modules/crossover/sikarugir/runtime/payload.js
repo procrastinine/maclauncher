@@ -70,7 +70,7 @@ async function preparePayload({ unpacked, pin, signal, logger, onProgress }, dep
   const records = walk(unpacked, signal), native = inspectClosure(unpacked, records, signal);
   const minimumMacOS = later(native.minimumMacOS, graphics.minimumBaseMacOS || native.minimumMacOS);
   const hostVersion = (dependencies.systemVersionSync || Host.systemVersionSync)();
-  if (!Host.versionAtLeast(hostVersion, minimumMacOS)) throw new Error(`This Sikarugir engine requires macOS ${minimumMacOS}.`);
+  if (!Host.versionAtLeast(hostVersion, minimumMacOS)) throw new Error(Shared.requiresMacOS(minimumMacOS));
   const inventory = await Shared.writeInventory(unpacked, records, signal, LABEL);
   const server = regularFile(unpacked, `${WINE_ROOT}/bin/wineserver`);
   if (fs.statSync(server).size > 32 * 1024 * 1024) throw new Error("Sikarugir server metadata exceeds its supported size.");
