@@ -7,12 +7,14 @@ const { bindProcessStop } = require("../../../core/process-lifecycle");
 const ProcessTree = require("../../../core/process-tree");
 
 // External environments must never wait for or terminate the whole server on
-// ordinary exit. The existing process-stop owner handles explicit Stop.
+// ordinary exit. The existing process-stop owner handles explicit Stop. A
+// session loader starts a stopped environment's Wine session before the game.
 const EXTERNAL_SUPERVISOR = `count=$1
 shift
 while [ "$count" -gt 0 ]; do export "$1"; shift; count=$((count - 1)); done
-wine=$1
-shift
+session=$1
+wine=$2
+shift 2
 child=
 stop_game() {
   trap '' TERM INT HUP
@@ -20,6 +22,11 @@ stop_game() {
   exit 143
 }
 trap stop_game TERM INT HUP
+if [ -n "$session" ]; then
+  (unset DYLD_LIBRARY_PATH DYLD_INSERT_LIBRARIES; exec "$session" winepath.exe -w /) >/dev/null 2>&1 </dev/null &
+  child=$!
+  wait "$child"
+fi
 "$wine" "$@" &
 child=$!
 wait "$child"
@@ -28,10 +35,10 @@ trap '' TERM INT HUP
 exit "$status"
 `;
 
-function externalArguments(command, args, environment = {}) {
+function externalArguments(command, args, environment = {}, sessionPath = "") {
   const libraries = Object.entries(environment).filter(([key, value]) => /^DYLD_[A-Z0-9_]+$/.test(key) && typeof value === "string")
     .map(([key, value]) => `${key}=${value}`);
-  return ["-c", EXTERNAL_SUPERVISOR, "maclauncher-wine", String(libraries.length), ...libraries, command, ...args];
+  return ["-c", EXTERNAL_SUPERVISOR, "maclauncher-wine", String(libraries.length), ...libraries, sessionPath || "", command, ...args];
 }
 
 async function runningState(prefixPath, { serverRoots, uid = process.getuid?.(), connect = net.createConnection, environment = process.env } = {}) {

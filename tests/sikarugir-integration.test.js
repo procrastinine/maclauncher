@@ -120,7 +120,7 @@ function managedFixture(t, { installed = [], approval = true, native = false } =
   const run = async (_wine, _server, args, options) => {
     const stage = args[0] === "wineboot.exe" ? "boot" : args[0] === "winecfg.exe" ? "prefix-windows-version"
       : args[0] === "reg.exe" && args[2]?.startsWith("HKCU\\Software\\Wine\\AppDefaults\\") ? "app-windows-version" : args[0];
-    calls.push({ stage, args });
+    calls.push({ stage, args, command: _wine, libraries: options.env.DYLD_LIBRARY_PATH });
     write(path.join(options.env.WINEPREFIX, "system.reg"), "registry");
     write(path.join(options.env.WINEPREFIX, "user.reg"), "registry");
     return { stdout: "", stderr: "" };
@@ -316,6 +316,12 @@ test("ordinary Play obtains one consent, prepares the Windows environment and ru
   assert.equal(spawned.args[3], path.join(bundle, "MacOS", "wine"));
   assert.match(fs.readFileSync(path.join(bundle, "Info.plist"), "utf8"), /<key>LSApplicationCategoryType<\/key>\s*<string>public\.app-category\.games<\/string>/);
   assert.equal(spawned.args[4], path.join(privateWine, "bin", "wineserver"));
+  // Wine's session and registry tool start from the engine's own loader,
+  // outside the bundle; only the game's processes start from the bundle.
+  assert.equal(spawned.args[6], path.join(installedWine, "bin", "wine"));
+  const registry = calls.find(call => call.stage === "app-windows-version");
+  assert.equal(registry.command, path.join(installedWine, "bin", "wine"));
+  assert.equal(registry.libraries, undefined);
   assert.equal(fs.lstatSync(spawned.args[3]).isSymbolicLink(), false);
   assert.deepEqual(fs.readFileSync(spawned.args[3]), fs.readFileSync(path.join(installedWine, "bin", "wine")));
   assert.ok(fs.lstatSync(spawned.args[4]).isSymbolicLink());
@@ -406,6 +412,8 @@ test("Stop ends only the selected private prefix and keeps independently spawned
       fallbackLibraries:process.env.DYLD_FALLBACK_LIBRARY_PATH,fallbackFrameworks:process.env.DYLD_FALLBACK_FRAMEWORK_PATH}));
     fs.writeFileSync(path.join(root,'windows-ready'),'yes');${untilTestEnds}`;
   write(install.executablePath, `#!${process.execPath}\nconst fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process');
+    if(process.argv[2]==='winepath.exe'){fs.writeFileSync(path.join(process.env.WINEPREFIX,'session.json'),JSON.stringify({args:process.argv.slice(2),
+      libraries:process.env.DYLD_LIBRARY_PATH??null,game:fs.existsSync(path.join(process.env.WINEPREFIX,'wine-arguments.json'))}));process.exit(0)}
     fs.writeFileSync(path.join(process.env.WINEPREFIX,'wine-arguments.json'),JSON.stringify(process.argv.slice(2)));
     const child=spawn(process.execPath,['-e',${JSON.stringify(childProgram)}],{detached:true,stdio:'ignore'});
     fs.writeFileSync(path.join(process.env.WINEPREFIX,'windows.pid'),String(child.pid));child.unref();\n`);
@@ -441,6 +449,8 @@ test("Stop ends only the selected private prefix and keeps independently spawned
       await waitUntil(() => fs.existsSync(path.join(prefix, "windows-ready")));
       windowsPids.push(Number(fs.readFileSync(path.join(prefix, "windows.pid"), "utf8")));
       assert.deepEqual(JSON.parse(fs.readFileSync(path.join(prefix, "wine-arguments.json"))), ["start.exe", "/d", "G:\\", "/exec", "G:\\Game.exe"]);
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(prefix, "session.json"))), { args: ["winepath.exe", "-w", "/"], libraries: null, game: false },
+        "the engine's own loader starts the session, without the bundle's ntdll, before the game");
       assert.equal(fs.realpathSync(path.join(prefix, "dosdevices", "g:")), fs.realpathSync(entry.runtimeData.sikarugir.gameRoot));
       const environment = JSON.parse(fs.readFileSync(path.join(prefix, "windows-environment.json")));
       const privateDllRoot = path.join(entry.runtimeData.sikarugir.viewRoot, "wine", "lib", "wine");

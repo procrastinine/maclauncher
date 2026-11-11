@@ -131,7 +131,7 @@ test("Sikarugir provider starts the supervised plain Wine command and records bo
   const context = { spawnDetachedChecked: async (...args) => { calls.push(args); return child; } };
   assert.equal(await provider.launchRuntime("sikarugir", entry, context), child);
   assert.equal(calls.length, 1); assert.equal(calls[0][0], "/bin/sh");
-  assert.deepEqual(calls[0][1].slice(3), [plan.winePath, plan.serverPath, "play", "/managed/support libraries", "", "/managed/frameworks", "", "", ...plan.args]);
+  assert.deepEqual(calls[0][1].slice(3), [plan.winePath, plan.serverPath, "play", "", "/managed/support libraries", "", "/managed/frameworks", "", "", ...plan.args]);
   assert.equal(calls[0][2].cwd, entry.gamePath); assert.equal(calls[0][2].env, plan.environment);
   assert.equal(calls[0][3], false, "Rosetta is checked for Wine before starting the native shell supervisor");
   assert.equal(calls[0][1].some(arg => ["--bottle", "--wait-children", "--workdir", "--env"].includes(arg)), false);
@@ -669,6 +669,35 @@ test("Wine supervisor keeps tracking independently grouped Windows children and 
   assert.equal(code, 143); assert.equal(fs.readFileSync(stopped, "utf8"), "yes");
   assert.doesNotThrow(() => process.kill(unrelated.pid, 0), "another Wine/game process remains untouched");
   assert.throws(() => process.kill(gamePid, 0), { code: "ESRCH" });
+});
+
+test("the session loader starts the prefix's Wine session outside the game bundle before the game joins it", async t => {
+  if (process.platform === "win32") return t.skip("POSIX process groups are required");
+  const Processes = require("../src/modules/shared/runtime/wine-processes");
+  for (const external of [false, true]) {
+    const directory = fixture(t), { wine, server } = fakeProcesses(directory, { returns: true }), prefix = path.join(directory, "prefix");
+    const session = path.join(directory, "engine wine"), sessionFile = path.join(directory, "session.json");
+    fs.writeFileSync(session, `#!${process.execPath}\nconst fs=require('fs');fs.writeFileSync(process.env.SESSION_FILE,JSON.stringify({args:process.argv.slice(2),libraries:process.env.DYLD_LIBRARY_PATH,fallbackLibraries:process.env.DYLD_FALLBACK_LIBRARY_PATH,insertLibraries:process.env.DYLD_INSERT_LIBRARIES,gameStarted:fs.existsSync(process.env.ENVIRONMENT_FILE)}));`, { mode: 0o755 });
+    const environment = { ...process.env, GAME_PID: path.join(directory, "pid"), RETURNED: path.join(directory, "returned"), STOPPED: path.join(directory, "stopped"),
+      SESSION_FILE: sessionFile, ENVIRONMENT_FILE: path.join(directory, "environment.json"), WINEPREFIX: prefix, EXPECTED_PREFIX: prefix,
+      DYLD_LIBRARY_PATH: path.join(directory, "bundle ntdll"), DYLD_FALLBACK_LIBRARY_PATH: path.join(directory, "fallback libraries"),
+      DYLD_INSERT_LIBRARIES: process.platform === "darwin" ? "/usr/lib/libSystem.B.dylib" : "/owned/effects.dylib" };
+    const args = external ? Processes.externalArguments(wine, ["start.exe", "/exec", "G:\\Game.exe"], environment, session)
+      : Launch.supervisorArguments(wine, server, "prepare", ["start.exe", "/exec", "G:\\Game.exe"], environment, session);
+    const child = spawn("/bin/sh", args, { detached: true, stdio: "ignore", env: environment });
+    t.after(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} });
+    const [code] = await once(child, "exit");
+    const gamePid = Number(fs.readFileSync(environment.GAME_PID, "utf8"));
+    t.after(() => { try { process.kill(-gamePid, "SIGKILL"); } catch {} });
+    assert.equal(code, 0);
+    assert.deepEqual(JSON.parse(fs.readFileSync(sessionFile, "utf8")), { args: ["winepath.exe", "-w", "/"],
+      fallbackLibraries: environment.DYLD_FALLBACK_LIBRARY_PATH, gameStarted: false },
+      "the engine's own loader starts the session without the bundle's ntdll or game-only libraries");
+    const game = JSON.parse(fs.readFileSync(environment.ENVIRONMENT_FILE, "utf8"));
+    assert.deepEqual(game.args, ["start.exe", "/exec", "G:\\Game.exe"]);
+    assert.equal(game.libraries, environment.DYLD_LIBRARY_PATH, "the game still starts through the bundle's ntdll");
+    assert.equal(game.insertLibraries, environment.DYLD_INSERT_LIBRARIES);
+  }
 });
 
 test("cancelled Wine initialization waits for its independently grouped child to stop before rejecting", async t => {

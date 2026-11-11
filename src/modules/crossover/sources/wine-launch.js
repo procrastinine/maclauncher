@@ -22,17 +22,20 @@ const WINDOWS_VERSIONS = new Set(Object.keys(WineSettings.WINDOWS_VERSIONS));
 // Wine may return while Windows children continue in other process groups.
 // Wait for the private wineserver on ordinary exit; Stop terminates that prefix
 // before the tracked process and its runtime lease are released.
+// A session loader first starts the prefix's Wine session (the boot program and
+// the service processes) from the engine's own loader; the game then joins it.
 const SUPERVISOR = `wine_wine=$1
 wine_server=$2
 wine_finish=$3
-DYLD_LIBRARY_PATH=$4
-DYLD_FALLBACK_LIBRARY_PATH=$5
-DYLD_FRAMEWORK_PATH=$6
-DYLD_FALLBACK_FRAMEWORK_PATH=$7
-wine_insert_libraries=$8
+wine_session=$4
+DYLD_LIBRARY_PATH=$5
+DYLD_FALLBACK_LIBRARY_PATH=$6
+DYLD_FRAMEWORK_PATH=$7
+DYLD_FALLBACK_FRAMEWORK_PATH=$8
+wine_insert_libraries=$9
 unset DYLD_INSERT_LIBRARIES
 export DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH DYLD_FRAMEWORK_PATH DYLD_FALLBACK_FRAMEWORK_PATH
-shift 8
+shift 9
 wine_child=
 stop_wine_prefix() {
   trap '' TERM INT HUP
@@ -43,6 +46,11 @@ stop_wine_prefix() {
   exit 143
 }
 trap stop_wine_prefix TERM INT HUP
+if [ -n "$wine_session" ]; then
+  (unset DYLD_LIBRARY_PATH; exec "$wine_session" winepath.exe -w /) >/dev/null 2>&1 </dev/null &
+  wine_child=$!
+  wait "$wine_child"
+fi
 if [ -n "$wine_insert_libraries" ]; then
   DYLD_INSERT_LIBRARIES="$wine_insert_libraries" "$wine_wine" "$@" &
 else
@@ -57,12 +65,12 @@ trap '' TERM INT HUP
 exit "$wine_status"
 `;
 
-function supervisorArguments(command, serverPath, mode, args, environment = {}) {
+function supervisorArguments(command, serverPath, mode, args, environment = {}, sessionPath = "") {
   // macOS removes inherited DYLD variables when /bin/sh starts. Positional
   // values remain data and are exported by the owned script before Wine runs.
   const libraries = ["DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH", "DYLD_FALLBACK_FRAMEWORK_PATH", "DYLD_INSERT_LIBRARIES"]
     .map(key => safeText(environment[key] || "", "Runtime library paths"));
-  return ["-c", SUPERVISOR, "maclauncher-wine", command, serverPath, mode, ...libraries, ...args];
+  return ["-c", SUPERVISOR, "maclauncher-wine", command, serverPath, mode, safeText(sessionPath || "", "Wine session loader"), ...libraries, ...args];
 }
 
 // `translatorEnvironment` holds the values of the chosen translators'
@@ -307,7 +315,11 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const registryEnvironment = existingEnvironment;
   await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(executablePath),
     assertWritable: registryEnvironment ? () => Environments.assertWritableRegistry(registryEnvironment) : undefined }, args => {
-    const options = { cwd: directory, env: { ...environment, WINEDEBUG: "-all" }, signal: context.signal, timeout: 30000 };
+    // The registry tool runs from the engine's own loader, outside the game
+    // bundle, like the session that it starts.
+    const env = { ...environment, WINEDEBUG: "-all" };
+    delete env.DYLD_LIBRARY_PATH;
+    const options = { cwd: directory, env, signal: context.signal, timeout: 30000 };
     return dependencies.run ? dependencies.run(selected.install.executablePath, selected.install.serverPath, args, options) : registryEnvironment
       ? require("../../shared/runtime/wine-processes").runTool(selected.install.executablePath, args, options)
       : runSupervised(selected.install.executablePath, selected.install.serverPath, args, options);
@@ -325,7 +337,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     install: selected.install, values: { installedVersion: selected.version, prefixPath, viewRoot, graphicsBackend: graphics.graphicsBackend,
       vulkanBackend: graphics.vulkanBackend, dlss: graphics.dlss?.enabled === true, componentVersions: graphics.componentVersions } });
   return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, windowsWorkingDirectory, graphics, environment, args, translatorPlan,
-    existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
+    existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath,
+    sessionPath: graphics.executablePath && graphics.executablePath !== selected.install.executablePath ? selected.install.executablePath : "" };
 }
 
 // The launch functions of one Wine source.

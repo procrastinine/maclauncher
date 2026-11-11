@@ -111,8 +111,8 @@ function createProvider({ source, manager, launch = WineLaunch.forSource(source)
       const log = createLog(plan.directory);
       try {
         Processes.installStopHandler(context, plan);
-        const args = plan.existingEnvironment ? Processes.externalArguments(plan.winePath, plan.args, plan.environment) :
-          launch.supervisorArguments(plan.winePath, plan.serverPath, "play", plan.args, plan.environment);
+        const args = plan.existingEnvironment ? Processes.externalArguments(plan.winePath, plan.args, plan.environment, plan.sessionPath) :
+          launch.supervisorArguments(plan.winePath, plan.serverPath, "play", plan.args, plan.environment, plan.sessionPath);
         const child = await context.spawnDetachedChecked("/bin/sh", args,
         { cwd: plan.workingDirectory || path.dirname(plan.executablePath), env: plan.environment, stdio: ["ignore", "pipe", "pipe"], graphicsExecutable: plan.winePath }, false);
         log.attach(child);
