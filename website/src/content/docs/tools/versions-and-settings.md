@@ -10,7 +10,7 @@ sidebar:
 
 MacLauncher lets you choose the version of everything it runs, and it passes through nearly every option a runtime has. Each game can pick its own runtime and version, change any runtime setting, add launch arguments and environment variables, and decide whether it may go online. This page covers where those choices live: the Runtimes window for versions, the game's inspector for per-game choices, and the Settings window for defaults.
 
-Settings, Runtimes and Credits each have their own Mac window. Opening them in quick succession keeps each view open, so you can keep Runtimes beside Settings while the library stays usable. Opening the same view again brings its existing window forward. Controls and data load asynchronously, and edits appear across open windows. The [window reference](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md) covers every window, menu and shortcut.
+Settings, Runtimes and Credits each have their own Mac window. Opening them in quick succession keeps each view open beside the others while the library stays usable. Opening the same view again brings its existing window forward. Controls and data load asynchronously, and edits appear across open windows. The [window reference](https://github.com/procrastinine/maclauncher/blob/master/docs/development/UI_GUIDE.md) covers every window, menu and shortcut.
 
 ## The Runtimes window
 
