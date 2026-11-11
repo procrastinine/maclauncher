@@ -228,10 +228,12 @@ test("Siglus launches the selected managed host executable", async t => {
   const mod = require("../src/modules/siglus/main"), calls = [];
   const install = { executablePath: "/managed/bin/siglus-host", libraryPath: "/managed/lib/libsiglus.dylib", needsRosetta: false };
   t.mock.method(mod.runtimeManagers[0], "resolveSelection", () => ({ ready: true, install }));
-  const result = await mod.launchRuntime("siglus", { gameId: "managed-host", gamePath: root }, {
+  const result = await mod.launchRuntime("siglus", { name: "Story title", iconPath: "/existing/story-icon.png", gameId: "managed-host", gamePath: root }, {
     userDataDir: path.join(root, "launcher"), runtimeSettings: {}, settings: {},
     spawnDetachedChecked: (...args) => { calls.push(args); return { pid: 123 }; }
   });
   assert.equal(result.pid, 123); assert.equal(calls[0][0], install.executablePath);
+  assert.equal(calls[0][2].env.MACLAUNCHER_GAME_NAME, "Story title");
+  assert.equal(calls[0][2].env.MACLAUNCHER_GAME_ICON, "/existing/story-icon.png");
   assert.deepEqual(calls[0][1], ["--run", install.libraryPath, root, "auto"]);
 });

@@ -28,6 +28,8 @@ test("Classic game arguments use the emulator's game transport without becoming 
   assert.deepEqual(launch.args.slice(0, 4), [fs.realpathSync(gamePath), "--strict", "--singlethread", "--realtime"]);
   assert.deepEqual(launch.args.slice(4), context.gameArguments.map(argument => `--game-arg=${argument}`));
   assert.equal(launch.cwd, source);
+  assert.equal(launch.env.MACLAUNCHER_GAME_NAME, "");
+  assert.equal(launch.env.MACLAUNCHER_GAME_ICON, "");
   assert.equal(launch.args.includes("--working-directory"), false);
   assert.equal(fs.existsSync(context.userDataDir), false);
   assert.equal(entry.defaultSaveDir, source);
@@ -150,7 +152,7 @@ test("Classic default paths do not traverse launcher data links", t => {
 test("Classic explicit writable overrides preserve the original executable and cwd", async t => {
   const root = temporary(t), source = path.join(root, "original"), override = path.join(root, "chosen-saves");
   fs.mkdirSync(source); const gamePath = path.join(source, "Game.exe"); fs.writeFileSync(gamePath, "original executable");
-  const entry = { gameId: "classic-override", moduleData: { dataPath: gamePath }, saveDirOverride: override };
+  const entry = { name: "Classic title", iconPath: "/existing/game-icon.png", gameId: "classic-override", moduleData: { dataPath: gamePath }, saveDirOverride: override };
   const context = { userDataDir: path.join(root, "launcher") };
   t.mock.method(OpenGMK, "preflight", async () => ({ parserAvailable: true, extensionCount: 0, externalDefinitionCount: 0, unsupportedLibraries: [] }));
   t.mock.method(Native, "launchLocalRuntime", options => options);

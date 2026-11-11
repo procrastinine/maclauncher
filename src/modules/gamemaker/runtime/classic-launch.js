@@ -50,7 +50,8 @@ async function launchClassic(entry, context, selection) {
     upstreamRevision: selection.install.upstreamRevision, expectedSha256: selection.install.binarySha256,
     args: [prepared.gamePath, "--strict", "--singlethread", "--realtime",
       ...(prepared.override ? ["--working-directory", prepared.override] : []),
-      ...(context.gameArguments || []).map(argument => `--game-arg=${argument}`)], cwd: prepared.originalRoot, context });
+      ...(context.gameArguments || []).map(argument => `--game-arg=${argument}`)], cwd: prepared.originalRoot,
+    env: { ...process.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" }, context });
 }
 
 module.exports = { prepareClassicGame, prepareLaunch, launchClassic };
