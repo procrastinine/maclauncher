@@ -1,5 +1,7 @@
+const zlib = require("node:zlib");
 const Upstream = require("../../../shared/runtime/upstream");
 const { ARCHIVE } = require("../../../shared/runtime/safe-archive");
+const { parseMachOLoadCommands } = require("../../../shared/runtime/macho-load-commands");
 
 const REPOSITORY = "dappermint/winecx-gptk";
 const SOURCE_URL = `https://github.com/${REPOSITORY}/releases`;
@@ -59,9 +61,70 @@ async function discover(options = {}) {
     const pin = entryFor(row);
     if (pin && !result.has(pin.version)) result.set(pin.version, pin);
   }
-  return [...result.values()].sort(compare);
+  return withFloor([...result.values()].sort(compare), options);
 }
 discover.allArchitectures = true;
+
+// The archive's first Wine executable states the release's macOS floor. Its
+// start is read in parts and inflated until that executable's load commands are
+// complete, about 4 MB of a 450 MB archive, so a version's requirement is known
+// before its download. The installed closure's floor replaces it after install.
+const HEADER = 64 * 1024, MACHO = new Set([0xfeedfacf, 0xcffaedfe, 0xfeedface, 0xcefaedfe, 0xcafebabe]);
+function tarString(bytes, start, length) { const text = bytes.toString("utf8", start, start + length); const end = text.indexOf("\0"); return end < 0 ? text : text.slice(0, end); }
+// The first Mach-O file in a Wine bin folder of an inflated tar prefix:
+// its header bytes, null when none is in the archive, or undefined when more input is needed.
+function wineExecutable(tar) {
+  let offset = 0, longName = null;
+  while (offset + 512 <= tar.length) {
+    const header = tar.subarray(offset, offset + 512);
+    if (header.every(byte => byte === 0)) return null;
+    const size = parseInt(tarString(header, 124, 12).trim() || "0", 8), type = String.fromCharCode(header[156] || 48), data = offset + 512;
+    if (!Number.isSafeInteger(size) || size < 0) return null;
+    const ustar = tarString(header, 257, 6) === "ustar" ? tarString(header, 345, 155) : "";
+    const name = longName || (ustar ? `${ustar}/` : "") + tarString(header, 0, 100);
+    longName = null;
+    if (type === "L" || type === "x") {
+      if (data + size > tar.length) return undefined;
+      const text = tar.toString("utf8", data, data + size);
+      longName = type === "L" ? text.replace(/\0[\s\S]*$/, "") : /(?:^|\n)\d+ path=([^\n]*)\n/.exec(text)?.[1] || null;
+    } else if ((type === "0" || type === "\0") && /(?:^|\/)Wine\/bin\/(?!\._)[^/]+$/.test(name) && size >= 4) {
+      if (data + Math.min(size, HEADER) > tar.length) return undefined;
+      const bytes = tar.subarray(data, data + Math.min(size, HEADER));
+      if (MACHO.has(bytes.readUInt32BE(0))) return bytes;
+    }
+    offset = data + Math.ceil(size / 512) * 512;
+  }
+  return undefined;
+}
+async function archiveFloor(listed, { signal, range = Upstream.range, step = 2 << 20, limit = 16 << 20 } = {}) {
+  if (!/\.(?:tar\.gz|tgz)$/i.test(listed?.filename || listed?.name || "")) return null;
+  let compressed = Buffer.alloc(0), total = Infinity;
+  while (compressed.length < Math.min(limit, total)) {
+    const part = await range(Upstream.listedFile(listed), compressed.length, Math.min(step, total - compressed.length), { signal });
+    compressed = Buffer.concat([compressed, part.bytes]); total = part.total;
+    const tar = zlib.gunzipSync(compressed, { finishFlush: zlib.constants.Z_SYNC_FLUSH, maxOutputLength: 8 * limit });
+    const executable = wineExecutable(tar);
+    if (executable === null) return null;
+    if (executable) {
+      try { return parseMachOLoadCommands(executable).slices.map(slice => slice.minimumMacOS).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).at(-1) || null; }
+      catch { return null; }
+    }
+  }
+  return null;
+}
+const floors = new Map();
+// Refresh reads the floor of the newest release, the one Play prepares. A floor
+// already read for the same archive is reused.
+async function withFloor(pins, options = {}) {
+  const pin = pins[0], key = pin && (pin.asset.sha256 || pin.asset.url);
+  if (!pin) return pins;
+  if (!floors.has(key)) {
+    try { floors.set(key, await (options.archiveFloor || archiveFloor)(pin.asset, options)); }
+    catch (error) { if (error?.name === "AbortError") throw error; options.logger?.warn?.(`[winecx] The macOS requirement of ${pin.version} could not be read before download: ${error.message}`); return pins; }
+  }
+  const minimumMacOS = floors.get(key);
+  return minimumMacOS ? [{ ...pin, minimumMacOS }, ...pins.slice(1)] : pins;
+}
 
 // The publisher's checksum file names the archive's SHA-256.
 function readChecksum(text, filename) {
@@ -72,4 +135,4 @@ function readChecksum(text, filename) {
   return null;
 }
 
-module.exports = { REPOSITORY, SOURCE_URL, source, runtimeAssets, releaseVersion, versionLabel, entryFor, validateEntry, discover, readChecksum };
+module.exports = { REPOSITORY, SOURCE_URL, source, runtimeAssets, releaseVersion, versionLabel, entryFor, validateEntry, discover, readChecksum, archiveFloor, wineExecutable };

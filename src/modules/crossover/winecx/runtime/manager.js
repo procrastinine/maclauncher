@@ -7,6 +7,8 @@ const { throwIfAborted } = require("../../../shared/runtime/download-utils");
 const { extractArchive } = require("../../../shared/runtime/safe-archive");
 const Catalog = require("./catalog");
 const Payload = require("./payload");
+const Shared = require("../../sources/wine-payload");
+const Host = require("../../../shared/runtime/bundled-native");
 
 // The archive must match the SHA-256 that the publisher's checksum file names,
 // in addition to any digest the release listing states. The checksum file is
@@ -61,8 +63,16 @@ function createManager({ discoverCatalog = Catalog.discover, dependencies = {} }
       version = choose();
     }
     if (!version) throw new Error("No WineCX download is listed for this selection. Select an available version in Runtimes or the game settings.");
+    // The floor is read from the archive's start before the download, for a version Refresh did not read.
+    const pin = base.core.catalog.find(row => row.version === version);
+    const floor = pin.minimumMacOS || await (dependencies.archiveFloor || Catalog.archiveFloor)(pin.asset, { signal: options.signal }).catch(error => {
+      if (error?.name === "AbortError") throw error;
+      options.logger?.warn?.(`[winecx] The macOS requirement of ${version} could not be read before download: ${error.message}`); return null;
+    });
+    if (floor && !Host.versionAtLeast(systemVersion(), floor)) throw new Error(Shared.requiresMacOS(floor));
     return version;
   }
+  const systemVersion = () => (dependencies.systemVersionSync || Host.systemVersionSync)();
   const manager = {
     ...base,
     upstream: [Catalog.source],
@@ -92,7 +102,9 @@ function createManager({ discoverCatalog = Catalog.discover, dependencies = {} }
       });
       for (const pin of base.core.catalog) requirements[pin.version] = { ...requirements[pin.version],
         downloadBytes: pin.downloadBytes, description: "Wine runtime with DXVK and DXMT",
-        contents: "The Wine and translator versions in this release are known after download." };
+        contents: "The Wine and translator versions in this release are known after download.",
+        ...(pin.minimumMacOS ? { minimumMacOS: pin.minimumMacOS } : {}),
+        ...(pin.minimumMacOS && !Host.versionAtLeast(systemVersion(), pin.minimumMacOS) ? { installReason: Shared.requiresMacOS(pin.minimumMacOS) } : {}) };
       const catalog = { ...state.catalog, delivery: "download", importable: false, versionRequirements: requirements,
         installableVersions: state.catalog.installableVersions.filter(version => !requirements[version]?.installReason),
         latestInstalledVersion: installed.find(row => row.ready)?.version || null,

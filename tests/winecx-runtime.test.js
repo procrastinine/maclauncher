@@ -127,6 +127,34 @@ test("WineCX installs only an archive that matches its published checksum file",
   assert.match(manager.resolveSelection({}, {}, userDataDir, { version: "4.8.1" }).reason, /WineCX runtime files changed/);
 });
 
+test("WineCX reads a release's macOS floor from the start of its archive before download", async t => {
+  const root = temporary(t), source = path.join(root, "release"); tree(source);
+  write(path.join(source, "Libraries/Wine/bin/wineserver"), macho(2, { minimum: 27 }), 0o755);
+  write(path.join(source, "Libraries/DXVK/x32/d3d11.dll"), crypto.randomBytes(3 << 20));
+  write(path.join(source, "Libraries/Wine/lib/libLarge.dylib"), crypto.randomBytes(4 << 20));
+  const archive = path.join(root, "Libraries.tar.gz");
+  require("node:child_process").execFileSync("/usr/bin/tar", ["-czf", archive, "-C", source, "Libraries/DXVK", "Libraries/Wine/bin", "Libraries/Wine/lib"]);
+  const bytes = fs.readFileSync(archive), reads = [];
+  const range = async (_listed, start, length) => { reads.push(start); return { bytes: bytes.subarray(start, start + length), total: bytes.length }; };
+  assert.equal(await Catalog.archiveFloor({ filename: "Libraries.tar.gz", url: "https://example.invalid/Libraries.tar.gz" }, { range, step: 1 << 20 }), "27.0.0");
+  assert.ok(reads.length > 1 && reads.at(-1) + (1 << 20) < bytes.length, "only the start of the archive is read, in parts");
+  // Refresh reads the newest release's floor; Install reads it for another version before downloading.
+  Harness.network.routes = routes([release("runtime-v4.8.1"), release("runtime-v4.7.4")]); t.after(() => { Harness.network.routes = null; });
+  const floors = [], archiveFloor = async listed => { floors.push(listed.url.split("/").at(-2)); return "27.0"; };
+  const manager = createManager({ discoverCatalog: options => Catalog.discover({ ...options, archiveFloor }),
+    dependencies: { systemVersionSync: () => "26.1", archiveFloor, extractArchive: async (_archive, target) => tree(target) } });
+  const userDataDir = path.join(root, "profile");
+  await manager.refreshCatalog({ userDataDir, force: true });
+  assert.deepEqual(floors, ["runtime-v4.8.1"], "Refresh reads only the newest release");
+  const state = manager.getState({ userDataDir, componentSummaries: false });
+  assert.equal(state.catalog.versionRequirements["4.8.1"].installReason, "Requires macOS 27 or later.");
+  assert.ok(!state.catalog.installableVersions.includes("4.8.1"));
+  await assert.rejects(manager.installRuntime({ userDataDir, version: "4.8.1" }), /^Error: Requires macOS 27 or later\.$/);
+  await assert.rejects(manager.installRuntime({ userDataDir, version: "4.7.4" }), /^Error: Requires macOS 27 or later\.$/);
+  assert.deepEqual(floors, ["runtime-v4.8.1", "runtime-v4.7.4"], "Install reads an unread version's floor before its download");
+  assert.equal(manager.core.listInstalled(userDataDir).length, 0, "nothing was downloaded or installed");
+});
+
 test("WineCX checksum verification reads the release's checksum file", async () => {
   const pin = { asset: { filename: "Libraries.tar.gz" }, checksum: { filename: "Libraries.tar.gz.sha256", url: "https://example.invalid/Libraries.tar.gz.sha256" } };
   const reply = text => async (_listed, target) => { fs.writeFileSync(target, text); };
