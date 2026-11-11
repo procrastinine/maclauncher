@@ -9,6 +9,7 @@ const { buildRuntimeDownloadMeta } = require("./runtime-downloads");
 const RuntimeCatalog = require("./runtime-catalog");
 const { sanitizeErrorMessage } = require("../../../core/runtime-errors.mjs");
 const Architecture = require("./architecture");
+const ReadPass = require("./read-pass");
 const { systemVersionSync, versionAtLeast } = require("./bundled-native");
 const Custom = require("./custom-runtime");
 const { selectRuntimeVersion, installedRuntimeVersion, managerDefaultVersion } = require("./version-choices");
@@ -270,7 +271,13 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     // resolvable through installed records, never as stale download options.
     versions = [...new Set([...deduplicated.keys(), ...resolvedVersions])];
   }
+  // Within one read pass the installed folders and the catalog file are read once.
+  const passOwner = {};
+  const passKey = (...parts) => JSON.stringify([Architecture.selectedArchitecture(), ...parts]);
   function loadCatalog(userDataDir) {
+    ReadPass.remember(passOwner, passKey("catalog", userDataDir ?? null), () => { readCatalog(userDataDir); return true; });
+  }
+  function readCatalog(userDataDir) {
     if (userDataDir && loadedCatalogDirectory !== null && loadedCatalogDirectory !== userDataDir) {
       entries.clear();
       versions = []; remoteEntries = []; resolvedVersions.clear();
@@ -563,7 +570,14 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       return null;
     }
   }
+  // A status read of one version is shared within a read pass; a full
+  // verification always reads again.
   function resolveInstalled(options = {}) {
+    return options.verification === "status"
+      ? ReadPass.remember(passOwner, passKey("installed", Object.entries(options).sort()), () => readInstalled(options))
+      : readInstalled(options);
+  }
+  function readInstalled(options = {}) {
     loadCatalog(options.userDataDir);
     const pin = entries.get(canonicalVersion(options.version));
     const registered = resolveRegistration(options);
@@ -588,6 +602,9 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       ...(bundledRuntime ? entries.keys() : [])])];
   }
   function listRuntimeRows(userDataDir) {
+    return ReadPass.remember(passOwner, passKey("rows", userDataDir ?? null), () => readRuntimeRows(userDataDir));
+  }
+  function readRuntimeRows(userDataDir) {
     loadCatalog(userDataDir);
     return installedVersions(userDataDir).flatMap(version => {
       const installed = resolveInstalled({ userDataDir, version, verification: "status" });
@@ -615,6 +632,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     });
   }
   function publishRecord(directory, record) {
+    ReadPass.forget();
     record = { ...record, architecture: Architecture.recordArchitecture(record) || Architecture.recordArchitecture(record.catalogEntry) || installationArchitecture };
     displayCache.delete(directory);
     fs.mkdirSync(directory, { recursive: true });
@@ -670,7 +688,8 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       ...(verifiedBuild ? { verifiedBuild: { ...verifiedBuild } } : {}), installedAt: new Date().toISOString() });
     return resolveInstalled({ userDataDir, version: normalized });
   }
-  function resolveSelection(entry, settings, userDataDir, { verification = "full", version: selectedVersion, recommendedVersion, recommended, compatible } = {}) {
+  function resolveSelection(...args) { return ReadPass.within(() => selectInstalled(...args)); }
+  function selectInstalled(entry, settings, userDataDir, { verification = "full", version: selectedVersion, recommendedVersion, recommended, compatible } = {}) {
     loadCatalog(userDataDir);
     // An automatic version option leaves the game's own choice in place.
     const manual = [selectedVersion, entry?.runtimeData?.[id]?.version].find(value => selectRuntimeVersion({ manual: value }).version);
@@ -896,7 +915,8 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     }
     return entries.get(version);
   }
-  function getState(options = {}) {
+  function getState(options = {}) { return ReadPass.within(() => readState(options)); }
+  function readState(options = {}) {
     const { settings, userDataDir } = options;
     loadCatalog(userDataDir);
     const cfg = normalizeSettings(settings);

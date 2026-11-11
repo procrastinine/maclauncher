@@ -8,6 +8,7 @@ const Architecture = require('./architecture');
 const Roles = require('./translator-roles');
 const Requirements = require('./feature-requirements');
 const Pairing = require('./translator-pairing');
+const ReadPass = require('./read-pass');
 const { compareRuntimeVersions } = require('./pinned-native-manager');
 const SETTINGS = Object.freeze({ 'd3d-renderer': 'translatorRenderer', 'vulkan-driver': 'translatorVulkan', d3d12: 'translatorD3D12', video: 'translatorVideo' });
 
@@ -116,8 +117,9 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
       if (value.engine === 'd3dmetal') choices.push({ ...value, id: value.id + ':d3d12', component: 'd3d12' });
     }
     };
-    if (consumer) Architecture.withArchitecture(consumer, inspect);
-    else inspect();
+    // One pass reads the manager's installed versions once for its state and
+    // every version's selection.
+    ReadPass.within(() => consumer ? Architecture.withArchitecture(consumer, inspect) : inspect());
   }
   return choices;
 }

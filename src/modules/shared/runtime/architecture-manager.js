@@ -1,4 +1,5 @@
 const Architecture = require("./architecture");
+const ReadPass = require("./read-pass");
 const { architectureSupport } = require("./host-capabilities");
 const { selectRuntimeVersion } = require("./version-choices");
 const ARCHITECTURES = ["arm64", "x64"];
@@ -85,7 +86,8 @@ function createArchitectureManager(config, createManager) {
     } : value;
   }});
   const tagged = (row, architecture) => ({ ...Architecture.tagInstall(row, architecture), variant: row.variant || `architecture:${architecture}` });
-  facade.getState = function getState(options = {}) {
+  facade.getState = (options = {}) => ReadPass.within(() => stateOfAll(options));
+  function stateOfAll(options) {
     const states = ARCHITECTURES.map(architecture => ({ architecture, state: call(architecture, "getState", [options]) }));
     // The automatic list is the one Play uses without a saved build choice.
     const automatic = facade.chooseArchitecture(null, null, options.userDataDir);
@@ -103,7 +105,7 @@ function createArchitectureManager(config, createManager) {
         catalog: section.catalog ? { ...section.catalog, architecture: automatic, architectureCatalogs } : section.catalog };
     }
     return { ...merge(initial), sections: initial.sections?.map(section => merge(section, section.id)) };
-  };
+  }
   for (const method of ["refreshCatalog", "installRuntime", "uninstallRuntime", "importRuntime", "registerCustomRuntime", "performInstalledAction", "performSetupAction"]) {
     if (typeof primary[method] !== "function") continue;
     facade[method] = (payload = {}, ...args) => {
@@ -123,7 +125,7 @@ function createArchitectureManager(config, createManager) {
       return result.value;
     } finally { discoveries.clear(); }
   };
-  facade.resolveSelection = (entry, settings, userDataDir, options = {}) => {
+  facade.resolveSelection = (entry, settings, userDataDir, options = {}) => ReadPass.within(() => {
     const architecture = facade.chooseArchitecture(entry, settings, userDataDir, options);
     const result = call(architecture, "resolveSelection", [entry, settings, userDataDir, options]);
     if (!result?.install) return { ...result, architecture };
@@ -131,7 +133,7 @@ function createArchitectureManager(config, createManager) {
     const support = architectureSupport(actual);
     return { ...result, architecture, install: tagged(result.install, architecture),
       ...(support.supported ? { requiresRosetta: Architecture.requiresRosetta(actual) } : { ready: false, reason: support.reason }) };
-  };
+  });
   facade.normalizeSettings = settings => ({ ...primary.normalizeSettings(settings),
     ...(Architecture.targetArchitecture(settings?.defaultArchitecture) ? { defaultArchitecture: Architecture.targetArchitecture(settings.defaultArchitecture) } : {}) });
   facade.applySettingsUpdate = (action, payload, settings, options = {}) => {

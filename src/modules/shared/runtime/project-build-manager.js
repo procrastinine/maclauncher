@@ -6,6 +6,7 @@ const { createPinnedNativeManager, compareRuntimeVersions } = require("./pinned-
 const { selectRuntimeVersion, installedRuntimeVersion, managerDefaultVersion } = require("./version-choices");
 const Custom = require("./custom-runtime");
 const Architecture = require("./architecture");
+const ReadPass = require("./read-pass");
 
 const Contract = require("./package-contract.cjs");
 function inspectPackage(root, record, { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix = "", dataOnly = false, validateManifest, validatePayload, resolveDependency, declaration, metadataOnly = false, managed = false }) {
@@ -165,9 +166,11 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
   }
   // The shared build resolver chooses the CPU; selection runs in its context.
   function resolveSelection(entry, settings, userDataDir, options = {}) {
-    const architecture = core.chooseArchitecture(entry, settings, userDataDir, options);
-    return Architecture.withArchitecture(architecture, () => ({
-      ...resolveForArchitecture(entry, settings, userDataDir, { ...options, architecture }), architecture }));
+    return ReadPass.within(() => {
+      const architecture = core.chooseArchitecture(entry, settings, userDataDir, options);
+      return Architecture.withArchitecture(architecture, () => ({
+        ...resolveForArchitecture(entry, settings, userDataDir, { ...options, architecture }), architecture }));
+    });
   }
   function resolveForArchitecture(entry, settings, userDataDir, options) {
     const { all } = includedPackages(options);
@@ -221,7 +224,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     delivery: Object.freeze({ included: included || retainedIncluded ? "direct" : "none", catalog: "remote", sourceBuild: false }),
     getState(options = {}) {
       // Included packages are checked for the CPU of the automatic list.
-      return Architecture.withArchitecture(core.chooseArchitecture(null, null, options.userDataDir), () => stateForArchitecture(options));
+      return ReadPass.within(() => Architecture.withArchitecture(core.chooseArchitecture(null, null, options.userDataDir), () => stateForArchitecture(options)));
     },
     async installRuntime(input = {}) {
       // An installation without a build choice uses the build Play would use.
