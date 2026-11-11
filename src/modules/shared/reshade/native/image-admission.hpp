@@ -92,6 +92,10 @@ public:
     PreparedImageLease()=default;
     explicit operator bool()const noexcept{return bool(state);}
     bool prepare()const;
+    // Prepares one more image even when one is idle now, up to the lease's
+    // capacity: for a refused acquire whose holds came back before the
+    // worker ran, so that the frames in flight fit next time.
+    bool grow()const;
     PooledImage acquire()const;
 private:
     std::shared_ptr<State>state;uintptr_t context=0;

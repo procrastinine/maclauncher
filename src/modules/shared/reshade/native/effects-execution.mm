@@ -356,7 +356,10 @@ struct EffectExecution::Impl {
     };
     struct Scratch {
         struct Prepared:std::enable_shared_from_this<Prepared>{PreparedImageLease key;std::atomic<bool>warming{false};
-            PooledImage acquire(){auto value=key.acquire();if(!value&&!warming.exchange(true)){auto self=shared_from_this();dispatch_async(effectPreparationQueue(),^{@autoreleasepool{try{self->key.prepare();}catch(...){}self->warming.store(false);}});}return value;}
+            // A refused frame adds an image: the holds it waited for may be
+            // back by the time the worker runs, while the next frame again
+            // arrives with its predecessors on the GPU.
+            PooledImage acquire(){auto value=key.acquire();if(!value&&!warming.exchange(true)){auto self=shared_from_this();dispatch_async(effectPreparationQueue(),^{@autoreleasepool{try{self->key.grow();}catch(...){}self->warming.store(false);}});}return value;}
         };
         struct Storage{std::vector<PooledImage>holds;};
         struct Pair{std::array<id<MTLTexture>,2>images{};std::shared_ptr<Prepared>prepared;};

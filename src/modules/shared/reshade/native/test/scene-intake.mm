@@ -5,7 +5,12 @@
 // float RG11B10Float colour and output, a render region smaller than the
 // textures, reversed infinite Depth32Float, RG16Float motion and R8 masks).
 // The ordered scene must finish preparing and encode within a bounded number
-// of frames while frames keep arriving at display rate.
+// of frames while frames keep arriving at display rate. A GPU-bound game then
+// submits each frame while its two earlier frames are still on the GPU, which
+// the fixture reproduces with a shared event. The oldest of them completes
+// before the preparation worker gets to a refused frame's request, as when the
+// worker is busy preparing other work. The scene's prepared images must still
+// grow to fit the frames in flight: after 1.5 s no frame may be refused.
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #include "fixture-files.hpp"
@@ -27,6 +32,7 @@ id<MTLTexture> image(id<MTLDevice> device,MTLPixelFormat format,NSUInteger width
 }
 int fail(const std::string &reason){std::fprintf(stderr,"scene intake: %s\n",reason.c_str());return 1;}
 }
+namespace macfx {dispatch_queue_t effectPreparationQueue();}
 
 int main(int argc,char **argv){@autoreleasepool{
     const auto phase=fixture::phase(argc,argv);argc=phase.argc;argv=phase.argv;
@@ -57,10 +63,17 @@ int main(int argc,char **argv){@autoreleasepool{
     if(!color||!output||!depth||!motion||!reactive||!transparency)return fail("Cannot create the intake textures");
 
     static int owner;std::deque<id<MTLCommandBuffer>> flight;std::string last;unsigned encodedAt=0;
-    const unsigned limit=argc>1?unsigned(std::strtoul(argv[1],nullptr,10)):300;
+    const unsigned limit=argc>1?unsigned(std::strtoul(argv[1],nullptr,10)):480;
     const float jitter[][2]={{.25f,-.1667f},{-.25f,.3889f},{.375f,-.3889f},{-.375f,.0556f}};
+    // Frames after the first 30 encoded ones wait on this event until two later
+    // frames have been submitted, as a GPU-bound game's frames do.
+    id<MTLSharedEvent> gate=[device newSharedEvent];unsigned gatedFrom=0,refused=0,refusedLast=0;std::string refusal;
     for(unsigned frame=1;frame<=limit;++frame){@autoreleasepool{
         id<MTLCommandBuffer> commands=[queue commandBuffer];
+        // The preparation worker waits until this frame's oldest predecessor is done.
+        dispatch_semaphore_t worker=nil;
+        if(gatedFrom){[commands encodeWaitForEvent:gate value:frame];worker=dispatch_semaphore_create(0);
+            dispatch_async(macfx::effectPreparationQueue(),^{dispatch_semaphore_wait(worker,DISPATCH_TIME_FOREVER);});}
         RSTemporalFrame f{};f.size=sizeof(f);f.version=1;f.owner=&owner;f.commandBuffer=(__bridge void*)commands;
         f.color=(__bridge void*)color;f.depth=(__bridge void*)depth;f.motion=(__bridge void*)motion;f.output=(__bridge void*)output;
         f.reactive=(__bridge void*)reactive;f.transparency=(__bridge void*)transparency;f.frameId=frame;f.method=RS_TEMPORAL_METALFX;
@@ -72,14 +85,20 @@ int main(int argc,char **argv){@autoreleasepool{
         const int code=rsProcessTemporalFrame(&f,&r);
         const std::string reason=std::to_string(code)+" encoded="+std::to_string(r.encoded)+" "+r.reason;
         if(reason!=last){std::printf("frame %u: %s\n",frame,reason.c_str());last=reason;}
+        if(gatedFrom&&frame>=gatedFrom+90&&!(code==RS_TEMPORAL_OK&&r.encoded)){++refused;refusedLast=frame;refusal=reason;}
         [commands commit];flight.push_back(commands);
+        if(gatedFrom){if(frame>=2)gate.signaledValue=frame-2;}
         while(flight.size()>2){[flight.front() waitUntilCompleted];flight.pop_front();}
+        if(worker)dispatch_semaphore_signal(worker);
         if(code==RS_TEMPORAL_OK&&r.encoded&&!encodedAt)encodedAt=frame;
-        if(encodedAt&&frame>=encodedAt+30)break;
+        if(encodedAt&&!gatedFrom&&frame>=encodedAt+30){for(id<MTLCommandBuffer> earlier:flight)[earlier waitUntilCompleted];flight.clear();gatedFrom=frame+1;gate.signaledValue=frame;}
+        if(gatedFrom&&frame>=gatedFrom+179)break;
         std::this_thread::sleep_for(std::chrono::microseconds(16600));
     }}
-    for(id<MTLCommandBuffer> commands:flight)[commands waitUntilCompleted];
+    gate.signaledValue=limit+1;for(id<MTLCommandBuffer> commands:flight)[commands waitUntilCompleted];
+    if(!gatedFrom)return fail("The ordered MetalFX scene did not reach the frames-in-flight segment");
+    if(refused)return fail("With two earlier frames on the GPU, "+std::to_string(refused)+" of the 90 frames after 1.5 s were refused, the last at frame "+std::to_string(refusedLast)+": "+refusal);
     if(!encodedAt)return fail("The ordered MetalFX scene never encoded: "+last);
-    std::printf("Ordered MetalFX scene intake (RG11B10Float 853x480 in 1280x720): encoded from frame %u: pass\n",encodedAt);
+    std::printf("Ordered MetalFX scene intake (RG11B10Float 853x480 in 1280x720): encoded from frame %u, and with two earlier frames on the GPU: pass\n",encodedAt);
     return 0;
 }}

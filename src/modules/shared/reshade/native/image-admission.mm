@@ -206,9 +206,9 @@ struct macfx::PreparedImageLease::State:std::enable_shared_from_this<State> {
     State(std::shared_ptr<ImagePoolClient::Pool>value,ImagePoolClient::Pool::Key identity,MTLTextureDescriptor*d,size_t capacity):pool(std::move(value)),key(std::move(identity)),descriptor([d copy]),limit(capacity){}
     ~State(){for(auto&slot:slots)if(slot.image)pool->uncache(slot.image,slot.ticket);}
     void capacity(size_t value){std::lock_guard lock(mutex);limit=std::max(limit,value);}
-    bool warm(uintptr_t context){
+    bool warm(uintptr_t context,bool grow=false){
         size_t index,capacity;std::shared_ptr<PooledImage::Lease>ticket;
-        {std::lock_guard lock(mutex);if(!free.empty())return true;capacity=limit;
+        {std::lock_guard lock(mutex);if(!grow&&!free.empty())return true;capacity=limit;
             auto it=std::find_if(slots.begin(),slots.end(),[](const auto&slot){return slot.phase==Phase::Empty;});
             if(it==slots.end()){
                 if(slots.size()>=limit)return false;index=slots.size();free.reserve(index+1);
@@ -243,6 +243,7 @@ struct macfx::PreparedImageLease::State:std::enable_shared_from_this<State> {
 };
 void macfx::PooledImage::Lease::release()noexcept{if(auto owner=state.lock())owner->release(index);}
 bool macfx::PreparedImageLease::prepare()const{return state&&state->warm(context);}
+bool macfx::PreparedImageLease::grow()const{return state&&state->warm(context,true);}
 macfx::PooledImage macfx::PreparedImageLease::acquire()const{return state?state->acquire():PooledImage{};}
 bool macfx::ImagePoolClient::Pool::evictIdle(){
     std::vector<std::shared_ptr<Entry>>released;std::vector<std::shared_ptr<PreparedImageLease::State>>clients;

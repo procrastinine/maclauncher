@@ -53,6 +53,8 @@ When the plan changes during play, the processor prepares a replacement graph wh
 
 Device image memory may not be able to hold both the accepted graph and its replacement. In that case, the accepted graph is released before the replacement is built: rows that the replacement reuses are kept, and the others are freed before the replacement allocates. Meanwhile, the replacement records Preparing, and callers present their last completed output. After one second, rows that still do not fit stay pending in an adopted partial graph and are retried until memory is available. A resource retry of the accepted revision, however, does not release it. An allocation that can never fit, or an actual provider error, keeps its failure reason.
 
+A graph prepares two images of each size and format that its rows write before its first frame, and frames never allocate images themselves. A frame that arrives while earlier frames still hold those images, such as a game frame submitted while the game's two previous frames are still on the GPU, is refused with busy image capacity. Each such refusal adds one more image of that size and format on the preparation worker, up to eight, so the frames in flight fit after a few refusals.
+
 A replacement shader, spatial or neural row can also fail with an actual error. When the accepted graph ran that row from the same input, the replacement keeps the row's accepted version: its stage records the active method `retained` with the error, and later rows are prepared against the output of the retained version. At launch, or when no compatible accepted version exists, the row is bypassed with its reason instead.
 
 ### Events and observations
