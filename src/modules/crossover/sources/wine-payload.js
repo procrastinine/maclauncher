@@ -8,6 +8,7 @@ const Native = require("../../shared/runtime/local-native");
 const MachO = require("../../shared/runtime/macho-load-commands");
 const Host = require("../../shared/runtime/bundled-native");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
+const InventoryRevision = require("../../../core/runtime-inventory-revision");
 
 const INVENTORY = "payload.json", MAXIMUM_FILES = 20000, MAXIMUM_INVENTORY_BYTES = 8 * 1024 * 1024;
 // The version of what installation reads from a Wine tree's binaries, kept in
@@ -49,6 +50,27 @@ function walk(root, signal, label = "Wine") {
     }
   }
   visit(root); return result.sort((a, b) => a.relative.localeCompare(b.relative));
+}
+// The same listing as walk, read without holding the thread.
+async function walkAsync(root, signal, label = "Wine") {
+  const result = [], canonicalRoot = await fs.promises.realpath(root);
+  async function visit(directory) {
+    throwIfAborted(signal);
+    for (const entry of await fs.promises.readdir(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name), relative = path.relative(root, file).split(path.sep).join("/");
+      if ([INVENTORY, "runtime.json"].includes(relative)) continue;
+      if (!safeRelative(relative) || result.length >= MAXIMUM_FILES) throw new Error(`${label} runtime files exceed their supported limits.`);
+      const stat = await fs.promises.lstat(file);
+      if (stat.isSymbolicLink()) {
+        const target = await fs.promises.readlink(file), real = await fs.promises.realpath(file);
+        if (path.isAbsolute(target) || !inside(canonicalRoot, real)) throw new Error(`A ${label} runtime link escaped its installation.`);
+        result.push({ relative, kind: "link", target, stamp: stamp(stat) });
+      } else if (stat.isDirectory()) { result.push({ relative, kind: "directory" }); await visit(file); }
+      else if (stat.isFile()) result.push({ relative, kind: "file", bytes: stat.size, mode: stat.mode & 0o777, stamp: stamp(stat) });
+      else throw new Error(`${label} runtime files must be regular files or internal links.`);
+    }
+  }
+  await visit(root); return result.sort((a, b) => a.relative.localeCompare(b.relative));
 }
 function nativeInfo(file, signal) {
   const fd = fs.openSync(file, "r"), bytes = Buffer.alloc(4);
@@ -139,7 +161,10 @@ function wineVersion(wineRoot) {
 // reads only the files named in `important`.
 function createInventoryCheck({ label = "Wine", systemVersionSync = Host.systemVersionSync } = {}) {
   const inventories = new Map(), checked = new Map();
-  return function check(installDir, seal, { verification = "full", signal, important = new Set(), minimumMacOS } = {}) {
+  // Trees whose full check passed in prepare, by inventory key, with the
+  // inspector worker's inventory count at that time.
+  const prepared = new Map();
+  function sealed(installDir, seal) {
     if (seal?.relativePath !== INVENTORY || !/^[a-f0-9]{64}$/.test(seal.sha256 || "") ||
       !Number.isSafeInteger(seal.bytes) || seal.bytes < 1 || seal.bytes > MAXIMUM_INVENTORY_BYTES ||
       !Number.isSafeInteger(seal.count) || seal.count < 1 || seal.count > MAXIMUM_FILES)
@@ -159,6 +184,18 @@ function createInventoryCheck({ label = "Wine", systemVersionSync = Host.systemV
       if (inventories.size >= 64) inventories.delete(inventories.keys().next().value);
       inventories.set(key, inventory);
     }
+    return { key, inventory };
+  }
+  function supportedHost(minimumMacOS) {
+    if (minimumMacOS && !Host.versionAtLeast(systemVersionSync(), minimumMacOS))
+      return { supported: false, reason: requiresMacOS(minimumMacOS) };
+    return { supported: true };
+  }
+  function check(installDir, seal, { verification = "full", signal, important = new Set(), minimumMacOS } = {}) {
+    const { key, inventory } = sealed(installDir, seal), revision = InventoryRevision.retained();
+    // The inspector worker reuses a tree that prepare checked fully until its
+    // runtime inventory changes; every other check reads the files.
+    if (revision !== null && prepared.get(key) === revision) return supportedHost(minimumMacOS);
     const observed = verification === "status" ? null : walk(installDir, signal, label);
     if (observed && JSON.stringify(observed.map(row => [row.relative, row.kind])) !== JSON.stringify(inventory.files.map(row => [row.relative, row.kind])))
       throw new Error(`${label} runtime files changed. Remove and install this version again.`);
@@ -180,12 +217,53 @@ function createInventoryCheck({ label = "Wine", systemVersionSync = Host.systemV
         if (checked.size >= MAXIMUM_FILES) checked.clear(); checked.set(checkKey, true);
       }
     }
-    if (minimumMacOS && !Host.versionAtLeast(systemVersionSync(), minimumMacOS))
-      return { supported: false, reason: requiresMacOS(minimumMacOS) };
-    return { supported: true };
+    return supportedHost(minimumMacOS);
+  }
+  // The full check, reading the tree and any changed file's digest without
+  // holding the thread. In the inspector worker, check then reuses it until
+  // the runtime inventory changes. A failure is left to check, which reports it.
+  check.prepare = async (installDir, seal, { signal } = {}) => {
+    const revision = InventoryRevision.retained();
+    if (revision === null) return false;
+    const { key, inventory } = sealed(installDir, seal);
+    if (prepared.get(key) === revision) return true;
+    const observed = await walkAsync(installDir, signal, label);
+    if (JSON.stringify(observed.map(row => [row.relative, row.kind])) !== JSON.stringify(inventory.files.map(row => [row.relative, row.kind]))) return false;
+    const rows = new Map(observed.map(row => [row.relative, row])), root = await fs.promises.realpath(installDir);
+    for (const row of inventory.files) {
+      throwIfAborted(signal);
+      const current = rows.get(row.relative), target = path.join(installDir, row.relative);
+      if (row.kind === "directory") continue;
+      if (row.kind === "link") {
+        if (current.target !== row.target || !inside(root, await fs.promises.realpath(target))) return false;
+        continue;
+      }
+      if (current.bytes !== row.bytes || current.mode !== row.mode) return false;
+      const checkKey = `${target}:${current.stamp}:${row.sha256}`;
+      if (current.stamp !== row.stamp && !checked.has(checkKey)) {
+        if (await hashAsync(target, signal, label) !== row.sha256) return false;
+        if (checked.size >= MAXIMUM_FILES) checked.clear(); checked.set(checkKey, true);
+      }
+    }
+    prepared.set(key, revision);
+    return true;
   };
+  return check;
 }
 
+// Prepares each installed version's payload check and executable digest
+// without holding the thread, so the synchronous reads that follow in the
+// inspector worker reuse them. A failure is left to those reads.
+async function prepareInstalled(core, prepare, { userDataDir, signal } = {}) {
+  for (const { directory } of core.listInstallDirs({ userDataDir })) {
+    try {
+      const record = JSON.parse(await fs.promises.readFile(path.join(directory, "runtime.json"), "utf8"));
+      const executable = record.source === "local" ? record.runtimePath : path.resolve(directory, record.executableRelative || "");
+      if ((await fs.promises.stat(executable)).isFile()) await Native.hashFileAsync(executable);
+      await prepare({ ...record, installDir: directory }, { signal });
+    } catch (error) { if (error.name === "AbortError") throw error; }
+  }
+}
 // What the current inspector reads from an installed Wine tree. A record from
 // an earlier inspector is read again from the installed binaries, without a
 // download, once per launcher session and installation. The result is kept in
@@ -207,4 +285,4 @@ function currentInspection(installDir, evidence, wineRoot) {
 // the stable platform requirements use.
 const requiresMacOS = version => `Requires macOS ${String(version).replace(/(?:\.0)+$/, "")} or later.`;
 module.exports = { INVENTORY, MAXIMUM_FILES, MAXIMUM_INVENTORY_BYTES, safeRelative, regularFile, walk, nativeInfo, inspectClosure,
-  hashAsync, writeInventory, mentions, wineCapabilities, wineVersion, createInventoryCheck, requiresMacOS, currentInspection, INSPECTION_VERSION, later, inside, stamp };
+  hashAsync, writeInventory, mentions, wineCapabilities, wineVersion, createInventoryCheck, prepareInstalled, requiresMacOS, currentInspection, INSPECTION_VERSION, later, inside, stamp };

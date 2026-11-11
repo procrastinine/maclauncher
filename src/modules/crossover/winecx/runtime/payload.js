@@ -55,7 +55,7 @@ async function preparePayload({ unpacked, pin, signal, onProgress }, dependencie
 }
 function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = {}) {
   const check = Shared.createInventoryCheck({ label: LABEL, systemVersionSync }), important = new Set(REQUIRED);
-  return function resolvePayload(install, { verification = "full", signal } = {}) {
+  function resolvePayload(install, { verification = "full", signal } = {}) {
     if (!install) return { install: null, reason: "WineCX is not installed." };
     try {
       throwIfAborted(signal);
@@ -73,7 +73,10 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
         componentVersions: evidence.componentVersions || {}, gptkCapable: evidence.gptkCapable === true },
         reason: null, minimumMacOS: evidence.minimumMacOS };
     } catch (error) { if (error.name === "AbortError") throw error; return { install: null, reason: error.message }; }
-  };
+  }
+  // The full payload check, read without holding the thread (wine-payload.js).
+  resolvePayload.prepare = (install, options) => check.prepare(install.installDir, install.installationMetadata?.inventory, options);
+  return resolvePayload;
 }
 
 module.exports = { ROOT, WINE, REQUIRED, findRoot, readVersionFile, preparePayload, createPayloadResolver };

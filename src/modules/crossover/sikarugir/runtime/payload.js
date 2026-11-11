@@ -86,7 +86,7 @@ async function preparePayload({ unpacked, pin, signal, logger, onProgress }, dep
 function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = {}) {
   const check = Shared.createInventoryCheck({ label: LABEL, systemVersionSync });
   const important = new Set([`${WINE_ROOT}/bin/wine`, `${WINE_ROOT}/bin/wineserver`, `${WINE_ROOT}/lib/wine/x86_64-unix/ntdll.so`, `${SUPPORT_ROOT}/graphics.json`]);
-  return function resolvePayload(install, { verification = "full", signal } = {}) {
+  function resolvePayload(install, { verification = "full", signal } = {}) {
     if (!install) return { install: null, reason: "Sikarugir is not installed." };
     try {
       throwIfAborted(signal);
@@ -106,7 +106,10 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
         graphicsMetadata: evidence.graphics, minimumMacOS: evidence.minimumMacOS, engineVersion: evidence.engineVersion },
         reason: null, minimumMacOS: evidence.minimumMacOS };
     } catch (error) { if (error.name === "AbortError") throw error; return { install: null, reason: error.message }; }
-  };
+  }
+  // The full payload check, read without holding the thread (wine-payload.js).
+  resolvePayload.prepare = (install, options) => check.prepare(install.installDir, install.installationMetadata?.inventory, options);
+  return resolvePayload;
 }
 
 module.exports = { WINE_ROOT, SUPPORT_ROOT, INVENTORY, walk, inspectClosure, findWineRoot, hashAsync, preparePayload, createPayloadResolver };

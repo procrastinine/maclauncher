@@ -79,6 +79,7 @@ function createManager({ discoverCatalog = Catalog.discover, dependencies = {} }
     upstream: [Catalog.source],
     ui: { groupId: "winecx", tabLabel: "WineCX", sectionLabel: "WineCX", memberOrder: 0, management: "managed", order: 202 },
     resolveSelection: require("../../sources/wine-selection").createSelection({ base, resolvePayload, planned }),
+    preparePayloads: options => require("../../sources/wine-payload").prepareInstalled(base.core, resolvePayload.prepare, options),
     async resolveForPlay(entry, context) {
       throwIfAborted(context.signal);
       return manager.resolveSelection(entry, context.settings, context.userDataDir, { signal: context.signal });

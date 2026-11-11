@@ -177,6 +177,31 @@ test("WineCX payload preparation refuses an external native library and a newer 
   assert.equal(metadata.runtimeVersion, "4.8.1");
 });
 
+// The inspector worker's launcher-start step reads an installed tree without
+// holding the thread; its synchronous checks reuse that until the inventory changes.
+test("a WineCX tree checked without holding the thread is reused by the inspector worker until the inventory changes", async t => {
+  const Revision = require("../src/core/runtime-inventory-revision");
+  t.after(() => Revision.activate({ retainReads: false }));
+  const dir = path.join(temporary(t), "installed"); tree(path.join(dir, "release"));
+  const metadata = await Payload.preparePayload({ unpacked: dir }, { systemVersionSync: () => "26.1" });
+  const resolve = Payload.createPayloadResolver({ systemVersionSync: () => "26.1" }), install = { installDir: dir, version: "4.8.1", installationMetadata: metadata };
+  assert.ok(resolve(install).install);
+  let walks = 0;const readdir = fs.readdirSync;
+  t.mock.method(fs, "readdirSync", function (target, ...args) { if (String(target).startsWith(dir)) walks++;return readdir.call(this, target, ...args); });
+  assert.equal(await resolve.prepare(install), false, "outside the inspector worker nothing is kept");
+  assert.ok(resolve(install).install);assert.ok(walks > 0, "every other check reads the tree");
+  Revision.activate({ retainReads: true });
+  assert.equal(await resolve.prepare(install), true);
+  walks = 0;
+  assert.ok(resolve(install).install);assert.ok(resolve(install, { verification: "status" }).install);
+  assert.equal(walks, 0, "the prepared check is reused");
+  fs.appendFileSync(path.join(dir, "Libraries/Wine/bin/wineserver"), "changed");
+  assert.equal(await resolve.prepare(install), true, "an unchanged count keeps the prepared check");
+  Revision.advance();
+  assert.equal(await resolve.prepare(install), false, "a changed file fails the prepared check");
+  assert.equal(resolve(install).install, null, "after an inventory change the tree is read again");
+});
+
 test("the WineCX source lists its included translators through the shared Wine translator reader", async t => {
   const root = temporary(t); tree(root);
   const wineRoot = path.join(root, "Libraries/Wine"), install = { version: "4.8.1", installDir: root, librariesRoot: path.join(root, "Libraries"), wineRoot, engineRoot: wineRoot,

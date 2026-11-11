@@ -240,7 +240,15 @@ async function describedManaged(context, runtime, managers, architecture) {
     return null;
   };
   for (;;) {
-    const choices = managedTranslators(context, runtime, managers, architecture, describe);
+    // Launcher-start preparation lets queued requests run between managers'
+    // state reads; it never waits for them, since a request may be waiting
+    // for this inventory.
+    const choices = [], groups = context.preparing
+      ? managers.filter(manager => manager.translatorEngine || manager.translator?.engine).map(manager => [manager]) : [managers];
+    for (const group of groups) {
+      choices.push(...managedTranslators(context, runtime, group, architecture, describe));
+      if (context.preparing) await new Promise(resolve => setImmediate(resolve));
+    }
     const missing = [...pending].filter(([key]) => !attempted.has(key));
     if (!missing.length) return choices;
     for (const [key, prepare] of missing) {

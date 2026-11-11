@@ -54,9 +54,13 @@ async function currentPlan(entry, runtimeId, context, install) {
 async function warmBackendLane(context) {
   for (const source of Sources.all()) {
     await context.whenIdle?.();
+    // Installed Wine trees are read without holding the worker first; the
+    // synchronous selection below reuses that check.
+    await source.manager().preparePayloads?.(context);
+    await context.whenIdle?.();
     const selected = source.manager().resolveSelection({}, context.settings, context.userDataDir, {});
     if (selected?.ready === false || !selected?.install) continue;
-    await Translators.optionsInventory(selected.install, source.id, { ...context, runtimeSettings: {} }, { reuse: true });
+    await Translators.optionsInventory(selected.install, source.id, { ...context, runtimeSettings: {}, preparing: true }, { reuse: true });
   }
 }
 // An existing environment of a source that runs its own Wine loader carries
