@@ -4,7 +4,7 @@
 
 ## Requirements
 
-Each release states its supported macOS versions; installation reads the minimum from the deployment target of every native image in the archive, and current releases require macOS 26 or later. A version that needs a newer macOS is listed as unavailable on the Mac. The Wine tree is Intel (x86-64) code, which needs Rosetta on Apple Silicon. Play checks for Rosetta and offers to install it, as [Rosetta](ROSETTA.md) describes.
+Each release states its supported macOS versions; installation reads the minimum from the deployment target of every native image in the archive, and current releases require macOS 26 or later. On an older macOS, installation stops before anything is installed, and an installed version that needs a newer macOS is listed as unavailable with **Requires macOS 26 or later**. The Wine tree is Intel (x86-64) code, which needs Rosetta on Apple Silicon. Play checks for Rosetta and offers to install it, as [Rosetta](ROSETTA.md) describes.
 
 ## Versions
 

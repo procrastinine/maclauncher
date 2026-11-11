@@ -26,7 +26,7 @@ The installed Wine tree determines which features a source can offer. Installati
 | Capability | Read from | Effect |
 | --- | --- | --- |
 | Wine version | The version string in `ntdll.so` | Version labels and the prefix's Wine identity |
-| Minimum macOS | The deployment target of every native image | Versions that need a newer macOS are listed as unavailable |
+| Minimum macOS | The deployment target of every native image | Installation stops on an older macOS, and an installed version that needs a newer one is listed as unavailable |
 | MSync, ESync | The variables that `wineserver` reads | The **Synchronization** values that are offered |
 | CrossOver graphics selector | `CX_GRAPHICS_BACKEND` in `ntdll.so` | The source chooses among its own Direct3D engines; otherwise MacLauncher places the selected libraries |
 | Vulkan library selector | `CX_LIBVULKAN` in `winevulkan.so` or `win32u.so` | The selected Vulkan driver is named through the variable instead of a library link |
