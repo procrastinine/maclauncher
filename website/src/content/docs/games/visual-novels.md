@@ -31,7 +31,7 @@ Each engine below is its own game type, linked to its guide.
 | [BGI / Ethornell](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/BGI.md) | No native interpreter; see [below](#engines-without-a-native-interpreter) |
 | [CatSystem2](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/CATSYSTEM2.md) | No native interpreter; see [below](#engines-without-a-native-interpreter) |
 
-When a game includes a compatible Windows executable, its game type also offers [Sikarugir and CrossOver](/maclauncher/games/windows/) as runtimes.
+When a game includes a compatible Windows executable, its game type also offers the [WINE runtimes](/maclauncher/games/windows/), Sikarugir, CrossOver and WineCX, as runtimes.
 
 Support depends on the engine and its format, and the same game can use different engines or formats across platforms and re-releases. To find out which engine a release uses, check [VNDB](https://vndb.org/), the visual novel database, which lists the engine on many release pages. Each interpreter supports the formats its own project supports, and some engines changed formats over the years, so the guides list exactly which variants work.
 

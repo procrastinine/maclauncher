@@ -1,17 +1,17 @@
 ---
 title: Windows games and WINE
-description: "How MacLauncher plays Windows games on macOS through WINE, with Sikarugir or CrossOver, a private Windows environment for each game, a choice of graphics translators, and graphics effects and upscaling."
+description: "How MacLauncher plays Windows games on macOS through WINE, with Sikarugir, CrossOver or WineCX, a private Windows environment for each game, a choice of graphics translators, and graphics effects and upscaling."
 head:
   - tag: title
-    content: "Windows games on Mac with WINE, CrossOver and Sikarugir | MacLauncher"
+    content: "Windows games on Mac with WINE, CrossOver, Sikarugir and WineCX | MacLauncher"
 sidebar:
   order: 0
   label: Overview
 ---
 
-Many Windows games don't need WINE on a Mac, because their engine has a native macOS runtime. Plenty of others do. Games on custom engines, [Unreal](https://www.unrealengine.com/) games, Unity [IL2CPP](https://docs.unity.com/en-us/engine/current/manual/programming-environment/scripting-backends) builds and countless older titles need Windows itself, or something that can stand in for it. MacLauncher plays them through **[WINE](https://www.winehq.org/)**, with one of two WINE distributions: [Sikarugir](https://github.com/Sikarugir-App/Sikarugir), which is free and which MacLauncher downloads for you, or CodeWeavers' [CrossOver](https://www.codeweavers.com/crossover/), if you own it.
+Many Windows games don't need WINE on a Mac, because their engine has a native macOS runtime. Plenty of others do. Games on custom engines, [Unreal](https://www.unrealengine.com/) games, Unity [IL2CPP](https://docs.unity.com/en-us/engine/current/manual/programming-environment/scripting-backends) builds and countless older titles need Windows itself, or something that can stand in for it. MacLauncher plays them through **[WINE](https://www.winehq.org/)**, with one of three WINE distributions: [Sikarugir](https://github.com/Sikarugir-App/Sikarugir), which is free and which MacLauncher downloads for you, [WineCX](https://github.com/dappermint/winecx-gptk), a free WINE built from CrossOver's own WINE changes that MacLauncher also downloads, or CodeWeavers' [CrossOver](https://www.codeweavers.com/crossover/), if you own it.
 
-This is one of MacLauncher's major features. Besides starting the game in CrossOver or Sikarugir, MacLauncher gives every game its own Windows environment, lets each game pick its own graphics translator and version, keeps your existing CrossOver bottles and Sikarugir wrappers safe, and brings its graphics effects and upscalers to WINE games. The pages in this section explain each part, starting with what WINE does.
+This is one of MacLauncher's major features. Besides starting the game in WINE, MacLauncher gives every game its own Windows environment, lets each game pick its own graphics translator and version, keeps your existing CrossOver bottles and Sikarugir wrappers safe, and brings its graphics effects and upscalers to WINE games. The pages in this section explain each part, starting with what WINE does.
 
 ## How a Windows game runs on a Mac
 
@@ -27,17 +27,19 @@ Some Windows games also have a native Mac version, either an official build or a
 
 ## When MacLauncher uses WINE
 
-MacLauncher prefers a native runtime whenever there is one. A game made with an engine it recognizes, such as Ren'Py, RPG Maker, Godot or Unity's Mono builds, starts on that engine's native runtime by default. If the game also includes a compatible Windows executable, Sikarugir and CrossOver appear next to the native runtime as alternatives, which you can pick in the game's inspector.
+MacLauncher prefers a native runtime whenever there is one. A game made with an engine it recognizes, such as Ren'Py, RPG Maker, Godot or Unity's Mono builds, starts on that engine's native runtime by default. If the game also includes a compatible Windows executable, the WINE runtimes appear next to the native runtime as alternatives, which you can pick in the game's inspector.
 
-A Windows executable whose engine MacLauncher doesn't recognize becomes a **Windows Game**, and its only runtimes are Sikarugir and CrossOver. Sikarugir is the default, and you can make CrossOver the default in **Settings**. A few game types, BGI / Ethornell, CatSystem2 and Haxe native builds, have tools but no Mac player at all, so they play through CrossOver when you have it and through Sikarugir otherwise. [Windows games through WINE](/maclauncher/games/windows/) covers which games get the WINE runtimes and how MacLauncher picks the right executable.
+A Windows executable whose engine MacLauncher doesn't recognize becomes a **Windows Game**, and its runtimes are Sikarugir, CrossOver and WineCX. Sikarugir is the default, and you can make another one the default in **Settings**. A few game types, BGI / Ethornell, CatSystem2 and Haxe native builds, have tools but no Mac player at all, so they play through CrossOver when you have it and through Sikarugir otherwise. [Windows games through WINE](/maclauncher/games/windows/) covers which games get the WINE runtimes and how MacLauncher picks the right executable.
 
-## CrossOver or Sikarugir
+## Sikarugir, CrossOver or WineCX
 
-Both are distributions of WINE for the Mac, with graphics translators included. Sikarugir is free, and MacLauncher downloads and sets it up for you. CrossOver is a commercial product that you install and license yourself; MacLauncher finds it and uses it, but never downloads or updates it. If you own CrossOver, it's usually the better choice, because CodeWeavers keeps it current with fixes for newer games. Otherwise Sikarugir is always there. [CrossOver and Sikarugir](/maclauncher/windows/crossover-and-sikarugir/) compares them in more detail.
+All three are distributions of WINE for the Mac, with graphics translators included. Sikarugir is free, and MacLauncher downloads and sets it up for you. CrossOver is a commercial product that you install and license yourself; MacLauncher finds it and uses it, but never downloads or updates it. WineCX sits in between: it's free and downloaded for you like Sikarugir, but its WINE is built from CodeWeavers' CrossOver changes on a current WINE release, so Apple's D3DMetal can load into it as it does in CrossOver. Current WineCX releases need macOS 26.
+
+If you own CrossOver, it's usually the better choice, because CodeWeavers keeps it current with fixes for newer games. Otherwise Sikarugir is always there, and WineCX is a newer WINE to try when a game needs one. MacLauncher runs all three on one shared WINE layer, so the rest of this section works the same whichever one a game uses. [CrossOver, Sikarugir and WineCX](/maclauncher/windows/crossover-and-sikarugir/) compares them in more detail.
 
 ## What MacLauncher adds
 
-CrossOver and Sikarugir supply WINE itself. Everything below is MacLauncher's own work on top of them, and none of it modifies the CrossOver application, a Sikarugir engine or its support libraries.
+CrossOver, Sikarugir and WineCX supply WINE itself. Everything below is MacLauncher's own work on top of them, and none of it modifies the CrossOver application, a Sikarugir engine, a WineCX release or their support libraries.
 
 ### A Windows environment for every game
 
@@ -49,9 +51,9 @@ If you already have a CrossOver bottle or a Sikarugir wrapper that a game is set
 
 ### A graphics translator for each game
 
-On its own, CrossOver chooses among the graphics engines that ship with that CrossOver release, and community tools such as CXPatcher update those engines by patching a copy of the app. MacLauncher keeps translators outside CrossOver and Sikarugir instead. Each game can use CrossOver's or Sikarugir's own engines, newer or older upstream releases such as [DXMT](https://github.com/3Shain/dxmt) and [DXVK](https://github.com/doitsujin/dxvk), files you downloaded yourself, or D3DMetal from your own copy of Apple's [Game Porting Toolkit](https://developer.apple.com/games/game-porting-toolkit/). The Vulkan driver, the Direct3D 12 translator and the video codecs can be chosen separately, too. One game can therefore try a newer DXVK while your other games keep theirs, and a CrossOver update leaves every choice in place. [Runtime patching](/maclauncher/tools/runtime-patching/) explains why this helps and walks through it step by step, [Graphics translators](/maclauncher/windows/graphics-translators/) explains what each translator does, and [Translator versions](/maclauncher/windows/translator-versions/) how the versions work.
+On its own, CrossOver chooses among the graphics engines that ship with that CrossOver release, and community tools such as CXPatcher update those engines by patching a copy of the app. MacLauncher keeps translators outside the WINE distributions instead. Each game can use the engines that its WINE distribution includes, newer or older upstream releases such as [DXMT](https://github.com/3Shain/dxmt) and [DXVK](https://github.com/doitsujin/dxvk), files you downloaded yourself, or D3DMetal from your own copy of Apple's [Game Porting Toolkit](https://developer.apple.com/games/game-porting-toolkit/). The Vulkan driver, the Direct3D 12 translator and the video codecs can be chosen separately, too. One game can therefore try a newer DXVK while your other games keep theirs, and a CrossOver update leaves every choice in place. [Runtime patching](/maclauncher/tools/runtime-patching/) explains why this helps and walks through it step by step, [Graphics translators](/maclauncher/windows/graphics-translators/) explains what each translator does, and [Translator versions](/maclauncher/windows/translator-versions/) how the versions work.
 
-Direct3D 12 games get more than one route this way. Besides Apple's D3DMetal and WINE's own vkd3d, they can run through [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton), the Direct3D 12 translator from Valve's Proton, on MacLauncher's own build of the KosmicKrisp Vulkan driver. vkd3d-proton reports Direct3D feature level 12_1 there in the default performance mode and 12_2 in conformance mode, and [KosmicKrisp](/maclauncher/windows/kosmickrisp/#direct3d-12-games-through-vkd3d-proton) explains what that means for a game. Paired with DXVK for Direct3D 8 to 11, that's the graphics path Valve's Proton uses on Linux, open to any game in CrossOver or Sikarugir that you set up this way, as [Proton's graphics path on a Mac](/maclauncher/windows/graphics-translators/#protons-graphics-path-on-a-mac) describes.
+Direct3D 12 games get more than one route this way. Besides Apple's D3DMetal and WINE's own vkd3d, they can run through [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton), the Direct3D 12 translator from Valve's Proton, on MacLauncher's own build of the KosmicKrisp Vulkan driver. vkd3d-proton reports Direct3D feature level 12_1 there in the default performance mode and 12_2 in conformance mode, and [KosmicKrisp](/maclauncher/windows/kosmickrisp/#direct3d-12-games-through-vkd3d-proton) explains what that means for a game. Paired with DXVK for Direct3D 8 to 11, that's the graphics path Valve's Proton uses on Linux, open to any game in CrossOver, Sikarugir or WineCX that you set up this way, as [Proton's graphics path on a Mac](/maclauncher/windows/graphics-translators/#protons-graphics-path-on-a-mac) describes.
 
 ### One copy of each version
 
@@ -77,8 +79,8 @@ Windows games from Steam can talk to the Steam client for Mac through the option
 
 WINE is very good, but it's a translation, so results vary from game to game. Games whose DRM or anti-cheat requires real Windows won't run. Installers that need to install further components can't be played as games either; point MacLauncher at the installed game folder or its main `.exe` instead.
 
-If a game's engine has a [native runtime](/maclauncher/games/desktop-engines/), try that first, since it will usually run better. If a WINE game misbehaves, try another Direct3D engine, another WINE version, or CrossOver if you have it. [Choosing a runtime](/maclauncher/background/choosing-a-runtime/#windows-games) has more on choosing between them.
+If a game's engine has a [native runtime](/maclauncher/games/desktop-engines/), try that first, since it will usually run better. If a WINE game misbehaves, try another Direct3D engine, another WINE version, or another WINE runtime, such as CrossOver if you have it. [Choosing a runtime](/maclauncher/background/choosing-a-runtime/#windows-games) has more on choosing between them.
 
 :::tip[Full reference]
-The repository's reference pages document every detail: [Windows Game](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/WINDOWS.md), [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md), [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md) and [Graphics translators](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/TRANSLATORS.md).
+The repository's reference pages document every detail: [Windows Game](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/WINDOWS.md), [Wine runtimes](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/WINE.md), [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md), [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md), [WineCX](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/WINECX.md) and [Graphics translators](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/TRANSLATORS.md).
 :::

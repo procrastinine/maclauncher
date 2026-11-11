@@ -1,6 +1,6 @@
 ---
 title: Choosing a runtime
-description: "How MacLauncher picks a runtime for a game on macOS, when to use a native engine, Sikarugir or CrossOver for Windows games, which Android runtime to pick, and how versions fit in."
+description: "How MacLauncher picks a runtime for a game on macOS, when to use a native engine, Sikarugir, CrossOver or WineCX for Windows games, which Android runtime to pick, and how versions fit in."
 head:
   - tag: title
     content: "Choosing a runtime on Mac: native engines, Sikarugir, CrossOver and Android | MacLauncher"
@@ -28,7 +28,7 @@ Select a game in your library to open its **inspector**. Its runtime selector li
 
 ## Windows games
 
-A game made with an engine MacLauncher recognizes keeps that engine's game type, even when you import its Windows `.exe`. If the game includes a compatible Windows executable, its runtime list has two kinds of choices: the engine's native runtime, which is the default, and the two WINE runtimes, Sikarugir and CrossOver. That works for every game type, however you imported the game; [Games made with other engines](/maclauncher/games/windows/#games-made-with-other-engines) covers the details, including the one exception, a game that lives inside a Mac `.app`. A Windows executable whose engine isn't recognized becomes a *Windows Game*, a game type whose only runtimes are Sikarugir and CrossOver.
+A game made with an engine MacLauncher recognizes keeps that engine's game type, even when you import its Windows `.exe`. If the game includes a compatible Windows executable, its runtime list has two kinds of choices: the engine's native runtime, which is the default, and the three WINE runtimes, Sikarugir, CrossOver and WineCX. That works for every game type, however you imported the game; [Games made with other engines](/maclauncher/games/windows/#games-made-with-other-engines) covers the details, including the one exception, a game that lives inside a Mac `.app`. A Windows executable whose engine isn't recognized becomes a *Windows Game*, a game type whose only runtimes are Sikarugir, CrossOver and WineCX.
 
 ### Native runtimes
 
@@ -50,10 +50,14 @@ Try it when:
 
 [CrossOver](https://www.codeweavers.com/crossover/) is CodeWeavers' commercial WINE. If it's installed, MacLauncher finds it and offers it as another runtime. You can register several copies of CrossOver, such as a preview build, and pick a different one for each game. CodeWeavers keeps CrossOver current with fixes for newer games, so if you own it, it's usually the better WINE to use. Sikarugir stays the default, though, because it's free and always available. To use CrossOver, pick it in a game's inspector, or make it the default runtime for Windows Game in **Settings**.
 
+### WineCX
+
+[WineCX](https://github.com/dappermint/winecx-gptk) is a free WINE runtime built from CodeWeavers' CrossOver changes on a current WINE release. Like Sikarugir, it's downloaded and managed for you, with a private Windows environment for each game. Unlike Sikarugir, its WINE is the kind Apple's D3DMetal loads into in CrossOver, and D3DMetal comes from a version you install in Runtimes. Current releases need macOS 26 or later. Try it when you don't have CrossOver and a game does better on a newer, CrossOver-style WINE. Its requirements and included translators are on the [Windows games](/maclauncher/windows/crossover-and-sikarugir/#winecx) page.
+
 A few game types have tools but no Mac player: BGI / Ethornell, CatSystem2 and Haxe native builds. These games play their Windows executable through a registered CrossOver application when there is one, and through Sikarugir otherwise.
 
 :::tip[Rule of thumb]
-Use the native runtime first. If the game won't start or misbehaves, switch to WINE: CrossOver if you have it, otherwise Sikarugir. Each runtime also has its own settings in the inspector, so check those too, for example a WINE game's **Direct3D engine** or locale.
+Use the native runtime first. If the game won't start or misbehaves, switch to WINE: CrossOver if you have it, otherwise Sikarugir or WineCX. Each runtime also has its own settings in the inspector, so check those too, for example a WINE game's **Direct3D engine** or locale.
 :::
 
 ## Android games

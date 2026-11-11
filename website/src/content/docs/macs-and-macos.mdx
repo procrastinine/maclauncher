@@ -35,7 +35,7 @@ Some code has to match the game it works with, whatever the default. A library t
 Many runtimes have builds for both processors, or a universal build, and work the same on any Mac. Some depend on the processor:
 
 - [Android, iPhone and iPad, and Nintendo Switch games](/maclauncher/games/mobile-and-consoles/) run their original ARM code directly on the Mac's processor, so they need an Apple Silicon Mac.
-- The WINE runtimes, [Sikarugir and CrossOver](/maclauncher/windows/crossover-and-sikarugir/), usually run Windows games as Intel programs, which use Rosetta on Apple Silicon. A CrossOver build with ARM64 WINE runs natively instead and translates the game's Intel code with FEX.
+- The WINE runtimes, [Sikarugir, CrossOver and WineCX](/maclauncher/windows/crossover-and-sikarugir/), usually run Windows games as Intel programs, which use Rosetta on Apple Silicon. A CrossOver build with ARM64 WINE runs natively instead and translates the game's Intel code with FEX. Current WineCX releases also need macOS 26 or later.
 - The [32-bit Mac runtime](/maclauncher/games/more/#32-bit-mac-apps), the [HashLink](/maclauncher/games/more/#hashlink-and-haxe) virtual machine, PlayStation 5 games and Java 8 also run Intel code, through Rosetta on Apple Silicon.
 
 Each runtime version also has its own minimum macOS version. MacLauncher learns it, together with the processors a version supports, from the publisher's release information or from the downloaded files themselves, and a version that a Mac can't run stays in the list with the reason. Because versions come from each runtime's own publisher, a newer release can need a newer macOS than an older one.

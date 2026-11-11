@@ -19,6 +19,8 @@ Open the game's **Runtime Settings** and look at **Environment**. Besides **Priv
 
 **Choose…** picks a bottle or wrapper anywhere else. Finding and reading them all happens offline, without starting WINE.
 
+WineCX has no bottle or wrapper format of its own, so its games always run in a private Windows environment and don't show **Environment**.
+
 ## What MacLauncher does with it
 
 MacLauncher stores only a reference to the bottle or wrapper and uses it where it is. It never copies, adopts, recreates, moves, replaces or deletes it. If the bottle has gone missing or is incomplete, the game reports an error instead of creating a new one, and removing the game from your library leaves the bottle as it was.

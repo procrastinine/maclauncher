@@ -1,14 +1,16 @@
 ---
-title: CrossOver and Sikarugir
-description: "The two WINE runtimes in MacLauncher for macOS: free Sikarugir, downloaded and set up for you, and CrossOver, used from your own installation. How they differ, how to choose, and where each game's Windows files live."
+title: CrossOver, Sikarugir and WineCX
+description: "The three WINE runtimes in MacLauncher for macOS: free Sikarugir and WineCX, downloaded and set up for you, and CrossOver, used from your own installation. How they differ, how to choose, and where each game's Windows files live."
 head:
   - tag: title
-    content: "CrossOver vs Sikarugir on Mac: MacLauncher's WINE runtimes | MacLauncher"
+    content: "CrossOver vs Sikarugir vs WineCX on Mac: MacLauncher's WINE runtimes | MacLauncher"
 sidebar:
   order: 1
 ---
 
-MacLauncher has two WINE runtimes, and both are distributions of WINE for macOS: a WINE build packaged with graphics translators and the libraries the Mac needs. [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) is free, and MacLauncher downloads it for you. [CrossOver](https://www.codeweavers.com/crossover/) is CodeWeavers' commercial version, which you buy and install yourself. Every game that can use WINE offers Sikarugir, and it offers CrossOver too whenever MacLauncher finds or has registered a CrossOver application.
+MacLauncher has three WINE runtimes, and all of them are distributions of WINE for macOS: a WINE build packaged with graphics translators and the libraries the Mac needs. [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) is free, and MacLauncher downloads it for you. [CrossOver](https://www.codeweavers.com/crossover/) is CodeWeavers' commercial version, which you buy and install yourself. [WineCX](https://github.com/dappermint/winecx-gptk) is free as well and downloaded for you, and its WINE comes from CrossOver's own changes. Every game that can use WINE offers Sikarugir and WineCX, and it offers CrossOver too whenever MacLauncher finds or has registered a CrossOver application.
+
+MacLauncher runs all three on one shared WINE layer. Settings, translator choices, private Windows environments, graphics effects, DLSS routing and the Steam client bridge work the same way for each, so what differs is mostly where the WINE comes from and what it includes.
 
 ## Sikarugir
 
@@ -24,17 +26,27 @@ If you own CrossOver, MacLauncher finds it in your Applications folder and offer
 
 When you update CrossOver in place, games keep using it with their existing bottles. If a game's selected copy goes missing, though, MacLauncher won't swap in another one on its own; put it back, or add its new location in **Runtimes**.
 
+## WineCX
+
+WineCX is a free WINE runtime published by dappermint. It takes CodeWeavers' CrossOver changes to WINE and rebases them onto a current WINE release. Because its WINE follows CrossOver's internals, Apple's D3DMetal can load into it the same way it loads into CrossOver.
+
+MacLauncher downloads WineCX releases from GitHub after asking, just like Sikarugir, and checks each download against both GitHub's checksum and the publisher's own checksum file. **Runtimes → WineCX** lists the releases, and an installed version is labeled with its WINE version, such as **WineCX 4.8.1 · Wine 11.19**, along with the translators it includes.
+
+Each release comes with DXMT, DXVK, MoltenVK and GStreamer video codecs. The DXVK in the current release has no 64-bit DXGI library, so MacLauncher offers it to 32-bit games only. D3DMetal isn't included: install a D3DMetal version in **Runtimes → Graphics → DirectX → Metal**, for example from Sikarugir's Template releases or your own copy of Apple's Game Porting Toolkit, and pick it for Direct3D 11 or 12. Every other translator in Runtimes works with WineCX as it does with Sikarugir, including the DXVK and vkd3d-proton releases that pair with MacLauncher KosmicKrisp. Left on its automatic choice, WineCX uses its DXMT for Direct3D 10 and 11, WineD3D for Direct3D 8 and 9, WINE's own vkd3d for Direct3D 12 and its MoltenVK for Vulkan.
+
+Current WineCX releases need macOS 26 or later. MacLauncher reads that requirement from the first few megabytes of a release before downloading the rest, so a version your Mac can't run is listed with **Requires macOS 26 or later** and never downloaded. WineCX has no wrapper or bottle format of its own, so each game always gets a private Windows environment.
+
 ## Which one to use
 
-CodeWeavers keeps CrossOver current with fixes for newer games, so if you own it, it's usually the better choice. You can make it the default runtime for Windows Game in **Settings**, or pick it for a single game in its inspector. Sikarugir stays the default because it's free and always available.
+CodeWeavers keeps CrossOver current with fixes for newer games, so if you own it, it's usually the better choice. You can make it the default runtime for Windows Game in **Settings**, or pick it for a single game in its inspector. Sikarugir stays the default because it's free and always available. On macOS 26, WineCX is the free way to a CrossOver-style WINE on a current WINE release, with D3DMetal from Runtimes.
 
-The two share more than you might expect. They offer the same [graphics translators](/maclauncher/windows/graphics-translators/) from MacLauncher, the same [runtime settings](/maclauncher/windows/settings/) and the same [effects and upscaling](/maclauncher/windows/effects-and-upscaling/). The differences are in what each distribution includes: its own WINE build, its own set of included translators and, for CrossOver, CodeWeavers' fixes. Some settings belong to one of them only. Sikarugir has an optional DirectDraw compatibility wrapper for old 32-bit games, for example, and CrossOver can report a different Windows version for a single launch.
+The three share more than you might expect. They offer the same [graphics translators](/maclauncher/windows/graphics-translators/) from MacLauncher, the same [runtime settings](/maclauncher/windows/settings/) and the same [effects and upscaling](/maclauncher/windows/effects-and-upscaling/). The differences are in what each distribution includes: its own WINE build, its own set of included translators and, for CrossOver and WineCX, CodeWeavers' changes. Some settings belong to one of them only. Sikarugir has an optional DirectDraw compatibility wrapper for old 32-bit games, for example, and CrossOver can report a different Windows version for a single launch.
 
 ## Original game files and separate Windows environments
 
 When you press **Play**, the game runs in its original folder and reads its files there directly, without a private copy of the whole game folder. Each game does get its own Windows environment, though, which holds its registry, Windows profile and DLL overrides.
 
-That environment belongs to the game, not to the WINE version. Updating CrossOver, switching to another Sikarugir version or changing the graphics translator keeps it, along with any saves the game wrote to its Windows profile. The Windows version setting is the exception: in CrossOver, each Windows environment type (Windows 10, 11, 7 or XP) is its own bottle, and in Sikarugir those four versions each get their own prefix. CrossOver normally links a bottle's Windows Documents and Desktop folders to your Mac's own, but MacLauncher replaces those links with private folders, so games don't write into your Mac folders. **Open Windows files** in the inspector shows the environment once the game has been played.
+That environment belongs to the game, not to the WINE version. Updating CrossOver, switching to another Sikarugir or WineCX version or changing the graphics translator keeps it, along with any saves the game wrote to its Windows profile. The Windows version setting is the exception: in CrossOver, each Windows environment type (Windows 10, 11, 7 or XP) is its own bottle, and in Sikarugir and WineCX those four versions each get their own prefix. CrossOver normally links a bottle's Windows Documents and Desktop folders to your Mac's own, but MacLauncher replaces those links with private folders, so games don't write into your Mac folders. **Open Windows files** in the inspector shows the environment once the game has been played.
 
 MacLauncher normally starts the original Windows executable. The exception is a camera or XeSS adapter that has to replace a DLL next to the executable; [Effects and upscaling](/maclauncher/windows/effects-and-upscaling/) explains what these adapters are for. Such an adapter needs a small, separate launch folder with the executable and DLLs, although the game still runs in its original folder. Files that a game writes next to the adapted executable stay in that launch folder. The [runtime reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md) describes how the adapters handle files.
 
@@ -42,6 +54,6 @@ Removing a game from your library removes the Windows environments MacLauncher c
 
 ## Rosetta
 
-Sikarugir and the usual CrossOver releases run WINE as an Intel program, so on Apple Silicon they need [Rosetta 2](https://support.apple.com/en-us/102527). A CrossOver build whose WINE is an ARM64 program runs it natively and leaves the game's Intel code to the FEX emulator. If Rosetta isn't installed yet, MacLauncher asks and installs it through the normal macOS prompt.
+Sikarugir, WineCX and the usual CrossOver releases run WINE as an Intel program, so on Apple Silicon they need [Rosetta 2](https://support.apple.com/en-us/102527). A CrossOver build whose WINE is an ARM64 program runs it natively and leaves the game's Intel code to the FEX emulator. If Rosetta isn't installed yet, MacLauncher asks and installs it through the normal macOS prompt.
 
-Further reading: the [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md) and [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md) reference pages, and CodeWeavers' [CrossOver Mac user guide](https://www.codeweavers.com/support/docs/crossover-mac/index).
+Further reading: the [Wine runtimes](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/WINE.md), [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md), [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md) and [WineCX](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/WINECX.md) reference pages, and CodeWeavers' [CrossOver Mac user guide](https://www.codeweavers.com/support/docs/crossover-mac/index).

@@ -39,7 +39,7 @@ Yes. When the drive is unplugged, its games stay in the library marked **Unavail
 
 ### Do I still need CrossOver or WINE?
 
-Only for games that have no native runtime. When a Windows game does need WINE, MacLauncher downloads and manages [Sikarugir](https://github.com/Sikarugir-App/Sikarugir), a free WINE distribution, and it can use an installed copy of CrossOver instead, which is usually the better choice for those who own it. Both are also offered for games of every other type that include a compatible Windows executable, next to their native runtime. See [Windows games through WINE](/maclauncher/games/windows/).
+Only for games that have no native runtime. When a Windows game does need WINE, MacLauncher downloads and manages [Sikarugir](https://github.com/Sikarugir-App/Sikarugir), a free WINE distribution, and [WineCX](https://github.com/dappermint/winecx-gptk), a free WINE built from CrossOver's changes for macOS 26. It can also use an installed copy of CrossOver instead, which is usually the better choice for those who own it. All three are also offered for games of every other type that include a compatible Windows executable, next to their native runtime. See [Windows games through WINE](/maclauncher/games/windows/).
 
 ### How do Android games run?
 
@@ -109,7 +109,7 @@ Downloaded Mac games, especially indie builds, often carry Gatekeeper's quaranti
 
 ### My game wasn't recognized, or was recognized as the wrong thing
 
-Try importing the whole game folder instead of a single file, or the other way round. If a folder holds several executables, drag in the main `.exe` itself so MacLauncher knows which one is the game. A Windows game whose engine isn't recognized still imports, as a Windows Game, and runs through Sikarugir or CrossOver.
+Try importing the whole game folder instead of a single file, or the other way round. If a folder holds several executables, drag in the main `.exe` itself so MacLauncher knows which one is the game. A Windows game whose engine isn't recognized still imports, as a Windows Game, and runs through Sikarugir, CrossOver or WineCX.
 
 ### A game shows Unavailable
 
@@ -124,7 +124,7 @@ Some runtimes need Apple Silicon, and some graphics features need Apple Silicon 
 Work through these, roughly in order:
 
 1. Try another version of the same runtime in the inspector. Engines such as [Godot](https://github.com/godotengine/godot), [Unity](https://unity.com/) and [GameMaker](https://gamemaker.io/) are picky about versions.
-2. Try another runtime. A game with a compatible Windows executable also offers Sikarugir and CrossOver, and Android games have three runtimes, with JVM and ART modes in MacLauncher Android.
+2. Try another runtime. A game with a compatible Windows executable also offers Sikarugir, CrossOver and WineCX, and Android games have three runtimes, with JVM and ART modes in MacLauncher Android.
 3. Check the Runtime Settings. For WINE games, switching the graphics backend fixes many rendering problems, and Japanese games may need the `ja_JP.UTF-8` locale.
 4. Turn off graphics effects to rule them out, then add them back one at a time.
 5. Look at the log: **Help → Show Log in Finder** reveals MacLauncher's log file.

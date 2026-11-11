@@ -1,9 +1,9 @@
 ---
 title: Runtime patching
-description: "Why a newer graphics translator or Vulkan driver can make a Windows game run, or run better, on a Mac; how CXPatcher patches a copy of CrossOver; how MacLauncher gives each game its own DXVK, vkd3d-proton, DXMT, D3DMetal or KosmicKrisp without modifying CrossOver or Sikarugir; and a walkthrough in the launcher."
+description: "Why a newer graphics translator or Vulkan driver can make a Windows game run, or run better, on a Mac; how CXPatcher patches a copy of CrossOver; how MacLauncher gives each game its own DXVK, vkd3d-proton, DXMT, D3DMetal or KosmicKrisp without modifying CrossOver, Sikarugir or WineCX; and a walkthrough in the launcher."
 head:
   - tag: title
-    content: "Patch DXVK, D3DMetal and KosmicKrisp into CrossOver and Sikarugir per game | MacLauncher"
+    content: "Patch DXVK, D3DMetal and KosmicKrisp into CrossOver, Sikarugir and WineCX per game | MacLauncher"
 sidebar:
   order: 0.5
 ---
@@ -43,9 +43,9 @@ The translator versions then belong to that copy of the app. Every bottle that r
 
 ## How MacLauncher does it
 
-MacLauncher gets the same result while leaving CrossOver and Sikarugir exactly as their developers ship them, following the [unchanged source](/maclauncher/tools/#unchanged-source) principle. The translators live in MacLauncher's own storage instead:
+MacLauncher gets the same result while leaving CrossOver, Sikarugir and WineCX exactly as their developers ship them, following the [unchanged source](/maclauncher/tools/#unchanged-source) principle. The translators live in MacLauncher's own storage instead:
 
-- Each version is installed once, in **Runtimes**, from the translator project's own releases, from [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/), from Sikarugir's Template releases or from files you already have. CrossOver's and Sikarugir's own copies are choices too, with nothing to install.
+- Each version is installed once, in **Runtimes**, from the translator project's own releases, from [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/), from Sikarugir's Template releases or from files you already have. The copies included with CrossOver, Sikarugir and WineCX are choices too, with nothing to install.
 - Each game picks its own translator for every Direct3D version, plus its Vulkan driver, in its runtime settings. **Settings** holds the defaults for games that don't choose.
 - When the game starts, MacLauncher links the chosen version into that one launch. If a translator has to replace a file inside a bottle, the original is set aside and put back when you choose something else.
 - Before every launch, MacLauncher checks that the chosen files fit the game, the WINE build and your Mac. A choice that can't load falls back to the runtime's own translator, the game still starts, and the inspector says what happened.
@@ -54,11 +54,11 @@ In practice, this works out as follows:
 
 | | A patched copy of CrossOver | MacLauncher |
 | --- | --- | --- |
-| Where translators live | Inside the patched app | In MacLauncher's storage, outside CrossOver and Sikarugir |
+| Where translators live | Inside the patched app | In MacLauncher's storage, outside CrossOver, Sikarugir and WineCX |
 | Which games use a version | Every bottle in that copy | The games that choose it, with a default for the rest |
 | After a CrossOver update | Patch the new release again | Nothing to redo |
 | CrossOver on disk | The original plus a modified copy | The original, unmodified |
-| Sikarugir games | Not covered | Use the same installed versions |
+| Sikarugir and WineCX games | Not covered | Use the same installed versions |
 
 [Translator versions](/maclauncher/windows/translator-versions/) covers the sources, the linking and the fallback in more detail.
 
@@ -80,7 +80,7 @@ Select the game in the library and click the gear next to its runtime menu to op
 - **Direct3D 8** to **Direct3D 11** each pick a translator for that version alone, and **Direct3D 12** picks the one for Direct3D 12.
 - **Vulkan driver** picks the driver beneath the Vulkan translators.
 
-Set the **Default Direct3D engine**, or just **Direct3D 11**, to the DXVK version you installed. Every entry names the translator, its version and where it came from. Leave the **Vulkan driver** on its automatic choice, which reads **Template's automatic choice** in Sikarugir and **CrossOver's automatic choice** in CrossOver. With a DXVK or vkd3d-proton from Runtimes, that choice pairs the translator with MacLauncher KosmicKrisp, and if the driver isn't installed yet, **Play** offers to download it. You can also pick a driver yourself.
+Set the **Default Direct3D engine**, or just **Direct3D 11**, to the DXVK version you installed. Every entry names the translator, its version and where it came from. Leave the **Vulkan driver** on its automatic choice, which reads **Sikarugir's automatic choice** in Sikarugir, **WineCX's automatic choice** in WineCX and **CrossOver's automatic choice** in CrossOver. With a DXVK or vkd3d-proton from Runtimes, that choice pairs the translator with MacLauncher KosmicKrisp, and if the driver isn't installed yet, **Play** offers to download it. You can also pick a driver yourself.
 
 To give every game the same choice, set these controls in **Settings → Windows Game** instead, on the runtime's tab. Games without a choice of their own follow it.
 

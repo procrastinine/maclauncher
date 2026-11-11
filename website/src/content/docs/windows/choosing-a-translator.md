@@ -21,7 +21,7 @@ A few translators only exist on some Macs, so your Mac narrows the list before t
 
 If you're not sure which graphics API a game uses, its system requirements usually name the DirectX version.
 
-Both WINE distributions, CrossOver and Sikarugir, can use the translators installed in Runtimes, except that CrossOver accepts DXVK-macOS packages only in their WINE builtin form. They differ in the translator versions they include, which [CrossOver and Sikarugir](/maclauncher/windows/crossover-and-sikarugir/#which-one-to-use) compares.
+All three WINE distributions, CrossOver, Sikarugir and WineCX, can use the translators installed in Runtimes, except that CrossOver accepts DXVK-macOS packages only in their WINE builtin form. They differ in the translator versions they include, which [CrossOver, Sikarugir and WineCX](/maclauncher/windows/crossover-and-sikarugir/#which-one-to-use) compares. WineCX includes no D3DMetal, so a D3DMetal choice there needs a version installed in Runtimes.
 
 ## By kind of game
 

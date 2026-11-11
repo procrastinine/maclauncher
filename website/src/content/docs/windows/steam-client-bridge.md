@@ -1,6 +1,6 @@
 ---
 title: Steam client bridge
-description: "How MacLauncher connects Windows Steam games in CrossOver and Sikarugir to the Steam client for Mac, without Windows Steam in the bottle and without patching Steam: when Play offers the Steam client bridge, what Play Without Steam does, how to check that a game used it, and how to remove it in Runtimes."
+description: "How MacLauncher connects Windows Steam games in CrossOver, Sikarugir and WineCX to the Steam client for Mac, without Windows Steam in the bottle and without patching Steam: when Play offers the Steam client bridge, what Play Without Steam does, how to check that a game used it, and how to remove it in Runtimes."
 head:
   - tag: title
     content: "Run Windows Steam games with the Steam client for Mac in WINE | MacLauncher"
@@ -10,7 +10,7 @@ sidebar:
 
 Windows games that use Steam's features carry Valve's Steam API, a `steam_api.dll` or `steam_api64.dll` file next to the game, which expects a Windows Steam client to answer it. Under WINE there's no Windows Steam client, so a game that checks your account or its ownership can refuse to start. The **Steam client bridge** connects the game's own Steam API to the Steam client for Mac, so Steam itself answers those requests. It works the same way in CrossOver and Sikarugir.
 
-The game keeps running in its usual CrossOver bottle or Sikarugir environment, with the same saves and settings. The bridge's own files load from MacLauncher's runtime storage outside the bottle, and MacLauncher writes only the few Steam registry entries that the bridge needs into the bottle; it makes no copy of the bottle. The game's files, its Steam API and its copy protection stay as they are, and the bridge doesn't change the CrossOver or Sikarugir app or the Steam client for Mac.
+The game keeps running in its usual CrossOver bottle or Sikarugir or WineCX environment, with the same saves and settings. The bridge's own files load from MacLauncher's runtime storage outside the bottle, and MacLauncher writes only the few Steam registry entries that the bridge needs into the bottle; it makes no copy of the bottle. The game's files, its Steam API and its copy protection stay as they are, and the bridge doesn't change the CrossOver or Sikarugir app or the Steam client for Mac.
 
 ## Why a bridge
 
@@ -20,7 +20,7 @@ The community project [NotProton](https://github.com/NotProtonNot/NotProton) mak
 
 ## When Play offers it
 
-Play offers the bridge for a Windows game in CrossOver or Sikarugir when all of these hold:
+Play offers the bridge for a Windows game in CrossOver, Sikarugir or WineCX when all of these hold:
 
 - the game includes `steam_api.dll` or `steam_api64.dll`;
 - MacLauncher knows the game's Steam app ID, either because the game is in a Steam library on your Mac or because you downloaded it with MacLauncher's Steam tab;

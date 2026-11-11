@@ -3,25 +3,25 @@ title: Runtime settings
 description: "The WINE settings MacLauncher offers for each Windows game on macOS: translators, locale, Windows version, Retina and DPI, custom virtual desktop sizes, keyboard and mouse, engine options and diagnostic HUDs."
 head:
   - tag: title
-    content: "WINE settings for Windows games on Mac: CrossOver and Sikarugir | MacLauncher"
+    content: "WINE settings for Windows games on Mac: CrossOver, Sikarugir and WineCX | MacLauncher"
 sidebar:
   order: 5
 ---
 
 WINE has a lot of switches, spread across environment variables, registry keys and command-line options. MacLauncher gathers the useful ones into each game's **Runtime Settings**, in its inspector. **Settings** holds the defaults for every game, and a game's own Runtime Settings can override any of them. Changes apply the next time the game starts, and options your Mac can't use, such as ones that need Apple Silicon, aren't shown.
 
-The settings come in a Basic group and four advanced groups: Display, Input, Compatibility and Diagnostics. Sikarugir and CrossOver share almost all of them.
+The settings come in a Basic group and four advanced groups: Display, Input, Compatibility and Diagnostics. Sikarugir, CrossOver and WineCX share almost all of them.
 
 ## Basic
 
 | Setting | What it does |
 | --- | --- |
-| Environment | Runs the game in its own private Windows environment, or in one of your [existing bottles or wrappers](/maclauncher/windows/existing-bottles/). |
+| Environment | Runs the game in its own private Windows environment, or in one of your [existing bottles or wrappers](/maclauncher/windows/existing-bottles/). WineCX has no bottle format of its own, so it doesn't show this setting. |
 | Default Direct3D engine, Direct3D 8 to 12, Vulkan driver, Video codecs | Choose the game's [graphics translators](/maclauncher/windows/graphics-translators/). |
 | Game temporal integration | Lets the game's DLSS option drive [MetalFX and MacLauncher's temporal upscalers](/maclauncher/windows/effects-and-upscaling/#temporal-upscaling). |
 | Synchronization | Automatic, MSync or Off, plus ESync for CrossOver versions older than 25. |
-| Language locale | Sets a locale such as `ja_JP.UTF-8`, for Japanese games that otherwise show garbled text. |
-| Windows version | Chooses which Windows version WINE reports: 10, 11, 7 or XP each get their own environment, and Sikarugir can also report older and server versions such as Vista or 98 inside the Windows 10 one. CrossOver calls this **Windows environment** and adds a per-launch Windows version. |
+| Language locale | Sets a locale such as `ja_JP.UTF-8`, for Japanese games that otherwise show garbled text. Left empty, the game uses the language of macOS. |
+| Windows version | Chooses which Windows version WINE reports: 10, 11, 7 or XP each get their own environment, and Sikarugir and WineCX can also report older and server versions such as Vista or 98 inside the Windows 10 one. CrossOver calls this **Windows environment** and adds a per-launch Windows version. |
 | Windows executable | Picks a different `.exe` inside the game folder, for when MacLauncher's automatic choice is the wrong one. |
 | Game arguments | Passes extra command-line arguments to the game, one per line. |
 
@@ -57,7 +57,7 @@ Sikarugir also has **DirectDraw compatibility**, an optional [cnc-ddraw](https:/
 
 ## Environment variables
 
-Runtime Settings also has an **Environment variables** section for the translators the game uses right now: CrossOver or Sikarugir itself, and each graphics translator its settings choose, such as DXVK, DXMT, D3DMetal, vkd3d-proton, MoltenVK or KosmicKrisp. The list follows your choices as you edit, so switching the Direct3D engine shows that translator's variables instead. Global values come from **Settings → Environment variables** and are marked **From Settings**; a game can change them, add its own or remove one for itself, and **Restore** brings back the inherited value. A variable you set overrides the matching control above, and MacLauncher keeps the WINE and Windows paths it needs. The [translator environment reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/TRANSLATOR_ENVIRONMENT.md) lists the suggested variables of each translator.
+Runtime Settings also has an **Environment variables** section for the translators the game uses right now: CrossOver, Sikarugir or WineCX itself, and each graphics translator its settings choose, such as DXVK, DXMT, D3DMetal, vkd3d-proton, MoltenVK or KosmicKrisp. The list follows your choices as you edit, so switching the Direct3D engine shows that translator's variables instead. Global values come from **Settings → Environment variables** and are marked **From Settings**; a game can change them, add its own or remove one for itself, and **Restore** brings back the inherited value. A variable you set overrides the matching control above, and MacLauncher keeps the WINE and Windows paths it needs. The [translator environment reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/TRANSLATOR_ENVIRONMENT.md) lists the suggested variables of each translator.
 
 ## Diagnostics
 
@@ -69,4 +69,4 @@ When a game runs in one of your own bottles or wrappers, every setting starts at
 
 If the bottle's WINE server is still running, the selector shows it, and changes to High Resolution or synchronization wait until it stops.
 
-Further reading: the full settings tables in the [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md#runtime-settings) and [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md#runtime-settings) references.
+Further reading: the full settings tables in the [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md#runtime-settings) and [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md#runtime-settings) references, which WineCX shares through the [Wine runtimes](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/WINE.md#shared-behavior) page.
