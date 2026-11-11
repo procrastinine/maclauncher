@@ -46,6 +46,12 @@ struct ImageRetry {
 };
 struct FramePublication {std::optional<macfx::LivePacket>controls;std::string revision;unsigned width=0,height=0;MTLPixelFormat format=MTLPixelFormatInvalid;uintptr_t device=0;};
 struct Batch {std::string planReason;std::shared_ptr<const FramePublication>publication;unsigned inputWidth=0,inputHeight=0,outputWidth=0,outputHeight=0,displayImages=1;std::shared_ptr<macfx::ImageReservation>generationAdmission,previousGenerationAdmission;id<MTLTexture>real,sourceSnapshot,finalScratch,outputScratch,generationSource,comparisonRaw,comparisonBefore,comparisonAfter,comparisonOutput;std::vector<id<MTLTexture>>generated,admitted,timelineImages;std::vector<bool>generatedMapped;std::vector<macfx::GenerationEvent>events;std::function<macfx::ShaderResult()>generationCompletion;std::vector<macfx::GenerationSequenceResult::Completion>generationCompletions;unsigned requestedGenerated=0;bool pacingObservation=false;std::vector<std::shared_ptr<macfx::ImageReservation>>timelineAdmissions;macfx::TimelinePhases phases;uint64_t id=0,epoch=0;double sourceTime=0,sourcePeriod=1.0/60;uint64_t contentId=0,contentEpoch=0,imageRevision=0;double contentPTS=0,contentPeriod=0;bool contentStamped=false,contentTimed=false;bool targeted=false,opaqueDisplay=false,realIssued=false,realAdmitted=false,retired=false,redraw=false,inputMapped=false,realMapped=false,sourceSynthetic=false,displayLimited=false;double target=0;macfx::ImageColorDescription color;std::shared_ptr<macfx::EffectExecution>execution;std::shared_ptr<const macfx::EffectSceneLease>scene;std::function<macfx::ShaderResult()>sceneCompletion;std::shared_ptr<macfx::FrameCapture>capture;macfx::PresentationContract contract;macfx::OutputPolicy output;std::shared_ptr<Retirement> retirement;};
+// Pool-only batches have no pending source, display or GPU callback. Their
+// retained pixels remain reusable, but their producer guides must return.
+void releaseIdleSceneInputs(const std::vector<std::shared_ptr<Batch>>&pool){
+ for(const auto&batch:pool)if(batch.use_count()==1){batch->scene.reset();batch->sceneCompletion={};}
+}
+
 struct Display {std::shared_ptr<Batch>batch;int generated=-1;double due=0;bool replay=false;unsigned subframe=0,totalSubframes=1;uint64_t outputId=0;bool repeatedCycle=false;};
 macfx::AdaptiveQualitySample qualitySample(const std::shared_ptr<Batch>&batch,macfx::EffectQualityPoint point){
  macfx::AdaptiveQualitySample value;if(!batch->execution||batch->redraw||batch->sourceSynthetic||!batch->execution->supportsGpuQuality(point))return value;
@@ -1052,6 +1058,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
    }return result;
   }
   applyOutputIdleCut();
+  {std::lock_guard<std::mutex>lock(mutex);releaseIdleSceneInputs(pool);}
   {std::lock_guard<std::mutex>lock(mutex);if(holdActive){heldEpoch=holdStatus.epoch;heldContract=desiredHoldContract;}}
   if(stopping.load()){result.reason="Presentation is stopped";return result;}if(!std::isfinite(sourceTime)||sourceTime<=0||frameId<=lastSubmission||sourceTime<=lastSourceTime){result.reason="Presentation timestamps and frame IDs must increase";return result;}
   if(!commands||!source||commands.status>=MTLCommandBufferStatusCommitted||!commands.retainedReferences){result.reason="Presentation requires an unsubmitted retaining command buffer and source";return result;}

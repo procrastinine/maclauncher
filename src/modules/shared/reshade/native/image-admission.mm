@@ -227,7 +227,7 @@ struct macfx::PreparedImageLease::State:std::enable_shared_from_this<State> {
         }catch(...){std::lock_guard lock(mutex);slots[index].phase=Phase::Empty;throw;}
     }
     PooledImage acquire(){
-        std::unique_lock lock(mutex,std::try_to_lock);if(!lock||free.empty())return {};
+        std::lock_guard lock(mutex);if(free.empty())return {};
         const auto index=free.back();free.pop_back();auto&slot=slots[index];slot.phase=Phase::Held;
         return PooledImage(slot.image.hold,slot.ticket);
     }

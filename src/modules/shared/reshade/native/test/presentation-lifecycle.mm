@@ -27,6 +27,15 @@ int main(){@autoreleasepool{
     setenv("RESHADE_EXPLICIT_HOST","1",1);
     for(const char *name:{"RESHADE_EFFECT_PLAN","RESHADE_EFFECT","RESHADE_CONTROL_FILE",
         "RESHADE_PRESENTATION_CONTROL_FILE","RESHADE_RUNTIME_STATUS_FILE","RESHADE_FRAME_GENERATION"})unsetenv(name);
+    // Idle pool entries retain output textures, not producer scene storage.
+    // An entry still held by delivery or a GPU callback keeps its guides.
+    std::vector<std::shared_ptr<Batch>> batches;std::vector<std::weak_ptr<int>> scenes;
+    for(unsigned i=0;i<4;++i){auto token=std::make_shared<int>(i);scenes.push_back(token);auto batch=std::make_shared<Batch>();
+        batch->scene=std::shared_ptr<const macfx::EffectSceneLease>(token,reinterpret_cast<const macfx::EffectSceneLease*>(token.get()));
+        batch->sceneCompletion=[token]{return macfx::ShaderResult{true,{}};};batches.push_back(std::move(batch));}
+    auto active=batches.back();releaseIdleSceneInputs(batches);
+    for(unsigned i=0;i<3;++i)assert(scenes[i].expired());assert(!scenes.back().expired());
+    active.reset();releaseIdleSceneInputs(batches);assert(scenes.back().expired());
     lifecycleDevice=[LifecycleDevice new];
     for(unsigned round=0;round<100;++round){
         LifecycleLayer *layer=[LifecycleLayer layer];layer.pixelFormat=MTLPixelFormatBGRA8Unorm;layer.drawableSize=CGSizeMake(32,24);

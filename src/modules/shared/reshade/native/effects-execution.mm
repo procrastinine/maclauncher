@@ -387,9 +387,9 @@ struct EffectExecution::Impl {
             if(!client)client=std::make_shared<ImagePoolClient>(device);
             auto descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format width:width height:height mipmapped:NO];descriptor.storageMode=MTLStorageModePrivate;descriptor.usage=MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite|MTLTextureUsageRenderTarget|MTLTextureUsagePixelFormatView;
             auto result=std::make_shared<Prepared>();result->key=client->prepare(descriptor,std::string(role)+':'+std::to_string(width)+':'+std::to_string(height)+':'+std::to_string(format),8);
-            // Warm both ping-pong destinations on the existing worker. Frames
-            // only acquire prepared holds, and never allocate GPU resources.
-            std::array<PooledImage,2>temporary;for(auto&hold:temporary){if(!result->key.prepare()||!(hold=result->key.acquire()))throw TransientBusy("Ordered effect image capacity is busy");}
+            // The retained scene and its successor each need a ping-pong pair.
+            // Warm both pairs on the worker; submission only acquires holds.
+            std::array<PooledImage,4>temporary;for(auto&hold:temporary){if(!result->key.prepare()||!(hold=result->key.acquire()))throw TransientBusy("Ordered effect image capacity is busy");}
             return result;
         }
         id<MTLTexture>take(const std::shared_ptr<Prepared>&prepared){auto hold=prepared->acquire();if(!hold)throw TransientBusy("Ordered effect image capacity is busy");auto result=hold.texture();storage->holds.push_back(std::move(hold));return result;}
@@ -1237,6 +1237,8 @@ EffectExecutionSelection EffectPlanExecutor::prepareSnapshot(const ShaderFrame&i
             impl->current=candidate;impl->scopeIdentity=prefix;impl->acceptedKey=key;impl->acceptedContractKey=contractKey;impl->acceptedError=job->result.error;
             impl->current->impl->quality=impl->quality;if(snapshot->quality){const auto contract=impl->current->impl->qualityContract();impl->current->impl->qualityAdoption=impl->quality->adopted(*snapshot->quality,contract.first,contract.second);}
             if(impl->current->impl->memoryDegraded){if(state->degradedKey!=key){state->degradedKey=key;state->degraded.reset();}state->degraded.record();impl->memoryRetry=std::chrono::steady_clock::now()+std::chrono::milliseconds(state->degraded.exhausted()?1000:250);}
+            // The accepted graph retains contracts, not the scene used to prepare it.
+            job->request->sceneLease.reset();
             impl->current->setStatusContext(impl->statusContext);state->accepted();result=job->result;result.changed=true;result.execution=impl->current;if(!poll.error.empty())result.error=poll.error;return result;
         }
         if(job->readiness.outcome==Impl::Outcome::Failed)return failed(job->readiness.reason);
