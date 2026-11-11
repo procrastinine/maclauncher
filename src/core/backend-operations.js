@@ -260,6 +260,8 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
         if (typeof warm !== "function") continue;
         try { await warm({ settings, userDataDir, logger }); }
         catch (error) { logger.debug?.(`[backend] ${id} lane preparation failed`, error.message); }
+        // Requests that arrived during one module's preparation run before the next module's.
+        await new Promise(resolve => setImmediate(resolve));
       }
       return true;
     },
