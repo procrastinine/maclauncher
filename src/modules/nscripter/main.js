@@ -733,7 +733,7 @@ async function launchRuntime(runtimeId, entry, context) {
     if (fontPath) args.push("--font", fontPath);
     args.push(...(context.gameArguments || []));
     return context.spawnDetachedChecked(selection.install.executablePath, args,
-      { cwd: gameRootDir, env: { ...process.env, ...resolveInstalledEnvironment(selection.install) } }, selection.install.needsRosetta);
+      { cwd: gameRootDir, env: { ...process.env, ...resolveInstalledEnvironment(selection.install), MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" } }, selection.install.needsRosetta);
   }
 
   if (runtimeId === "onsyuri_web") {
