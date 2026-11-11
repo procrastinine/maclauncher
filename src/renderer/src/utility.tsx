@@ -1,9 +1,8 @@
 performance.mark("launcher:shell-entry");
 const api = window.MacLauncher?.launcher;
-// The refill shares a warm renderer. Paint its shell before the controls can
-// occupy that renderer and delay another native window's presentation.
-void new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-  .then(() => Promise.all([import("react"), import("react-dom/client"), import("./ui/UtilityApp"), import("./ui/styles.css"), api?.initialStateReady?.()]))
+// Start the independent refill's control graph and state together; its HTML
+// shell can paint while those asynchronous requests are in flight.
+void Promise.all([import("react"), import("react-dom/client"), import("@utility-controls"), import("./ui/styles.css"), api?.initialStateReady?.()])
   .then(([React, ReactDOM, {default: UtilityApp}]) => {
     performance.mark("launcher:entry-loaded");
     ReactDOM.createRoot(document.getElementById("root")!).render(React.createElement(UtilityApp));

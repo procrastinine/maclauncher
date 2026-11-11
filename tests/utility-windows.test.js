@@ -661,7 +661,7 @@ test("utility switches acknowledge the mounted DOM without frame callbacks or ti
   const effect = source.slice(start, source.indexOf('  const initiallyPainted',start+5)).replaceAll('<HTMLElement>','');
   const slots=['settings','runtimes','credits'].map(view=>({dataset:{utilityView:view},hidden:false}));
   let switchView, cleanup; const reported=[];
-  vm.runInNewContext(effect,{utilityRevision:1,api:{onUtilityViewSwitch:callback=>{switchView=callback;return ()=>{};},utilityWindowDrawn:revision=>reported.push(revision)},
+  vm.runInNewContext(effect,{utilityRevision:1,allViews:true,api:{onUtilityViewSwitch:callback=>{switchView=callback;return ()=>{};},utilityWindowDrawn:revision=>reported.push(revision)},
     document:{querySelectorAll:()=>slots},useLayoutEffect:callback=>{cleanup=callback();}});
   switchView({view:'credits',revision:73});
   assert.deepEqual(slots.map(slot=>slot.hidden),[true,true,false]);
@@ -715,6 +715,9 @@ test('the utility preload paints its shell before fetching state and retains a n
   assert.equal((await loading).utilityWindow,latest);
   const replay=[];const stop=api.onUtilityViewSwitch(value=>replay.push(value),1);
   assert.equal(replay[0],latest,'Mounting controls receive a request newer than their snapshot');stop();
+  const prepared={...latest,prepared:true};ipc.emit('launcher:utilityViewSwitch',{},prepared);
+  const sameRevision=[];api.onUtilityViewSwitch(value=>sameRevision.push(value),2)();
+  assert.equal(sameRevision[0],prepared,'Hiding during mount must not lose all-view preparation at the same revision');
   assert.equal(messages.at(-1)[0],'launcher:utilityWindowDrawn');
 });
 
@@ -796,10 +799,10 @@ test('prepared Settings navigation sends only the request instead of a full laun
   const request={view:'settings',sectionId:'launcher',revision:17},messages=[];
   const win={isDestroyed:()=>false,webContents:{send:(...args)=>messages.push(args)}};
   vm.runInNewContext(helper+'\n('+callback+')(win);',{win,KEPT_UTILITY_VIEWS:['settings','runtimes','credits'],
-    utilityWindows:{stateForWindow:()=>({utilityWindow:request})},sendState:()=>assert.fail('A prepared navigation must not serialize and render the launcher snapshot')});
+    utilityWindows:{stateForWindow:()=>({utilityWindow:request}),isHidden:()=>false},sendState:()=>assert.fail('A prepared navigation must not serialize and render the launcher snapshot')});
   assert.equal(messages.length,1);
   assert.equal(messages[0][0],'launcher:utilityViewSwitch');
-  assert.equal(messages[0][1],request);
+  assert.deepEqual(JSON.parse(JSON.stringify(messages[0][1])),{...request,prepared:false});
 });
 
 test('a Settings navigation commits its request without rebuilding the mounted Runtimes and Credits panels', async () => {
@@ -922,7 +925,7 @@ test('the Credits shell reserves the real table layout at the top without a visi
   assert.ok(!rule(html,'#utility-shell').includes('display:grid'),'Auto-sized grid rows must not spread the heading and table over the viewport');
 });
 
-test('a second request shows within a frame without waiting for the first window refill', async t => {
+test('a second request renders independently without waiting for the first window refill', async t => {
   t.mock.timers.enable({apis:['setTimeout','Date'],now:0});
   const source=fs.readFileSync(path.join(__dirname,'../src/main/main.js'),'utf8');
   const start=source.indexOf('  createWindow: ',source.indexOf('const utilityWindows = createUtilityWindowController'))+'  createWindow: '.length;
@@ -940,10 +943,10 @@ test('a second request shows within a frame without waiting for the first window
     registerWindow:(win,view)=>{win.__maclauncherWindowType=view;registered.add(win);},idle:()=>{},
     loadView:async win=>{
       if(initial){initial=false;win.webContents=contents(true);return;}
-      // Model the recorded 130 ms cold start versus a warm shell's next frame.
-      // Full control preparation remains outstanding until 300 ms in both cases.
+      // A separate process can make progress while the first renderer is busy.
+      // A cloned renderer queues its work behind the first document until 350 ms.
       setTimeout(()=>{fullRefillDone=true;},300);
-      await new Promise(resolve=>setTimeout(resolve,win.webContents.warm?8:130));
+      await new Promise(resolve=>setTimeout(resolve,win.webContents.warm?350:130));
     },present:async win=>win.show()});
   const flush=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
   await controller.prepare();
@@ -951,22 +954,81 @@ test('a second request shows within a frame without waiting for the first window
   t.mock.timers.tick(1);
   const requestedAt=Date.now();let credits;
   const second=controller.open({view:'credits'}).then(win=>{credits=win;});
-  t.mock.timers.tick(7);await flush();
-  assert.ok(credits,'The second show must not wait for a cold process or the full refill');
+  t.mock.timers.tick(129);await flush();
+  assert.ok(credits,'The second view must not wait behind another document on the first renderer');
   assert.notEqual(credits,await first);
-  assert.ok(shown.find(row=>row.win===credits).at-requestedAt<=16);
+  assert.equal(credits.webContents.warm,false,'Separate native windows also keep independent renderer threads');
+  assert.ok(shown.find(row=>row.win===credits).at-requestedAt<=179);
   assert.equal(fullRefillDone,false);
   await second;
 });
 
-test('utility control imports start after the shell has a paint opportunity', async () => {
+test('independent refill controls and state start together without frame waits', () => {
   const source=fs.readFileSync(path.join(__dirname,'../src/renderer/src/utility.tsx'),'utf8');
-  const frames=[];let imports=0;
-  // Keep import evaluation pending; only the scheduling before it is under test.
-  const scheduled=source.slice(source.indexOf('void new Promise'),source.indexOf('  .then(([React'));
-  const runnable=scheduled.replace(/<void>/g,'').replace(/import\([^)]*\)/g,'loadControls()');
-  vm.runInNewContext(runnable,{requestAnimationFrame:callback=>frames.push(callback),api:{initialStateReady:()=>null},loadControls:()=>{imports++;return new Promise(()=>{});}});
-  assert.equal(imports,0);
-  frames.shift()();await Promise.resolve();assert.equal(imports,0);
-  frames.shift()();await Promise.resolve();await Promise.resolve();assert.equal(imports,4);
+  let imports=0,state=0;
+  const scheduled=source.slice(source.indexOf('void Promise.all'),source.indexOf('  .then(([React'));
+  const runnable=scheduled.replace(/import\([^)]*\)/g,'loadControls()');
+  vm.runInNewContext(runnable,{api:{initialStateReady:()=>{state++;return new Promise(()=>{});}},loadControls:()=>{imports++;return new Promise(()=>{});}});
+  assert.equal(imports,4);assert.equal(state,1);
+});
+
+test('a requested Credits page renders its content without decoding or mounting other utility views', async () => {
+  const {build}=require('vite'),Module=require('node:module'),React=require('react');
+  const {renderToStaticMarkup}=require('react-dom/server');
+  const bundle=await build({configFile:false,logLevel:'silent',build:{ssr:path.resolve(__dirname,'../src/renderer/src/ui/UtilityApp.tsx'),write:false,
+    rollupOptions:{external:id=>/^react(?:-dom)?(?:\/|$)/.test(id),output:{format:'cjs',codeSplitting:false}}}});
+  const compiled=new Module(path.join(__dirname,'utility-credits-first.cjs'),module);compiled.paths=module.paths;
+  compiled._compile(bundle.output.find(chunk=>chunk.type==='chunk').code,compiled.id);
+  const state=require('./library-layout-fixture').createLibraryFixture();
+  state.utilityWindow={view:'credits',revision:3,prepared:false};
+  state.runtimeManagers=new Proxy({}, {ownKeys(){assert.fail('Credits must not decode or enumerate runtime catalogs before its content');}});
+  const previous=globalThis.window;
+  globalThis.window={location:{search:'?view=settings'},MacLauncher:{launcher:{initialState:()=>state}}};
+  try {
+    const markup=renderToStaticMarkup(React.createElement(compiled.exports.default||compiled.exports));
+    assert.match(markup,/data-utility-view="credits"/);
+    assert.doesNotMatch(markup,/data-utility-view="settings"|data-utility-view="runtimes"/);
+    assert.match(markup,/class="ackTable"/);
+  } finally {globalThis.window=previous;}
+});
+
+test('development utility controls use one prebundled graph before any renderer opens', async t => {
+  const {createServer,optimizeDeps}=require('vite');
+  const cacheDir=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'utility-controls-'));
+  t.after(()=>fs.rmSync(cacheDir,{recursive:true,force:true}));
+  const server=await createServer({configFile:path.resolve(__dirname,'../vite.config.mjs'),cacheDir,logLevel:'silent',server:{middlewareMode:true}});
+  try {
+    const graph=await optimizeDeps(server.config,true,true);
+    assert.ok(graph.optimized['@utility-controls'],'The controls are compiled before a window can request them');
+    const script=await server.transformRequest('/src/utility.tsx');
+    assert.match(script.code,/deps\/@utility-controls\.js/);
+    assert.doesNotMatch(script.code,/import\("\/src\/ui\/UtilityApp\.tsx"\)/,'A refill does not request every UI source module');
+  } finally {await server.close();}
+});
+
+test('a requested view retained as the hidden spare prepares all views for later switches', async () => {
+  const {build}=require('vite'),Module=require('node:module');
+  const {react,componentHarness}=require('./helpers/renderer-component');
+  const testReact={...react,useLayoutEffect:react.useEffect};
+  const bundle=await build({configFile:false,logLevel:'silent',build:{ssr:path.resolve(__dirname,'../src/renderer/src/ui/UtilityApp.tsx'),write:false,
+    rollupOptions:{external:id=>/^react(?:-dom)?(?:\/|$)/.test(id),output:{format:'cjs',codeSplitting:false}}}});
+  const compiled=new Module(path.join(__dirname,'utility-retained.cjs'),module);compiled.paths=module.paths;
+  compiled.require=id=>id==='react'?testReact:Module.prototype.require.call(compiled,id);
+  compiled._compile(bundle.output.find(chunk=>chunk.type==='chunk').code,compiled.id);
+  const state=require('./library-layout-fixture').createLibraryFixture();state.utilityWindow={view:'credits',prepared:false,revision:1};
+  let navigate;const frames=[],reported=[];
+  const previous={document:globalThis.document,window:globalThis.window,raf:globalThis.requestAnimationFrame,cancel:globalThis.cancelAnimationFrame};
+  globalThis.document={querySelectorAll:()=>[]};globalThis.requestAnimationFrame=callback=>{frames.push(callback);return frames.length;};globalThis.cancelAnimationFrame=()=>{};
+  globalThis.window={location:{search:'?view=settings'},MacLauncher:{launcher:{initialState:()=>state,getState:async()=>state,onState:()=>()=>{},
+    onUtilityViewSwitch:callback=>{navigate=callback;return ()=>{};},utilityWindowDrawn:revision=>reported.push(revision)}}};
+  const views=tree=>{const found=[],queue=[tree];while(queue.length){const node=queue.shift();if(node?.props?.['data-utility-view'])found.push(node.props['data-utility-view']);const children=node?.props?.children;if(children)queue.push(...[children].flat(Infinity));}return found.sort();};
+  let harness;
+  try {
+    harness=componentHarness(compiled.exports.default||compiled.exports,{});
+    assert.deepEqual(views(harness.render()),['credits']);frames.shift()();frames.shift()();await harness.settle();
+    navigate({view:'credits',prepared:true,revision:1});
+    assert.deepEqual(views(harness.render()),['credits','runtimes','settings'],'The one retained spare regains all three views');
+    navigate({view:'runtimes',managerId:'fixture-manager',revision:2});harness.render();
+    assert.equal(reported.at(-1),2,'Navigation remains committed before showing a retained spare');
+  } finally {harness?.close();globalThis.document=previous.document;globalThis.window=previous.window;globalThis.requestAnimationFrame=previous.raf;globalThis.cancelAnimationFrame=previous.cancel;}
 });

@@ -578,7 +578,7 @@ export type GameFailure = { gamePath: string; message: string };
 export type ImportProgress = { inputPath: string; phase: string; completed?: number; total?: number; cached?: boolean };
 
 export type UtilityWindowRequest = { view: "settings" | "runtimes" | "credits" | "external" | "appAction"; managerId?: string; sectionId?: string; shaderCategory?: string; moduleId?: string; actionId?: string; activate?: boolean };
-export type UtilityWindowContext = Omit<UtilityWindowRequest,"activate"> & { revision?: number };
+export type UtilityWindowContext = Omit<UtilityWindowRequest,"activate"> & { revision?: number; prepared?: boolean };
 
 export type LauncherState = {
   utilityWindow?: UtilityWindowContext;

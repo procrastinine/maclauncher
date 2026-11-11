@@ -11,6 +11,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
+    "paths": { "@utility-controls": ["./src/renderer/src/ui/UtilityApp.tsx"] },
     "types": []
   },
   "include": ["src/renderer/src"]

@@ -92,7 +92,7 @@ contextBridge.exposeInMainWorld("MacLauncher", {
     // The view a Settings, Runtimes or Credits window displays, switched before it shows.
     onUtilityViewSwitch: (callback, revision = 0) => {
       listenUtilitySwitch(); utilitySwitchSubscribers.add(callback);
-      if (utilityRequest && utilityRequest.revision > revision) callback(utilityRequest);
+      if (utilityRequest && (utilityRequest.revision > revision || utilityRequest.prepared)) callback(utilityRequest);
       return () => {
         utilitySwitchSubscribers.delete(callback);
         if (!utilityPage && !utilitySwitchSubscribers.size) { ipcRenderer.removeListener("launcher:utilityViewSwitch", utilitySwitchListener); utilitySwitchListening = false; }

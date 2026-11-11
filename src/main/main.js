@@ -2275,11 +2275,11 @@ function utilityViewDrawn(win, revision, limitMs) {
 function sendUtilityWindowRequest(win) {
   if (win.isDestroyed()) return;
   const request = utilityWindows.stateForWindow(win, {}).utilityWindow;
-  if (request && KEPT_UTILITY_VIEWS.includes(request.view)) win.webContents.send("launcher:utilityViewSwitch", request);
+  if (request && KEPT_UTILITY_VIEWS.includes(request.view)) win.webContents.send("launcher:utilityViewSwitch", { ...request, prepared: utilityWindows.isHidden(win) });
   else sendState(win);
 }
 async function presentUtilityWindow(win, { view, revision, switched, navigation, activate }) {
-  if (switched && !navigation && !win.isDestroyed()) win.webContents.send("launcher:utilityViewSwitch", { view, revision });
+  if (switched && !navigation && !win.isDestroyed()) win.webContents.send("launcher:utilityViewSwitch", { view, revision, prepared: false });
   if ((switched || navigation) && !await utilityViewDrawn(win, revision, 300)) throw new Error("Utility view did not acknowledge its content.");
   if (win.isDestroyed()) return;
   if (!activate) { win.showInactive(); return; }
@@ -2288,12 +2288,7 @@ async function presentUtilityWindow(win, { view, revision, switched, navigation,
 }
 const utilityWindows = createUtilityWindowController({
   createWindow: (options, request) => {
-    // A clone has its own document and lifetime but reuses the warm utility
-    // SiteInstance. A refill must not launch a renderer on the next click.
-    const source = KEPT_UTILITY_VIEWS.includes(request?.view) && [...launcherWindows].find(win =>
-      !win.isDestroyed() && KEPT_UTILITY_VIEWS.includes(win.__maclauncherWindowType) && win.webContents.getURL());
     return new BrowserWindow({ ...options,
-      ...(source ? { webContents: source.webContents.clone() } : {}),
       ...(request?.view === "appAction" ? { title: moduleAppActions.title(request.moduleId, request.actionId) || options.title } : {}),
       ...utilityWindowSize(options),
       backgroundColor: nativeTheme.shouldUseDarkColors ? "#111318" : "#f5f6f8",
@@ -2338,7 +2333,7 @@ const utilityWindows = createUtilityWindowController({
   },
   beforeShow: sendUtilityWindowRequest,
   present: presentUtilityWindow,
-  onHidden: () => quitWithoutVisibleWindows(),
+  onHidden: win => { if (!utilityWindows.isRetiring(win)) sendUtilityWindowRequest(win); quitWithoutVisibleWindows(); },
   isQuitting: () => launcherQuitting
 });
 let launcherQuitting = false;
@@ -3556,7 +3551,8 @@ ipcMain.handle("launcher:getState", event =>
 // Other dedicated routes retain their synchronous first-state snapshot.
 ipcMain.on("launcher:utilityWindowRequest", event => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  event.returnValue = launcherWindows.has(win) ? utilityWindows.stateForWindow(win, {}).utilityWindow || null : null;
+  const request = launcherWindows.has(win) ? utilityWindows.stateForWindow(win, {}).utilityWindow : null;
+  event.returnValue = request ? { ...request, prepared: utilityWindows.isHidden(win) } : null;
 });
 ipcMain.on("launcher:initialState", event => {
   try {
