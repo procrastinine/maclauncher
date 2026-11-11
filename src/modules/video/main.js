@@ -88,7 +88,7 @@ module.exports = {
     let env;
     try {
       await context.refreshGraphicsPreparation();
-      env = await context.applyGameEnvironment(process.env);
+      env = await context.applyGameEnvironment({ ...process.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" });
     } catch (error) { player.cleanup();throw error; }
     if(renderHost)env.RESHADE_EXPLICIT_HOST="1";
     let controls, playbackCleanup;
