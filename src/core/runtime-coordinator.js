@@ -41,10 +41,16 @@ async function isRuntimeProcessAlive(pid) {
   if (process.platform === "win32") return true;
   // A worker can close the libuv child watcher before its process exits. Such a
   // child may remain an OS zombie, which kill(pid, 0) reports as present.
-  return new Promise(resolve => execFile("/bin/ps", ["-o", "stat=", "-p", String(pid)], { timeout: 1000 }, (error, stdout) => {
-    const state = String(stdout || "").trim();
-    resolve(state ? !state.startsWith("Z") : Boolean(error && error.code !== 1));
-  }));
+  // When ps cannot run (spawn fails synchronously, as under a sandbox that denies it),
+  // the process counts as present, as it does for any other ps failure.
+  return new Promise(resolve => {
+    try {
+      execFile("/bin/ps", ["-o", "stat=", "-p", String(pid)], { timeout: 1000 }, (error, stdout) => {
+        const state = String(stdout || "").trim();
+        resolve(state ? !state.startsWith("Z") : Boolean(error && error.code !== 1));
+      });
+    } catch { resolve(true); }
+  });
 }
 
 /** Pure Node host. Only bookkeeping and short JSON commits run here; jobs stay in workers. */
