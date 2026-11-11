@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const Modules = require("../src/modules/registry");
 const { publisherAppProvider } = require("../src/modules/shared/runtime/publisher-app");
+const { createGameMetadataService } = require("../src/core/game-metadata");
 const { temporary, write, mz, wad, grp, gob } = require("./helpers/engine-port-fixtures.cjs");
 
 const ENGINES = ["uzdoom", "raze", "dreamm"];
@@ -52,4 +53,22 @@ test("a provider launch hands the engine's own hooks the folder's main game file
   assert.equal(calls[0].entry.moduleData.gameFile, "DUKE3D.GRP");
   assert.equal(calls[0].entry.contentRootDir, root);
   assert.equal(calls[0].entry.gameId, "dos1");
+});
+
+test("the offline library refresh records the engine for a DOS game imported without the record", async t => {
+  const root = temporary(t), folder = path.join(root, "Doom"), userDataDir = path.join(root, "data");
+  write(path.join(folder, "DOOM.EXE"), mz()); write(path.join(folder, "DOOM1.WAD"), wad());
+  const { runtimeData: _recorded, ...stored } = imported(folder);
+  const entry = { ...stored, gameId: "doom", importPath: folder, runtimeData: {} };
+  assert.deepEqual(offered(entry), []);
+  const service = createGameMetadataService({ userDataDir, registry: Modules, extractIcon: async () => null });
+  const refresh = current => service.refreshEntry(current, {}, { availability: { available: true }, persist: false });
+  const refreshed = await refresh(entry);
+  assert.deepEqual(refreshed.runtimeData.uzdoom, { gameFile: "DOOM1.WAD" });
+  assert.deepEqual(offered(refreshed), ["uzdoom"]);
+  // A second WAD leaves no single game file, so the next refresh withdraws the choice.
+  write(path.join(folder, "DOOM2.WAD"), wad());
+  const withdrawn = await refresh(refreshed);
+  assert.equal(withdrawn.runtimeData.uzdoom, null);
+  assert.deepEqual(offered(withdrawn), []);
 });

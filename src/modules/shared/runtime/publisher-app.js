@@ -102,12 +102,15 @@ function publisherAppProvider({ hooks, moduleId, runtime, gameTypes, candidates,
   };
   return { runtimeId, managerId: hooks.runtimeManagers[0].id, runtime: { ...runtime, input: { gameTypes } },
     supports: { saveLocation: false, saveEditing: false, cheats: false, cheatsPatcher: false },
+    // Detection runs at import and at each library refresh, so a game imported
+    // earlier gains the record, and a folder that no longer holds exactly one
+    // game file loses it (a null record replaces a stored one when merged).
     decorateEntry: entry => {
       if (!applies(entry)) return entry;
       let files = [];
       try { files = candidates(root(entry)); } catch {}
-      if (files.length !== 1 || path.dirname(files[0]) !== root(entry)) return entry;
-      return { ...entry, runtimeData: { ...entry.runtimeData, [runtimeId]: { ...entry.runtimeData?.[runtimeId], gameFile: path.basename(files[0]) } } };
+      const gameFile = files.length === 1 && path.dirname(files[0]) === root(entry) ? path.basename(files[0]) : null;
+      return { ...entry, runtimeData: { ...entry.runtimeData, [runtimeId]: gameFile ? { ...entry.runtimeData?.[runtimeId], gameFile } : null } };
     },
     supportsEntry: entry => Boolean(recorded(entry)),
     ensureRuntime: (entry, context) => hooks.ensureRuntime(entry, context),
