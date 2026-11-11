@@ -340,3 +340,38 @@ test("Play, tools and saves explain missing files while settings work, and Play 
   assert.equal(stored().moduleId, "fixture");
   assert.equal(stored().notes, "Kept on the drive");
 });
+
+test("a save-location refresh writes the runtime chosen while its availability check ran", async t => {
+  const { createBackendOperations } = require("../src/core/backend-operations");
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "maclauncher-refresh-runtime-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const gamePath = path.join(root, "Games", "Fixture"), userDataDir = path.join(root, "data");
+  fs.mkdirSync(gamePath, { recursive: true });
+  const info = { id: "fixture", label: "Fixture", gameType: "native",
+    runtime: { default: "runner", supported: ["runner", "other"], entries: { runner: {}, other: {} } }, supports: {} };
+  const seen = [];
+  const mod = { id: info.id, manifest: info,
+    resolveSaveLocations: entry => { seen.push(entry.runtimeId); return { primaryDirectory: path.join(entry.gamePath, entry.runtimeId || "runner"), directories: [] }; } };
+  const registry = { listModuleIds: () => [info.id], listModules: () => [info],
+    getModule: () => mod, getModuleInfo: () => info, getModuleDir: () => root,
+    listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null,
+    detectGameAsync: async () => ({ moduleId: info.id, gamePath, contentRootDir: gamePath, name: "Fixture" }) };
+  const operations = createBackendOperations({ userDataDir, registry });
+  t.after(() => operations.beginShutdown());
+  const entry = await operations.importEntry(gamePath, {});
+  GameStore.writeGameRecord(userDataDir, { ...entry, runtimeId: "runner" });
+  // The Runtime menu saves another choice while the refresh's availability
+  // check is in flight.
+  const check = GameAvailability.checkGameAvailability;
+  GameAvailability.checkGameAvailability = async (...args) => {
+    GameStore.writeGameRecord(userDataDir, { ...entry, runtimeId: "other" });
+    return check(...args);
+  };
+  t.after(() => { GameAvailability.checkGameAvailability = check; });
+  const refreshed = await operations.refreshSaveLocations({ ...entry, runtimeId: "runner" }, {});
+  GameAvailability.checkGameAvailability = check;
+  const stored = GameStore.readGameRecord(userDataDir, entry.gameId);
+  assert.equal(stored.runtimeId, "other", "the refresh keeps the newer choice");
+  assert.equal(refreshed.runtimeId, "other");
+  assert.equal(seen.at(-1), "other", "locations are resolved for the newer choice");
+});

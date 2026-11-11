@@ -452,11 +452,12 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       return { entry: fresh, checks, metadataError };
     },
     async refreshSaveLocations(entry, settings) {
-      const current = currentEntry(entry);
       // Engines read save locations from game files. Without them the stored
       // locations stay, rather than ones resolved from absent configuration.
-      if (!(await GameAvailability.checkGameAvailability(current, { userDataDir })).available) return current;
-      const hydrated = hydrateGameSaveLocations(current, registry, { settings, userDataDir });
+      if (!(await GameAvailability.checkGameAvailability(currentEntry(entry), { userDataDir })).available) return currentEntry(entry);
+      // The record is read after the check, so a runtime chosen while it ran
+      // is the one whose locations are written.
+      const hydrated = hydrateGameSaveLocations(currentEntry(entry), registry, { settings, userDataDir });
       GameStore.writeGameRecord(userDataDir, hydrated);
       emit("entryChanged", { gameId: hydrated.gameId, gamePath: hydrated.gamePath });
       return hydrated;

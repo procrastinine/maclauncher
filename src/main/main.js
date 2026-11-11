@@ -4713,9 +4713,13 @@ ipcMain.handle("launcher:setGameRuntime", async (_event, gamePath, runtimeId) =>
 
   entry.updatedAt = Date.now();
   saveGameRecord(entry);
-  Object.assign(entry, await backendService.request(`game:${entry.gameId || gamePath}`, "refreshSaveLocations", entry, settings));
   cachedState = buildState(settings, games);
   broadcastState();
+  // The Runtime menu shows the choice at once. Save locations come from the
+  // game's files, so the game's lane reads them afterwards and its
+  // entryChanged event updates the row.
+  void backendService.request(`game:${entry.gameId || gamePath}`, "refreshSaveLocations", entry, settings)
+    .catch(error => logger.warn("[runtime] Save locations could not be refreshed:", error?.message || error));
   return true;
 });
 

@@ -4,13 +4,13 @@ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 function fixture(){
   let saved={gameId:'example',gamePath:'/Games/Example',moduleId:'current-engine',runtimeId:'old-player'};
   let finishRefresh;const refreshing=new Promise(resolve=>{finishRefresh=resolve;});
-  const handlers=new Map(),opened=[],settings={},module={},info={runtime:{}};let broadcasts=0,reads=0;
-  const context={Date,loadSettings:()=>settings,loadGamesHydrated:options=>{assert.equal(options.persist,false);reads++;return [structuredClone(saved)];},
+  const handlers=new Map(),opened=[],settings={},module={},info={runtime:{}},refreshes=[],warnings=[];let broadcasts=0,reads=0;
+  const context={Date,logger:{warn:(...args)=>warnings.push(args.join(' '))},loadSettings:()=>settings,loadGamesHydrated:options=>{assert.equal(options.persist,false);reads++;return [structuredClone(saved)];},
     findGameByPath:(games,gamePath)=>games.find(game=>game.gamePath===gamePath),resolveModuleId:game=>game.moduleId,
     Modules:{getModule:()=>module,getModuleInfo:()=>info},resolveModuleSettings:()=>({}),
     normalizeGameEntry:game=>({...game,runtimeId:game.runtimeId||'default-player'}),
     resolveRuntimeForEntry:requested=>requested,saveGameRecord:game=>{saved=structuredClone(game);},
-    backendService:{request:async()=>{await refreshing;return {saveLocations:[]};}},
+    backendService:{request:async(...args)=>{refreshes.push(args);await refreshing;if(args[2]?.runtimeId==='failing-player')throw new Error('drive went away');return {saveLocations:[]};}},
     buildState:(_settings,games)=>({recents:games}),broadcastState:()=>{broadcasts++;},
     createRuntimeSettingsWindow:async value=>opened.push(structuredClone(value)),
     ipcMain:{handle:(name,handler)=>handlers.set(name,handler)},cachedState:null};
@@ -19,16 +19,22 @@ function fixture(){
       ['ipcMain.handle("launcher:openRuntimeSettings",','ipcMain.handle("launcher:setLauncherSettings",']]){
     const start=source.indexOf(startToken),end=source.indexOf(endToken,start);assert(start>=0&&end>start);vm.runInNewContext(source.slice(start,end),context);
   }
-  return {opened,context,finishRefresh,get saved(){return saved;},set saved(value){saved=value;},get broadcasts(){return broadcasts;},get reads(){return reads;},
+  return {opened,context,finishRefresh,refreshes,warnings,get saved(){return saved;},set saved(value){saved=value;},get broadcasts(){return broadcasts;},get reads(){return reads;},
     invoke:(name,payload,...args)=>handlers.get('launcher:'+name)(null,payload,...args)};
 }
 
-test('game settings use the saved runtime while its selection refresh and renderer snapshot are still pending',async()=>{
-  const f=fixture(),changing=f.invoke('setGameRuntime',f.saved.gamePath,'new-player');
-  assert.equal(f.saved.runtimeId,'new-player');assert.equal(f.broadcasts,0);
+test('a runtime choice replies and shows at once while the game lane refreshes its save locations',async()=>{
+  const f=fixture();
+  assert.equal(await f.invoke('setGameRuntime',f.saved.gamePath,'new-player'),true,'the reply does not wait for the game lane');
+  assert.equal(f.saved.runtimeId,'new-player');assert.equal(f.broadcasts,1);
+  assert.deepEqual(f.refreshes.map(args=>[args[0],args[1],args[2].runtimeId]),[['game:example','refreshSaveLocations','new-player']]);
+  assert.equal(f.context.cachedState.recents[0].runtimeId,'new-player');
   assert.equal(await f.invoke('openRuntimeSettings',{scope:'game',gamePath:f.saved.gamePath,moduleId:'stale-engine',runtimeId:'old-player'}),true);
   assert.deepEqual(f.opened,[{scope:'game',gamePath:f.saved.gamePath,moduleId:'current-engine',runtimeId:'new-player'}]);
-  f.finishRefresh();await changing;assert.equal(f.broadcasts,1);
+  assert.equal(await f.invoke('setGameRuntime',f.saved.gamePath,'failing-player'),true);
+  f.finishRefresh();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(f.broadcasts,2,'the refreshed row arrives through entryChanged, not a second reply');
+  assert.match(f.warnings.join('\n'),/Save locations could not be refreshed: drive went away/);
 });
 
 test('module settings retain the explicitly requested module/runtime without reading game state',async()=>{
