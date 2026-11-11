@@ -10,6 +10,7 @@ const { isAbortError } = require("../../shared/runtime/download-utils");
 const warnGraphics = require("../../shared/graphics-warning");
 const manager = require("./manager");
 const DLSS = require("../dlss");
+const Finish = require("../sources/launch-finish");
 const Translators = require("../../shared/runtime/wine-translators");
 const TranslatorFiles = require("../../shared/runtime/translator-files");
 const { wineLayout } = require("../../shared/runtime/wine-layout");
@@ -265,7 +266,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   Writable.assertOwnDirectory(context.userDataDir, directory);
   // Wine accepts the original Unix executable and working directory. Ordinary
   // Play needs no game copy, alias projection or old-view reconciliation.
-  const originalRoot = match.sourceRoot, recovery = { overrides: {}, omitted: new Set(), libraries: [] };
+  const originalRoot = match.sourceRoot;
   let gameRoot = originalRoot, executablePath = executable, cameraView;
   const GraphicsLoader = require("./graphics-loader");
   let winemac = await require('./winemac').select(selected.install, context);
@@ -354,21 +355,16 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     context.graphicsBridgeFailure = {provider: "crossover-loader", reason: String(loaderFailure.message || loaderFailure)};
     warnGraphics(context.logger, "CrossOver graphics loader could not be prepared. Using the vendor renderer without shared graphics processing.", context.graphicsBridgeFailure.reason);
   }
-  const steamBridge = await require('./steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath: bottlePath,
-    architecture: selectedExecutable.executableArchitecture, environment });
-  const bridgeLaunch = steamBridge ? require('./steam-bridge-launch').resolve(executablePath, selectedExecutable.executableArchitecture) : null;
-  if (steamBridge) { environment = steamBridge.environment; Object.assign(overrides, steamBridge.extra); dll = environment.WINEDLLOVERRIDES; executablePath = bridgeLaunch.executablePath; }
+  const steam = await Finish.steamBridge(entry, context, { install: selected.install, prefixPath: bottlePath,
+    architecture: selectedExecutable.executableArchitecture, environment, executablePath });
+  const { bridge: steamBridge, launch: bridgeLaunch } = steam;({ environment, executablePath } = steam);
+  if (steamBridge) { Object.assign(overrides, steamBridge.extra); dll = environment.WINEDLLOVERRIDES; }
   const vulkanEnvironment=require("../temporal/vulkan-dlss").environment(vulkanDLSS.enabled,environment);
   Object.assign(environment,vulkanEnvironment);Object.assign(overrides,vulkanEnvironment);
-  const adapterDescription = await require("../../shared/runtime/dxgi-adapter-description").prepare({ ...existingEnvironment?.environment, ...environment },
-    { translatorPlan, host, signal: context.signal });
+  const adapterDescription = await Finish.adapterDescription(environment, { translatorPlan, host, signal: context.signal, existingEnvironment });
   Object.assign(environment, adapterDescription); Object.assign(overrides, adapterDescription);
-  const workingDirectory = path.dirname(executable);
-  // The drive covers the imported game folder, so paths above the executable's folder resolve.
-  const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, executable);
-  const { windowsExecutablePath, windowsWorkingDirectory } = require("../../shared/runtime/wine-game-paths").prepareGamePaths(bottlePath,
-    { gameRoot: gameRoot === originalRoot ? driveRoot : gameRoot, executablePath, workingRoot: driveRoot, workingDirectory });
-  const shaderCache = require('./shader-cache').prepare(directory, bottlePath);
+  const { workingDirectory, windowsExecutablePath, windowsWorkingDirectory } = Finish.gamePaths(entry, bottlePath, { originalRoot, gameRoot, executable, executablePath });
+  const shaderCache = Finish.shaderCache(directory, bottlePath);
   Object.assign(environment, shaderCache); Object.assign(overrides, shaderCache);
   const args = ["--bottle", bottlePath, "--wait-children", "--workdir", windowsWorkingDirectory];
   if (!WineSettings.inherit(settings.windowsVersion)) {
@@ -394,18 +390,10 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (settings.wineDebug) args.push("--debugmsg", safeText(settings.wineDebug, "Wine debug channels"));
   if (settings.wineDebug) args.push("--cx-log", path.join(directory, "wine.log"));
   args.push("--", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(bridgeLaunch?.arguments || []), ...argumentsList, ...(context.gameArguments || []));
-  if (cameraView) {
-    GameView.remember(entry, context, "crossover", cameraView, recovery);
-    GameView.watch(entry, context, directory, "crossover", cameraView);
-  }
-  entry.runtimeData = { ...entry.runtimeData, crossover: { ...entry.runtimeData?.crossover,
-    windowsExecutablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
-    sourceRoot: match.sourceRoot, gameRoot, bottlePath, applicationPath: selected.install.appPath,
-    ...(existingEnvironment ? { environmentReference: existingEnvironment.reference } : {}),
-    steamBridge: steamBridge ? { version: steamBridge.packageVersion } : null,
-    translatorRows: Translators.inspectorRows(translatorPlan),
-    translatorPlanInputs: Translators.planInputs(context.runtimeSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
-  context.onEntryChange?.(entry);
+  Finish.keepLaunchFolder(entry, context, { runtimeId: "crossover", directory, view: cameraView });
+  Finish.recordRuntime(entry, context, { runtimeId: "crossover", match, gameRoot, existingEnvironment, steamBridge, translatorPlan,
+    requestedSettings: context.runtimeSettings, install: selected.install, values: { windowsExecutablePath: match.windowsExecutablePath,
+      executableArchitecture: match.executableArchitecture, bottlePath, applicationPath: selected.install.appPath } });
   timing('ready');
   return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, windowsExecutablePath, windowsWorkingDirectory, environment, args, translatorPlan, existingEnvironment };
 }

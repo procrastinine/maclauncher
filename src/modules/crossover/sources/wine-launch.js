@@ -14,6 +14,7 @@ const WindowsFiles = require("../runtime/launch");
 const Sources = require(".");
 const Detection = require("../detect");
 const DLSS = require("../dlss");
+const Finish = require("./launch-finish");
 const Translators = require("../../shared/runtime/wine-translators");
 const TranslatorFiles = require("../../shared/runtime/translator-files");
 
@@ -288,7 +289,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const GameView = require("../temporal/game-view");GameView.clearWatch(context);
   Writable.assertOwnDirectory(context.userDataDir, directory);
   if (!existingEnvironment) for (const name of ["home", "tmp", "prefixes", "runtime-view"]) Writable.assertOwnDirectory(directory, path.join(directory, name));
-  const originalRoot = match.sourceRoot, recovery = { overrides: {}, omitted: new Set(), libraries: [] };
+  const originalRoot = match.sourceRoot;
   let gameRoot = originalRoot, executablePath = match.windowsExecutablePath, cameraView;
   if (cameraBridge || scenePlan?.packageReady) {
     const plans = [...(cameraBridge ? [{ kind: "camera", plan: cameraBridge }] : []), ...(scenePlan?.packageReady ? [{ kind: "scene", plan: scenePlan }] : [])];
@@ -327,7 +328,6 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   context.signal?.throwIfAborted();
   let { environment } = buildEnvironment(settings, selected.install, directory, prefixPath, graphics, { ...dependencies, source, translatorPlan, existingEnvironment, translatorEnvironment });
   Object.assign(environment,require("../temporal/vulkan-dlss").environment(vulkanDLSS.enabled,environment));
-  Object.assign(environment,await require("../../shared/runtime/dxgi-adapter-description").prepare(environment,{translatorPlan,host,signal:context.signal}));
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
   if (context.applyGameEnvironment) environment = await context.applyGameEnvironment(environment);
@@ -339,12 +339,9 @@ async function prepareLaunch(entry, context, dependencies = {}) {
       else delete environment[key];
     }
   }
-  const steamBridge = await require('../runtime/steam-bridge').prepare(entry, context, { installation: selected.install, prefixPath,
-    architecture: match.executableArchitecture, environment });
-  const bridgeLaunch = steamBridge ? require('../runtime/steam-bridge-launch').resolve(executablePath, match.executableArchitecture) : null;
-  if (steamBridge) { environment = steamBridge.environment; executablePath = bridgeLaunch.executablePath; }
-  Object.assign(environment, await require("../../shared/runtime/dxgi-adapter-description").prepare(environment,
-    { translatorPlan, host, signal: context.signal }));
+  const steam = await Finish.steamBridge(entry, context, { install: selected.install, prefixPath, architecture: match.executableArchitecture, environment, executablePath });
+  const { bridge: steamBridge, launch: bridgeLaunch } = steam;({ environment, executablePath } = steam);
+  Object.assign(environment, await Finish.adapterDescription(environment, { translatorPlan, host, signal: context.signal }));
   const registryEnvironment = existingEnvironment;
   await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(executablePath),
     assertWritable: registryEnvironment ? () => Environments.assertWritableRegistry(registryEnvironment) : undefined }, args => {
@@ -353,29 +350,18 @@ async function prepareLaunch(entry, context, dependencies = {}) {
       ? require("../../shared/runtime/wine-processes").runTool(selected.install.executablePath, args, options)
       : runSupervised(selected.install.executablePath, selected.install.serverPath, args, options);
   });
-  const workingDirectory = path.dirname(match.windowsExecutablePath);
-  // Allocate relative drive links only after choosing the prefix that will run the game.
-  const driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, match.windowsExecutablePath);
-  const { windowsExecutablePath, windowsWorkingDirectory } = require("../../shared/runtime/wine-game-paths").prepareGamePaths(prefixPath,
-    { gameRoot: gameRoot === originalRoot ? driveRoot : gameRoot, executablePath, workingRoot: driveRoot, workingDirectory });
-  Object.assign(environment, require('../runtime/shader-cache').prepare(directory, prefixPath));
+  const { workingDirectory, windowsExecutablePath, windowsWorkingDirectory } = Finish.gamePaths(entry, prefixPath,
+    { originalRoot, gameRoot, executable: match.windowsExecutablePath, executablePath });
+  Object.assign(environment, Finish.shaderCache(directory, prefixPath));
   let applicationArguments = [...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")), ...(context.gameArguments || [])];
   if (context.resolveRuntimeArguments) applicationArguments = await context.resolveRuntimeArguments({ arguments: applicationArguments,
     install: selected.install, executablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
     graphicsBackend: graphics.graphicsBackend });
   const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(bridgeLaunch?.arguments || []), ...applicationArguments]);
-  if (cameraView) {
-    GameView.remember(entry, context, source.id, cameraView, recovery);
-    GameView.watch(entry, context, directory, source.id, cameraView);
-  }
-  entry.runtimeData = { ...entry.runtimeData, [source.id]: { ...entry.runtimeData?.[source.id], installedVersion: selected.version,
-    sourceRoot: match.sourceRoot, gameRoot, prefixPath, viewRoot, graphicsBackend: graphics.graphicsBackend,
-    ...(existingEnvironment ? { environmentReference: existingEnvironment.reference } : {}),
-    vulkanBackend: graphics.vulkanBackend, dlss: graphics.dlss?.enabled === true, componentVersions: graphics.componentVersions,
-    steamBridge: steamBridge ? { version: steamBridge.packageVersion } : null,
-    translatorRows: Translators.inspectorRows(translatorPlan),
-    translatorPlanInputs: Translators.planInputs(requestedSettings, context.wineEnvironment?.install || selected.install), cameraAdapterNotice: context.cameraAdapterNotice || null, graphicsInputs: context.graphicsInputs } };
-  context.onEntryChange?.(entry);
+  Finish.keepLaunchFolder(entry, context, { runtimeId: source.id, directory, view: cameraView });
+  Finish.recordRuntime(entry, context, { runtimeId: source.id, match, gameRoot, existingEnvironment, steamBridge, translatorPlan, requestedSettings,
+    install: selected.install, values: { installedVersion: selected.version, prefixPath, viewRoot, graphicsBackend: graphics.graphicsBackend,
+      vulkanBackend: graphics.vulkanBackend, dlss: graphics.dlss?.enabled === true, componentVersions: graphics.componentVersions } });
   return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, windowsWorkingDirectory, graphics, environment, args, translatorPlan,
     existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath };
 }
