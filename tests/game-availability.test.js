@@ -375,3 +375,37 @@ test("a save-location refresh writes the runtime chosen while its availability c
   assert.equal(refreshed.runtimeId, "other");
   assert.equal(seen.at(-1), "other", "locations are resolved for the newer choice");
 });
+
+test("a save-location refresh keeps changes saved during its engine scan and drops a result for an older runtime", async t => {
+  const { createBackendOperations } = require("../src/core/backend-operations");
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "maclauncher-refresh-scan-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const gamePath = path.join(root, "Games", "Fixture"), userDataDir = path.join(root, "data");
+  fs.mkdirSync(gamePath, { recursive: true });
+  const info = { id: "fixture", label: "Fixture", gameType: "native",
+    runtime: { default: "runner", supported: ["runner", "other"], entries: { runner: {}, other: {} } }, supports: {} };
+  let duringScan = null;
+  const mod = { id: info.id, manifest: info, resolveSaveLocations: entry => {
+    if (duringScan) { const change = duringScan; duringScan = null; change(); }
+    return { primaryDirectory: path.join(entry.gamePath, entry.runtimeId || "runner"), directories: [] };
+  } };
+  const registry = { listModuleIds: () => [info.id], listModules: () => [info],
+    getModule: () => mod, getModuleInfo: () => info, getModuleDir: () => root,
+    listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null,
+    detectGameAsync: async () => ({ moduleId: info.id, gamePath, contentRootDir: gamePath, name: "Fixture" }) };
+  const operations = createBackendOperations({ userDataDir, registry });
+  t.after(() => operations.beginShutdown());
+  const entry = await operations.importEntry(gamePath, {});
+  const stored = () => GameStore.readGameRecord(userDataDir, entry.gameId);
+  // The launcher saves notes and a module value while the scan runs.
+  GameStore.writeGameRecord(userDataDir, { ...entry, runtimeId: "other", defaultSaveDir: null, moduleData: { kept: 1 } });
+  duringScan = () => GameStore.writeGameRecord(userDataDir, { ...stored(), notes: "Saved meanwhile", moduleData: { kept: 2 } });
+  await operations.refreshSaveLocations({ ...entry, runtimeId: "other" }, {});
+  assert.equal(stored().notes, "Saved meanwhile");assert.equal(stored().moduleData.kept, 2);
+  assert.equal(stored().defaultSaveDir, path.join(gamePath, "other"), "the scan's own fields are written");
+  // A runtime chosen during the scan wins; the older result is not written.
+  duringScan = () => GameStore.writeGameRecord(userDataDir, { ...stored(), runtimeId: "runner" });
+  const result = await operations.refreshSaveLocations({ ...entry, runtimeId: "other" }, {});
+  assert.equal(stored().runtimeId, "runner");assert.equal(result.runtimeId, "runner");
+  assert.equal(stored().defaultSaveDir, path.join(gamePath, "other"), "the dropped result changed nothing");
+});

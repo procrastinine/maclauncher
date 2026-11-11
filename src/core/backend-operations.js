@@ -464,12 +464,19 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       // Engines read save locations from game files. Without them the stored
       // locations stay, rather than ones resolved from absent configuration.
       if (!(await GameAvailability.checkGameAvailability(currentEntry(entry), { userDataDir })).available) return currentEntry(entry);
-      // The record is read after the check, so a runtime chosen while it ran
-      // is the one whose locations are written.
-      const hydrated = hydrateGameSaveLocations(currentEntry(entry), registry, { settings, userDataDir });
-      GameStore.writeGameRecord(userDataDir, hydrated);
-      emit("entryChanged", { gameId: hydrated.gameId, gamePath: hydrated.gamePath });
-      return hydrated;
+      // The engine scan can take a while, and the launcher can save the
+      // record meanwhile. Only the fields the scan changed are written, onto
+      // the record as it is after the scan. A runtime chosen during the scan
+      // queued its own refresh, so this older result is dropped.
+      const read = currentEntry(entry);
+      const hydrated = hydrateGameSaveLocations(read, registry, { settings, userDataDir });
+      const latest = currentEntry(entry);
+      if (latest.runtimeId !== read.runtimeId) return latest;
+      const merged = applyRecordDelta({ ...latest }, read, hydrated);
+      if (JSON.stringify(merged) === JSON.stringify(latest)) return latest;
+      GameStore.writeGameRecord(userDataDir, merged);
+      emit("entryChanged", { gameId: merged.gameId, gamePath: merged.gamePath });
+      return merged;
     },
     // Main applies the result: it moves its own state for the game's path and
     // checks availability before the library updates.
@@ -581,4 +588,17 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
   return operations;
 }
 
-module.exports = { createBackendOperations, listRuntimeManagers };
+// Applies the fields that changed from `before` to `after` onto `target`,
+// object by object, so values saved elsewhere in between stay.
+function applyRecordDelta(target, before, after) {
+  const plain = value => value && typeof value === "object" && !Array.isArray(value);
+  for (const key of new Set([...Object.keys(before || {}), ...Object.keys(after || {})])) {
+    if (JSON.stringify(before?.[key]) === JSON.stringify(after?.[key])) continue;
+    if (plain(before?.[key]) && plain(after?.[key]) && plain(target[key])) target[key] = applyRecordDelta({ ...target[key] }, before[key], after[key]);
+    else if (after?.[key] === undefined) delete target[key];
+    else target[key] = after[key];
+  }
+  return target;
+}
+
+module.exports = { createBackendOperations, listRuntimeManagers, applyRecordDelta };

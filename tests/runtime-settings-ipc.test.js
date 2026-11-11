@@ -5,7 +5,7 @@ function fixture(){
   let saved={gameId:'example',gamePath:'/Games/Example',moduleId:'current-engine',runtimeId:'old-player'};
   let finishRefresh;const refreshing=new Promise(resolve=>{finishRefresh=resolve;});
   const handlers=new Map(),opened=[],settings={},module={},info={runtime:{}},refreshes=[],warnings=[];let broadcasts=0,reads=0;
-  const context={Date,logger:{warn:(...args)=>warnings.push(args.join(' '))},loadSettings:()=>settings,loadGamesHydrated:options=>{assert.equal(options.persist,false);reads++;return [structuredClone(saved)];},
+  const context={Date,logger:{warn:(...args)=>warnings.push(args.join(' '))},gameLaunchNotices:new Map(),loadSettings:()=>settings,loadGamesHydrated:options=>{assert.equal(options.persist,false);reads++;return [structuredClone(saved)];},
     findGameByPath:(games,gamePath)=>games.find(game=>game.gamePath===gamePath),resolveModuleId:game=>game.moduleId,
     Modules:{getModule:()=>module,getModuleInfo:()=>info},resolveModuleSettings:()=>({}),
     normalizeGameEntry:game=>({...game,runtimeId:game.runtimeId||'default-player'}),
@@ -33,8 +33,9 @@ test('a runtime choice replies and shows at once while the game lane refreshes i
   assert.deepEqual(f.opened,[{scope:'game',gamePath:f.saved.gamePath,moduleId:'current-engine',runtimeId:'new-player'}]);
   assert.equal(await f.invoke('setGameRuntime',f.saved.gamePath,'failing-player'),true);
   f.finishRefresh();await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(f.broadcasts,2,'the refreshed row arrives through entryChanged, not a second reply');
+  assert.equal(f.broadcasts,3,'a successful refresh arrives through entryChanged; a failed one is broadcast on its row');
   assert.match(f.warnings.join('\n'),/Save locations could not be refreshed: drive went away/);
+  assert.deepEqual([...f.context.gameLaunchNotices.get(f.saved.gamePath)],['Save locations for failing-player could not be read: drive went away']);
 });
 
 test('module settings retain the explicitly requested module/runtime without reading game state',async()=>{
