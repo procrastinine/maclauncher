@@ -131,28 +131,49 @@ function historical(row, now = Date.now()) {
 // last record came just after the request (a final pass-through
 // acknowledgment) while another context kept drawing for this long.
 const DRAWING_GRACE_MS = 500;
-// What the contexts that accepted `revision` report for each row. A row is
-// not running when every latest event for it bypassed, failed or is still
-// preparing it with a reason, such as missing renderer inputs, busy image
-// capacity or a provider warming up; any other latest event means it runs.
-// A row that is only preparing is `pending`. `completed` counts the frames
-// that ran it.
-function rowOutcomes(rows, revision) {
-  const result = {}, preparing = {};
-  for (const row of rows) if (!historical(row) && (!revision || row.acceptedRevision === revision)) for (const stage of row.stages || []) {
+// The single merge of what contexts report for each row. A row is not
+// running when every context's latest event for it bypassed, failed or is
+// still preparing it with a reason, such as missing renderer inputs, busy
+// image capacity or a provider warming up; any other latest event means it
+// runs. One context running a row therefore outweighs another context's
+// bypass of it, whatever the context order: a renderer's scene intake runs a
+// temporal row while the window chain that receives its upscaled image passes
+// the same row through, and a window chain's bypass from a frame before the
+// intake's first encoded scene stops counting with that scene, without a new
+// plan revision. A row that is only preparing is `pending`. `completed` counts
+// the frames that ran it. With `detail`, each row also carries the stage that
+// represents it, including that stage's reason: the most recently observed
+// running stage, or else the most recently observed stage that gives the
+// reason it is not running, with the counts of all.
+function mergeRows(contexts, detail = false) {
+  const result = {}, shown = {};
+  for (const row of contexts) for (const stage of row.stages || []) {
     if (!stage.id) continue;
-    const outcome = result[stage.id] ||= {running: false, reason: "", completed: 0};
-    outcome.completed += stage.completed;
-    if (!stage.reason || !["bypassed", "failed", "preparing"].includes(stage.phase)) outcome.running = true;
-    else if (stage.phase === "preparing") preparing[stage.id] ||= stage.reason;
-    else outcome.reason ||= stage.reason;
+    const outcome = result[stage.id] ||= {running: false, reason: "", completed: 0, ...(detail ? {encoded: 0} : {})};
+    outcome.completed += stage.completed;if (detail) outcome.encoded += stage.encoded || 0;
+    // Running outranks a bypass or failure, which outranks preparation.
+    const rank = !stage.reason || !["bypassed", "failed", "preparing"].includes(stage.phase) ? 2 : stage.phase === "preparing" ? 0 : 1, earlier = shown[stage.id];
+    if (!earlier || rank > earlier.rank || rank === earlier.rank && (stage.observedAt || 0) > (earlier.stage.observedAt || 0)) shown[stage.id] = {rank, stage};
   }
   for (const [id, outcome] of Object.entries(result)) {
-    if (outcome.running) outcome.reason = "";
-    else if (!outcome.reason) Object.assign(outcome, {reason: preparing[id], pending: true});
+    const {rank, stage} = shown[id];
+    if (rank === 2) outcome.running = true;
+    else Object.assign(outcome, {reason: stage.reason}, rank === 0 ? {pending: true} : {});
+    if (!detail) continue;
+    // A running stage's reason explains its method, such as a retained previous version.
+    const {requestedMethod, activeMethod, input, output, observedAt, resolutionScope} = stage;
+    Object.assign(outcome, {reason: stage.reason || "", phase: stage.phase, requestedMethod, activeMethod, input, output, observedAt, ...(resolutionScope ? {resolutionScope} : {})});
   }
   return result;
 }
+// What the contexts that accepted `revision` report for each row.
+function rowOutcomes(rows, revision) {
+  return mergeRows(rows.filter(row => !historical(row) && (!revision || row.acceptedRevision === revision)));
+}
+// The rows of the given contexts, merged as `rowOutcomes` merges them, with
+// the stage that represents each row. Status readers show these instead of
+// any one context's stages.
+function rowStatus(contexts) { return mergeRows(contexts, true); }
 // Row outcomes for an accepted revision from every current context that
 // accepted it. Unlike acceptance this takes no vote, so a context that still
 // shows an earlier revision, such as one that stopped drawing at the previous
@@ -345,8 +366,9 @@ function read(entry, {userDataDir, runningPids = [],settings} = {}) {
       : preparing ? "preparing"
       : observed.some(row => row.matchesPrepared && !row.historical && row.completed > 0) ? "observed"
       : observed.some(row => row.matchesPrepared && row.completed > 0) ? "historical"
-      : observed.some(row => row.identityState === "unverified" && row.completed > 0) ? "unverified" : "prepared", contexts: observed};
+      : observed.some(row => row.identityState === "unverified" && row.completed > 0) ? "unverified" : "prepared", contexts: observed,
+      rows: rowStatus(observed.filter(row => row.matchesPrepared && !row.historical))};
   } catch (error) {return {...metadata, state: "unavailable", reason: error.message, contexts: []};}
   finally {if (fd !== undefined) fs.closeSync(fd);}
 }
-module.exports = {supported, prepare, prime, read, accepted, acquireAccepted, outcomes, pendingReason, preparation, rowOutcomes};
+module.exports = {supported, prepare, prime, read, accepted, acquireAccepted, outcomes, pendingReason, preparation, rowOutcomes, rowStatus};

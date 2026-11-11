@@ -4,6 +4,9 @@ const { react, componentHarness: baseHarness } = require("./helpers/renderer-com
 // The chosen view persists for the session, so each harness selects the view it tests.
 function viewHarness(view){return (Component,props)=>{const harness=baseHarness(Component,props);if(Component===EffectsControls){const tree=harness.render();elements(tree).find(node=>node.type==="button"&&node.props.children===view).props.onClick();}return harness;};}
 const componentHarness=viewHarness("Advanced"),simpleHarness=viewHarness("Simple");
+const Status=require("../src/modules/shared/reshade/runtime-status");
+// The launcher's status read adds the rows merged over its matching current contexts.
+const withRows=status=>({...status,rows:Status.rowStatus((status.contexts||[]).filter(context=>context.identityState==="matching"&&!context.historical))});
 let EffectsControls, effectChoice, effectChooserRows, effectAvailability;
 test.before(async () => {
   const result = await build({ configFile: false, logLevel: "silent", build: {
@@ -840,11 +843,11 @@ test('native rejection explains the retained chain even when acceptance belongs 
   const markup=renderToStaticMarkup(harness.render());assert.match(markup,/Using previous/);assert.match(markup,/About retained graphics/);assert.doesNotMatch(markup,/role="status">Applied/);
  }finally{harness.close();global.window=previous;}
 });
-test('published graphics becomes Active only after every enabled row completed in one matching current context',async()=>{
+test('published graphics becomes Active only after every enabled row completed in the matching current contexts',async()=>{
  const before={schema:2,mode:'advanced',enabled:true,video:[shader,{id:'up',kind:'upscale',method:'bilinear',enabled:true,settings:{}}]},previous=global.window;
  global.window={MacLauncher:{launcher:{getGameEffects:async()=>({plan:before,catalog:[],live:true,preparation:{state:'published',revision:'new'}})}}};
  const harness=simpleHarness(EffectsControls,{game:{gamePath:'/Game',effects:before},running:true,visible:true});
- try{harness.render();await harness.settle();const status=contexts=>elements(harness.render()).find(n=>typeof n.props.onStatus==='function').props.onStatus({state:'observed',contexts}),context={identityState:'matching',historical:false,observedAt:Date.now(),reason:'',stages:[{id:'film',completed:2}]};
+ try{harness.render();await harness.settle();const status=contexts=>elements(harness.render()).find(n=>typeof n.props.onStatus==='function').props.onStatus(withRows({state:'observed',contexts})),context={identityState:'matching',historical:false,observedAt:Date.now(),reason:'',stages:[{id:'film',completed:2}]};
   status([context]);assert.doesNotMatch(renderToStaticMarkup(harness.render()),/role="status">Active/);
   status([{...context,stages:[...context.stages,{id:'up',completed:2}],historical:true}]);assert.doesNotMatch(renderToStaticMarkup(harness.render()),/role="status">Active/);
   status([{...context,stages:[...context.stages,{id:'up',completed:2}]}]);assert.match(renderToStaticMarkup(harness.render()),/role="status">Active/);
@@ -861,8 +864,8 @@ test('owned fit shows the actual matched method while preserving the saved choic
  global.window={MacLauncher:{launcher:{getGameEffects:async()=>({plan:before,catalog,live:true}),setGameEffects:()=>assert.fail('Status cannot save a method substitution.')}}};
  const harness=componentHarness(EffectsControls,{game:{gamePath:'/Game',effects:before},running:true,visible:true});
  try{harness.render();await harness.settle();
-  const report=(identityState='matching',historical=false)=>elements(harness.render()).find(node=>typeof node.props.onStatus==='function').props.onStatus({state:'observed',preparation:{pending:[],applied:[{id:fit.id,kind:'spatial',method:'bilinear'}]},contexts:[{identityState,historical,observedAt:Date.now(),stages:[{id:model.id,completed:1,phase:'completed',requestedMethod:'realcugan',activeMethod:'realcugan'},
-   {id:fit.id,completed:1,phase:'completed',requestedMethod:'bilinear',activeMethod:'bilinear',reason:''}].map(stage=>({input:{width:1920,height:1080},output:{width:1920,height:1080},...stage}))}]});
+  const report=(identityState='matching',historical=false)=>elements(harness.render()).find(node=>typeof node.props.onStatus==='function').props.onStatus(withRows({state:'observed',preparation:{pending:[],applied:[{id:fit.id,kind:'spatial',method:'bilinear'}]},contexts:[{identityState,historical,observedAt:Date.now(),stages:[{id:model.id,completed:1,phase:'completed',requestedMethod:'realcugan',activeMethod:'realcugan'},
+   {id:fit.id,completed:1,phase:'completed',requestedMethod:'bilinear',activeMethod:'bilinear',reason:''}].map(stage=>({input:{width:1920,height:1080},output:{width:1920,height:1080},...stage}))}]}));
   report();let markup=renderToStaticMarkup(harness.render());assert.match(markup,/Active · Bilinear/);assert.match(markup,/This stage uses Bilinear\. MetalFX remains the saved choice/);
   assert.equal(elements(harness.render()).find(node=>node.props.id===`effect-choice-${fit.id}`).props.value,'upscale:metalfx');assert.match(markup,/role="status">Active/);
   report('previous');markup=renderToStaticMarkup(harness.render());assert.doesNotMatch(markup,/Active · Bilinear|This stage uses Bilinear|role="status">Active/);
@@ -878,8 +881,8 @@ test('a stage native code kept at its previous working version shows Using previ
  global.window={MacLauncher:{launcher:{getGameEffects:async()=>({plan:before,catalog,live:true})}}};
  const harness=componentHarness(EffectsControls,{game:{gamePath:'/Game',effects:before},running:true,visible:true});
  try{harness.render();await harness.settle();
-  elements(harness.render()).find(node=>typeof node.props.onStatus==='function').props.onStatus({state:'observed',preparation:{pending:[],applied:[]},contexts:[{identityState:'matching',historical:false,observedAt:Date.now(),
-   stages:[{id:fit.id,completed:3,phase:'completed',requestedMethod:'metalfx',activeMethod:'retained',reason,input:{width:1920,height:1080},output:{width:3840,height:2160}}]}]});
+  elements(harness.render()).find(node=>typeof node.props.onStatus==='function').props.onStatus(withRows({state:'observed',preparation:{pending:[],applied:[]},contexts:[{identityState:'matching',historical:false,observedAt:Date.now(),
+   stages:[{id:fit.id,completed:3,phase:'completed',requestedMethod:'metalfx',activeMethod:'retained',reason,input:{width:1920,height:1080},output:{width:3840,height:2160}}]}]}));
   const markup=renderToStaticMarkup(harness.render());
   assert.match(markup,/Using previous/);assert.match(markup,/edited scaler could not be prepared/);assert.doesNotMatch(markup,/Active · retained/);
   assert.doesNotMatch(markup,/role="status">Active/,'a retained stage does not confirm the edit');
@@ -966,7 +969,7 @@ test('open Simple Options reports same-size dimensions and updates geometry thro
  const h=simpleHarness(EffectsControls,{game:{gamePath:'/Game',effects:before},running:true,visible:true});
  try{h.render();await h.settle();const observer=()=>elements(h.render()).find(n=>typeof n.props.onStatus==='function');assert.equal(observer().props.inspectDetails,false);
   elements(h.render()).find(n=>n.type==='button'&&n.props.children==='Options…').props.onClick();assert.equal(observer().props.inspectDetails,true);
-  const report=(width,height,resolutionScope)=>observer().props.onStatus({state:'observed',contexts:[{identityState:'matching',historical:false,observedAt:Date.now(),stages:[{id:'same',phase:'encoded',encoded:1,completed:0,input:{width,height},output:{width,height},resolutionScope}]}]});
+  const report=(width,height,resolutionScope)=>observer().props.onStatus(withRows({state:'observed',contexts:[{identityState:'matching',historical:false,observedAt:Date.now(),stages:[{id:'same',phase:'encoded',encoded:1,completed:0,input:{width,height},output:{width,height},...(resolutionScope?{resolutionScope}:{})}]}]}));
   report(64,48);let markup=renderToStaticMarkup(h.render());assert.match(markup,/64 × 48 → 64 × 48/);assert.doesNotMatch(markup,/role="status">Active/);
   report(80,60,{kind:'shader-group',members:['same','refinement']});markup=renderToStaticMarkup(h.render());assert.match(markup,/Group resolution/);assert.match(markup,/80 × 60 → 80 × 60/);
   report(96,64);markup=renderToStaticMarkup(h.render());assert.match(markup,/96 × 64 → 96 × 64/);assert.doesNotMatch(markup,/64 × 48 → 64 × 48/);assert.equal(observer().props.inspectDetails,true);

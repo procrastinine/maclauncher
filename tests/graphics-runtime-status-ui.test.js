@@ -4,7 +4,9 @@ let GraphicsRuntimeStatus;
 test.before(async()=>{const result=await build({configFile:false,logLevel:'silent',build:{ssr:path.join(__dirname,'../src/renderer/src/ui/components/GraphicsRuntimeStatus.tsx'),write:false,rollupOptions:{external:id=>/^react(?:-dom)?(?:\/|$)/.test(id),output:{format:'cjs'}}}});const compiled=new Module(path.join(__dirname,'graphics-status.cjs'),module);compiled.paths=module.paths;compiled.require=id=>id==='react'?react:Module.prototype.require.call(compiled,id);compiled._compile(result.output.find(row=>row.type==='chunk').code,compiled.id);GraphicsRuntimeStatus=compiled.exports.GraphicsRuntimeStatus;});
 const neural={id:'neural',kind:'neural',method:'mlx-dlss',enabled:true,settings:{modelPath:'/Models/One.dlssmodel'}};
 const shader={id:'shader',kind:'shader',enabled:true,shader:{enabled:true,preset:'crt'}};
-const size={width:640,height:360};
+const size={width:640,height:360},Status=require('../src/modules/shared/reshade/runtime-status');
+// The launcher's status read adds the rows merged over its matching current contexts.
+const merged=value=>value&&!value.rows&&Array.isArray(value.contexts)?{...value,rows:Status.rowStatus(value.contexts.filter(context=>context.identityState==='matching'&&!context.historical))}:value;
 function observation(stages=[{id:'neural',completed:1,phase:'completed'}],identityState='matching'){
  return{state:'observed',contexts:[{id:'frame',pid:42,identityState,historical:false,phase:'completed',input:size,output:size,encoded:1,completed:1,presentedReal:0,presentedGenerated:0,presentedTime:0,stages:stages.map(row=>({input:size,output:size,requestedMethod:row.id==='neural'?'mlx-dlss':'crt',activeMethod:row.id==='neural'?'mlx-dlss':'crt',...row}))}]};
 }
@@ -12,7 +14,7 @@ function fixture(t){
  const previous={window:global.window,document:global.document};let harness;const timers=new Map(),replies=[],reported=[];let serial=0,reads=0;
  t.after(()=>{harness?.close();Object.assign(global,previous);});
  t.mock.method(global,'setTimeout',(run,delay)=>{timers.set(++serial,{run,delay});return serial;});t.mock.method(global,'clearTimeout',id=>timers.delete(id));
- global.document={visibilityState:'visible'};global.window={MacLauncher:{launcher:{getGameGraphicsStatus:()=>{reads++;return new Promise(resolve=>replies.push(resolve));}}}};
+ global.document={visibilityState:'visible'};global.window={MacLauncher:{launcher:{getGameGraphicsStatus:()=>{reads++;return new Promise(resolve=>replies.push(value=>resolve(merged(value))));}}}};
  const props={game:{gamePath:'/Game',effects:{schema:2,mode:'advanced',enabled:true,video:[structuredClone(neural)]}},running:true,visible:true,live:true,onStatus:status=>reported.push(status)};
  harness=componentHarness(GraphicsRuntimeStatus,props);
  return{harness,props,timers,replies,reported,reads:()=>reads,markup:()=>renderToStaticMarkup(harness.render()),tick(){const [id,timer]=timers.entries().next().value||[];assert.ok(timer,'No status observation scheduled');assert.equal(timer.delay,2000);timers.delete(id);timer.run();}};
@@ -37,10 +39,36 @@ test('tone mapping only observes completed output and retains nonfatal fallback 
  f.replies.shift()(observation([{id:'output-color',requestedMethod:'pbr-neutral',activeMethod:'reinhard',phase:'completed',completed:1,reason}]));await f.harness.settle();assert.equal(f.timers.size,0);assert.match(f.markup(),/pbr-neutral → reinhard: Completed/);assert.ok(f.markup().includes(reason));
  f.props.game.effects={...f.props.game.effects,enabled:false};assert.equal(f.harness.render(),null);assert.equal(f.reported.at(-1),null);assert.equal(f.reads(),2);
 });
-test('all requested stages must settle in one matching current context',async t=>{
- const f=fixture(t);f.props.game.effects.video.push(shader);f.harness.render();const split=observation();split.contexts.push({...observation([{id:'shader',phase:'completed',completed:1}]).contexts[0],id:'different-source'});
- f.replies.shift()(split);await f.harness.settle();assert.equal(f.timers.size,1,'split-context receipts cannot end observation');
- f.tick();f.replies.shift()(observation([{id:'neural',phase:'completed',completed:1},{id:'shader',phase:'completed',completed:1}]));await f.harness.settle();assert.equal(f.timers.size,0);
+test('requested rows settle in the merged rows, whichever matching current context runs each',async t=>{
+ const f=fixture(t);f.props.game.effects.video.push(shader);f.harness.render();
+ f.replies.shift()(observation([{id:'neural',phase:'completed',completed:1}]));await f.harness.settle();assert.equal(f.timers.size,1,'a requested row no context reports keeps observation open');
+ // A scene intake and the window chain after it are separate contexts.
+ f.tick();const split=observation();split.contexts.push({...observation([{id:'shader',phase:'completed',completed:1}]).contexts[0],id:'different-source'});
+ f.replies.shift()(split);await f.harness.settle();assert.equal(f.timers.size,0);assert.match(f.markup(),/Selected · Completed processing reported/);
+});
+// A renderer's scene intake runs the temporal row; the window chain that
+// receives its upscaled image reports the same row passed through.
+const missing='Needs matching renderer depth, motion and jitter';
+const intake=()=>({...observation([{id:'temporal',requestedMethod:'metalfx',activeMethod:'metalfx',phase:'completed',completed:30,encoded:30,reason:'',observedAt:2000}]).contexts[0],id:'intake'});
+const windowChain=(observedAt=2000)=>({...observation([{id:'temporal',requestedMethod:'metalfx',activeMethod:'passthrough',phase:'bypassed',completed:0,encoded:0,reason:missing,observedAt}]).contexts[0],id:'window'});
+for(const [name,order] of [['window chain first',()=>[windowChain(),intake()]],['intake first',()=>[intake(),windowChain()]]])
+ test(`a row one context runs is active while another context bypasses it (${name})`,async t=>{
+  const f=fixture(t);f.props.game.effects.video=[{id:'temporal',kind:'temporal',method:'metalfx',enabled:true,settings:{}}];f.harness.render();
+  f.replies.shift()({state:'observed',contexts:order()});await f.harness.settle();const markup=f.markup();
+  assert.match(markup,/Selected · Completed processing reported/);assert.doesNotMatch(markup,/Some effects are not running/);
+  assert.equal(f.timers.size,0);assert.equal(f.reported.at(-1).rows.temporal.running,true);
+  // The details keep the window chain's pass-through as that context's state, not the row's.
+  assert.match(markup,/metalfx: Running/);assert.match(markup,/In this context · metalfx → passthrough: Bypassed · [^<]*Needs matching renderer depth, motion and jitter/);
+ });
+test('an early bypass stops counting once encoded frames follow, without a new revision',async t=>{
+ const f=fixture(t);f.props.game.effects.video=[{id:'temporal',kind:'temporal',method:'metalfx',enabled:true,settings:{}}];f.props.inspectDetails=true;f.harness.render();
+ // The window chain's first frame passed the row through before the intake's first encoded scene.
+ f.replies.shift()({state:'observed',contexts:[windowChain(1000)]});await f.harness.settle();assert.match(f.markup(),/Selected · Some effects are not running/);
+ f.tick();f.replies.shift()({state:'observed',contexts:[windowChain(1000),intake()]});await f.harness.settle();
+ assert.doesNotMatch(f.markup(),/Some effects are not running/);assert.match(f.markup(),/Selected · Completed processing reported/);
+ // The same context encoding the row after its own bypass also runs it.
+ f.tick();f.replies.shift()({state:'observed',contexts:[{...windowChain(),stages:[{...windowChain().stages[0],phase:'encoded',activeMethod:'metalfx',reason:'',completed:4,encoded:4}]}]});await f.harness.settle();
+ assert.doesNotMatch(f.markup(),/Some effects are not running/);assert.match(f.markup(),/Selected · Completed processing reported/);
 });
 test('Off, Stop and replaced selections reject late responses',async t=>{
  const f=fixture(t);f.harness.render();const older=f.replies.shift();f.props.game.effects={...f.props.game.effects,video:[{...neural,settings:{modelPath:'/Models/Two.dlssmodel'}}]};f.harness.render();const current=f.replies.shift(),reported=f.reported.length;

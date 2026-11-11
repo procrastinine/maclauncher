@@ -300,6 +300,43 @@ test("row outcomes of an accepted revision are read without another acceptance v
   assert.deepEqual(Status.outcomes(f.entry, {...f.options, revision: "f".repeat(64)}).stages, {}, "no context accepted another revision");
   assert.equal(Status.outcomes(f.entry, {...f.options, revision: "not-a-revision"}), null);
 });
+test("a status read merges each row over the matching current contexts: one running context outweighs another's bypass in either slot order", t => {
+  const f = fixture(t), missing = "Needs matching renderer depth, motion and jitter", now = Date.now();
+  // Phases: 2 encoded, 3 completed, 5 bypassed. Each stage: [id, phase, reason, completed, encoded, observedAt, activeMethod].
+  const write = (slot, stages) => {
+    const bytes = Buffer.alloc(32768);
+    if (stages) {
+      bytes.writeUInt32LE(process.pid, 0);bytes.writeBigUInt64LE(BigInt(slot + 1), 8);bytes.writeUInt32LE(3, 16);bytes.writeUInt32LE(stages.length, 20);
+      bytes.write(f.revision, 112);bytes.write(f.digest, 177);bytes.writeBigUInt64LE(BigInt(now), 504);bytes.writeBigUInt64LE(1n, 512);
+      bytes.write(f.revision, 528);bytes.write(f.digest, 593);bytes.writeBigUInt64LE(BigInt(now), 664);
+      stages.forEach(([id, phase, reason, completed, encoded, at, active], index) => {
+        const start = 1024 + index * 768;bytes.write(id, start);bytes.write("metalfx", start + 129);bytes.write(active, start + 257);bytes.write(reason, start + 385);
+        bytes.writeUInt32LE(phase, start + 644);bytes.writeUInt32LE(640, start + 648);bytes.writeUInt32LE(360, start + 652);bytes.writeUInt32LE(1280, start + 656);bytes.writeUInt32LE(720, start + 660);
+        bytes.writeBigUInt64LE(BigInt(encoded), start + 680);bytes.writeBigUInt64LE(BigInt(completed), start + 688);bytes.writeBigUInt64LE(BigInt(at), start + 704);
+      });
+    }
+    const fd = fs.openSync(f.selected.binding.file, "r+");try {fs.writeSync(fd, bytes, 0, bytes.length, 4096 + slot * 32768);} finally {fs.closeSync(fd);}
+  };
+  Status.read(f.entry, f.options);
+  // The window chain passed the temporal row through at its first frame, before the intake's first encoded scene.
+  const windowChain = [["temporal", 5, missing, 0, 0, now - 4000, "passthrough"]], intake = [["temporal", 3, "", 29, 30, now, "metalfx"]];
+  write(0, windowChain);
+  let read = Status.read(f.entry, f.options);
+  assert.deepEqual({...read.rows.temporal, observedAt: undefined}, {running: false, reason: missing, completed: 0, encoded: 0, phase: "bypassed", requestedMethod: "metalfx",
+    activeMethod: "passthrough", input: {width: 640, height: 360}, output: {width: 1280, height: 720}, observedAt: undefined}, "only a bypass: the row is not running");
+  for (const [first, second] of [[windowChain, intake], [intake, windowChain]]) {
+    write(0, first);write(1, second);read = Status.read(f.entry, f.options);
+    assert.equal(read.contexts.length, 2);assert.ok(read.contexts.every(row => row.identityState === "matching" && !row.historical));
+    assert.deepEqual({...read.rows.temporal, observedAt: undefined}, {running: true, reason: "", completed: 29, encoded: 30, phase: "completed", requestedMethod: "metalfx",
+      activeMethod: "metalfx", input: {width: 640, height: 360}, output: {width: 1280, height: 720}, observedAt: undefined}, "the intake's encoded frames outweigh the early bypass");
+    assert.deepEqual(Status.rowOutcomes(read.contexts, f.revision), {temporal: {running: true, reason: "", completed: 29}}, "the acceptance merge agrees");
+  }
+  // A context that still reports the previous settings does not take part.
+  write(0, windowChain);write(1, intake);
+  const fd = fs.openSync(f.selected.binding.file, "r+");try {fs.writeSync(fd, Buffer.from("b".repeat(64)), 0, 64, 4096 + 32768 + 112);} finally {fs.closeSync(fd);}
+  read = Status.read(f.entry, f.options);
+  assert.equal(read.contexts.find(row => row.id === "2").identityState, "previous");assert.equal(read.rows.temporal.running, false);
+});
 test("closed-panel transaction acquires actual CPU resource acceptance without inspector reads", {skip: process.platform !== "darwin"}, async t => {
   const f = fixture(t);
   const binary = path.join(f.root, "accepted-status-fixture"), native = path.resolve(__dirname, "../src/modules/shared/reshade/native");

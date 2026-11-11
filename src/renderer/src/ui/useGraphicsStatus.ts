@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from "react";
-import type {GameEffectsPlan, GameGraphicsStatus, GraphicsContextStatus, GraphicsOwnerStatus, GraphicsStatusEvent} from "./types";
+import type {GameEffectsPlan, GameGraphicsStatus, GraphicsContextStatus, GraphicsOwnerStatus, GraphicsRowStatus, GraphicsStatusEvent} from "./types";
 
 const current = (context: GraphicsContextStatus) => context.identityState === "matching" && !context.historical;
 
@@ -34,21 +34,22 @@ export function useGraphicsStatus({gamePath, subscribe, plan, pending, onEvent}:
   // Stage reports apply once the desired plan is saved and prepared.
   const settled = status && !pending && owner?.phase !== "preparing" && status.state !== "preparing"
     ? status.contexts.filter(context => current(context) && context.phase !== "preparing") : [];
-  const stages = settled.flatMap(context => context.stages);
+  // Rows merged over the matching current contexts by the launcher; no view reads one context's stages on its own.
+  const rows: Record<string, GraphicsRowStatus> = settled.length ? status?.rows || {} : {};
   const requested = plan.video.filter(node => node.enabled), output = plan.output;
   const outputOnly = requested.length === 0 && (["bfi", "beam"].includes(output?.motionClarity || "") ||
     Boolean(output?.comparison?.mode && output.comparison.mode !== "off") || Boolean(output?.toneMapping && output.toneMapping !== "auto"));
   // A stage native code kept at its previous working version did not apply the edit.
-  const completed = (requested.length > 0 || outputOnly) && Boolean(settled.some(context =>
-    (outputOnly ? context.completed > 0 : requested.every(node => context.stages.some(stage => stage.id === node.id && stage.completed > 0 && stage.activeMethod !== "retained")))));
-  const retainedReason = status && !stages.some(stage => stage.completed > 0)
+  const completed = (requested.length > 0 || outputOnly) && (outputOnly ? settled.some(context => context.completed > 0)
+    : requested.every(node => rows[node.id]?.running && rows[node.id].completed > 0 && rows[node.id].activeMethod !== "retained"));
+  const retainedReason = status && !Object.values(rows).some(row => row.completed > 0)
     ? [...status.contexts].sort((a, b) => b.observedAt - a.observedAt).find(context => context.identityState === "previous" && context.reason)?.reason : undefined;
   return {
     /** The owner's record for this game, once read. */
-    status: owner, completed, retainedReason, stages,
+    status: owner, completed, retainedReason, rows,
     /** A runtime sample of the plan shown now; null clears it. */
     observe: (next: GameGraphicsStatus | null) => setObservation(next ? {plan, status: next} : null),
-    stage: (id: string) => stages.find(stage => stage.id === id),
+    stage: (id: string): GraphicsRowStatus | undefined => rows[id],
     /** A row waiting for preparation, an input or a model, from the runtime sample or the owner. */
     pendingRow: (id: string): {id: string; reason?: string; retained?: boolean} | undefined => {
       const sampled = status?.preparation?.pending?.find(row => row.id === id);

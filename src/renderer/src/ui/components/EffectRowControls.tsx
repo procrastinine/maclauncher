@@ -31,8 +31,9 @@ function shaderOptionsTransfer(): ShaderOptionsTransfer | undefined {
  */
 export function EffectRowControls({editor, row: node, choice, simple = false}: {editor: EffectsEditor; row: VideoEffectNode; choice?: EffectCatalogRow; simple?: boolean}) {
   const {plan, reshade: status, support, running, info, graphics} = editor, type = editor.typeOf(node);
-  const reported = graphics.stages.find(stage => stage.id === node.id && (stage.completed > 0 || stage.encoded > 0) && !["failed", "bypassed", "stopped"].includes(stage.phase) &&
-    stage.input.width > 0 && stage.input.height > 0 && stage.output.width > 0 && stage.output.height > 0);
+  const row = graphics.stage(node.id);
+  const reported = row && row.running && (row.completed > 0 || row.encoded > 0) && !["failed", "bypassed", "stopped"].includes(row.phase) &&
+    row.input.width > 0 && row.input.height > 0 && row.output.width > 0 && row.output.height > 0 ? row : undefined;
   const groupedResolution = reported?.resolutionScope?.kind === "shader-group";
   const dimensions = reported ? `${reported.input.width} × ${reported.input.height} → ${reported.output.width} × ${reported.output.height}` :
     !node.enabled || plan.enabled === false ? "Off" : choice?.sourceUnsupported ? "Inactive" : "Waiting for frame dimensions";

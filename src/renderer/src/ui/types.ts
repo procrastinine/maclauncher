@@ -350,6 +350,10 @@ export type GraphicsStageStatus = {id: string; requestedMethod: string; activeMe
   resolutionScope?:{kind:"shader-group";members:string[]};
   input: {width: number; height: number}; output: {width: number; height: number}; frameId: number; encoded: number; completed: number; presented: number; observedAt: number;
   gpu?: {milliseconds: number; scope: "row" | "section"; section: number; observedAt: number}};
+/** One row merged over the matching current contexts (runtime-status.js rowStatus): running when any of them runs it, with the stage that represents it. */
+export type GraphicsRowStatus = {running: boolean; reason: string; pending?: true; completed: number; encoded: number; phase: GraphicsProcessingPhase;
+  requestedMethod: string; activeMethod: string; input: {width: number; height: number}; output: {width: number; height: number}; observedAt: number;
+  resolutionScope?: {kind: "shader-group"; members: string[]}};
 export type GraphicsContextStatus = {pid: number; id: string; phase: GraphicsProcessingPhase; frameId: number; encoded: number; completed: number;
   presentedReal: number; presentedGenerated: number; sourceTime: number; presentedTime: number; input: {width: number; height: number}; output: {width: number; height: number};
   requestedBytes: number; admittedBytes: number; planRevision: string; controlsDigest: string; reason: string; observedAt: number; matchesPrepared: boolean; identityState: "matching" | "previous" | "unverified"; historical: boolean;
@@ -364,7 +368,7 @@ export type GameGraphicsStatus = {state: "off" | "stopped" | "unbound" | "unavai
   preparation?: {requested?: Array<{id: string; kind: string; method: string}>; applied?: Array<{id: string; kind: string; method: string}>;
     skipped?: Array<{id: string; reason: string}>; pending?: Array<{id: string; kind: string; method: string; reason: string; retained: boolean}>;
     output?: {requested?: GraphicsOutputSettings | null;applied?: GraphicsOutputSettings | null;pending?: Array<{id: string;reason: string}>}} | null;
-  contexts: GraphicsContextStatus[]};
+  contexts: GraphicsContextStatus[]; rows?: Record<string, GraphicsRowStatus>};
 export type EffectsChainTemplate = { id: string; name: string; plan: GameEffectsPlan; available: boolean; reason?: string };
 export type EffectsPreset = { id: string; name: string; updatedAt: number; plan: GameEffectsPlan; notices?: GraphicsNotice[];
   measuredCost?: {milliseconds: number; width: number; height: number; measuredAt: number} };
