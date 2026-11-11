@@ -29,6 +29,8 @@ Once an AnyPS5 conversion exists, **Inspect program** exports the program metada
 
 ### AnyPS5
 
+The converted program runs from its prepared macOS application bundle, with the library title as its application and executable name and the library artwork as its Dock icon. The executable and converted modules share the same directory, preserving their relative library paths. Existing preparations move into this layout on the next preparation without reconversion. Renaming a library entry updates the prepared executable name without retaining the old name. Removing the game’s prepared data removes the bundle.
+
 [AnyPS5](https://github.com/boykopovar/AnyPS5), which appears in MacLauncher as **PS5 (AnyPS5)**, converts the x86-64 PS5 executable and its bundled modules into Mach-O files. The converter itself follows the selected package's CPU, but converted games and PS5 system libraries use x86-64. As a result, both the Intel converter and the game run natively on Intel Macs, without Rosetta, while Apple Silicon runs converted games under [Rosetta](../runtimes/ROSETTA.md); if Rosetta is missing, the system consent flow installs it. On both Mac architectures, AnyPS5 requires macOS 26 or later and a Vulkan build with Intel support.
 
 #### Versions

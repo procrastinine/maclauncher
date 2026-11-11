@@ -30,7 +30,8 @@ function inspectExecutable(entry,_payload,context) {
   const program=resolveProgram(entry),root=gameDirectory(entry,context);fs.mkdirSync(root,{recursive:true});
   const outputRoot=fs.mkdtempSync(path.join(root,"program-inspection-"));
   const result={...program,titleId:entry.moduleData?.titleId,contentVersion:entry.moduleData?.contentVersion,outputRoot};
-  const registry=path.join(root,"launch","eboot.registry.json");
+  const bundled=path.join(root,"launch.app","Contents","MacOS","eboot.registry.json");
+  const registry=fs.existsSync(bundled)?bundled:path.join(root,"launch","eboot.registry.json");
   try {
     const stat=fs.lstatSync(registry);
     if(stat.isFile()&&!stat.isSymbolicLink()&&stat.size<32*1024*1024) {
