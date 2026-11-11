@@ -356,10 +356,20 @@ struct EffectExecution::Impl {
     };
     struct Scratch {
         struct Prepared:std::enable_shared_from_this<Prepared>{PreparedImageLease key;std::atomic<bool>warming{false};
-            // A refused frame adds an image: the holds it waited for may be
-            // back by the time the worker runs, while the next frame again
-            // arrives with its predecessors on the GPU.
-            PooledImage acquire(){auto value=key.acquire();if(!value&&!warming.exchange(true)){auto self=shared_from_this();dispatch_async(effectPreparationQueue(),^{@autoreleasepool{try{self->key.grow();}catch(...){}self->warming.store(false);}});}return value;}
+            // A frame that finds every image out adds one: the holds it waited
+            // for may be back by the time the worker runs, while the next frame
+            // again arrives with its predecessors on the GPU. The frame itself
+            // waits briefly for the oldest frame in flight to return an image
+            // rather than being refused.
+            PooledImage acquire(){
+                auto value=key.acquire();if(value)return value;
+                if(!warming.exchange(true)){auto self=shared_from_this();dispatch_async(effectPreparationQueue(),^{@autoreleasepool{bool grown=false;std::string problem;
+                    try{grown=self->key.grow();}catch(const std::exception&error){problem=error.what();}catch(...){problem="unknown error";}self->warming.store(false);
+                    if(nativeConfig().diagnostics.enabled){const auto counts=self->key.counts();nativeLog("Prepared images "+self->key.role()+(grown?" grew to ":" stay at ")+std::to_string(counts.images)+" of "+std::to_string(counts.limit)+(problem.empty()?std::string():" ("+problem+")"));}}});}
+                value=key.acquireWithin(std::chrono::milliseconds(50));
+                if(!value&&nativeConfig().diagnostics.enabled){const auto counts=key.counts();nativeLog("Prepared images "+key.role()+" refused a frame: "+std::to_string(counts.images)+" of "+std::to_string(counts.limit)+", "+std::to_string(counts.held)+" in use, "+std::to_string(counts.idle)+" idle");}
+                return value;
+            }
         };
         struct Storage{std::vector<PooledImage>holds;};
         struct Pair{std::array<id<MTLTexture>,2>images{};std::shared_ptr<Prepared>prepared;};

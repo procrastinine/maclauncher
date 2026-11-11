@@ -97,6 +97,12 @@ public:
     // worker ran, so that the frames in flight fit next time.
     bool grow()const;
     PooledImage acquire()const;
+    // Waits up to the limit for an image that a frame still on the GPU
+    // returns, when the lease has one out; otherwise returns at once.
+    PooledImage acquireWithin(std::chrono::milliseconds)const;
+    struct Counts{size_t images=0,idle=0,held=0,limit=0;};
+    Counts counts()const;
+    std::string role()const;
 private:
     std::shared_ptr<State>state;uintptr_t context=0;
     explicit PreparedImageLease(std::shared_ptr<State>value,uintptr_t owner):state(std::move(value)),context(owner){}

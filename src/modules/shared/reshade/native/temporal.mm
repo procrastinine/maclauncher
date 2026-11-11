@@ -329,7 +329,11 @@ auto&sceneOwners=*new std::unordered_map<void*,std::shared_ptr<SceneOwner>>;
 // consumes the receipt reports the stages under its own context, and an
 // unconsumed receipt keeps them here. A stopped encoder retires its context,
 // so acceptance never waits for it.
-struct OrderedSceneOwner{std::mutex mutex;macfx::EffectPlanExecutor plan;std::atomic<bool> statusReported{false};};
+// The scene behind the producer's output image. A producer keeps its previous
+// image when a scene frame is refused, and the reused image carries this
+// scene's receipt to its final image.
+struct ReusedScene{std::shared_ptr<macfx::EffectExecution>execution;std::shared_ptr<const macfx::EffectSceneLease>lease;RSTemporalFrame frame{};bool displayMapped=false;__weak id<MTLTexture>output=nil;};
+struct OrderedSceneOwner{std::mutex mutex;macfx::EffectPlanExecutor plan;std::atomic<bool> statusReported{false};ReusedScene reused;};
 // The scene's own extents and inputs, and its completion on the GPU.
 void acceptEncodedScene(uintptr_t context,const macfx::EffectExecution&execution,const RSTemporalFrame&frame,id<MTLCommandBuffer>commands){
     const auto controls=macfx::presentationControlsDigest();const std::string revision=execution.revision();
@@ -501,9 +505,14 @@ bool macfx::prepareTemporalProvider(const RSTemporalFrame*f,RSTemporalResult*r,c
     if(f&&f->method!=RS_TEMPORAL_METALFX&&f->method!=RS_TEMPORAL_XESS&&f->method!=RS_TEMPORAL_METALFX_DENOISED){const auto loaded=providerDescriptor(f->method);if(loaded&&loaded->api&&!loaded->prepare)return false;}
     const auto value=writeImageColor(color);processTemporalProviderFrame(f,&value,r,true);return true;
 }
+// Output written without the scene's rows no longer carries its receipt.
+static void forgetReusedScene(void*key){
+    if(!key)return;std::shared_ptr<OrderedSceneOwner>owner;{std::lock_guard lock(ownersMutex);const auto found=orderedSceneOwners.find(key);if(found==orderedSceneOwners.end())return;owner=found->second;}
+    std::lock_guard lock(owner->mutex);owner->reused={};
+}
 static int processSelectedTemporalFrame(const RSTemporalFrame*f,const RSImageColorDescription*explicitColor,RSTemporalResult*r,bool originalRetained=false){
     if(!r||r->size<sizeof(*r)||r->version!=1)return RS_TEMPORAL_INVALID;
-    if(!macfx::effectPlanRequested()){if(originalRetained){r->encoded=0;return answer(r,RS_TEMPORAL_UNAVAILABLE,"The complete original renderer output is retained; no ordered scene work is requested");}return processTemporalProviderFrame(f,explicitColor,r);}
+    if(!macfx::effectPlanRequested()){if(originalRetained){r->encoded=0;return answer(r,RS_TEMPORAL_UNAVAILABLE,"The complete original renderer output is retained; no ordered scene work is requested");}if(f&&f->size>=sizeof(*f))forgetReusedScene(f->owner);return processTemporalProviderFrame(f,explicitColor,r);}
     r->encoded=r->reset=0;r->method=f?f->method:0;r->reason[0]=0;
     if(!f||f->size<sizeof(*f)||f->version!=1||!f->owner||!f->commandBuffer||!f->frameId||f->method>RS_TEMPORAL_METALFX_DENOISED||f->flags>255||!rsTemporalFrameOptionsValid(f)||f->commandBufferKind||!finite(*f))return answer(r,RS_TEMPORAL_INVALID,"Invalid ordered scene frame inputs");
     @autoreleasepool{@try{try{
@@ -515,7 +524,7 @@ static int processSelectedTemporalFrame(const RSTemporalFrame*f,const RSImageCol
         std::shared_ptr<OrderedSceneOwner>owner;{std::lock_guard lock(ownersMutex);auto&entry=orderedSceneOwners[f->owner];if(!entry){entry=std::make_shared<OrderedSceneOwner>();entry->plan.setStatusContext(reinterpret_cast<uintptr_t>(entry.get()));}owner=entry;}
         std::unique_lock lock(owner->mutex,std::try_to_lock);if(!lock.owns_lock())return answer(r,RS_TEMPORAL_BUSY,"This scene owner is processing another frame");
         const auto statusContext=reinterpret_cast<uintptr_t>(owner.get());
-        if(!owner->plan.requiresTemporal()){stopEncoderStatus(statusContext,owner->statusReported);return originalRetained?answer(r,RS_TEMPORAL_UNAVAILABLE,"The complete original renderer output is retained; image work belongs to its ordinary consumer"):processTemporalProviderFrame(f,explicitColor,r);}
+        if(!owner->plan.requiresTemporal()){owner->reused={};stopEncoderStatus(statusContext,owner->statusReported);return originalRetained?answer(r,RS_TEMPORAL_UNAVAILABLE,"The complete original renderer output is retained; image work belongs to its ordinary consumer"):processTemporalProviderFrame(f,explicitColor,r);}
         // Unknown optional source metadata cannot claim the completed SDK
         // image as a preparing output and stall its ordinary image consumer.
         if(originalRetained&&!explicitColor&&!macfx::temporalSceneAovs(*f))return answer(r,RS_TEMPORAL_UNAVAILABLE,"Matching source color metadata is required by the optional scene reconstruction; the original output is retained");
@@ -523,6 +532,14 @@ static int processSelectedTemporalFrame(const RSTemporalFrame*f,const RSImageCol
         if(!macfx::reserveExplicitTemporalOutput(commands,output,f->owner,f->frameId))return answer(r,RS_TEMPORAL_BUSY,"This exact scene output already has a producer for these commands");
         const auto destination=macfx::temporalSceneDestination(*f,*f);std::shared_ptr<macfx::TemporalSceneContinuation>early;
         if(destination)if(auto value=macfx::temporalSceneContinuation(destination->window);value&&value->frameId()==f->frameId&&owner->plan.snapshot()&&value->execution()->revision()==owner->plan.snapshot()->revision){const auto ready=value->ready(commands);if(!ready.encoded)return answer(r,ready.busy?RS_TEMPORAL_BUSY:RS_TEMPORAL_FAILED,ready.reason.c_str());early=std::move(value);}
+        // From here a refused frame leaves the output with the producer's
+        // previous image, which carries the receipt of the scene it came from.
+        bool written=false;
+        const auto refuse=[&](int code,const char*reason){
+            const auto&reused=owner->reused;
+            if(!originalRetained&&!written&&destination&&reused.lease&&reused.output==output)macfx::publishRetainedTemporalSceneContinuation(commands,*destination,reused.frame,reused.execution,reused.lease,reused.displayMapped);
+            return answer(r,code,reason);
+        };
         auto actual=*f;if(early&&early->displayMapped()){actual.preExposure=1;actual.exposure=nullptr;actual.flags&=~RS_TEMPORAL_AUTO_EXPOSURE;}f=&actual;
         const auto attachments=macfx::temporalSceneAovs(*f);
         auto description=explicitColor?macfx::readImageColor(*explicitColor):attachments?macfx::readImageColor(attachments->value.color):macfx::describeImageColor(f->flags&RS_TEMPORAL_HDR?macfx::ImageColorSpace::ExtendedSRGB:macfx::ImageColorSpace::LegacySDR);
@@ -530,19 +547,21 @@ static int processSelectedTemporalFrame(const RSTemporalFrame*f,const RSImageCol
         macfx::DepthFrame guide{depth,f->frameId,macfx::FrameOrigin::TopLeft};
         macfx::ShaderFrame frame{commands,color,output,f->frameId,CACurrentMediaTime()*1000,f->frameTimeMs,macfx::FrameOrigin::TopLeft,macfx::spatialColorForDescription(description),&guide,description.alpha==macfx::ColorAlpha::Opaque};
         const auto selected=early?owner->plan.prepareSceneContinuation(frame,f,macfx::imageColorLabel(description),description,early->execution()->sceneSuffixSnapshot(),early->execution()->sceneOutputIdentity()):originalRetained?owner->plan.prepareRecordedScene(frame,*f,description):owner->plan.prepareWithColorDescription(frame,true,f,macfx::imageColorLabel(description),description);
-        if(selected.holdPrevious||(selected.preparing&&(!selected.execution||!selected.execution->hasTemporal()))){macfx::publishTemporalPreparation(commands,output,f->frameId,selected.error);return answer(r,RS_TEMPORAL_BUSY,selected.error.c_str());}
-        if(!selected.execution||!selected.execution->hasTemporal())return answer(r,RS_TEMPORAL_UNAVAILABLE,selected.error.empty()?"The ordered scene provider could not be prepared":selected.error.c_str());
+        if(selected.holdPrevious||(selected.preparing&&(!selected.execution||!selected.execution->hasTemporal()))){macfx::publishTemporalPreparation(commands,output,f->frameId,selected.error);return refuse(RS_TEMPORAL_BUSY,selected.error.c_str());}
+        if(!selected.execution||!selected.execution->hasTemporal())return refuse(RS_TEMPORAL_UNAVAILABLE,selected.error.empty()?"The ordered scene provider could not be prepared":selected.error.c_str());
         if(!originalRetained&&!selected.execution->replacesTemporal()){
             RSTemporalResult original{};original.size=sizeof(original);original.version=1;
             if(!f->method){
-                if(f->renderWidth!=f->outputWidth||f->renderHeight!=f->outputHeight||color.pixelFormat!=output.pixelFormat)return answer(r,RS_TEMPORAL_UNAVAILABLE,"Raw scene output needs matching color dimensions and format before its image pipeline");
-                auto copy=[commands blitCommandEncoder];if(!copy)return answer(r,RS_TEMPORAL_BUSY,"The raw scene output copy is unavailable");
+                if(f->renderWidth!=f->outputWidth||f->renderHeight!=f->outputHeight||color.pixelFormat!=output.pixelFormat)return refuse(RS_TEMPORAL_UNAVAILABLE,"Raw scene output needs matching color dimensions and format before its image pipeline");
+                auto copy=[commands blitCommandEncoder];if(!copy)return refuse(RS_TEMPORAL_BUSY,"The raw scene output copy is unavailable");
                 [copy copyFromTexture:color sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(f->colorX,f->colorY,0) sourceSize:MTLSizeMake(f->renderWidth,f->renderHeight,1) toTexture:output destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[copy endEncoding];
-            }else{const auto code=processTemporalProviderFrame(f,explicitColor,&original);if(code!=RS_TEMPORAL_OK||!original.encoded){*r=original;return code;}}
+            }else{const auto code=processTemporalProviderFrame(f,explicitColor,&original);if(code!=RS_TEMPORAL_OK||!original.encoded){refuse(code,original.reason);*r=original;return code;}}
+            written=true;
         }
         auto capture=macfx::FrameCapture::begin(commands,selected.execution->replacesTemporal()?color:output,f->frameId,false,&description);bool displayMapped=early&&early->displayMapped();
-        const auto encoded=originalRetained?selected.execution->encodeRecordedScene(frame,*f,&displayMapped,&guide):selected.execution->encodeScene(frame,*f,&displayMapped,&guide,displayMapped);if(!encoded.encoded)return answer(r,encoded.busy?RS_TEMPORAL_BUSY:RS_TEMPORAL_FAILED,encoded.reason.c_str());
-        if(destination)macfx::publishTemporalSceneContinuation(commands,*destination,*f,selected.execution,displayMapped);else macfx::publishTemporalOutputWithDepth(commands,output,f->frameId,selected.execution,std::move(capture),&guide,displayMapped,f);
+        const auto encoded=originalRetained?selected.execution->encodeRecordedScene(frame,*f,&displayMapped,&guide):selected.execution->encodeScene(frame,*f,&displayMapped,&guide,displayMapped);if(!encoded.encoded)return refuse(encoded.busy?RS_TEMPORAL_BUSY:RS_TEMPORAL_FAILED,encoded.reason.c_str());
+        if(destination){auto lease=selected.execution->captureSceneLease(commands);macfx::publishRetainedTemporalSceneContinuation(commands,*destination,*f,selected.execution,lease,displayMapped);owner->reused={selected.execution,std::move(lease),*f,displayMapped,output};}
+        else{macfx::publishTemporalOutputWithDepth(commands,output,f->frameId,selected.execution,std::move(capture),&guide,displayMapped,f);owner->reused={};}
         acceptEncodedScene(statusContext,*selected.execution,*f,commands);owner->statusReported.store(true,std::memory_order_release);r->encoded=1;r->reset=bool(f->flags&RS_TEMPORAL_RESET);return answer(r,RS_TEMPORAL_OK,"");
     }catch(const std::exception&e){return answer(r,RS_TEMPORAL_FAILED,e.what());}}@catch(NSException*e){return answer(r,RS_TEMPORAL_FAILED,e.reason.UTF8String?:"Ordered scene encoding failed");}}
 }

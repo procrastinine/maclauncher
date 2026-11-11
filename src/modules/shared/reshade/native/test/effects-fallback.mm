@@ -1,5 +1,6 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "effects-execution.hpp"
+#include "scene-destination.hpp"
 #include "fixture-files.hpp"
 #include "view-presentation.hpp"
 #include "frame.h"
@@ -9,7 +10,7 @@
 #include "runtime-status.hpp"
 #include "fsr1.hpp"
 #include "fsr1-budget.hpp"
-#import <Foundation/Foundation.h>
+#import <Cocoa/Cocoa.h>
 #include <array>
 #include <cmath>
 #include <atomic>
@@ -27,6 +28,7 @@
 namespace {
 unsigned partialCalls=0;
 unsigned brightWidth=0,partialWidth=0;
+std::map<std::string,unsigned> shaderEncodes;
 uint64_t expectedFrameId=0;
 // prepare() declares LegacySDR (sRGB), so its provider envelope is perceptual.
 macfx::SpatialColor expectedColor=macfx::SpatialColor::Perceptual;
@@ -80,6 +82,7 @@ struct Shader final:macfx::ShaderNode {
         metadata(frame);
         const bool partial=file=="/proof/encode-fails",busy=shaderBusy&&file=="/proof/encode-busy";
         if(file=="/proof/after-busy")++afterBusyCalls;
+        ++shaderEncodes[file];
         lastShaderTarget=(__bridge void*)frame.target;
         auto encoder=[frame.commands computeCommandEncoder];unsigned clear=partial||busy?1:file=="/proof/generation-suffix"?2:0;
         if(partial)partialWidth=frame.source.width;else brightWidth=frame.target.width;
@@ -445,7 +448,56 @@ int temporalFallback(NSString *directory,NSString *path,id<MTLDevice> device,id<
     selected=prepared(sceneless,frame,true);assert(selected.execution&&selected.error.empty()&&!selected.execution->hasTemporal()&&!selected.execution->requiresDepth());
     result=selected.execution->encode(frame);assert(result.encoded&&result.reason=="Needs matching renderer depth, motion and camera inputs");complete(commands);check(8);
     std::array<unsigned char,8*8*4> unchanged{};[input getBytes:unchanged.data() bytesPerRow:32 fromRegion:MTLRegionMake2D(0,0,8,8) mipmapLevel:0];assert(unchanged==source);
-    assert([[NSFileManager defaultManager]removeItemAtPath:directory error:nil]);std::puts("ordered temporal fallback: missing/unavailable scene row isolated, live replacement adopted with that row bypassed, partial failure overwritten, downstream pixels/extent/frame metadata preserved, typed shader/temporal busy kept previous image and recovered");return 0;
+    // A renderer's scene runs the rows up to the temporal stage, and the final
+    // image the rows after it, through the receipt the scene publishes. When
+    // the renderer reuses its previous image after a refused scene, it
+    // publishes that scene's receipt again, as the temporal intake does, and
+    // the final image again runs only the later rows. Once the scene stops,
+    // the next final image has no receipt and runs the complete chain. Every
+    // row runs once for every presented image.
+    publishNodes(path,@"7",@[shader(@"pre",@"/proof/pre-temporal"),temporal,shader(@"color",@"/proof/temporal-color")]);
+    temporalProbeStatus=RS_TEMPORAL_OK;temporalEncodeStatus=RS_TEMPORAL_OK;
+    [NSApplication sharedApplication];
+    NSWindow *window=[[NSWindow alloc]initWithContentRect:NSMakeRect(0,0,16,16) styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];window.releasedWhenClosed=NO;
+    const auto authority=macfx::temporalSceneWindow((__bridge void*)window);assert(authority);
+    const auto presenterOwner=std::make_shared<int>(0);macfx::noteSceneWindowPresenter(presenterOwner,authority,device);
+    auto finalImage=[device newTextureWithDescriptor:descriptor];assert(finalImage);
+    static int producer;
+    const auto runs=[]{return std::make_pair(shaderEncodes["/proof/pre-temporal"],shaderEncodes["/proof/temporal-color"]);};
+    commands=[queue commandBuffer];frame.commands=commands;stamp(frame,13);scene=sceneFor(frame);scene.owner=&producer;macfx::EffectPlanExecutor renderer;
+    selected=prepared(renderer,frame,true,&scene);assert(selected.execution&&selected.execution->hasTemporal());const auto sceneExecution=selected.execution;
+    // The presenter's own chain, for a final image without a receipt.
+    auto presentCommands=[queue commandBuffer];macfx::ShaderFrame presented{presentCommands,finalImage,finalImage};stamp(presented,300);
+    macfx::EffectPlanExecutor presenter;const auto own=prepared(presenter,presented,true);assert(own.execution&&!own.execution->hasTemporal());
+    const auto present=[&](uint64_t id){
+        auto presentation=[queue commandBuffer];macfx::ShaderFrame image{presentation,finalImage,finalImage};stamp(image,id);uint64_t receipt=0;
+        if(auto received=macfx::temporalSceneContinuation(authority,finalImage)){
+            assert(received->ready(presentation).encoded&&received->claim(presentation,finalImage));receipt=received->frameId();stamp(image,receipt);
+            assert(received->execution()->encodeAfterScene(image,false,false,received->displayMapped()).encoded);
+        }else assert(own.execution->encode(image).encoded);
+        complete(presentation);return receipt;
+    };
+    const auto expectRuns=[&](const char *label,uint64_t receipt,uint64_t expected,unsigned scenePre,std::pair<unsigned,unsigned> counted,std::pair<unsigned,unsigned> latest){
+        if(receipt!=expected||latest.first!=counted.first+scenePre||latest.second!=counted.second+1)std::fprintf(stderr,"%s: receipt %llu of %llu, pre %u to %u, color %u to %u\n",label,(unsigned long long)receipt,(unsigned long long)expected,counted.first,latest.first,counted.second,latest.second);
+        assert(receipt==expected&&latest.first==counted.first+scenePre&&latest.second==counted.second+1);
+    };
+    // The scene: its rows before the temporal stage, then the final image's rows after it.
+    stamp(frame,13);auto counted=runs();result=sceneExecution->encodeScene(frame,scene);assert(result.encoded);
+    const auto lease=sceneExecution->captureSceneLease(commands);assert(lease);const auto sceneFrame=scene;
+    macfx::publishRetainedTemporalSceneContinuation(commands,*macfx::presentedTemporalSceneDestination(scene),scene,sceneExecution,lease);complete(commands);
+    auto receipt=present(400);expectRuns("scene frame",receipt,13,1,counted,runs());
+    // Two refused frames: each reused image carries the scene's receipt.
+    temporalEncodeStatus=RS_TEMPORAL_BUSY;
+    for(uint64_t id:{14u,15u}){
+        commands=[queue commandBuffer];frame.commands=commands;stamp(frame,id);scene=sceneFor(frame);scene.owner=&producer;
+        result=sceneExecution->encodeScene(frame,scene);assert(!result.encoded&&result.busy);
+        macfx::publishRetainedTemporalSceneContinuation(commands,*macfx::presentedTemporalSceneDestination(scene),sceneFrame,sceneExecution,lease);complete(commands);
+        counted=runs();receipt=present(id+400);expectRuns("refused frame",receipt,13,0,counted,runs());
+    }
+    // The scene stops: the first final image after it runs the complete chain, once.
+    counted=runs();receipt=present(500);expectRuns("after the scene",receipt,0,1,counted,runs());
+    [window close];
+    assert([[NSFileManager defaultManager]removeItemAtPath:directory error:nil]);std::puts("ordered temporal fallback: missing/unavailable scene row isolated, live replacement adopted with that row bypassed, partial failure overwritten, downstream pixels/extent/frame metadata preserved, typed shader/temporal busy kept previous image and recovered, renderer receipts ran each row once per final image through a scene, two refused frames and the scene stopping");return 0;
 }
 }
 namespace macfx {std::shared_ptr<ShaderNode> makeShaderNode(const ShaderSpec &spec){auto value=std::make_shared<Shader>(spec.selection.file);lastShader[spec.selection.file]=value;++shaderCreates[spec.selection.file];if(capturedShaders)capturedShaders->push_back(value);return value;}}
