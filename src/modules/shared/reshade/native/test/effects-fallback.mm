@@ -11,6 +11,7 @@
 #include "fsr1-budget.hpp"
 #import <Foundation/Foundation.h>
 #include <array>
+#include <cmath>
 #include <atomic>
 #include <cassert>
 #include <chrono>
@@ -594,6 +595,44 @@ int fsrScratch(NSString *directory,NSString *path,id<MTLDevice>device,id<MTLComm
     std::printf("FSR scratch: extent edits reuse idle images; healthy completed pixels continue past %.1f s soft grace (%u preparing/%u partial observations); late pressure release recovers the same revision; exact hard shader failure stays isolated; a broken working row keeps its previous version\n",std::chrono::duration<double>(elapsed).count(),preparingObservations,partialObservations);
     return 0;
 }
+// FidelityFX games hand over HDR scene color without alpha: RG11B10Float, or
+// RGB9E5Float as a read-only input. A color row before the scene stage runs at
+// render size, and the ordered graph writes the declared RG11B10Float output.
+float packedFloat(uint32_t bits,unsigned mantissa){const uint32_t e=bits>>mantissa,m=bits&((1u<<mantissa)-1);return e?std::ldexp(1+float(m)/float(1u<<mantissa),int(e)-15):std::ldexp(float(m)/float(1u<<mantissa),-14);}
+int packedFloatScene(NSString *path,id<MTLDevice> device,id<MTLCommandQueue> queue){
+    temporalFixture=true;temporalProbeStatus=RS_TEMPORAL_OK;temporalEncodeStatus=RS_TEMPORAL_FAILED;
+    // The scene is extended-range linear, which the rows receive as HDR color.
+    expectedColor=macfx::SpatialColor::HDR;
+    // 0.5, 0.25 and 2.0, beyond the SDR range in blue.
+    const std::array<std::pair<MTLPixelFormat,uint32_t>,2> inputs{{{MTLPixelFormatRG11B10Float,896u|(832u<<11)|(512u<<22)},{MTLPixelFormatRGB9E5Float,64u|(32u<<9)|(256u<<18)|(17u<<27)}}};
+    NSDictionary *temporal=@{@"id":@"scene",@"kind":@"temporal",@"enabled":@YES,@"method":@"fsr2",@"settings":@{}};
+    publishNodes(path,@"7",@[shader(@"before",@"/proof/packed-float-before"),temporal]);
+    uint64_t frameNumber=40;
+    for(const auto &[format,texel]:inputs){
+        auto descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format width:8 height:8 mipmapped:NO];
+        descriptor.storageMode=MTLStorageModeShared;descriptor.usage=MTLTextureUsageShaderRead;auto input=[device newTextureWithDescriptor:descriptor];
+        descriptor.pixelFormat=MTLPixelFormatRG11B10Float;descriptor.width=descriptor.height=16;descriptor.usage=MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite|MTLTextureUsageRenderTarget;
+        auto output=[device newTextureWithDescriptor:descriptor];assert(input&&output);
+        std::array<uint32_t,64> source;source.fill(texel);[input replaceRegion:MTLRegionMake2D(0,0,8,8) mipmapLevel:0 withBytes:source.data() bytesPerRow:32];
+        auto commands=[queue commandBuffer];macfx::ShaderFrame frame{commands,input,output};stamp(frame,++frameNumber);
+        RSTemporalFrame scene{};scene.size=sizeof(scene);scene.version=1;scene.commandBuffer=(__bridge void*)commands;scene.color=(__bridge void*)input;scene.output=(__bridge void*)output;
+        scene.frameId=frame.frameId;scene.frameTimeMs=frame.frameTimeMs;scene.renderWidth=scene.renderHeight=8;scene.outputWidth=scene.outputHeight=16;
+        macfx::EffectPlanExecutor executor;const auto selected=prepared(executor,frame,true,&scene,macfx::ImageColorSpace::ExtendedSRGB);
+        if(!selected.execution||!selected.execution->hasTemporal())std::fprintf(stderr,"packed float scene %lu: %s\n",(unsigned long)format,selected.error.c_str());
+        assert(selected.execution&&selected.execution->hasTemporal());
+        brightWidth=0;const auto result=selected.execution->encodeScene(frame,scene);
+        if(!result.encoded)std::fprintf(stderr,"packed float scene %lu encode: %s\n",(unsigned long)format,result.reason.c_str());
+        assert(result.encoded);[commands commit];[commands waitUntilCompleted];assert(commands.status==MTLCommandBufferStatusCompleted);
+        assert(brightWidth==8);
+        std::array<uint32_t,256> pixels{};[output getBytes:pixels.data() bytesPerRow:64 fromRegion:MTLRegionMake2D(0,0,16,16) mipmapLevel:0];
+        for(const auto value:pixels){
+            const float r=packedFloat(value&0x7ff,6),g=packedFloat((value>>11)&0x7ff,6),b=packedFloat(value>>22,5);
+            if(std::abs(r-.5f)>.01f||std::abs(g-1)>.02f||std::abs(b-2)>.04f){std::fprintf(stderr,"packed float scene %lu output %.4f %.4f %.4f\n",(unsigned long)format,r,g,b);std::_Exit(1);}
+        }
+    }
+    std::puts("packed float scene: RG11B10Float and RGB9E5Float scene color run the color row at render size, keep values above 1, and fill the RG11B10Float output");
+    return 0;
+}
 static int controlledTemporal(const RSTemporalFrame *frame,RSTemporalResult *result,bool probe){
     assert(frame&&result&&frame->owner&&frame->commandBuffer&&frame->color&&frame->output);assert(frame->frameId==expectedFrameId&&frame->frameTimeMs==12.5f);
     assert(frame->renderWidth==8&&frame->renderHeight==8&&frame->outputWidth==16&&frame->outputHeight==16&&!frame->depth&&!frame->motion);
@@ -634,11 +673,12 @@ int main(int argc,char **argv){@autoreleasepool{
     phase.argv[1]=phase.argv[0];argc=phase.argc-1;argv=phase.argv+1;
     const bool generation=argc==3&&!std::strcmp(argv[1],"--generation-geometry");
     const bool fsr=argc==2&&!std::strcmp(argv[1],"--fsr-scratch");
-    assert(argc==1||generation||fsr||(argc==2&&(!std::strcmp(argv[1],"--temporal-fallback")||!std::strcmp(argv[1],"--memory-color-fallback")||!std::strcmp(argv[1],"--candidate-geometry")||!std::strcmp(argv[1],"--origin-contract")||!std::strcmp(argv[1],"--scene-generation"))));
+    assert(argc==1||generation||fsr||(argc==2&&(!std::strcmp(argv[1],"--temporal-fallback")||!std::strcmp(argv[1],"--packed-float-scene")||!std::strcmp(argv[1],"--memory-color-fallback")||!std::strcmp(argv[1],"--candidate-geometry")||!std::strcmp(argv[1],"--origin-contract")||!std::strcmp(argv[1],"--scene-generation"))));
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(generation||fsr?30:10)*NSEC_PER_SEC),dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{std::fputs("Ordered fallback check timed out\n",stderr);std::_Exit(2);});
     auto device=MTLCreateSystemDefaultDevice();auto queue=[device newCommandQueue];assert(device&&queue);
     if(generation)return generationGeometry(directory,path,device,queue,@(argv[2]));
     if(argc==2&&!std::strcmp(argv[1],"--temporal-fallback"))return temporalFallback(directory,path,device,queue);
+    if(argc==2&&!std::strcmp(argv[1],"--packed-float-scene"))return packedFloatScene(path,device,queue);
     if(fsr)return fsrScratch(directory,path,device,queue);
     auto d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:32 height:24 mipmapped:NO];d.storageMode=MTLStorageModeShared;d.usage=MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite|MTLTextureUsageRenderTarget;
     auto input=[device newTextureWithDescriptor:d];d.width=64;d.height=48;auto output=[device newTextureWithDescriptor:d];std::array<unsigned char,32*24*4> pixels;for(unsigned i=0;i<pixels.size();i+=4){pixels[i]=16+4*(i/(32*4));pixels[i+1]=80;pixels[i+2]=140;pixels[i+3]=64;}
