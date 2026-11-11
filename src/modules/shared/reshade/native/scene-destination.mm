@@ -30,7 +30,7 @@ class Continuation;void retire(const Continuation*);
 class Continuation final:public macfx::TemporalSceneContinuation{
 public:
  std::shared_ptr<const macfx::SceneWindowAuthority>window;void*destinationOwner=nullptr,*producerOwner=nullptr;uint64_t frame=0;uint32_t inputMask=0,width=0,height=0;bool mapped=false,presented=false;
- std::shared_ptr<macfx::EffectExecution>effect;std::shared_ptr<const macfx::EffectSceneLease>lease;__weak id<MTLCommandBuffer>producer;id<MTLSharedEvent>event;uint64_t eventValue=1;id<MTLDevice>device;std::atomic<bool>failed{false};
+ std::shared_ptr<macfx::EffectExecution>effect;std::shared_ptr<const macfx::EffectSceneLease>lease;__weak id<MTLCommandBuffer>producer;id<MTLSharedEvent>event;uint64_t eventValue=1;id<MTLDevice>device;std::shared_ptr<std::atomic<bool>>failed=std::make_shared<std::atomic<bool>>(false);
  mutable std::mutex claimMutex;__weak id<MTLCommandBuffer>consumer;__weak id<MTLTexture>image;bool claimed=false;
  std::shared_ptr<macfx::EffectExecution>execution()const override{return effect;}
  std::shared_ptr<const macfx::EffectSceneLease>scene()const override{return lease;}
@@ -38,7 +38,7 @@ public:
  uint32_t inputs()const noexcept override{return inputMask;}
  bool displayMapped()const noexcept override{return mapped;}
  macfx::ShaderResult ready(id<MTLCommandBuffer>commands)const override{
-  if(!window||!window->alive()||failed.load())return {false,"The renderer scene producer was retired"};auto source=producer;
+  if(!window||!window->alive()||failed->load())return {false,"The renderer scene producer was retired"};auto source=producer;
   if(!commands||commands.status>=MTLCommandBufferStatusCommitted||commands.device!=device)return {false,"Scene continuation requires retaining commands on the producer GPU"};
   if(source==commands)return {true,{}};
   if(!source&&event.signaledValue<eventValue)return {false,"The renderer scene commands were abandoned"};
@@ -47,7 +47,7 @@ public:
   {std::lock_guard lock(claimMutex);if(claimed&&(consumer!=commands||image==nil))return {false,"This final image needs a new matching renderer scene",true};}
   [commands encodeWaitForEvent:event value:eventValue];return {true,{}};
  }
- macfx::ShaderResult completion()const override{auto source=producer;if(failed.load()||source&&source.status==MTLCommandBufferStatusError)return {false,"The renderer scene producer failed"};if(event.signaledValue<eventValue||source&&source.status!=MTLCommandBufferStatusCompleted)return {false,"The renderer scene producer has not completed",true};return {true,{}};}
+ macfx::ShaderResult completion()const override{auto source=producer;if(failed->load()||source&&source.status==MTLCommandBufferStatusError)return {false,"The renderer scene producer failed"};if(event.signaledValue<eventValue||source&&source.status!=MTLCommandBufferStatusCompleted)return {false,"The renderer scene producer has not completed",true};return {true,{}};}
  bool claim(id<MTLCommandBuffer>commands,id<MTLTexture>texture)override{
   {std::lock_guard lock(claimMutex);if(claimed)return consumer==commands&&image==texture;consumer=commands;image=texture;claimed=true;}
   // A presented destination's scene belongs to the next final image only.
@@ -75,17 +75,34 @@ namespace macfx {
 void publishTemporalSceneContinuation(id<MTLCommandBuffer>commands,const TemporalSceneDestination&destination,const RSTemporalFrame&frame,std::shared_ptr<EffectExecution>execution,bool displayMapped){
  auto lease=execution?execution->captureSceneLease(commands):nullptr;publishRetainedTemporalSceneContinuation(commands,destination,frame,std::move(execution),std::move(lease),displayMapped);
 }
-void publishRetainedTemporalSceneContinuation(id<MTLCommandBuffer>commands,const TemporalSceneDestination&destination,const RSTemporalFrame&frame,std::shared_ptr<EffectExecution>execution,std::shared_ptr<const EffectSceneLease>lease,bool displayMapped,id<MTLSharedEvent>readyEvent,uint64_t readyValue){
- if(!commands||!destination.window||!destination.window->alive()||!execution||commands.status>=MTLCommandBufferStatusCommitted||!commands.retainedReferences)return;
+std::shared_ptr<TemporalSceneContinuation>publishRetainedTemporalSceneContinuation(id<MTLCommandBuffer>commands,const TemporalSceneDestination&destination,const RSTemporalFrame&frame,std::shared_ptr<EffectExecution>execution,std::shared_ptr<const EffectSceneLease>lease,bool displayMapped,id<MTLSharedEvent>readyEvent,uint64_t readyValue){
+ if(!commands||!destination.window||!destination.window->alive()||!execution||commands.status>=MTLCommandBufferStatusCommitted||!commands.retainedReferences)return {};
  auto value=std::shared_ptr<Continuation>(new Continuation,[](Continuation*pointer){dispatch_async_f(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),pointer,[](void*value){delete static_cast<Continuation*>(value);});});
- value->mapped=displayMapped;value->presented=destination.presented;value->width=frame.outputWidth;value->height=frame.outputHeight;value->window=destination.window;value->destinationOwner=destination.owner;value->producerOwner=frame.owner;value->frame=frame.frameId;value->inputMask=temporalSceneInputMask(frame);value->effect=std::move(execution);value->lease=std::move(lease);if(!value->lease)return;value->producer=commands;value->device=commands.device;value->event=readyEvent?:[commands.device newSharedEvent];value->eventValue=readyEvent?readyValue:1;if(!value->event||!value->eventValue)return;
- if(!readyEvent)[commands encodeSignalEvent:value->event value:value->eventValue];std::weak_ptr<Continuation>weak=value;[commands addCompletedHandler:^(id<MTLCommandBuffer>completed){if(completed.status!=MTLCommandBufferStatusCompleted)if(auto held=weak.lock()){held->failed.store(true);if(held->event.signaledValue<held->eventValue)held->event.signaledValue=held->eventValue;}}];
- std::lock_guard lock(continuationMutex);for(auto it=continuations.begin();it!=continuations.end();)if(!it->second->window->alive())it=continuations.erase(it);else ++it;const auto key=destination.window->identity();if(continuations.size()>=64&&!continuations.count(key))return;
+ value->mapped=displayMapped;value->presented=destination.presented;value->width=frame.outputWidth;value->height=frame.outputHeight;value->window=destination.window;value->destinationOwner=destination.owner;value->producerOwner=frame.owner;value->frame=frame.frameId;value->inputMask=temporalSceneInputMask(frame);value->effect=std::move(execution);value->lease=std::move(lease);if(!value->lease)return {};value->producer=commands;value->device=commands.device;value->event=readyEvent?:[commands.device newSharedEvent];value->eventValue=readyEvent?readyValue:1;if(!value->event||!value->eventValue)return {};
+ if(!readyEvent)[commands encodeSignalEvent:value->event value:value->eventValue];std::weak_ptr<Continuation>weak=value;[commands addCompletedHandler:^(id<MTLCommandBuffer>completed){if(completed.status!=MTLCommandBufferStatusCompleted)if(auto held=weak.lock()){held->failed->store(true);if(held->event.signaledValue<held->eventValue)held->event.signaledValue=held->eventValue;}}];
+ std::lock_guard lock(continuationMutex);for(auto it=continuations.begin();it!=continuations.end();)if(!it->second->window->alive())it=continuations.erase(it);else ++it;const auto key=destination.window->identity();if(continuations.size()>=64&&!continuations.count(key))return {};
  // Registration already rejected simultaneous ambiguous producers. A new
  // unambiguous camera may replace an earlier frame for this exact window.
  // Two producers before one presented final image are ambiguous: neither continues.
- if(destination.presented)if(const auto it=continuations.find(key);it!=continuations.end()&&it->second->presented&&it->second->producerOwner!=value->producerOwner&&it->second->unclaimed()){continuations.erase(it);return;}
- continuations[key]=std::move(value);
+ if(destination.presented)if(const auto it=continuations.find(key);it!=continuations.end()&&it->second->presented&&it->second->producerOwner!=value->producerOwner&&it->second->unclaimed()){continuations.erase(it);return {};}
+ continuations[key]=value;return value;
+}
+std::shared_ptr<TemporalSceneContinuation>repeatTemporalSceneContinuation(const TemporalSceneDestination&destination,const std::shared_ptr<TemporalSceneContinuation>&receipt){
+ auto previous=std::dynamic_pointer_cast<Continuation>(receipt);
+ if(!previous||!destination.window||!destination.window->alive()||previous->window->identity()!=destination.window->identity())return {};
+ // The output was not written by the refused frame. Its readiness and failure
+ // belong to the last encoded producer, even if the refused commands are never
+ // submitted. Reuse that signal rather than allocating another GPU event.
+ auto value=std::make_shared<Continuation>();
+ value->window=previous->window;value->destinationOwner=destination.owner;value->producerOwner=previous->producerOwner;
+ value->frame=previous->frame;value->inputMask=previous->inputMask;value->width=previous->width;value->height=previous->height;
+ value->mapped=previous->mapped;value->presented=destination.presented;value->effect=previous->effect;value->lease=previous->lease;
+ value->producer=previous->producer;value->event=previous->event;value->eventValue=previous->eventValue;value->device=previous->device;
+ value->failed=previous->failed;
+ std::lock_guard lock(continuationMutex);const auto key=destination.window->identity();
+ if(continuations.size()>=64&&!continuations.count(key))return {};
+ if(destination.presented)if(const auto it=continuations.find(key);it!=continuations.end()&&it->second->presented&&it->second->producerOwner!=value->producerOwner&&it->second->unclaimed()){continuations.erase(it);return {};}
+ continuations[key]=value;return value;
 }
 std::shared_ptr<TemporalSceneContinuation>temporalSceneContinuation(const std::shared_ptr<const SceneWindowAuthority>&window){if(!window||!window->alive())return {};std::lock_guard lock(continuationMutex);const auto it=continuations.find(window->identity());return it==continuations.end()?nullptr:it->second;}
 std::shared_ptr<TemporalSceneContinuation>temporalSceneContinuation(const std::shared_ptr<const SceneWindowAuthority>&window,id<MTLTexture>finalImage){

@@ -120,7 +120,7 @@ int main(int argc,char **argv){@autoreleasepool{
     for(unsigned frame=limit+1;frame<=limit+48&&reuses<4;++frame){@autoreleasepool{
         id<MTLCommandBuffer> commands=[queue commandBuffer];[commands encodeWaitForEvent:hold value:1];
         RSTemporalFrame f=sceneFrame(commands,frame);RSTemporalResult r{};r.size=sizeof(r);r.version=1;
-        const int code=rsProcessTemporalFrame(&f,&r);[commands commit];held.push_back(commands);
+        const int code=rsProcessTemporalFrame(&f,&r);
         const std::string reason=std::to_string(code)+" encoded="+std::to_string(r.encoded)+" "+r.reason;if(reason!=outcome){std::printf("receipt frame %u: %s\n",frame,reason.c_str());outcome=reason;}
         const auto receipt=macfx::temporalSceneContinuation(authority,finalImage);
         if(code==RS_TEMPORAL_OK&&r.encoded){
@@ -130,8 +130,10 @@ int main(int argc,char **argv){@autoreleasepool{
         }else{
             if(!receipt)return fail("The image reused at frame "+std::to_string(frame)+" lacks the receipt of scene "+std::to_string(scene)+": "+reason);
             if(receipt->frameId()!=scene)return fail("The image reused at frame "+std::to_string(frame)+" carries receipt "+std::to_string(receipt->frameId())+", not scene "+std::to_string(scene));
+            if(!receipt->ready([queue commandBuffer]).encoded)return fail("A reused image depends on submission of the refused frame");
             ++reuses;
         }
+        [commands commit];held.push_back(commands);
         if(receipt&&!receipt->claim([queue commandBuffer],finalImage))return fail("The final image cannot claim its receipt");
         if(macfx::temporalSceneContinuation(authority,finalImage))return fail("A claimed receipt serves a second final image");
         std::this_thread::sleep_for(std::chrono::microseconds(16600));

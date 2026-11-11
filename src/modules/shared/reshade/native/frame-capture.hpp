@@ -119,7 +119,6 @@ public:
     static bool configured(){return nativeConfig().capture.configured();}
     // Diagnostic capture attaches processing on its own; a screenshot channel
     // captures only frames that are already processed.
-    static bool forcesAttachment(){const auto&capture=nativeConfig().capture;return capture.configured()&&!capture.finalOnly;}
     // Presentation demand of capture: diagnostic capture always, a screenshot
     // channel while a requested screenshot is pending. With no processing the
     // pending frame is presented as is and captured; once it is published

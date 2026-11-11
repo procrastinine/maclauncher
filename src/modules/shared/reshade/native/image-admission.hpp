@@ -99,7 +99,6 @@ public:
     PooledImage acquire()const;
     // Waits up to the limit for an image that a frame still on the GPU
     // returns, when the lease has one out; otherwise returns at once.
-    PooledImage acquireWithin(std::chrono::milliseconds)const;
     struct Counts{size_t images=0,idle=0,held=0,limit=0;};
     Counts counts()const;
     std::string role()const;

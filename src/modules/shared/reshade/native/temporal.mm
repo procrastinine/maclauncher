@@ -332,7 +332,7 @@ auto&sceneOwners=*new std::unordered_map<void*,std::shared_ptr<SceneOwner>>;
 // The scene behind the producer's output image. A producer keeps its previous
 // image when a scene frame is refused, and the reused image carries this
 // scene's receipt to its final image.
-struct ReusedScene{std::shared_ptr<macfx::EffectExecution>execution;std::shared_ptr<const macfx::EffectSceneLease>lease;RSTemporalFrame frame{};bool displayMapped=false;__weak id<MTLTexture>output=nil;};
+struct ReusedScene{std::shared_ptr<macfx::TemporalSceneContinuation>receipt;__weak id<MTLTexture>output=nil;};
 struct OrderedSceneOwner{std::mutex mutex;macfx::EffectPlanExecutor plan;std::atomic<bool> statusReported{false};ReusedScene reused;};
 // The scene's own extents and inputs, and its completion on the GPU.
 void acceptEncodedScene(uintptr_t context,const macfx::EffectExecution&execution,const RSTemporalFrame&frame,id<MTLCommandBuffer>commands){
@@ -537,7 +537,9 @@ static int processSelectedTemporalFrame(const RSTemporalFrame*f,const RSImageCol
         bool written=false;
         const auto refuse=[&](int code,const char*reason){
             const auto&reused=owner->reused;
-            if(!originalRetained&&!written&&destination&&reused.lease&&reused.output==output)macfx::publishRetainedTemporalSceneContinuation(commands,*destination,reused.frame,reused.execution,reused.lease,reused.displayMapped);
+            if(!originalRetained&&!written&&destination&&reused.receipt&&reused.output==output)macfx::repeatTemporalSceneContinuation(*destination,reused.receipt);
+            // A refused scene frame is reported with its reason on the scene's context.
+            {macfx::RuntimeStatusEvent event;event.context=statusContext;event.processing=true;event.phase=code==RS_TEMPORAL_BUSY?macfx::RuntimeStatusPhase::Preparing:macfx::RuntimeStatusPhase::Bypassed;event.frameId=f->frameId;event.reason=reason?reason:"";macfx::observeRuntimeStatus(event);}
             return answer(r,code,reason);
         };
         auto actual=*f;if(early&&early->displayMapped()){actual.preExposure=1;actual.exposure=nullptr;actual.flags&=~RS_TEMPORAL_AUTO_EXPOSURE;}f=&actual;
@@ -560,7 +562,7 @@ static int processSelectedTemporalFrame(const RSTemporalFrame*f,const RSImageCol
         }
         auto capture=macfx::FrameCapture::begin(commands,selected.execution->replacesTemporal()?color:output,f->frameId,false,&description);bool displayMapped=early&&early->displayMapped();
         const auto encoded=originalRetained?selected.execution->encodeRecordedScene(frame,*f,&displayMapped,&guide):selected.execution->encodeScene(frame,*f,&displayMapped,&guide,displayMapped);if(!encoded.encoded)return refuse(encoded.busy?RS_TEMPORAL_BUSY:RS_TEMPORAL_FAILED,encoded.reason.c_str());
-        if(destination){auto lease=selected.execution->captureSceneLease(commands);macfx::publishRetainedTemporalSceneContinuation(commands,*destination,*f,selected.execution,lease,displayMapped);owner->reused={selected.execution,std::move(lease),*f,displayMapped,output};}
+        if(destination){auto lease=selected.execution->captureSceneLease(commands);auto receipt=macfx::publishRetainedTemporalSceneContinuation(commands,*destination,*f,selected.execution,lease,displayMapped);owner->reused={std::move(receipt),output};}
         else{macfx::publishTemporalOutputWithDepth(commands,output,f->frameId,selected.execution,std::move(capture),&guide,displayMapped,f);owner->reused={};}
         acceptEncodedScene(statusContext,*selected.execution,*f,commands);owner->statusReported.store(true,std::memory_order_release);r->encoded=1;r->reset=bool(f->flags&RS_TEMPORAL_RESET);return answer(r,RS_TEMPORAL_OK,"");
     }catch(const std::exception&e){return answer(r,RS_TEMPORAL_FAILED,e.what());}}@catch(NSException*e){return answer(r,RS_TEMPORAL_FAILED,e.reason.UTF8String?:"Ordered scene encoding failed");}}

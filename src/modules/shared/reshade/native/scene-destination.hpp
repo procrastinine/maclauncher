@@ -44,10 +44,12 @@ public:
  virtual bool claim(id<MTLCommandBuffer>,id<MTLTexture>)=0;
 };
 void publishTemporalSceneContinuation(id<MTLCommandBuffer>,const TemporalSceneDestination&,const RSTemporalFrame&,std::shared_ptr<EffectExecution>,bool displayMapped=false);
-void publishRetainedTemporalSceneContinuation(id<MTLCommandBuffer>,const TemporalSceneDestination&,const RSTemporalFrame&,std::shared_ptr<EffectExecution>,std::shared_ptr<const EffectSceneLease>,bool displayMapped=false,id<MTLSharedEvent>readyEvent=nil,uint64_t readyValue=0);
+std::shared_ptr<TemporalSceneContinuation>publishRetainedTemporalSceneContinuation(id<MTLCommandBuffer>,const TemporalSceneDestination&,const RSTemporalFrame&,std::shared_ptr<EffectExecution>,std::shared_ptr<const EffectSceneLease>,bool displayMapped=false,id<MTLSharedEvent>readyEvent=nil,uint64_t readyValue=0);
 std::shared_ptr<TemporalSceneContinuation>temporalSceneContinuation(const std::shared_ptr<const SceneWindowAuthority>&);
 // The continuation for this final image. A presented destination's scene
 // continues once, on a final image of the scene's output extent.
 std::shared_ptr<TemporalSceneContinuation>temporalSceneContinuation(const std::shared_ptr<const SceneWindowAuthority>&,id<MTLTexture>finalImage);
+// Reissue the unchanged image receipt with its original producer dependency.
+std::shared_ptr<TemporalSceneContinuation>repeatTemporalSceneContinuation(const TemporalSceneDestination&,const std::shared_ptr<TemporalSceneContinuation>&);
 void releaseTemporalSceneContinuations(void*owner);
 }
