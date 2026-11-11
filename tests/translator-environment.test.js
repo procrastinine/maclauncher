@@ -142,6 +142,13 @@ test('KosmicKrisp emulation suggestions match the documented source contract and
     assert.ok(suggestion.description.includes(syntax), syntax);
     assert.ok(row.includes(syntax), syntax);
   }
+  // Unset and performance select the fast set of the detected GPU generation; conformance names its Direct3D 12 level.
+  for (const text of [suggestion.description, row]) {
+    assert.match(text, /Unset or `?performance`?: the fast set for this Mac's Apple GPU generation, (?:which the driver detects|detected) automatically/);
+    assert.match(text, /`?conformance`?: every emulated feature \(Direct3D 12 feature level 12_2, shader model 6\.9\)/);
+    assert.match(text, /runs natively/, 'a chip preset adds that generation\'s native features');
+  }
+  assert.ok(suggestion.description.length <= 512, 'the description fits the declaration limit');
   const debugRow = doc.split('\n').find(line => line.startsWith('| `MESA_KK_DEBUG` |'));
   assert.doesNotMatch(debugRow, /\bnir\b/);
   const value = 'conformance,+float64,-denorm_preserve,-VK_EXT_mesh_shader,apple10,mode=11';

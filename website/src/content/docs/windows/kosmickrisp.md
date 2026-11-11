@@ -84,7 +84,7 @@ MacLauncher KosmicKrisp reads your Mac's family when a game creates its Vulkan d
 
 Some Vulkan features have no Metal equivalent at all, and MacLauncher KosmicKrisp reproduces them in shaders or extra GPU passes. Those emulations cost time, so each one is a named switch, and two modes decide which switches start out on:
 
-- **Performance**, the default, turns off every emulated feature that Direct3D games don't need. A switch stays on only when turning it off would lower the shader model or feature level that DXVK or vkd3d-proton report, stop either from starting, or break a Direct3D feature they translate, such as ExecuteIndirect. Denormal handling, for example, stays on, because without it vkd3d-proton drops from shader model 6.2 and up to 6.1. Software 64-bit floating point, on the other hand, is off, because neither translator requires it.
+- **Performance**, the default, applies to every game that leaves `KK_EMULATION` unset. The driver detects the Mac's GPU family on its own and turns on the emulations that are fast on that family. On an M1 to M4 it turns off every emulated feature that Direct3D games don't need. A switch stays on only when turning it off would lower the shader model or feature level that DXVK or vkd3d-proton report, stop either from starting, or break a Direct3D feature they translate, such as ExecuteIndirect. Denormal handling, for example, stays on, because without it vkd3d-proton drops from shader model 6.2 and up to 6.1. Software 64-bit floating point, on the other hand, is off, because neither translator requires it.
 - **Conformance** turns every emulated feature on, so applications can use everything the build offers, at the cost of the extra shader work, memory or rendering passes. It doesn't give MacLauncher's adapted build a Khronos certification of its own.
 
 A feature that your Mac's GPU family runs natively stays on in both modes, because it costs nothing extra. Ray tracing is reported only when you ask for it, with `+ray_tracing` or `conformance`.
@@ -98,7 +98,7 @@ The `KK_EMULATION` environment variable chooses the mode and individual switches
 | `conformance` | Turns every emulated feature on. |
 | `performance,-denorm_preserve` | Keeps the performance defaults but turns denormal preservation off. |
 | `performance,+float64` | Keeps the performance defaults and adds software 64-bit floating point. |
-| `apple10` or `mode=10` | Turns on every switch that M5 runs natively, emulating them on an M1 to M4. |
+| `apple10` or `mode=10` | Adds the switches that M5 runs natively, emulating them on an M1 to M4. It does not apply M5's performance set. |
 | `+ray_tracing` | Adds ray tracing to the performance defaults. |
 | `conformance,-ray_tracing` | Everything except ray tracing. |
 

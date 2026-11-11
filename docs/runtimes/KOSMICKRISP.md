@@ -251,13 +251,15 @@ MacLauncher KosmicKrisp emulates Vulkan capabilities that Metal does not provide
 
 Two modes set the starting selection:
 
-- `performance`, the default: each entry uses its performance default.
-- `conformance`: every entry is enabled.
+- `performance`, the default, which an unset or empty `KK_EMULATION` also selects: each entry is on when the registry lists the running device's Apple GPU family among the families on which its path is fast. The driver detects the family from the Metal device when it creates the Vulkan physical device, so no setting names the Mac.
+- `conformance`: every entry is enabled, which gives Direct3D 12 feature level 12_2 and shader model 6.9 through vkd3d-proton.
+
+A chip preset, `apple7` to `apple11` or `mode=7` to `mode=11`, adds the entries that the named family runs natively to the selection. It does not apply that family's performance selection. `+name` and `-name` turn one entry on or off, with the names in the [switch table](#switch-table).
 
 In performance mode, an entry is off only when turning it off lowers no Direct3D shader model or feature level reported by DXVK or vkd3d-proton and does not prevent either translator from creating its device. All other entries stay on, with two exceptions:
 
 - Ray tracing interfaces are reported only when selected explicitly, with `+ray_tracing` or `conformance`.
-- Fragment barycentrics are off, although vkd3d-proton reports mesh shaders only with `+fragment_barycentric` or `conformance`. Applications that use reported barycentric support for all fragment interpolation move every fragment shader to per-corner transport.
+- Fragment barycentrics are off on Apple7 to Apple9, although vkd3d-proton reports mesh shaders only with `+fragment_barycentric` or `conformance`. Applications that use reported barycentric support for all fragment interpolation move every fragment shader to per-corner transport.
 
 For example, vkd3d-proton reports shader model 6.2 and later only when FP32 flush-to-zero, FP32 denormal preservation and independent denormal controls are all reported. Disabling either denormal entry limits vkd3d-proton to shader model 6.1, so both entries stay on in performance mode.
 
