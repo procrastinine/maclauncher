@@ -1700,7 +1700,38 @@ async function refreshLibraryMetadata(games, settings) {
     .map(entry => queueLibraryWork(entry, settings, { refreshMetadata: true })));
 }
 
+// The games found unavailable at the last check persist beside the library, so
+// a row that was unavailable paints that way at the next start until its own
+// check answers.
+const availabilityFile = path.join(userDataDir, "library-availability.json");
+function readRememberedAvailability() {
+  try {
+    const stat = fs.lstatSync(availabilityFile);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4 * 1024 ** 2) return [];
+    const cached = JSON.parse(fs.readFileSync(availabilityFile, "utf8"));
+    if (cached?.format !== 1 || !Array.isArray(cached.games)) return [];
+    return cached.games.filter(([key, value]) => typeof key === "string" && typeof value?.root === "string" &&
+      value.result?.available === false && ["reason", "message", "path"].every(field => typeof value.result[field] === "string"))
+      .map(([key, value]) => [key, { root: value.root, result: Object.freeze({ available: false, reason: value.result.reason,
+        path: value.result.path, message: value.result.message }) }]);
+  } catch { return []; }
+}
+let availabilitySaveTimer, availabilityWrite = Promise.resolve();
+function rememberAvailability(games) {
+  clearTimeout(availabilitySaveTimer);
+  availabilitySaveTimer = setTimeout(() => {
+    const value = JSON.stringify({ format: 1, games });
+    availabilityWrite = availabilityWrite.catch(() => {}).then(async () => {
+      const temporary = availabilityFile + ".tmp";
+      await fs.promises.mkdir(userDataDir, { recursive: true });
+      try { await fs.promises.writeFile(temporary, value, { mode: 0o600 }); await fs.promises.rename(temporary, availabilityFile); }
+      finally { await fs.promises.rm(temporary, { force: true }); }
+    }).catch(error => logger.debug("[library] availability write failed", error.message));
+  }, 250);
+  availabilitySaveTimer.unref?.();
+}
 const gameAvailability = createAvailabilityMonitor({ userDataDir, logger,
+  remembered: readRememberedAvailability(), onRemember: rememberAvailability,
   listGames: () => loadGamesHydrated({ persist: false }),
   onChange: () => { if (cachedState) scheduleStateRebuild(); },
   // Returning files are checked as at startup, without restarting or reimporting.
@@ -2204,13 +2235,54 @@ const launcherWindows = new Set();
 const activityDelivery = require("./activity-delivery").createActivityDelivery((win, message) =>
   win.webContents.send("launcher:activity", message));
 const saveEditorWindows = new Map();
+function utilityWindowSize(options) {
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  return { width: Math.min(options.width, Math.max(options.minWidth, workArea.width - 48)),
+    height: Math.min(options.height, Math.max(options.minHeight, workArea.height - 48)) };
+}
+// The request revision each utility page last reported drawn, and who waits for one.
+const utilityDrawn = new WeakMap();
+ipcMain.on("launcher:utilityWindowDrawn", (event, revision) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || !Number.isSafeInteger(revision)) return;
+  const entry = utilityDrawn.get(win) || { revision: 0, waiters: [] };
+  entry.revision = Math.max(entry.revision, revision);
+  entry.waiters = entry.waiters.filter(waiter => entry.revision >= waiter.revision ? (waiter.resolve(true), false) : true);
+  utilityDrawn.set(win, entry);
+});
+function utilityViewDrawn(win, revision, limitMs) {
+  const entry = utilityDrawn.get(win) || { revision: 0, waiters: [] };
+  utilityDrawn.set(win, entry);
+  if (entry.revision >= revision) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const waiter = { revision, resolve };
+    entry.waiters.push(waiter);
+    setTimeout(() => { entry.waiters = entry.waiters.filter(item => item !== waiter); resolve(false); }, limitMs).unref?.();
+  });
+}
+// A switched view shows once its page has drawn it. A page that is drawing
+// while hidden reports it before the window shows; one hidden after it was
+// shown draws only while visible, so its window shows transparent until then.
+async function presentUtilityWindow(win, { revision, switched, shown, activate }) {
+  const show = () => {
+    if (win.isDestroyed()) return;
+    if (!activate) { win.showInactive(); return; }
+    if (win.isMinimized()) win.restore();
+    win.show(); win.focus();
+  };
+  if (!switched) { show(); return; }
+  if (!shown) { await utilityViewDrawn(win, revision, 500); show(); return; }
+  if (win.isDestroyed()) return;
+  win.setOpacity(0);
+  show();
+  await utilityViewDrawn(win, revision, 300);
+  if (!win.isDestroyed()) win.setOpacity(1);
+}
 const utilityWindows = createUtilityWindowController({
   createWindow: (options, request) => {
-    const workArea = screen.getPrimaryDisplay().workAreaSize;
     return new BrowserWindow({ ...options,
       ...(request?.view === "appAction" ? { title: moduleAppActions.title(request.moduleId, request.actionId) || options.title } : {}),
-      width: Math.min(options.width, Math.max(options.minWidth, workArea.width - 48)),
-      height: Math.min(options.height, Math.max(options.minHeight, workArea.height - 48)),
+      ...utilityWindowSize(options),
       backgroundColor: nativeTheme.shouldUseDarkColors ? "#111318" : "#f5f6f8",
       webPreferences: { preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
         nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: devtoolsEnabled }
@@ -2225,10 +2297,18 @@ const utilityWindows = createUtilityWindowController({
     if (activate) attachDevToolsAutoOpen(win, view);
   },
   onContextChange: win => sendState(win),
-  // Settings, Runtimes and Credits are prepared hidden after the startup
-  // inventory and hide when closed, so opening one only shows it.
-  keptViews: ["runtimes", "settings", "credits"],
+  // Settings, Runtimes and Credits share one hidden window prepared after the
+  // startup inventory and again after each opening; closing one hides it.
+  keptViews: ["settings", "runtimes", "credits"],
+  adaptWindow: (win, options, request) => {
+    win.__maclauncherWindowType = request.view;
+    win.setTitle(options.title);
+    win.setMinimumSize(options.minWidth, options.minHeight);
+    const { width, height } = utilityWindowSize(options);
+    win.setSize(width, height);
+  },
   beforeShow: win => sendState(win, undefined, { hidden: true }),
+  present: presentUtilityWindow,
   onHidden: () => quitWithoutVisibleWindows(),
   isQuitting: () => launcherQuitting
 });

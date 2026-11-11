@@ -25,7 +25,8 @@ function fixture(options = {}) {
     registerWindow: (win, view) => registrations.push({ win, view }),
     loadView: async (win, request) => { loads.push({ win, request }); await options.load?.(win, request); },
     onContextChange: options.changed,
-    ...(options.kept ? { keptViews: options.kept, beforeShow: options.beforeShow, onHidden: options.hidden, isQuitting: options.quitting } : {})
+    ...(options.kept ? { keptViews: options.kept, beforeShow: options.beforeShow, onHidden: options.hidden, isQuitting: options.quitting,
+      adaptWindow: options.adapt, idle: options.idle } : {})
   });
   return { controller, windows, registrations, loads };
 }
@@ -37,43 +38,79 @@ function closeWindow(win) {
   return prevented;
 }
 
-test("kept utility views are prepared hidden, open by showing, and hide when closed until the launcher quits", async () => {
-  const shownWith = [], hidden = [];
-  let quitting = false;
-  const f = fixture({ kept: ["runtimes", "settings", "credits"], beforeShow: win => shownWith.push(f.controller.stateForWindow(win, {}).utilityWindow),
-    hidden: win => hidden.push(win), quitting: () => quitting });
+test("one hidden spare serves Settings, Runtimes and Credits: switched on open, refilled when idle, closed windows hidden at once", async () => {
+  const shownWith = [], hidden = [], adapted = [], idle = [];
+  let quitting = false, holdLoad = null;
+  const f = fixture({ kept: ["settings", "runtimes", "credits"], beforeShow: win => shownWith.push(f.controller.stateForWindow(win, {}).utilityWindow),
+    hidden: win => hidden.push(win), quitting: () => quitting, adapt: (win, options, request) => adapted.push({ win, title: options.title, view: request.view }),
+    idle: callback => idle.push(callback), load: () => holdLoad });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const runIdle = async () => { await settle(); while (idle.length) { await idle.shift()(); await settle(); } };
   Window.prototype.hide = function () { this.hides = (this.hides || 0) + 1; };
+  const live = () => f.windows.filter(win => !win.destroyed);
+
   await f.controller.prepare();
-  assert.deepEqual(f.registrations.map(value => value.view), ["runtimes", "settings", "credits"]);
-  assert.equal(f.loads.length, 3, "Each prepared view loads once, one after another");
-  assert.ok(f.windows.every(win => win.shows === 0 && win.focuses === 0 && !win.inactive), "Prepared windows stay hidden");
-  assert.ok(f.windows.every(win => f.controller.isHidden(win)));
-  await f.controller.prepare();
-  assert.equal(f.windows.length, 3, "Preparing again creates nothing");
+  assert.equal(f.windows.length, 1, "One spare is prepared");
+  assert.equal(f.loads[0].request.view, "settings");
+  assert.equal(f.windows[0].shows, 0); assert.ok(f.controller.isHidden(f.windows[0]));
 
-  const settings = await f.controller.open({ view: "settings", sectionId: "launcher" });
-  assert.equal(settings, f.windows[1], "Opening shows the prepared window");
-  assert.equal(f.windows.length, 3);
-  assert.equal(f.loads.length, 3, "Opening a prepared view loads nothing");
-  assert.equal(settings.shows, 1); assert.equal(settings.focuses, 1);
-  assert.equal(shownWith.length, 1);
-  assert.equal(shownWith[0].sectionId, "launcher", "The state sent before showing carries the request");
-  assert.equal(f.controller.isHidden(settings), false);
+  const runtimes = await f.controller.open({ view: "runtimes", managerId: "wine" });
+  assert.equal(runtimes, f.windows[0], "The spare is switched to Runtimes");
+  assert.deepEqual(adapted.map(item => [item.view, item.title]), [["runtimes", "Runtimes"]]);
+  assert.equal(shownWith.at(-1).view, "runtimes", "Its state names the new view before it shows");
+  assert.equal(shownWith.at(-1).managerId, "wine");
+  assert.equal(runtimes.shows, 1); assert.equal(f.loads.length, 1, "Switching loads nothing");
+  await runIdle();
+  assert.equal(f.windows.length, 2, "A new spare is prepared when idle");
+  assert.equal(f.loads[1].request.view, "settings", "for a kept view without a window");
 
-  assert.equal(closeWindow(settings), true, "Closing hides a kept view");
-  assert.equal(settings.destroyed, false); assert.equal(settings.hides, 1);
-  assert.deepEqual(hidden, [settings]);
-  assert.equal(f.controller.isHidden(settings), true);
-  assert.equal(await f.controller.open({ view: "settings" }), settings, "Reopening shows the same window");
-  assert.equal(shownWith.length, 2);
+  const settings = await f.controller.open({ view: "settings" });
+  assert.equal(settings, f.windows[1], "Opening the spare's own view shows it unchanged");
+  assert.equal(adapted.length, 1);
+  await runIdle();
+  assert.equal(f.windows.length, 3); assert.equal(f.loads[2].request.view, "credits");
 
-  const external = await f.controller.open({ view: "external" });
-  assert.equal(closeWindow(external), false, "Other views close as before");
-  assert.equal(external.destroyed, true);
+  assert.equal(closeWindow(runtimes), true, "Closing hides at once");
+  assert.equal(runtimes.hides, 1); assert.equal(runtimes.destroyed, false);
+  assert.ok(f.controller.isHidden(runtimes), "A window waiting to go counts as hidden");
+  await runIdle();
+  assert.equal(runtimes.destroyed, true, "With a spare already hidden, the closed window goes when idle");
+  assert.equal(closeWindow(settings), true); await runIdle();
+  assert.equal(settings.destroyed, true);
+  assert.equal(live().length, 1, "Idle, one hidden window remains");
+  assert.deepEqual(hidden, [runtimes, settings]);
+
+  const reopened = await f.controller.open({ view: "runtimes" });
+  assert.equal(reopened, f.windows[2], "The Credits spare becomes Runtimes");
+  await runIdle();
+  assert.equal(closeWindow(reopened), true); await runIdle();
+  assert.equal(reopened.destroyed, true);
+  assert.equal(live().length, 1, "Idle, one hidden window remains");
+
+  // A spare still loading another view is left to finish; the view gets its own window.
+  live()[0].destroy();
+  let release; holdLoad = new Promise(resolve => { release = resolve; });
+  void f.controller.prepare();
+  const loading = f.windows.at(-1);
+  assert.equal(f.loads.at(-1).request.view, "settings");
+  const opening = f.controller.open({ view: "credits" });
+  const credits = f.windows.at(-1);
+  assert.notEqual(credits, loading);
+  assert.equal(credits.shows, 1, "Its frame shows at once");
+  release(); holdLoad = null; await opening; await runIdle();
+
+  // With no other hidden window, a closed view stays as the spare.
+  loading.destroy();
+  assert.equal(closeWindow(credits), true); await runIdle();
+  assert.equal(credits.destroyed, false);
+  assert.ok(f.controller.isHidden(credits));
+  assert.equal(await f.controller.open({ view: "credits" }), credits, "Reopening shows the same window");
+  assert.equal(adapted.length, 2, "Its own view needs no switch");
+  await runIdle();
 
   quitting = true;
-  assert.equal(closeWindow(settings), false, "Quitting closes kept views");
-  assert.equal(settings.destroyed, true);
+  assert.equal(closeWindow(credits), false, "Quitting closes kept views");
+  assert.equal(credits.destroyed, true);
   delete Window.prototype.hide;
 });
 

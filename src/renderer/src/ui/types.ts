@@ -712,6 +712,7 @@ declare global {
       launcher: {
         getState(): Promise<LauncherState>;
         initialState?(): LauncherState | null;
+        utilityWindowDrawn?(revision: number): void;
         prioritizeGame?(gamePath: string): Promise<boolean>;
         openUtilityWindow(request: UtilityWindowRequest): Promise<boolean>;
         appActionPickerState: import("./components/AppActionPicker").AppActionPickerApi["appActionPickerState"];

@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld("MacLauncher", {
     getState: () => ipcRenderer.invoke("launcher:getState"),
     // A utility view's state for its first render; null for other views.
     initialState: () => ipcRenderer.sendSync("launcher:initialState"),
+    // A utility view reports the request revision it has drawn.
+    utilityWindowDrawn: revision => ipcRenderer.send("launcher:utilityWindowDrawn", revision),
     prioritizeGame: gamePath => ipcRenderer.invoke("launcher:prioritizeGame", gamePath),
     openUtilityWindow: request => ipcRenderer.invoke("launcher:openUtilityWindow", request),
     appActionPickerState: () => ipcRenderer.invoke("launcher:appActionPickerState"),

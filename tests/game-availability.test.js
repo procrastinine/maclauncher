@@ -173,6 +173,33 @@ test("save tools keep saves stored elsewhere usable and refuse saves inside the 
   assert.equal(fs.existsSync(d.mount), false, "nothing recreates the missing drive's folders");
 });
 
+test("games unavailable at the last launch paint unavailable until their own check answers, and only changes are remembered", async () => {
+  const GameAvailability = require("../src/core/game-availability");
+  const games = [{ gameId: "a", gamePath: "/A" }, { gameId: "b", gamePath: "/B" }, { gameId: "c", gamePath: "/C" }];
+  const lost = root => ({ available: false, reason: "missing", path: root, message: "The game's files were not found at their saved location." });
+  const root = entry => GameAvailability.rootPath(entry, {});
+  const states = new Map([["a", lost(root(games[0]))], ["b", { available: true }], ["c", { available: true }]]);
+  const pending = [], remembered = [];
+  const monitor = createAvailabilityMonitor({ listGames: () => games, logger: {}, focusIntervalMs: 0,
+    check: entry => new Promise(resolve => pending.push(() => resolve(states.get(entry.gameId)))),
+    remembered: [["a", { root: root(games[0]), result: lost(root(games[0])) }], ["b", { root: root(games[1]), result: lost(root(games[1])) }],
+      ["c", { root: "/elsewhere", result: lost("/elsewhere") }]],
+    onRemember: list => remembered.push(list) });
+  assert.equal(monitor.get(games[0]).reason, "missing", "The first paint shows the last-known state");
+  assert.equal(monitor.get(games[1]).reason, "missing");
+  assert.equal(monitor.get(games[2]), null, "A game moved since then is not marked from its old location");
+  assert.equal(monitor.known(games[0]), false);
+  assert.equal(pending.length, 0, "Reading remembered availability starts no check");
+  monitor.start();
+  await new Promise(resolve => setTimeout(resolve, 5));
+  while (pending.length) pending.shift()();
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(monitor.get(games[0]).reason, "missing", "Still missing");
+  assert.equal(monitor.get(games[1]), null, "Its files returned");
+  assert.equal(remembered.length, 1, "One write for the round");
+  assert.deepEqual(remembered[0].map(([key]) => key), ["a"], "Only games still unavailable stay remembered");
+});
+
 test("the monitor reports changes in request order and refreshes games whose files return", async () => {
   const states = new Map([["a", { available: true }], ["b", { available: true }]]);
   const pending = [];

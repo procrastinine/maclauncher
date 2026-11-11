@@ -102,13 +102,23 @@ export default function App() {
   const api = window.MacLauncher?.launcher;
   const importBatches = useImportBatches(api || undefined);
   const utilityWindowContext = useMemo(() => readUtilityWindowContext(window.location.search), []);
-  const runtimesOpen = utilityWindowContext?.view === "runtimes";
   // A utility view renders its first state in its first frame.
   const [initialState] = useState<LauncherState | null>(() => {
     if (!utilityWindowContext) return null;
     try { return api?.initialState?.() || null; } catch { return null; }
   });
   const [state, setState] = useState<LauncherState | null>(() => initialState && restoreLauncherState(initialState));
+  // A prepared utility window can be switched to another view; its state names the view it shows.
+  const utilityView = utilityWindowContext ? state?.utilityWindow?.view || utilityWindowContext.view : null;
+  const runtimesOpen = utilityView === "runtimes";
+  const utilityRevision = state?.utilityWindow?.revision;
+  useEffect(() => {
+    if (!utilityView || utilityRevision === undefined || !api?.utilityWindowDrawn) return;
+    // Reported once the view for this request has been drawn, so its window can show it.
+    let second = 0;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => api.utilityWindowDrawn?.(utilityRevision)); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, [api, utilityView, utilityRevision]);
   const gamePaths = useMemo(() => new Set((state?.recents || []).map(game => game.gamePath)), [state?.recents]);
   const latestState = useRef(state);
   latestState.current = state;
@@ -686,7 +696,7 @@ export default function App() {
   }, [state?.modules]);
 
   // Only the Credits window lists acknowledgments.
-  const creditsOpen = utilityWindowContext?.view === "credits";
+  const creditsOpen = utilityView === "credits";
   const acknowledgments = useMemo(
     () => creditsOpen ? collectAcknowledgments(state?.modules || [], sharedAcknowledgments) : [],
     [creditsOpen, state?.modules]
@@ -2032,10 +2042,10 @@ export default function App() {
       <ImportBatches {...importBatches} jobs={state?.importing || []} onCancel={input => { api?.cancelImport(input).catch(value => setError(String(value))); }} />
       <ErrorText error={error} onDismiss={() => setError(null)} />
       {!state && !error && <div className="empty" role="status">Loading…</div>}
-      {state && api && utilityWindowContext.view === "external" && <React.Suspense fallback={<div className="empty" role="status">Loading External…</div>}>
+      {state && api && utilityView === "external" && <React.Suspense fallback={<div className="empty" role="status">Loading External…</div>}>
         <ExternalView api={api} />
       </React.Suspense>}
-      {state && utilityWindowContext.view === "settings" && <SettingsView
+      {state && utilityView === "settings" && <SettingsView
         state={state} api={api || undefined} showIcons={showIcons} showNonDefaultTags={showNonDefaultTags}
         sectionId={state.utilityWindow?.sectionId || utilityWindowContext.sectionId}
         shaderCategory={state.utilityWindow?.shaderCategory || utilityWindowContext.shaderCategory}
@@ -2043,8 +2053,8 @@ export default function App() {
         onSetLauncherSettings={onSetLauncherSettings} onSetModuleSettings={onSetModuleSettings}
         onAppUpdate={api?.appUpdate ? action => { void api.appUpdate(action).catch((e: any) => setError(String(e?.message || e))); } : undefined}
       />}
-      {api && utilityWindowContext.view === "appAction" && <AppActionPicker api={api} />}
-      {state && utilityWindowContext.view === "credits" && <CreditsView
+      {api && utilityView === "appAction" && <AppActionPicker api={api} />}
+      {state && utilityView === "credits" && <CreditsView
         acknowledgments={acknowledgments} canOpenExternal={canOpenExternal} onOpenLink={onOpenAcknowledgmentsLink}
       />}
       {state && runtimesOpen && <RuntimesView
