@@ -59,3 +59,44 @@ test("Play clears the starting state when the game's files are unavailable", asy
   assert.deepEqual(f.activity.at(-1), {});
   assert.equal(f.context.pendingGameCompletions.has("/Games/Slow"), true);
 });
+
+function moduleDataFixture({ fail = false } = {}) {
+  let saved = { gameId: "g", gamePath: "/Games/Tools", moduleId: "engine", moduleData: { toolsButtonVisibleOverride: false, kept: 1 } };
+  let finishPatch;
+  const patching = new Promise(resolve => { finishPatch = resolve; });
+  const broadcasts = [], patches = [], handlers = new Map();
+  const context = {
+    Date, loadSettings: () => ({}), loadGamesHydrated: () => [structuredClone(saved)],
+    findGameByPath: (games, gamePath) => games.find(game => game.gamePath === gamePath), resolveModuleId: game => game.moduleId,
+    getCheatsPatcherIfSupported: () => ({}), resolveToolsButtonVisible: entry => entry.moduleData.toolsButtonVisibleOverride === true,
+    saveGameRecord: entry => { saved = structuredClone(entry); },
+    backendService: { request: async (...args) => { patches.push(args[5]); await patching; if (fail) throw new Error("patch failed"); } },
+    buildState: (_settings, games) => ({ recents: games }), broadcastState: () => broadcasts.push(saved.moduleData.toolsButtonVisibleOverride ?? null),
+    ipcMain: { handle: (name, handler) => handlers.set(name, handler) }, cachedState: null
+  };
+  vm.runInNewContext(slice("function updateEntryModuleData(", "\nfunction updateEntryRuntimeData("), context);
+  vm.runInNewContext(slice('ipcMain.handle("launcher:setGameModuleData",', 'ipcMain.handle("launcher:setGameRuntimeData",'), context);
+  return { get saved() { return saved; }, broadcasts, patches, finishPatch,
+    invoke: patch => handlers.get("launcher:setGameModuleData")(null, "/Games/Tools", patch) };
+}
+
+test("the Tools button choice shows before the game's files are patched", async () => {
+  const f = moduleDataFixture(), changing = f.invoke({ toolsButtonVisibleOverride: true });
+  assert.equal(f.saved.moduleData.toolsButtonVisibleOverride, true);
+  assert.deepEqual(f.broadcasts, [true], "broadcast while the patch is still running");
+  assert.equal(JSON.stringify(f.patches), JSON.stringify([{ toolsButtonVisible: true }]));
+  f.finishPatch();
+  assert.equal(await changing, true);
+  assert.deepEqual(f.broadcasts, [true]);
+  assert.equal(f.saved.moduleData.kept, 1);
+});
+
+test("a Tools button patch that fails restores the earlier choice and reports the error", async () => {
+  const f = moduleDataFixture({ fail: true }), changing = f.invoke({ toolsButtonVisibleOverride: true });
+  assert.deepEqual(f.broadcasts, [true]);
+  f.finishPatch();
+  await assert.rejects(changing, /patch failed/);
+  assert.equal(f.saved.moduleData.toolsButtonVisibleOverride, false);
+  assert.deepEqual(f.broadcasts, [true, false]);
+  assert.equal(f.saved.moduleData.kept, 1);
+});

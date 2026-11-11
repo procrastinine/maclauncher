@@ -4899,21 +4899,36 @@ ipcMain.handle("launcher:setGameModuleData", async (_event, gamePath, patch) => 
   const entry = findGameByPath(games, gamePath);
   if (!entry) throw new Error("Game not found in library");
 
+  const previousOverride = entry.moduleData?.toolsButtonVisibleOverride;
   updateEntryModuleData(entry, patch || {});
 
   const moduleId = resolveModuleId(entry);
   const needsRepatch =
     patch && Object.prototype.hasOwnProperty.call(patch, "toolsButtonVisibleOverride");
   const patcher = needsRepatch ? getCheatsPatcherIfSupported(moduleId) : null;
-  if (patcher) {
-    await backendService.request(`game:${entry.gameId || gamePath}`, "patcher", entry, "cheats", "updateVisibility",
-      { toolsButtonVisible: resolveToolsButtonVisible(entry, settings) });
-  }
 
+  // The choice shows at once. Patching the game's files for the Tools button
+  // follows in the game's lane; when it fails, the earlier choice returns.
   entry.updatedAt = Date.now();
   saveGameRecord(entry);
   cachedState = buildState(settings, games);
   broadcastState();
+  if (patcher) {
+    try {
+      await backendService.request(`game:${entry.gameId || gamePath}`, "patcher", entry, "cheats", "updateVisibility",
+        { toolsButtonVisible: resolveToolsButtonVisible(entry, settings) });
+    } catch (error) {
+      const restored = loadGamesHydrated({ persist: false }), current = findGameByPath(restored, gamePath);
+      if (current) {
+        updateEntryModuleData(current, { toolsButtonVisibleOverride: previousOverride ?? null });
+        current.updatedAt = Date.now();
+        saveGameRecord(current);
+        cachedState = buildState(loadSettings(), restored);
+        broadcastState();
+      }
+      throw error;
+    }
+  }
   return true;
 });
 
