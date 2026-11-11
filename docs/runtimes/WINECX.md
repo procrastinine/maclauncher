@@ -22,7 +22,7 @@ Version labels name the release and the Wine version read from the installed `nt
 | --- | --- | --- |
 | Wine | `Libraries/Wine` | The Wine tree, with its own FreeType, GnuTLS, GStreamer, wine-mono and wine-gecko |
 | DXVK | `Libraries/DXVK` | Direct3D 10 and 11 to Vulkan, for 32-bit games when the 64-bit folder has no `dxgi.dll` |
-| DXMT | `Libraries/DXMT` | Direct3D 10 and 11 to Metal |
+| DXMT | `Libraries/DXMT` | Direct3D 10 and 11 to Metal, with the Wine tree's `winemetal.so` as its Unix module |
 | MoltenVK | `Libraries/Wine/lib/libMoltenVK.dylib` | Vulkan-to-Metal driver |
 
 These appear as Included rows labeled **WineCX** in **Runtimes → Graphics** and in each game's translator choices. The release includes no D3DMetal. Its Wine reads `CX_APPLEGPTK_LIBD3DSHARED_PATH`, so a D3DMetal version installed in **Runtimes → Graphics → DirectX → Metal** can be selected for Direct3D 11 and 12. KosmicKrisp, vkd3d-proton and the other translator versions from Runtimes are selected the same way as for Sikarugir.

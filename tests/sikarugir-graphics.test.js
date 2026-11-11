@@ -438,3 +438,21 @@ test("vendor dependencies use fallback paths while the HUD and private ntdll ove
   assert.equal(stock.env.DYLD_LIBRARY_PATH, undefined);
   assert.ok(stock.env.DYLD_FALLBACK_LIBRARY_PATH.split(path.delimiter).map(canonical).includes(canonical(frameworks)));
 });
+
+test("a translator builtin without its own Unix module uses the engine's module of that name in the private view", async t => {
+  const f = await installed(t), unixRoot = path.join(f.engineRoot, "lib/wine/x86_64-unix"), set = path.join(f.root, "dxmt-set");
+  const engineMetal = put(path.join(unixRoot, "winemetal.so"), image({ cpu: X64, minimumOS: 0x000e0000 }));
+  put(path.join(unixRoot, "d3d12.so"), image({ cpu: X64, minimumOS: 0x000e0000 }));
+  const before = hash(engineMetal), links = {};
+  for (const name of ["winemetal", "d3d11", "nvngx", "d3d12"])
+    links[`lib/wine/x86_64-windows/${name}.dll`] = builtinDll(path.join(set, "x86_64-windows", name + ".dll"), "x86_64-windows", "set " + name);
+  links["lib/wine/x86_64-unix/d3d12.so"] = put(path.join(set, "x86_64-unix", "d3d12.so"), image({ cpu: X64, minimumOS: 0x000e0000 }));
+  const translatorView = { identity: "unix-modules", links, env: {}, dllOverrides: ["winemetal=b", "d3d11=b", "nvngx=b", "d3d12=b"], libraryPaths: [], frameworkPaths: [] };
+  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "wined3d" },
+    viewRoot: path.join(f.root, "game", "unix-view"), host: { hardwareArch: "arm64", macOSVersion: "26.4" }, translatorView });
+  const view = file => path.join(result.wineRoot, "lib/wine/x86_64-unix", file);
+  assert.equal(fs.realpathSync(view("winemetal.so")), fs.realpathSync(engineMetal));
+  assert.equal(fs.realpathSync(view("d3d12.so")), fs.realpathSync(links["lib/wine/x86_64-unix/d3d12.so"]), "a set's own Unix module stays selected");
+  for (const name of ["d3d11.so", "nvngx.so"]) assert.equal(fs.existsSync(view(name)), false, name + " has no engine module");
+  assert.equal(hash(engineMetal), before);
+});

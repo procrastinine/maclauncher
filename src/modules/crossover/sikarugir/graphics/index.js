@@ -294,6 +294,15 @@ async function prepareGraphicsView({ source = require("../../sources").get("sika
       const source = cameraBridge ? require("../../temporal").rendererFile(cameraBridge, path.basename(path.dirname(relative)), path.basename(relative), original) : original;
       await linkFile(source, path.join(loader.wineRoot, relative), signal);
     }
+    // Wine opens a builtin's Unix module beside the folder it loaded the
+    // builtin from. A set that supplies a builtin without its Unix module,
+    // such as WineCX's DXMT winemetal.dll, uses the engine's module of that name.
+    for (const relative of Object.keys(translatorView.links)) {
+      const name = /^lib\/wine\/[^/]+-windows\/([^/]+)\.dll$/i.exec(relative)?.[1], unix = name && `lib/wine/${layout.unixName}/${name}.so`;
+      if (!unix || Object.hasOwn(translatorView.links, unix) || fs.existsSync(path.join(loader.wineRoot, unix))) continue;
+      const own = path.join(engine, unix);
+      if (fs.existsSync(own)) await linkFile(own, path.join(loader.wineRoot, unix), signal);
+    }
     dllOverrides.push(...translatorView.dllOverrides);
   }
   for (const helper of helpers) {
