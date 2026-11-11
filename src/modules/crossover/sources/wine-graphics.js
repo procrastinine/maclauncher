@@ -153,6 +153,118 @@ async function cloneLoaderFile(source, destination, signal) {
   await fs.promises.chmod(destination, sourceStat.mode & 0o777);
   signal?.throwIfAborted();
 }
+// The loader's embedded application properties (__TEXT,__info_plist) from a
+// thin 64-bit or universal Intel Mach-O image.
+function embeddedInfo(bytes) {
+  const thin = offset => {
+    if (offset + 32 > bytes.length || bytes.readUInt32LE(offset) !== 0xfeedfacf) return null;
+    const count = bytes.readUInt32LE(offset + 16), end = offset + 32 + bytes.readUInt32LE(offset + 20);
+    if (count > 4096 || end > bytes.length) return null;
+    const name = at => bytes.subarray(at, at + 16).toString("latin1").split("\0")[0];
+    for (let command = offset + 32, index = 0; index < count && command + 8 <= end; index++) {
+      const type = bytes.readUInt32LE(command), size = bytes.readUInt32LE(command + 4);
+      if (size < 8 || command + size > end) return null;
+      if (type === 0x19 && size >= 72) for (let section = 0, sections = bytes.readUInt32LE(command + 64); section < sections && 72 + (section + 1) * 80 <= size; section++) {
+        const at = command + 72 + section * 80;
+        if (name(at) !== "__info_plist" || name(at + 16) !== "__TEXT") continue;
+        const length = Number(bytes.readBigUInt64LE(at + 40)), start = offset + bytes.readUInt32LE(at + 48);
+        return length > 0 && length <= 65536 && start + length <= bytes.length ? bytes.subarray(start, start + length).toString("utf8").replace(/\0+$/, "") : null;
+      }
+      command += size;
+    }
+    return null;
+  };
+  if (bytes.length >= 8 && bytes.readUInt32BE(0) === 0xcafebabe) {
+    for (let index = 0, count = Math.min(bytes.readUInt32BE(4), 16); index < count; index++) {
+      const at = 8 + index * 20;
+      if (at + 20 <= bytes.length && bytes.readUInt32BE(at) === 0x01000007) return thin(bytes.readUInt32BE(at + 8));
+    }
+    return null;
+  }
+  return thin(0);
+}
+// macOS turns on Game Mode for a full-screen application in the games
+// category. The application properties are the loader's own, with the bundle's
+// executable name, a MacLauncher identifier and that category.
+const GAME_BUNDLE = "MacLauncher Game.app";
+// Views of an earlier layout are never reused; a new layout gets new paths.
+const VIEW_LAYOUT = 4;
+function gameBundleInfo(embedded) {
+  const value = (key, text) => `    <key>${key}</key>\n    <string>${text}</string>\n`;
+  let text = /^\s*<\?xml[\s\S]*<dict>[\s\S]*<\/dict>\s*<\/plist>\s*$/.test(embedded || "") ? embedded.trim() + "\n" :
+    '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' +
+    '<plist version="1.0">\n<dict>\n' + value("CFBundleName", "MacLauncher Game") + value("CFBundlePackageType", "APPL") + '</dict>\n</plist>\n';
+  for (const [key, setting] of [["CFBundleExecutable", "wine"], ["CFBundleIdentifier", "com.maclauncher.wine-game"], ["LSApplicationCategoryType", "public.app-category.games"]]) {
+    const pattern = new RegExp(`(<key>${key}</key>\\s*<string>)[^<]*(</string>)`);
+    text = pattern.test(text) ? text.replace(pattern, `$1${setting}$2`) : text.replace(/<\/dict>\s*<\/plist>\s*$/, value(key, setting) + "</dict>\n</plist>\n");
+  }
+  return text;
+}
+// macOS associates a process with a bundle only when the process starts from
+// the bundle's own Contents/MacOS path; a symbolic or hard link elsewhere
+// leaves it unbundled. Wine starts each Windows program from "wine" beside the
+// real path of ntdll.so. With a separate loader, the bundle therefore holds
+// real copies of the loader and ntdll.so, and the view's names for them lead
+// into the bundle. From Contents/MacOS, links give Wine its builtin folders,
+// the files beside ntdll.so, and the bin and share folders it derives two
+// levels up. A single-file loader starts the game itself from the bundle and
+// keeps the view's ntdll.so.
+async function prepareGameBundle({ loader, engine, wineRoot, dllRoot, layout, separate, signal }) {
+  const bundle = path.join(wineRoot, GAME_BUNDLE), contents = path.join(bundle, "Contents"), macos = path.join(contents, "MacOS");
+  const unix = path.join(dllRoot, layout.unixName), engineUnix = path.join(engine, "lib", "wine", layout.unixName);
+  for (const directory of [bundle, contents, macos]) ownDirectory(directory);
+  const executable = path.join(macos, "wine");
+  await cloneLoaderFile(loader, executable, signal);
+  if (separate) {
+    await cloneLoaderFile(path.join(engineUnix, "ntdll.so"), path.join(macos, "ntdll.so"), signal);
+    for (const name of [...layout.windows, layout.unixName]) await linkDirectory(path.join(dllRoot, name), path.join(macos, name), signal);
+    for (const entry of await fs.promises.readdir(engineUnix, { withFileTypes: true }))
+      if (entry.isFile() && entry.name.endsWith(".so") && entry.name !== "ntdll.so") await linkFile(path.join(engineUnix, entry.name), path.join(macos, entry.name), signal);
+    for (const name of ["bin", "share"]) await linkDirectory(path.join(wineRoot, name), path.join(bundle, name), signal);
+    await keepBundleLoader(executable, path.join(macos, "ntdll.so"));
+  } else {
+    await linkFile(path.join(unix, "ntdll.so"), path.join(macos, "ntdll.so"), signal);
+    await linkDirectory(path.join(wineRoot, "lib"), path.join(contents, "lib"), signal);
+  }
+  const info = path.join(contents, "Info.plist"), text = gameBundleInfo(embeddedInfo(await fs.promises.readFile(loader)));
+  if (fs.existsSync(info) && fs.lstatSync(info).isSymbolicLink()) fail("The private Wine application properties must be a regular file.");
+  if (!fs.existsSync(info) || fs.readFileSync(info, "utf8") !== text) Writable.atomicWrite(info, text, { root: wineRoot });
+  return executable;
+}
+// CrossOver's Wine, which WineCX carries, starts each Windows program from a
+// hard link named after the program in the user's temporary folder, in a
+// folder named winetemp-<inode>-<size>-<seconds>-<nanoseconds> after the
+// loader's file. macOS associates that link with no bundle. A file in place
+// of the loader's folder leaves Wine without the link, so it starts the
+// program from the bundle; the process still carries the program's name. A
+// folder that Wine made earlier for the same loader holds only links to it,
+// and is replaced. Anything else there is left alone.
+const PROGRAM_LINKS = Buffer.from("/winetemp-%llu-%llu-%lu-%lu/");
+let userTemporary;
+async function userTemporaryDirectory() {
+  userTemporary ??= require("node:util").promisify(require("node:child_process").execFile)("/usr/bin/getconf", ["DARWIN_USER_TEMP_DIR"], { encoding: "utf8", timeout: 5000 })
+    .then(({ stdout }) => stdout.trim(), () => "");
+  return userTemporary;
+}
+async function keepBundleLoader(executable, ntdll, temporary) {
+  try {
+    if (!(await fs.promises.readFile(ntdll)).includes(PROGRAM_LINKS)) return null;
+    const root = temporary || await userTemporaryDirectory(), loader = fs.statSync(executable, { bigint: true }), second = 1000000000n;
+    if (!path.isAbsolute(root)) return null;
+    const entry = path.join(root, `winetemp-${loader.ino}-${loader.size}-${loader.mtimeNs / second}-${loader.mtimeNs % second}`);
+    const current = fs.lstatSync(entry, { throwIfNoEntry: false });
+    if (current?.isFile()) return entry;
+    if (current?.isDirectory()) {
+      const names = fs.readdirSync(entry);
+      const ours = name => { const stat = fs.lstatSync(path.join(entry, name), { bigint: true }); return stat.isSymbolicLink() ? name === "ntdll.so" : stat.isFile() && stat.ino === loader.ino; };
+      if (!names.every(ours)) return null;
+      for (const name of names) fs.unlinkSync(path.join(entry, name));
+      fs.rmdirSync(entry);
+    } else if (current) return null;
+    fs.writeFileSync(entry, "Wine starts this loader's programs from its MacLauncher Game.app bundle.\n", { mode: 0o600, flag: "wx" });
+    return entry;
+  } catch { return null; }
+}
 async function prepareLoaderView(engine, viewRoot, install, signal) {
   const wineRoot = path.join(viewRoot, "wine"), dllRoot = path.join(wineRoot, "lib", "wine");
   const layout = wineLayout(install), bin = path.join(wineRoot, "bin"), unix = path.join(dllRoot, layout.unixName);
@@ -163,17 +275,8 @@ async function prepareLoaderView(engine, viewRoot, install, signal) {
   // while WINEDLLPATH supplies the unchanged shared engine as a fallback.
   const executablePath = path.join(bin, "wine"), serverPath = path.join(bin, "wineserver");
   await cloneLoaderFile(install.executablePath || path.join(engine, "bin", "wine"), executablePath, signal);
-  await cloneLoaderFile(path.join(engine, "lib", "wine", "x86_64-unix", "ntdll.so"), path.join(unix, "ntdll.so"), signal);
-  const libraryOverride = path.join(wineRoot, "loader-libraries");
-  ownDirectory(libraryOverride);
-  await linkFile(path.join(unix, "ntdll.so"), path.join(libraryOverride, "ntdll.so"), signal);
   await linkFile(install.serverPath || path.join(engine, "bin", "wineserver"), serverPath, signal);
-  // Newer engines re-exec a separate loader with the address-space layout
-  // required by Windows. Reusing bin/wine here can retain its 4 GB PAGEZERO
-  // mapping and prevent Wine from reserving the shared user-data address.
-  const unixLoader = path.join(engine, "lib", "wine", layout.unixName, "wine");
-  if (fs.existsSync(unixLoader)) await cloneLoaderFile(unixLoader, path.join(unix, "wine"), signal);
-  else await linkFile(executablePath, path.join(unix, "wine"), signal);
+  await linkDirectory(path.join(engine, "share"), path.join(wineRoot, "share"), signal);
   for (const architecture of layout.windows) {
     for (const name of ["ntdll.dll", "apisetschema.dll"]) {
       const source = path.join(engine, "lib", "wine", architecture, name);
@@ -181,8 +284,21 @@ async function prepareLoaderView(engine, viewRoot, install, signal) {
       else if (architecture === layout.primaryWindows) fail("The selected Wine engine is incomplete. Reinstall this version.");
     }
   }
-  await linkDirectory(path.join(engine, "share"), path.join(wineRoot, "share"), signal);
-  return { wineRoot, dllRoot, executablePath, serverPath, libraryOverride };
+  // Newer engines re-exec a separate loader with the address-space layout
+  // required by Windows. Reusing bin/wine here can retain its 4 GB PAGEZERO
+  // mapping and prevent Wine from reserving the shared user-data address.
+  // Either loader runs the game from the Game Mode bundle.
+  const unixLoader = path.join(engine, "lib", "wine", layout.unixName, "wine"), separate = fs.existsSync(unixLoader);
+  if (!separate) await cloneLoaderFile(path.join(engine, "lib", "wine", "x86_64-unix", "ntdll.so"), path.join(unix, "ntdll.so"), signal);
+  const gameLoader = await prepareGameBundle({ loader: separate ? unixLoader : executablePath, engine, wineRoot, dllRoot, layout, separate, signal });
+  if (separate) {
+    await linkFile(path.join(path.dirname(gameLoader), "ntdll.so"), path.join(unix, "ntdll.so"), signal);
+    await linkFile(gameLoader, path.join(unix, "wine"), signal);
+  }
+  const libraryOverride = path.join(wineRoot, "loader-libraries");
+  ownDirectory(libraryOverride);
+  await linkFile(path.join(unix, "ntdll.so"), path.join(libraryOverride, "ntdll.so"), signal);
+  return { wineRoot, dllRoot, executablePath: separate ? executablePath : gameLoader, serverPath, libraryOverride };
 }
 async function clearUnusedRenderers(dllRoot, renderers, components, signal) {
   const selected = new Set(components.flatMap(name => CORE_DLLS[name].map(module => module + ".dll")));
@@ -281,10 +397,8 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     if (!image.slices.some(slice => slice.architecture === layout.architecture && slice.platform === 1)) fail("The GPU helper requires an Intel macOS library.");
     helperNames.add(item.name); helpers.push({ name: item.name, windows, unix });
   }
-  const privateLoader = Boolean(selection.components.length || helpers.length || translatorView && Object.keys(translatorView.links).length);
-  const loader = privateLoader ? await prepareLoaderView(engine, viewRoot, install, signal) : {
-    wineRoot: engine, dllRoot: path.join(viewRoot, "dlls"), executablePath: install.executablePath || path.join(engine, "bin", "wine"),
-    serverPath: install.serverPath || path.join(engine, "bin", "wineserver") };
+  // Every game runs from the private loader view and its Game Mode bundle.
+  const loader = await prepareLoaderView(engine, viewRoot, install, signal);
   const dllRoot = loader.dllRoot, dllOverrides = [], selectedUnix = [];
   ownDirectory(dllRoot);
   for (const architecture of [...layout.windows, layout.unixName]) ownDirectory(path.join(dllRoot, architecture));
@@ -337,7 +451,7 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
   // its initialized copy. Vendor dependencies must not replace system libraries
   // loaded by Apple frameworks in the same process.
   const env = { WINEDLLPATH: path.join(engine, "lib", "wine"),
-    ...(privateLoader ? { DYLD_LIBRARY_PATH: loader.libraryOverride } : {}),
+    DYLD_LIBRARY_PATH: loader.libraryOverride,
     DYLD_FALLBACK_LIBRARY_PATH: libraryPaths.join(path.delimiter),
     ...(native.frameworks.length || external ? { DYLD_FALLBACK_FRAMEWORK_PATH: [...native.frameworks, ...(external ? [external] : [])].join(path.delimiter) } : {}),
     GST_REGISTRY_1_0: path.join(viewRoot, "gstreamer-registry.bin") };
@@ -381,5 +495,5 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath };
 }
 
-module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, prepareGraphicsView, capabilitiesFor,
+module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, keepBundleLoader, prepareGraphicsView, capabilitiesFor,
   __test: { capabilitiesFor, selectGraphics, ownDirectory, CORE_DLLS } };

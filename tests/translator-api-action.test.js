@@ -258,8 +258,10 @@ test('real Sikarugir API graphics view applies exact planned builtin and Unix so
   assert.deepEqual(fs.readFileSync(graphics.executablePath), fs.readFileSync(install.executablePath));
   assert.equal(fs.realpathSync(graphics.serverPath), install.serverPath);
   const privateUnix = path.join(graphics.dllRoot, plan.layout.unixName);
-  assert.equal(fs.lstatSync(path.join(privateUnix, 'ntdll.so')).isSymbolicLink(), false);
-  assert.deepEqual(fs.readFileSync(path.join(privateUnix, 'ntdll.so')), sourceBytes.get(path.join(plan.layout.unixRoot, 'ntdll.so')));
+  // The private ntdll.so is a real copy; with a separate loader it sits in the Game Mode bundle beside that loader.
+  const privateNtdll = fs.realpathSync(path.join(privateUnix, 'ntdll.so'));
+  assert.equal(fs.lstatSync(privateNtdll).isFile(), true); assert.notEqual(privateNtdll, fs.realpathSync(path.join(plan.layout.unixRoot, 'ntdll.so')));
+  assert.deepEqual(fs.readFileSync(privateNtdll), sourceBytes.get(path.join(plan.layout.unixRoot, 'ntdll.so')));
   for (const { file } of plan.placements) {
     if (file.format === 'pe' && file.form === 'builtin' || file.format === 'macho' && file.path.endsWith('.so')) {
       const cpu = file.format === 'pe' ? Files.cpuFolder(file.machine) : plan.layout.unixName;

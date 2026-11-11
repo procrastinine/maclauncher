@@ -279,7 +279,8 @@ test("WineD3D has no replacement DLLs but still configures a Vulkan driver for d
   const f = await installed(t), viewRoot = path.join(f.root, "game", "view");
   const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "wined3d", vulkanBackend: "moltenvk" }, viewRoot, host: { hardwareArch: "arm64", macOSVersion: "26.1" } });
   assert.deepEqual(result.components, []); assert.deepEqual(result.dllOverrides, []);
-  assert.equal(result.wineRoot, fs.realpathSync(f.engineRoot));
+  assert.equal(result.wineRoot, path.join(viewRoot, "wine"), "the game still runs from the private view and its Game Mode bundle");
+  assert.equal(result.executablePath, path.join(viewRoot, "wine", "MacLauncher Game.app", "Contents", "MacOS", "wine"));
   assert.equal(result.vulkanBackend, "moltenvk"); assert.ok(fs.existsSync(result.env.VK_DRIVER_FILES));
 });
 test("private MoltenVK discovery works for Windows instance flags and preserves upstream driver metadata", async t => {
@@ -371,7 +372,10 @@ test("engines with a separate Unix loader retain its distinct address-space layo
   put(unixLoader, "producer loader with small PAGEZERO and fixed high text address");
   const options = { install: f.install, settings: {}, viewRoot: path.join(f.root, "game", "modern-view"), host: { hardwareArch: "arm64", macOSVersion: "15.7" } };
   const result = await Graphics.prepareGraphicsView(options), copy = path.join(result.dllRoot, "x86_64-unix", "wine");
-  assert.equal(fs.lstatSync(copy).isSymbolicLink(), false);
+  // The re-executed loader is a private copy inside the Game Mode bundle.
+  assert.equal(fs.realpathSync(copy), fs.realpathSync(path.join(result.wineRoot, "MacLauncher Game.app/Contents/MacOS/wine")));
+  assert.equal(fs.lstatSync(fs.realpathSync(copy)).isFile(), true);
+  assert.equal(result.executablePath, path.join(result.wineRoot, "bin", "wine"), "bin/wine still starts the separate loader");
   assert.equal(hash(copy), hash(unixLoader));assert.notEqual(hash(copy), hash(result.executablePath));
   assert.notEqual(fs.statSync(copy).ino, fs.statSync(unixLoader).ino);
   const inode = fs.statSync(copy).ino;await Graphics.prepareGraphicsView(options);assert.equal(fs.statSync(copy).ino, inode);
@@ -456,4 +460,64 @@ test("a translator builtin without its own Unix module uses the engine's module 
   assert.equal(fs.realpathSync(view("d3d12.so")), fs.realpathSync(links["lib/wine/x86_64-unix/d3d12.so"]), "a set's own Unix module stays selected");
   for (const name of ["d3d11.so", "nvngx.so"]) assert.equal(fs.existsSync(view(name)), false, name + " has no engine module");
   assert.equal(hash(engineMetal), before);
+});
+
+// An Intel Mach-O image whose __TEXT,__info_plist section holds `plist`.
+function loaderWithInfo(plist) {
+  const bytes = Buffer.alloc(4096), text = Buffer.from(plist + "\0");
+  bytes.writeUInt32LE(0xfeedfacf, 0); bytes.writeUInt32LE(0x01000007, 4); bytes.writeUInt32LE(3, 8); bytes.writeUInt32LE(2, 12);
+  bytes.writeUInt32LE(1, 16); bytes.writeUInt32LE(152, 20);
+  bytes.writeUInt32LE(0x19, 32); bytes.writeUInt32LE(152, 36); bytes.write("__TEXT", 40); bytes.writeUInt32LE(1, 96);
+  bytes.write("__info_plist", 104); bytes.write("__TEXT", 120); bytes.writeBigUInt64LE(BigInt(text.length), 144); bytes.writeUInt32LE(1024, 152);
+  text.copy(bytes, 1024); return bytes;
+}
+test("a loader whose Wine names programs through links in the temporary folder keeps its programs in the bundle", async t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "bundle-loader-"))); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const temporary = path.join(root, "T"), loader = path.join(root, "wine"), ntdll = path.join(root, "ntdll.so");
+  fs.mkdirSync(temporary); fs.writeFileSync(loader, "loader"); fs.writeFileSync(ntdll, "plain ntdll");
+  assert.equal(await Graphics.keepBundleLoader(loader, ntdll, temporary), null, "a Wine without program links needs nothing");
+  fs.writeFileSync(ntdll, "\0/winetemp-%llu-%llu-%lu-%lu/\0");
+  const stat = fs.statSync(loader, { bigint: true }), name = `winetemp-${stat.ino}-${stat.size}-${stat.mtimeNs / 1000000000n}-${stat.mtimeNs % 1000000000n}`;
+  // A folder Wine made earlier for this loader holds only its links, and is replaced.
+  fs.mkdirSync(path.join(temporary, name)); fs.linkSync(loader, path.join(temporary, name, "ULTRAKILL")); fs.symlinkSync(ntdll, path.join(temporary, name, "ntdll.so"));
+  assert.equal(await Graphics.keepBundleLoader(loader, ntdll, temporary), path.join(temporary, name));
+  assert.equal(fs.lstatSync(path.join(temporary, name)).isFile(), true, "a file in place of the folder leaves Wine without the link");
+  assert.equal(await Graphics.keepBundleLoader(loader, ntdll, temporary), path.join(temporary, name), "an existing file is kept");
+  // Anything else at that name is left alone.
+  fs.rmSync(path.join(temporary, name)); fs.mkdirSync(path.join(temporary, name)); fs.writeFileSync(path.join(temporary, name, "other"), "other");
+  assert.equal(await Graphics.keepBundleLoader(loader, ntdll, temporary), null);
+  assert.equal(fs.readFileSync(path.join(temporary, name, "other"), "utf8"), "other");
+});
+test("the game's Wine loader runs from a games-category bundle that keeps the loader's own properties", async t => {
+  const f = await installed(t), unixLoader = path.join(f.engineRoot, "lib/wine/x86_64-unix/wine");
+  put(unixLoader, loaderWithInfo('<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n    <key>CFBundleExecutable</key>\n    <string>wineloader</string>\n' +
+    '    <key>CFBundleIdentifier</key>\n    <string>org.winehq.wine</string>\n    <key>NSPrincipalClass</key>\n    <string>WineApplication</string>\n    <key>LSUIElement</key>\n    <string>1</string>\n</dict>\n</plist>\n'));
+  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "wined3d" }, viewRoot: path.join(f.root, "game", "bundle-view"),
+    host: { hardwareArch: "arm64", macOSVersion: "26.4" } });
+  const contents = path.join(result.wineRoot, "MacLauncher Game.app", "Contents"), executable = path.join(contents, "MacOS", "wine");
+  assert.equal(fs.lstatSync(executable).isFile(), true, "the bundle holds a private copy, so macOS associates the process with the bundle");
+  assert.equal(hash(executable), hash(unixLoader));
+  assert.equal(fs.realpathSync(path.join(result.dllRoot, "x86_64-unix", "wine")), fs.realpathSync(executable), "bin/wine re-executes the bundled loader");
+  // Wine starts each program from "wine" beside the real path of ntdll.so, and macOS associates only the bundle's own
+  // Contents/MacOS path with the bundle, so both are real files there and the view's names lead to them.
+  assert.equal(fs.lstatSync(path.join(contents, "MacOS", "ntdll.so")).isFile(), true);
+  assert.equal(fs.realpathSync(path.join(result.dllRoot, "x86_64-unix", "ntdll.so")), fs.realpathSync(path.join(contents, "MacOS", "ntdll.so")));
+  assert.equal(fs.realpathSync(path.join(result.wineRoot, "loader-libraries", "ntdll.so")), fs.realpathSync(path.join(contents, "MacOS", "ntdll.so")),
+    "Unix modules reuse the ntdll.so that the loader started");
+  // From Contents/MacOS, Wine finds its builtin folders there and bin and share two levels up.
+  for (const name of ["x86_64-unix", "x86_64-windows", "i386-windows"])
+    assert.equal(fs.realpathSync(path.join(contents, "MacOS", name)), fs.realpathSync(path.join(result.dllRoot, name)));
+  for (const name of ["bin", "share"])
+    assert.equal(fs.realpathSync(path.join(contents, "MacOS", "..", "..", name)), fs.realpathSync(path.join(result.wineRoot, name)));
+  const info = fs.readFileSync(path.join(contents, "Info.plist"), "utf8"), value = key => new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`).exec(info)?.[1];
+  assert.equal(value("LSApplicationCategoryType"), "public.app-category.games");
+  assert.equal(value("CFBundleExecutable"), "wine");
+  assert.equal(value("CFBundleIdentifier"), "com.maclauncher.wine-game");
+  assert.equal(value("NSPrincipalClass"), "WineApplication", "the loader's own properties are kept");
+  assert.equal(value("LSUIElement"), "1");
+  // A loader without embedded properties gets a minimal games-category bundle.
+  fs.rmSync(unixLoader);
+  const plain = await Graphics.prepareGraphicsView({ install: { ...f.install }, settings: { graphicsBackend: "wined3d" }, viewRoot: path.join(f.root, "game", "plain-view"),
+    host: { hardwareArch: "arm64", macOSVersion: "26.4" } });
+  assert.match(fs.readFileSync(path.join(plain.wineRoot, "MacLauncher Game.app/Contents/Info.plist"), "utf8"), /<key>LSApplicationCategoryType<\/key>\s*<string>public\.app-category\.games<\/string>/);
 });

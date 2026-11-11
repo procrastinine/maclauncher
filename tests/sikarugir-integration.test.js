@@ -311,7 +311,10 @@ test("ordinary Play obtains one consent, prepares the Windows environment and ru
   assert.equal(fs.realpathSync(state.gameRoot), fs.realpathSync(source));
   assert.deepEqual(fs.readFileSync(path.join(state.gameRoot, "Game.exe")), before);
   const privateWine = path.join(state.viewRoot, "wine"), installedWine = path.join(root, "runtime-payloads", "engine-12");
-  assert.equal(spawned.args[3], path.join(privateWine, "bin", "wine"));
+  // A single-file loader runs the game from the Game Mode bundle.
+  const bundle = path.join(privateWine, "MacLauncher Game.app", "Contents");
+  assert.equal(spawned.args[3], path.join(bundle, "MacOS", "wine"));
+  assert.match(fs.readFileSync(path.join(bundle, "Info.plist"), "utf8"), /<key>LSApplicationCategoryType<\/key>\s*<string>public\.app-category\.games<\/string>/);
   assert.equal(spawned.args[4], path.join(privateWine, "bin", "wineserver"));
   assert.equal(fs.lstatSync(spawned.args[3]).isSymbolicLink(), false);
   assert.deepEqual(fs.readFileSync(spawned.args[3]), fs.readFileSync(path.join(installedWine, "bin", "wine")));

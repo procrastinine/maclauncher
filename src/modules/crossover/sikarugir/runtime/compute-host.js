@@ -65,7 +65,7 @@ async function prepare(request,context={}){
   const prefix=request.prefixDirectory?fs.realpathSync(request.prefixDirectory):path.join(directory,"prefix");
   if(request.prefixDirectory&&(!fs.statSync(prefix).isDirectory()||!fs.existsSync(path.join(prefix,"system.reg"))||!fs.existsSync(path.join(prefix,"user.reg"))))throw Error("The selected Windows GPU environment is incomplete.");
   const helperLibraries=(request.helperLibraries||[]).map(item=>({name:item.name,windows:regular(item.windows),unix:regular(item.unix)}));
-  const viewIdentity=digest(JSON.stringify([hostPath,helperLibraries.map(item=>[item.name,digest(fs.readFileSync(item.windows)),digest(fs.readFileSync(item.unix))])])).slice(0,24);
+  const viewIdentity=digest(JSON.stringify([Graphics.VIEW_LAYOUT,hostPath,helperLibraries.map(item=>[item.name,digest(fs.readFileSync(item.windows)),digest(fs.readFileSync(item.unix))])])).slice(0,24);
   const settings={graphicsBackend:request.backend==="d3d12"?"d3dmetal":"wined3d",vulkanBackend:request.backend==="vulkan"?"kosmickrisp":"auto",synchronization:"auto",dlss:false,environment:[],windowsVersion:"win10"};
   const graphics=await Graphics.prepareGraphicsView({source:Source,install,settings,environment:existing,context,userDataDir,prefixPath:prefix,viewRoot:path.join(directory,"views",viewIdentity),host:{hardwareArch:architecture()},executableArchitecture:"x64",helperLibraries,signal});
   if(!request.prefixDirectory)await Launch.ensurePrefix(install,require("../../../shared/runtime/wine-environment").privateEnvironment(userDataDir,directory,"prefix"),directory,settings,graphics,context);

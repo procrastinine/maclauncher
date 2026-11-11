@@ -270,7 +270,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const environmentVersion = require('./settings').prefixVersions(require('../manifest.json')).includes(windowsVersion) ? windowsVersion : 'win10';
   const prefixPath = existingEnvironment?.prefixPath || path.join(directory, "prefixes", environmentVersion);
   // Version the loader layout independently of the persistent prefix/saves.
-  const variant = crypto.createHash("sha256").update(JSON.stringify([2, settings.graphicsBackend || "auto", settings.vulkanBackend || "auto",
+  const variant = crypto.createHash("sha256").update(JSON.stringify([require("./wine-graphics").VIEW_LAYOUT, settings.graphicsBackend || "auto", settings.vulkanBackend || "auto",
     settings.cncDdraw === true, match.executableArchitecture, ...(settings.dlss === true ? ["dlss"] : []),
     ...(cameraBridge ? [cameraBridge.dxmt.identity, cameraBridge.baseRoot] : [])])).digest("hex").slice(0, 12);
   const views = path.join(context.userDataDir, `graphics/${source.id}-views`);

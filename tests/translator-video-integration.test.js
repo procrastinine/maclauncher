@@ -52,6 +52,7 @@ function fixture(t, runtime) {
   const loaderPath = put('wine/bin/wineloader', native({ fileType: 2 }));
   put('wine/lib/wine/x86_64-unix/wine', native({ fileType: 2 }));
   put('wine/lib/wine/x86_64-unix/ntdll.so', native({ exports: ['wine_unix_call'] }));
+  put('wine/share/wine/wine.inf', 'fixture');
   for (const name of ['ntdll', 'apisetschema']) {
     const pe = peFixture({ is64: true }); pe.bytes.writeUInt16LE(0x2002, pe.peOffset + 22); pe.bytes.write('Wine builtin DLL\0', 64);
     put(`wine/lib/wine/x86_64-windows/${name}.dll`, pe.bytes);
