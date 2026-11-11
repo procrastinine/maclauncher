@@ -921,3 +921,52 @@ test('the Credits shell reserves the real table layout at the top without a visi
   assert.ok(rule(html,'#utility-shell h1').includes('clip-path:inset(50%)'),'Only the native title is visible, as in CreditsView');
   assert.ok(!rule(html,'#utility-shell').includes('display:grid'),'Auto-sized grid rows must not spread the heading and table over the viewport');
 });
+
+test('a second request shows within a frame without waiting for the first window refill', async t => {
+  t.mock.timers.enable({apis:['setTimeout','Date'],now:0});
+  const source=fs.readFileSync(path.join(__dirname,'../src/main/main.js'),'utf8');
+  const start=source.indexOf('  createWindow: ',source.indexOf('const utilityWindows = createUtilityWindowController'))+'  createWindow: '.length;
+  const callback=source.slice(start,source.indexOf('\n  loadView:',start)).trim().replace(/,$/,'');
+  const windows=[],registered=new Set(),shown=[];let initial=true,fullRefillDone=false;
+  const contents=warm=>({warm,getURL:()=>warm?'file:///utility.html':'',clone:()=>contents(true)});
+  class NativeWindow extends Window {
+    constructor(options){super(options);this.webContents=options.webContents||contents(false);windows.push(this);}
+    show(){shown.push({win:this,at:Date.now()});super.show();}
+  }
+  const createWindow=vm.runInNewContext('('+callback+')',{BrowserWindow:NativeWindow,launcherWindows:registered,
+    KEPT_UTILITY_VIEWS:['settings','runtimes','credits'],utilityWindowSize:()=>({}),nativeTheme:{shouldUseDarkColors:false},
+    moduleAppActions:{},path,__dirname:path.join(__dirname,'../src/main'),devtoolsEnabled:false});
+  const controller=createUtilityWindowController({keptViews:['settings','runtimes','credits'],createWindow,
+    registerWindow:(win,view)=>{win.__maclauncherWindowType=view;registered.add(win);},idle:()=>{},
+    loadView:async win=>{
+      if(initial){initial=false;win.webContents=contents(true);return;}
+      // Model the recorded 130 ms cold start versus a warm shell's next frame.
+      // Full control preparation remains outstanding until 300 ms in both cases.
+      setTimeout(()=>{fullRefillDone=true;},300);
+      await new Promise(resolve=>setTimeout(resolve,win.webContents.warm?8:130));
+    },present:async win=>win.show()});
+  const flush=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
+  await controller.prepare();
+  const first=controller.open({view:'runtimes'});await flush();
+  t.mock.timers.tick(1);
+  const requestedAt=Date.now();let credits;
+  const second=controller.open({view:'credits'}).then(win=>{credits=win;});
+  t.mock.timers.tick(7);await flush();
+  assert.ok(credits,'The second show must not wait for a cold process or the full refill');
+  assert.notEqual(credits,await first);
+  assert.ok(shown.find(row=>row.win===credits).at-requestedAt<=16);
+  assert.equal(fullRefillDone,false);
+  await second;
+});
+
+test('utility control imports start after the shell has a paint opportunity', async () => {
+  const source=fs.readFileSync(path.join(__dirname,'../src/renderer/src/utility.tsx'),'utf8');
+  const frames=[];let imports=0;
+  // Keep import evaluation pending; only the scheduling before it is under test.
+  const scheduled=source.slice(source.indexOf('void new Promise'),source.indexOf('  .then(([React'));
+  const runnable=scheduled.replace(/<void>/g,'').replace(/import\([^)]*\)/g,'loadControls()');
+  vm.runInNewContext(runnable,{requestAnimationFrame:callback=>frames.push(callback),api:{initialStateReady:()=>null},loadControls:()=>{imports++;return new Promise(()=>{});}});
+  assert.equal(imports,0);
+  frames.shift()();await Promise.resolve();assert.equal(imports,0);
+  frames.shift()();await Promise.resolve();await Promise.resolve();assert.equal(imports,4);
+});

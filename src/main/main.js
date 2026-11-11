@@ -2288,7 +2288,12 @@ async function presentUtilityWindow(win, { view, revision, switched, navigation,
 }
 const utilityWindows = createUtilityWindowController({
   createWindow: (options, request) => {
+    // A clone has its own document and lifetime but reuses the warm utility
+    // SiteInstance. A refill must not launch a renderer on the next click.
+    const source = KEPT_UTILITY_VIEWS.includes(request?.view) && [...launcherWindows].find(win =>
+      !win.isDestroyed() && KEPT_UTILITY_VIEWS.includes(win.__maclauncherWindowType) && win.webContents.getURL());
     return new BrowserWindow({ ...options,
+      ...(source ? { webContents: source.webContents.clone() } : {}),
       ...(request?.view === "appAction" ? { title: moduleAppActions.title(request.moduleId, request.actionId) || options.title } : {}),
       ...utilityWindowSize(options),
       backgroundColor: nativeTheme.shouldUseDarkColors ? "#111318" : "#f5f6f8",
