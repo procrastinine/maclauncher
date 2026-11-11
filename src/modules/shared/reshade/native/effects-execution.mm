@@ -384,7 +384,9 @@ struct EffectExecution::Impl {
         std::map<GuideKey,Guides>guides;bool resolvedColor=false;std::optional<RSTemporalFrame>scene;std::weak_ptr<const EffectSceneLease>lease;std::shared_ptr<const EffectSceneLease>guideLease;
         Scratch()=default;
         explicit Scratch(const Scratch&source):preparing(false),extraHolds(source.extraHolds),client(source.client),images(source.images),depths(source.depths),guides(source.guides){clearImages();storage->holds.reserve(images.size()*2+depths.size()+guides.size()*10+extraHolds);}
-        void clearImages(){for(auto&[key,pair]:images)pair.images={};for(auto&[key,value]:depths)value.image=nil;for(auto&[key,value]:guides)for(auto&image:value.images)image={};if(storage&&storage.use_count()==1)storage->holds.clear();else storage.reset();}
+        // A retired slot keeps no lease: the scene it continued belongs to
+        // its final image, and its images return when that image completes.
+        void clearImages(){for(auto&[key,pair]:images)pair.images={};for(auto&[key,value]:depths)value.image=nil;for(auto&[key,value]:guides)for(auto&image:value.images)image={};guideLease.reset();if(storage&&storage.use_count()==1)storage->holds.clear();else storage.reset();}
         std::shared_ptr<Prepared>prepare(id<MTLDevice>device,unsigned width,unsigned height,MTLPixelFormat format,const char*role){
             if(!preparing)throw TransientBusy("The effect image geometry requires resource preparation");
             if(!client)client=std::make_shared<ImagePoolClient>(device);

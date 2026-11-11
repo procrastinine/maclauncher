@@ -10,6 +10,7 @@
 #include "runtime-status.hpp"
 #include "fsr1.hpp"
 #include "fsr1-budget.hpp"
+#include "image-color.hpp"
 #import <Cocoa/Cocoa.h>
 #include <array>
 #include <cmath>
@@ -496,6 +497,22 @@ int temporalFallback(NSString *directory,NSString *path,id<MTLDevice> device,id<
     }
     // The scene stops: the first final image after it runs the complete chain, once.
     counted=runs();receipt=present(500);expectRuns("after the scene",receipt,0,1,counted,runs());
+    // A presenter continuing the scene holds its lease only while that final
+    // image is on the GPU: retired continuation slots keep no scene images.
+    {macfx::EffectPlanExecutor continuing;macfx::EffectExecutionSelection continued;std::weak_ptr<const macfx::EffectSceneLease>held;
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(8);
+        for(;;){@autoreleasepool{
+            auto image=[queue commandBuffer];macfx::ShaderFrame final{image,finalImage,finalImage};stamp(final,600);
+            std::shared_ptr<const macfx::EffectSceneLease>derived;assert(sceneExecution->bindSceneImage(image,finalImage,finalImage,lease,derived).encoded&&derived);
+            const auto inputs=macfx::retainedSceneFrame(derived);assert(inputs);const auto color=sceneExecution->imageColor();
+            continued=continuing.prepareSceneContinuation(final,&*inputs,macfx::imageColorLabel(color),color,sceneExecution->sceneSuffixSnapshot(),sceneExecution->sceneOutputIdentity(),derived);
+            if(continued.execution&&!continued.preparing&&!continued.holdPrevious){held=derived;derived.reset();complete(image);break;}
+            assert(std::chrono::steady_clock::now()<deadline);
+        }std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+        const auto settled=std::chrono::steady_clock::now()+std::chrono::seconds(2);while(!held.expired()&&std::chrono::steady_clock::now()<settled)std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        if(!held.expired())std::fprintf(stderr,"The completed continuation still holds the scene lease of frame %llu\n",(unsigned long long)sceneFrame.frameId);
+        assert(held.expired()&&continued.execution);
+    }
     [window close];
     assert([[NSFileManager defaultManager]removeItemAtPath:directory error:nil]);std::puts("ordered temporal fallback: missing/unavailable scene row isolated, live replacement adopted with that row bypassed, partial failure overwritten, downstream pixels/extent/frame metadata preserved, typed shader/temporal busy kept previous image and recovered, renderer receipts ran each row once per final image through a scene, two refused frames and the scene stopping");return 0;
 }
