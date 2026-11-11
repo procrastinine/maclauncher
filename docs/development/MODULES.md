@@ -516,6 +516,12 @@ These hooks start a game's processes and decide how they stop.
 - `runtimeSettingsChanged(entry, runtimeId, settings)` receives a running game's effective runtime settings after an edit, so the module can apply settings that take effect without a relaunch.
 - `reviewRuntimeSettings(runtimeId, next, previous, { systemPreferences })` runs before a game or module runtime-settings edit is stored and returns the settings to store. A module uses it for a choice that needs a system permission: the module asks for the permission and, while the permission is missing, returns a replacement value for that choice.
 
+### Native application identity
+
+Native game launch environments can supply `MACLAUNCHER_GAME_NAME` with the library title and `MACLAUNCHER_GAME_ICON` with an absolute path to existing local artwork. Native hosts that consume this optional contract apply the name before application registration, label their standard app menu and initial game window, and load the artwork into the Dock icon. Game-controlled caption changes and native menu actions retain their own handlers.
+
+The host consumes these values in its existing process. The contract creates no per-game files. Empty values retain the runtime’s own naming and artwork; runtime packages without contract support ignore the values. Publisher packages keep their upstream identity.
+
 ### Graphics
 
 - `resolveGraphicsInputs(entry, context)` optionally describes the selected renderer's inputs to the graphics service, including `{ cameraProjection, source, methods }` for a camera integration. The service intersects these methods with the installed providers and the selected presentation host.
