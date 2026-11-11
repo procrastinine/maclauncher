@@ -12,6 +12,7 @@ function fixture(t, {live = false} = {}) {
   const session = {id: "session", pid: 4242}, binding = {effectPlanAPI: 1, pid: session.pid, launchId: "launch"};
   const EffectsRuntime = { info: (entry, options) => { calls.push(["info", options]);return { mode: "advanced", plan: entry.effects, catalog: [] }; },
     describe: async (entry, id, draft, options) => { calls.push(["describe", id, draft, options]);return { key: "key", parameters: [] }; },
+    templates: (entry, options) => { calls.push(["templates", options]);return [{ id: "template" }]; },
     prepare: async (entry, options) => { calls.push(["prepare", structuredClone(entry.effects), options]); },
     publishSimple: () => calls.push(["simple"]), emptyDocument: () => ({schema: 1, mode: "advanced", revision: "empty-revision", nodes: []}),
     acceptance: async entry => {
@@ -53,6 +54,10 @@ function fixture(t, {live = false} = {}) {
         if (method === "gameEffectsInfo") {
           assert.equal(lane, "inspector");
           return structuredClone(context.EffectsRuntime.info(structuredClone(requested), structuredClone(action)));
+        }
+        if (method === "gameEffectTemplates") {
+          assert.equal(lane, "inspector");
+          return structuredClone(context.EffectsRuntime.templates(structuredClone(requested), structuredClone(action)));
         }
         // Shader parameters are described there too, for running and stopped games.
         if (method === "gameEffectParameters") {
@@ -328,4 +333,15 @@ test("an edit with an unreadable row saves and publishes its other rows with a n
   const saves = f.saved.length;
   await assert.rejects(async () => f.invoke("setGameEffects", f.entry.gamePath, {...shaderPlan(), extra: true}), /valid ordered effects plan/);
   assert.equal(f.saved.length, saves, "a desired plan without a readable envelope is not saved");
+});
+
+test("the graphics menu reads a stopped game's chain templates in the inspector worker and a running game's on main", async t => {
+  const stopped = fixture(t);
+  assert.deepEqual(await stopped.invoke("getGameEffectTemplates", stopped.entry.gamePath), [{ id: "template" }]);
+  const options = stopped.calls.find(row => row[0] === "templates")[1];
+  assert.equal(options.running, false);assert.deepEqual(options.graphicsInputs, { depth: true });
+  assert.equal(options.prepareEffectsEntry, undefined, "the worker receives data options only");
+  const running = fixture(t, {live: true});
+  assert.deepEqual(await running.invoke("getGameEffectTemplates", running.entry.gamePath), [{ id: "template" }]);
+  assert.equal(running.calls.find(row => row[0] === "templates")[1].running, true);
 });

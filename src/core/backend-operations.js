@@ -264,6 +264,10 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     gameEffectsInfo(entry, options) {
       return require("../modules/shared/effects/runtime").info(entry, { ...options, userDataDir, app: null });
     },
+    // The graphics menu's chain templates for a game that is not running.
+    gameEffectTemplates(entry, options) {
+      return require("../modules/shared/effects/runtime").templates(entry, { ...options, userDataDir, app: null });
+    },
     // A shader row's parameters. Describing verifies the included graphics
     // runtime's files and compiles the shader, which stays off main.
     gameEffectParameters(entry, nodeId, draft, options) {

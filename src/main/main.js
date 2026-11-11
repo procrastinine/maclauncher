@@ -4362,7 +4362,10 @@ ipcMain.handle("launcher:graphicsCatalog", (event, request) => graphicsCatalog.r
 ipcMain.handle("launcher:getGameEffectTemplates", async (_event, gamePath) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
   if (!entry) throw new Error("Game not found in library.");
-  return EffectsRuntime.templates(entry, await gameEffectsOptions(entry));
+  const options = await gameEffectsOptions(entry);
+  // As with discovery, a game that is not running reads them in the inspector's worker.
+  return options.running ? EffectsRuntime.templates(entry, options) : backendService.request("inspector", "gameEffectTemplates", entry,
+    Object.fromEntries(EFFECTS_INFO_OPTIONS.filter(key => options[key] !== undefined).map(key => [key, options[key]])));
 });
 ipcMain.handle("launcher:getGraphicsStatus", (_event, gamePath) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
