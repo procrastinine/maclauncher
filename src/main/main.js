@@ -190,9 +190,6 @@ function createLogger() {
 const logger = createLogger();
 const gamePreparations = new Map();
 const runtimeSettingsWindows = new Map();
-// Play's file check for each game, before the backend launch exists; Cancel
-// during the check marks it stopped.
-const playFileChecks = new Map();
 // Tools button patches in progress for each game: the latest request and the
 // last choice whose patch succeeded.
 const toolsButtonPatches = new Map();
@@ -1913,6 +1910,9 @@ async function stopRunSession(session) {
   return false;
 }
 
+// Play's file check for each game, before the backend launch exists; Cancel
+// during the check marks it stopped.
+const playFileChecks = new Map();
 async function stopGameRuns(gamePath) {
   const checking = playFileChecks.get(gamePath);
   if (checking) checking.stopped = true;
