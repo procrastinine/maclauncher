@@ -1,6 +1,6 @@
 # Unity
 
-This game type covers games built with the Unity engine. For Windows and Linux exports that use Unity's Mono scripting backend, MacLauncher runs the game with the Mac player of exactly the same Unity version. The game keeps its original scripts and assets, and MacLauncher prepares the native application automatically. Windows builds that the Mac player cannot run, because of IL2CPP code, Windows desktop APIs or shaders without a Metal or OpenGL version, use the [Windows runtimes](#crossover-and-sikarugir-wine). The asset and source tools work for Mono and IL2CPP games with any runtime.
+This game type covers games built with the Unity engine. For Windows and Linux exports that use Unity's Mono scripting backend, MacLauncher runs the game with the Mac player of exactly the same Unity version. The game keeps its original scripts and assets, and MacLauncher prepares the native application automatically. Windows builds that the Mac player cannot run, because of IL2CPP code, Windows desktop APIs or shaders without a Metal or OpenGL version, use the [Windows runtimes](#crossover-sikarugir-and-winecx). The asset and source tools work for Mono and IL2CPP games with any runtime.
 
 ## Detection and versions
 
@@ -93,6 +93,6 @@ Shared graphics uses the selected Mac player's CPU architecture, including its R
 
 When the game ships its own Mac build, **Game's macOS app** runs that build.
 
-### CrossOver and Sikarugir
+### CrossOver, Sikarugir and WineCX
 
-Compatible x86 and x64 Windows exports, including IL2CPP and Direct3D-only builds, can use [Sikarugir](../runtimes/SIKARUGIR.md) or an available [CrossOver](../runtimes/CROSSOVER.md) application instead. The asset and source tools stay available. These runtimes keep their own private writable files and Windows environments. [Windows Game](WINDOWS.md#windows-executables-in-other-game-types) describes how they are offered.
+Compatible x86 and x64 Windows exports, including IL2CPP and Direct3D-only builds, can use [Sikarugir](../runtimes/SIKARUGIR.md), [WineCX](../runtimes/WINECX.md) or an available [CrossOver](../runtimes/CROSSOVER.md) application instead. The asset and source tools stay available. These runtimes keep their own private writable files and Windows environments. [Windows Game](WINDOWS.md#windows-executables-in-other-game-types) describes how they are offered.

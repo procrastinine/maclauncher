@@ -17,7 +17,7 @@ The table lists game types by the name the app shows. In it, *Windows runtimes* 
 | [Build engine (Raze)](BUILD_ENGINE.md) | Raze | |
 | [CatSystem2](CATSYSTEM2.md) | Archive and script tools (inspection only) | Windows runtimes |
 | [Construct](CONSTRUCT.md) | Electron | NW.js, NW.js (Patched), Game's macOS app, Windows runtimes |
-| [DOS](DOS.md) | DOSBox Staging | Windows runtimes |
+| [DOS](DOS.md) | DOSBox Staging | UZDoom, Raze or DREAMM for a game folder that holds one of their main game files, Windows runtimes |
 | [Doom engine (UZDoom)](DOOM_ENGINE.md) | UZDoom | |
 | [FAVORITE / FVP](FVP.md) | RFVP | Windows runtimes |
 | [Flash](FLASH.md) | Adobe Flash Player | Ruffle |
@@ -55,7 +55,7 @@ The table lists game types by the name the app shows. In it, *Windows runtimes* 
 | [VNDS](VNDS.md) | VNDS-LOVE | Windows runtimes |
 | [Web](WEB.md) | Electron | NW.js, NW.js (Patched), Game's macOS app, Windows runtimes |
 | [Window](WINDOW.md) | Window capture | |
-| [Windows Game](WINDOWS.md) | Sikarugir | CrossOver |
+| [Windows Game](WINDOWS.md) | Sikarugir | CrossOver, WineCX |
 | [WOLF RPG Editor](WOLFRPG.md) | Browser Woditor | Windows runtimes |
 
 Window entries are not imported. MacLauncher creates one for each window graphics session, which applies graphics to another app's window or to a display, and the entry exists only while that session runs.
@@ -74,7 +74,7 @@ When a game includes a compatible macOS build of its engine, its game type offer
 
 ### Windows runtimes
 
-Sikarugir and CrossOver play the [Windows Game](WINDOWS.md) type. They are also offered for other game types whose files include a compatible x86 or x64 Windows executable, and offering them does not change the detected engine and version, the engine's tools or its default runtime. For BGI / Ethornell, CatSystem2 and Haxe native builds, which have no runtime that plays them on macOS, Play runs the Windows executable through one of these two. [Windows executables in other game types](WINDOWS.md#windows-executables-in-other-game-types) describes the rules.
+Sikarugir, CrossOver and WineCX play the [Windows Game](WINDOWS.md) type. They are also offered for other game types whose files include a compatible x86 or x64 Windows executable, and offering them does not change the detected engine and version, the engine's tools or its default runtime. For BGI / Ethornell, CatSystem2 and Haxe native builds, which have no runtime that plays them on macOS, Play runs the Windows executable through one of these three, a registered CrossOver application when one is available and Sikarugir otherwise. [Windows executables in other game types](WINDOWS.md#windows-executables-in-other-game-types) describes the rules.
 
 ### Inspection-only runtimes
 

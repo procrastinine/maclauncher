@@ -9,7 +9,7 @@ This game type covers desktop games made with GameMaker, from Classic GM8.0/8.1 
 | [Official GameMaker](#official-gamemaker) | Studio games whose bytecode matches an official vendor runner |
 | [Game's macOS app](#games-macos-app) | The game's own macOS build |
 | [Inspect only](#inspect-only) | Nothing; the tools stay available |
-| [Sikarugir and CrossOver](#crossover-and-sikarugir-wine) | Compatible Windows executables |
+| [Sikarugir, CrossOver and WineCX](#crossover-sikarugir-and-winecx) | Compatible Windows executables |
 
 ## Formats and version detection
 
@@ -179,9 +179,9 @@ A game that already ships a native macOS app can keep using it through **Game's 
 
 **Inspect only** is the choice for formats without a compatible player. It disables Play and Shortcut but keeps the tools available.
 
-### CrossOver and Sikarugir
+### CrossOver, Sikarugir and WineCX
 
-Windows executables, including Classic games, can also play through [Sikarugir or CrossOver](WINDOWS.md#windows-executables-in-other-game-types).
+Windows executables, including Classic games, can also play through [Sikarugir, WineCX or CrossOver](WINDOWS.md#windows-executables-in-other-game-types).
 
 ## Licenses
 

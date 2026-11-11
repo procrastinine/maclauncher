@@ -1,11 +1,11 @@
 # BGI / Ethornell
 
-BGI, also known as Ethornell, is a Windows visual novel engine. Its games store compiled Buriko programs (`._bp` files) and other resources in ARC archives. MacLauncher has no native BGI interpreter. It identifies BGI games, provides archive, program and text tools, and plays the original Windows executable through CrossOver or Sikarugir.
+BGI, also known as Ethornell, is a Windows visual novel engine. Its games store compiled Buriko programs (`._bp` files) and other resources in ARC archives. MacLauncher has no native BGI interpreter. It identifies BGI games, provides archive, program and text tools, and plays the original Windows executable through a Wine runtime: CrossOver, Sikarugir or WineCX.
 
 | Runtime | Description |
 | --- | --- |
 | Program tools (default) | Detection and inspector tools; does not launch the game |
-| CrossOver, Sikarugir | Run the original Windows executable |
+| CrossOver, Sikarugir, WineCX | Run the original Windows executable |
 
 ## Importing games
 
@@ -31,6 +31,6 @@ Program tools are limited to 128 archives, 16 MiB of indexes in total, 1024 prog
 
 Program tools, the default runtime, provides detection, version information and the inspector tools but cannot launch the game. When a compatible Windows executable is present, automatic selection plays the game with a Windows runtime instead; without one, the import can only be inspected.
 
-### CrossOver and Sikarugir
+### CrossOver, Sikarugir and WineCX
 
-Play runs the game's Windows executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application when one is available, and otherwise through [Sikarugir](../runtimes/SIKARUGIR.md). Either one can be chosen in the game's runtime selector, and the detected engine version and the program tools stay available with both.
+Play runs the game's Windows executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application when one is available, and otherwise through [Sikarugir](../runtimes/SIKARUGIR.md). [WineCX](../runtimes/WINECX.md) is offered as well. Any of the three can be chosen in the game's runtime selector, and the detected engine version and the program tools stay available with each.

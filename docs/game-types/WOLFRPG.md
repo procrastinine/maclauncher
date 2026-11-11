@@ -15,7 +15,7 @@ Browser Woditor needs a small runtime marker and a list of the game's files, and
 | Runtime | Delivery |
 | --- | --- |
 | Browser Woditor (default) | Downloaded from its publisher, **Runtimes → WOLF RPG** |
-| CrossOver, Sikarugir | Windows runtimes for the original `Game.exe` |
+| CrossOver, Sikarugir, WineCX | Windows runtimes for the original `Game.exe` |
 
 The selected Browser Woditor version determines which WOLF RPG formats and APIs work. Games that use Windows-specific system functions, native DLLs, WOLF RPG Pro APIs or MP4 video can run in [Sikarugir](../runtimes/SIKARUGIR.md) or [CrossOver](../runtimes/CROSSOVER.md) instead.
 

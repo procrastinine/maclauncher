@@ -13,7 +13,7 @@ By default, the **RGSS version** setting uses the version that MacLauncher detec
 | Runtime | Delivery |
 | --- | --- |
 | MKXP-Z (default) | Package from MacLauncher Builds, or an upstream build |
-| CrossOver, Sikarugir | Windows runtimes for the original `Game.exe` |
+| CrossOver, Sikarugir, WineCX | Windows runtimes for the original `Game.exe` |
 
 MKXP-Z has a long list of runtime settings for the window, scaling, fonts, audio, Ruby and RTP paths; the [settings reference](../runtimes/SETTINGS_REFERENCE.md#rpg-maker-xpvxvx-ace) lists them all.
 

@@ -5,7 +5,7 @@ FVP is FAVORITE's visual novel engine for Windows. A game consists of a compiled
 | Runtime | Description |
 | --- | --- |
 | RFVP (default) | Independent FVP interpreter, running natively |
-| CrossOver, Sikarugir | Run the original Windows executable |
+| CrossOver, Sikarugir, WineCX | Run the original Windows executable |
 
 ## Importing games
 
@@ -60,9 +60,9 @@ Versions come from the [publisher's release catalog](https://github.com/xmoezzz/
 - The Mac download is the publisher's disk image or, after a rename or format change, another Mac archive in the prerelease. Installation finds the application and the engine library for this Mac's processor wherever the release places them.
 - A compatible download that was already identified can still be installed when the release catalog is unavailable. MacLauncher verifies its checksum before using it.
 
-### CrossOver and Sikarugir
+### CrossOver, Sikarugir and WineCX
 
-Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir](../runtimes/SIKARUGIR.md). The detected version and the inspector tools stay available with either runtime.
+Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application, [Sikarugir](../runtimes/SIKARUGIR.md) or [WineCX](../runtimes/WINECX.md). The detected version and the inspector tools stay available with each of these runtimes.
 
 ## Licenses
 

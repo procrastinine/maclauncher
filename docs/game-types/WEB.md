@@ -26,7 +26,7 @@ For library titles and icons, MacLauncher reads the local NW.js `window.title`, 
 | NW.js | Downloaded from **Runtimes → NW.js** |
 | NW.js (Patched) | The same NW.js installation with compatibility patches |
 | Game's macOS app | A compatible Mac app supplied with the game |
-| CrossOver, Sikarugir | Windows runtimes for the game's Windows executable |
+| CrossOver, Sikarugir, WineCX | Windows runtimes for the game's Windows executable |
 
 [Web runtimes](../runtimes/WEB_RUNTIMES.md) describes the hosts and their settings.
 

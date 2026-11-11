@@ -5,7 +5,7 @@ VNDS is a visual novel script format. MacLauncher plays games that have already 
 | Runtime | Description |
 | --- | --- |
 | VNDS-LOVE (default) | VNDS interpreter hosted by LÖVE |
-| CrossOver, Sikarugir | Run a compatible Windows executable |
+| CrossOver, Sikarugir, WineCX | Run a compatible Windows executable |
 
 ## Game files and saves
 
@@ -27,6 +27,6 @@ VNDS-LOVE is the default runtime, and it has two parts. The interpreter is publi
 
 **Runtimes → VNDS → VNDS-LOVE** lists the interpreter packages in the MacLauncher Builds catalog. Each package records its source revision and interpreter version, and MacLauncher accepts any compatible source revision instead of requiring a particular one. The runtime status then reports which package is installed.
 
-### CrossOver and Sikarugir
+### CrossOver, Sikarugir and WineCX
 
-When a game includes a compatible x86 or x64 Windows executable, that executable can also run through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir](../runtimes/SIKARUGIR.md).
+When a game includes a compatible x86 or x64 Windows executable, that executable can also run through a registered [CrossOver](../runtimes/CROSSOVER.md) application, [Sikarugir](../runtimes/SIKARUGIR.md) or [WineCX](../runtimes/WINECX.md).

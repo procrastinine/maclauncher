@@ -5,7 +5,7 @@ Nitroplus games are Windows visual novels whose scripts are NSS source files pac
 | Runtime | Description |
 | --- | --- |
 | Nitroplus (default) | Native NPA/NSS player |
-| CrossOver, Sikarugir | Run the original Windows executable |
+| CrossOver, Sikarugir, WineCX | Run the original Windows executable |
 
 ## Importing games
 
@@ -72,9 +72,9 @@ The player also handles these rendering and input details:
 - Native choice objects include the `MouseLeave` namespace used by menu callbacks in the scripts. Reading a missing object returns no object, an invalid write fails with its namespace, and cyclic aliases fail within a fixed limit.
 - Drawable children are found anywhere in the `MouseUsual`, `MouseOver` and `MouseClick` state groups, including children with arbitrary names and nested groups. Hit testing, state visibility and keyboard focus use their actual bounds. `SetNextFocus` also accepts a child-texture handle and resolves the choice that contains it. Existing `img` children remain supported. The search covers up to 32 nested groups and 4096 objects.
 
-### CrossOver and Sikarugir
+### CrossOver, Sikarugir and WineCX
 
-Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir](../runtimes/SIKARUGIR.md). The detected version and the inspector tools stay available with either runtime.
+Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application, [Sikarugir](../runtimes/SIKARUGIR.md) or [WineCX](../runtimes/WINECX.md). The detected version and the inspector tools stay available with each of these runtimes.
 
 ## Source and builds
 

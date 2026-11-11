@@ -7,7 +7,7 @@ AliceSoft games are Windows games built on AliceSoft's System engines, from Syst
 | System 1–3 (default) | System 1, 2 and 3, following upstream format support | [system3-sdl2](https://github.com/kichikuou/system3-sdl2) |
 | System 3.5–3.9 | ALD scenarios, with SDL2 graphics, audio and live variables | [xsystem35-sdl2](https://github.com/kichikuou/xsystem35-sdl2) |
 | System 4 | AIN virtual machine with HLL APIs, native fonts, audio and movies | [xsystem4](https://github.com/nunuhara/xsystem4) |
-| CrossOver, Sikarugir | Run the original Windows executable | |
+| CrossOver, Sikarugir, WineCX | Run the original Windows executable | |
 
 The detected engine generation decides which interpreter a game can use.
 
@@ -106,9 +106,9 @@ The System 3.5 to 3.9 interpreter is built from [xsystem35-sdl2](https://github.
 
 The System 4 interpreter is built from [xsystem4](https://github.com/nunuhara/xsystem4) and runs the AIN virtual machine with its HLL APIs. Each package records its xsystem4 and libsys4 source revisions. It contains separate gothic and mincho fonts, shaders, native `--save-folder` routing and optional Console text capture, and it decodes movies with FFmpeg. MacLauncher's Mac adaptations add global-reference initialization, case-insensitive AIN lookup, GBK text conversion and TTC font support, and they also change resource handling, saves and rendering. For rendering, these changes use Apple OpenGL 3.2 core with GLSL 150, and the player finds its shaders relative to the executable.
 
-### CrossOver and Sikarugir
+### CrossOver, Sikarugir and WineCX
 
-Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir](../runtimes/SIKARUGIR.md). The detected version and the source tools stay available with either runtime.
+Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application, [Sikarugir](../runtimes/SIKARUGIR.md) or [WineCX](../runtimes/WINECX.md). The detected version and the source tools stay available with each of these runtimes.
 
 ## Local registration
 

@@ -23,7 +23,7 @@ Ren'Py 7 and earlier use Python 2, and Ren'Py 8 uses Python 3. When a version tu
 | Ren'Py SDK (default) | Official SDK from **Runtimes → Ren'Py** |
 | Ren'Py Patch | macOS runtime files from the matching SDK, copied into the game |
 | Game's macOS app | A Mac build supplied with the game |
-| CrossOver, Sikarugir | Windows runtimes for the game's Windows executable |
+| CrossOver, Sikarugir, WineCX | Windows runtimes for the game's Windows executable |
 
 ### Ren'Py SDK
 

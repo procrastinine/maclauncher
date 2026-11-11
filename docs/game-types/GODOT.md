@@ -24,7 +24,7 @@ During import and metadata refresh, an exported pack provides its declared appli
 | --- | --- |
 | Godot (default) | Official Godot release from **Runtimes → Godot** |
 | Game's macOS app | A compatible Mac app supplied with the game |
-| CrossOver, Sikarugir | Windows runtimes for the game's Windows executable |
+| CrossOver, Sikarugir, WineCX | Windows runtimes for the game's Windows executable |
 
 ### Versions
 
