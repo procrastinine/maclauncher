@@ -45,11 +45,13 @@ test('runtime states report an inventory change only when installed or included 
     emit: (event, payload) => events.push([event, payload?.managerId || payload?.id]) });
   t.after(() => ops.beginShutdown());
   const changes = () => events.filter(([event]) => event === 'runtimeInventoryChanged').length;
+  // Every lane reads the same files, so the state lane's first report, such
+  // as the startup inventory, leaves the other lanes' reads current.
   await ops.runtimeStates({}, [manager.id]); await ops.runtimeStates({}, [manager.id]);
-  assert.equal(changes(), 1, 'the first state of a lane is a change; an identical one is not');
+  assert.equal(changes(), 0, 'neither a lane\'s first state nor an identical one is a change');
   installed = [...installed, { version: '2.0', ready: true }];
   await ops.runtimeStates({}, [manager.id]);
-  assert.equal(changes(), 2);
+  assert.equal(changes(), 1);
   assert.equal(events.filter(([event]) => event === 'runtimeState').length, 3, 'every state still reaches the windows');
 });
 

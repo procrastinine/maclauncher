@@ -3808,12 +3808,11 @@ async function gameEffectsOptions(entry, settings = loadSettings()) {
   // Device metadata does not hold the graph editor or any graphics edit open.
   // A newer included helper can query hardware for an older active processor.
   void Hardware.inspect(hardwareRoot).then(() => graphicsCatalog.refresh());
-  // A launch binding records its graphics inputs. Otherwise the inspector's
-  // backend lane resolves them, as for the inspector, so game files and
-  // translator plans stay off this thread.
+  // A launch binding records its graphics inputs. Otherwise the game's backend
+  // lane resolves them, so game files and translator plans stay off this thread.
   const effective = launch?.runtimeId ? {...entry, runtimeId: launch.runtimeId} : entry;
   const recorded = launch && Object.hasOwn(launch, "graphicsInputs");
-  const result = recorded ? null : await backendService.request("inspector", "moduleAction", effective, "graphicsInputs", {}, settings);
+  const result = recorded ? null : await backendService.request(`game:${entry.gameId || entry.gamePath}`, "moduleAction", effective, "graphicsInputs", {}, settings);
   // Module graphics callbacks prepare game content, so they wait for the game's files.
   const callbacks = result?.filesUnavailable ? {} : launcherService.graphicsCallbacks(effective, settings);
   const graphicsHardware = Hardware.snapshot(hardwareRoot);

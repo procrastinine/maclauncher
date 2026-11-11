@@ -6,7 +6,6 @@ const path = require("node:path");
 const vm = require("node:vm");
 const { monitorEventLoopDelay } = require("node:perf_hooks");
 const { createBackendService } = require("../src/core/backend-worker-client");
-const { createBackendOperations } = require("../src/core/backend-operations");
 const { createModuleActionRequests } = require("../src/main/module-action-requests");
 const workerPath = path.join(__dirname, "fixtures", "backend-worker.cjs");
 
@@ -59,29 +58,6 @@ test("selected games read through the one inspector worker while the launcher's 
   assert.equal(tool.lane, "game:game-0");
   assert.equal((await handler({ sender: owner }, games[0].gamePath, "otherStatus", {})).lane, "inspector",
     "a status action declared for another runtime of the module is an inspector read");
-});
-
-// The state worker's startup inventory reads the same files every other
-// worker reads, so its first report of each manager does not make other
-// workers read runtimes again. A later report that differs does.
-test("the startup runtime inventory leaves other workers' runtime reads current", async t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "inspector-selection-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  let installed = [{ version: "1.0", ready: true }];
-  const manager = { id: "fixture-runtime", label: "Fixture", getState: () => ({ installed, catalog: { versions: [] } }) };
-  const registry = { listModuleIds: () => [], listModules: () => [], getModule: () => null, getModuleInfo: () => null,
-    getModuleDir: () => __dirname, listSharedRuntimeManagers: () => [manager], getRuntimeManagerUi: () => null };
-  const events = [];
-  const operations = createBackendOperations({ userDataDir: root, registry, emit: event => events.push(event) });
-  const changes = () => events.filter(event => event === "runtimeInventoryChanged").length;
-  await operations.runtimeStates({});
-  assert.equal(events.filter(event => event === "runtimeState").length, 1);
-  assert.equal(changes(), 0, "a first report is not an inventory change");
-  await operations.runtimeStates({});
-  assert.equal(changes(), 0, "an unchanged report is not an inventory change");
-  installed = [...installed, { version: "2.0", ready: true }];
-  await operations.runtimeStates({});
-  assert.equal(changes(), 1, "a report with another installed version is a change");
 });
 
 // The inspector's lane keeps listed installations and verified app bundles

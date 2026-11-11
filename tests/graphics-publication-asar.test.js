@@ -13,6 +13,9 @@ for (const unpacked of [false, true]) test(`Electron ${unpacked ? "unpacked" : "
     const target = path.join(source, shared, relative); fs.mkdirSync(path.dirname(target), {recursive: true});
     fs.copyFileSync(path.join(__dirname, "..", shared, relative), target);
   }
+  // The app-bundle helper reads the worker's runtime inventory count.
+  fs.mkdirSync(path.join(source, "src/core"), {recursive: true});
+  fs.copyFileSync(path.join(__dirname, "../src/core/runtime-inventory-revision.js"), path.join(source, "src/core/runtime-inventory-revision.js"));
   const relative = shared + "reshade/distribution-supplementals.json";
   const declaration = [{id: "reshade", version: "first", directoryRelative: "reshade/first/universal", manifestRelative: "runtime.json",
     manifestSha256: "a".repeat(64), files: [{path: "runtime.json", size: 2, sha256: "b".repeat(64)}]}];
