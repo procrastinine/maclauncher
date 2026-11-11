@@ -58,9 +58,9 @@ async function preparePayload({ unpacked, pin, signal, logger, onProgress }, dep
     const templateUnpacked = path.join(scratch, "unpacked"); await fs.promises.mkdir(templateUnpacked);
     stageProgress("Extracting support libraries…");
     await (dependencies.extractArchive || extractArchive)(archive, templateUnpacked, signal);
-    const templateRoot = require("../graphics/closure").templateContents(templateUnpacked, template.version);
+    const templateRoot = require("./template-closure").templateContents(templateUnpacked, template.version);
     stageProgress("Preparing graphics libraries…");
-    graphics = await (dependencies.stageTemplateClosure || require("../graphics").stageTemplateClosure)({
+    graphics = await (dependencies.stageTemplateClosure || require("./template-closure").stageTemplateClosure)({
       templateRoot, templateVersion: template.version, destinationRoot: path.join(unpacked, SUPPORT_ROOT), signal });
   } finally { await fs.promises.rm(scratch, { recursive: true, force: true }); }
   throwIfAborted(signal);

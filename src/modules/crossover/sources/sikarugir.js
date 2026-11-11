@@ -15,7 +15,7 @@ module.exports = Object.freeze({
   graphicsSelector: false,
   vulkanLibrarySelector: () => false,
   includedTranslators(install, add, { describe, source, requestedEngine, warnings, nativeRoots, result, Description }) {
-    const { RELATIVE_PATHS, templateRenderers, gstreamerPaths } = require("../sikarugir/graphics/closure");
+    const { RELATIVE_PATHS, templateRenderers, gstreamerPaths } = require("../sikarugir/runtime/template-closure");
     const root = support(install), gstreamer = gstreamerPaths(root);
     add(gstreamer.plugins, "gstreamer", "video", { form: "dylib", frameworkRoot: gstreamer.root });
     // This is the same explicit DYLD root used by the launch.
@@ -54,7 +54,7 @@ module.exports = Object.freeze({
   },
   nativeLibraries(install) {
     const root = support(install), frameworks = path.join(root, "Frameworks");
-    const gstreamer = require("../sikarugir/graphics/closure").gstreamerPaths(root);
+    const gstreamer = require("../sikarugir/runtime/template-closure").gstreamerPaths(root);
     return { libraries: [frameworks], frameworks: [frameworks],
       gstreamer: fs.existsSync(gstreamer.lib) ? { lib: gstreamer.lib, plugins: gstreamer.plugins, scanner: gstreamer.scanner } : null };
   },

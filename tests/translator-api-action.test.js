@@ -236,7 +236,7 @@ test('real API11 imported PE machine failure retains the coherent CrossOver shar
 });
 
 test('real Sikarugir API graphics view applies exact planned builtin and Unix sources without graphics metadata', async t => {
-  const f = fixture(t), Graphics = require('../src/modules/crossover/sikarugir/graphics');
+  const f = fixture(t), Graphics = require('../src/modules/crossover/sources/wine-graphics');
   const templateRoot = path.join(f.root, 'template'), component = path.join(templateRoot, 'Frameworks/renderer/dxmt');
   fs.mkdirSync(path.dirname(component), { recursive: true }); fs.cpSync(path.join(f.root, 'wine/lib/dxmt'), component, { recursive: true });
   f.put('wine/share/wine/nls/c_932.nls', 'fixture locale data');
@@ -343,7 +343,7 @@ test('resolved vkd3d-proton replaces stock DXGI in the actual private loader inp
 
 test('standalone D3DMetal and DXMT API12 choices resolve and place their matching libraries on both routes', async t => {
   const f = fixture(t), templateRoot = path.join(f.root, 'paired-template');
-  const { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/graphics/closure');
+  const { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/runtime/template-closure');
   const roots = { d3dmetal: path.join(f.root, 'wine/lib64/apple_gptk'), dxmt: path.join(f.root, 'wine/lib/dxmt') };
   for (const [engine, root] of Object.entries(roots)) {
     for (const name of ['d3d10core', 'd3d11', 'dxgi', 'd3d12', 'd3d12core'])
@@ -385,7 +385,7 @@ test('foreign DXMT 0.80 references own DXGI and winemetal over a 0.72 default an
   f.put(path.relative(f.root, path.join(root, 'x86_64-unix/winemetal.so')), image({ cpu: X64, symbols: ['wine_metal_entry'] }));
   f.put(path.relative(f.root, path.join(root, 'version')), '0.80'); f.put('wine/lib/dxmt/version', '0.72');
   f.put('wine/share/wine/nls/c_932.nls', 'fixture locale data');
-  const templateRoot = path.join(f.root, 'default-template'), { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/graphics/closure');
+  const templateRoot = path.join(f.root, 'default-template'), { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/runtime/template-closure');
   const oldTemplate = path.join(templateRoot, RELATIVE_PATHS.renderers, 'dxmt');
   fs.mkdirSync(path.dirname(oldTemplate), { recursive: true }); fs.cpSync(path.join(f.root, 'wine/lib/dxmt'), oldTemplate, { recursive: true });
   const install = { ...f.install, templateRoot };
@@ -408,7 +408,7 @@ test('foreign DXMT 0.80 references own DXGI and winemetal over a 0.72 default an
       { host: f.host, translatorPlan: plan, executableArchitecture: 'x86_64', baseEnvironment: {} });
     assert.equal(built.environment.DXMT_ENABLE_NVEXT, '1'); assert.equal(built.environment.D3DM_ENABLE_METALFX, '0');
     if (runtime === 'sikarugir') {
-      const graphics = await require('../src/modules/crossover/sikarugir/graphics').prepareGraphicsView({ install, settings: effective,
+      const graphics = await require('../src/modules/crossover/sources/wine-graphics').prepareGraphicsView({ install, settings: effective,
         translatorPlan: plan, translatorView: view, context, userDataDir: context.userDataDir,
         viewRoot: path.join(context.userDataDir, 'dxmt-view', aggregate || 'automatic'), prefixPath: path.join(f.root, 'prefix'),
         host: f.host, executableArchitecture: 'x86_64' });
@@ -447,7 +447,7 @@ test('engine settings use declared configuration namespaces without rewriting hi
   assert.deepEqual(new Set(declared['d3d-renderer']), new Set(['dxmt', 'dxvk']));
   assert.equal(WineSettings.environment({ dxvkHud: 'fps' }, { engines: declared }).DXVK_HUD, 'fps');
 
-  const { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/graphics/closure'), templateRoot = path.join(f.root, 'namespace-template');
+  const { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/runtime/template-closure'), templateRoot = path.join(f.root, 'namespace-template');
   const dxmtRoot = path.join(templateRoot, RELATIVE_PATHS.renderers, 'dxmt');
   fs.mkdirSync(path.dirname(dxmtRoot), { recursive: true }); fs.cpSync(path.join(f.root, 'wine/lib/dxmt'), dxmtRoot, { recursive: true });
   f.put(path.join('namespace-template', RELATIVE_PATHS.renderers, 'd9vk/wine/x86_64-windows/d3d9.dll'), dll());

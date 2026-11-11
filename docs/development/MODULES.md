@@ -127,7 +127,7 @@ Catalog rows describe the builds, and managers decide which build to use. A MacL
 
 For each version, the default build is the one for the launcher's CPU, then Universal, then an Intel build through Rosetta on Apple Silicon. A build for another CPU appears in the Build menu. Managers take availability from these records and `architectureSupport`, so adding a CPU for a project means publishing its record; the launcher needs no change. An unfamiliar CPU label does not make a record require a newer MacLauncher version. Instead, installation checks the CPU slices that the executable actually contains.
 
-Publishers sometimes move files inside a package between versions, and one rule locates them. An open-ended version threshold (`versionAtLeast`) orders the known locations, a bounded search of the package's contents runs when none of them match, and the location found is recorded with the installation. Unity player templates ([`unity/runtime/package.js`](../../src/modules/unity/runtime/package.js)) and Sikarugir Template renderers ([`sikarugir/graphics/closure.js`](../../src/modules/crossover/sikarugir/graphics/closure.js)) follow this rule.
+Publishers sometimes move files inside a package between versions, and one rule locates them. An open-ended version threshold (`versionAtLeast`) orders the known locations, a bounded search of the package's contents runs when none of them match, and the location found is recorded with the installation. Unity player templates ([`unity/runtime/package.js`](../../src/modules/unity/runtime/package.js)) and Sikarugir Template renderers ([`sikarugir/runtime/template-closure.js`](../../src/modules/crossover/sikarugir/runtime/template-closure.js)) follow this rule.
 
 ### Registered local runtimes
 

@@ -59,7 +59,7 @@ function managedFixture(t, { installed = [], approval = true, native = false } =
   const { root, userDataDir } = fixture(t), calls = [], children = [], installs = new Map();
   const Modules = registry(), manifest = Modules.getModuleInfo("crossover");
   const Launch = require("./helpers/wine-source.cjs").launch("sikarugir");
-  const Graphics = require("../src/modules/crossover/sikarugir/graphics");
+  const Graphics = require("../src/modules/crossover/sources/wine-graphics");
   const Provider = require("./helpers/wine-source.cjs").provider("sikarugir");
   const { composeRuntimeProviders } = require("../src/modules/shared/runtime/providers");
   const runtimeRoot = path.join(root, "runtime-payloads");
@@ -291,7 +291,7 @@ test("ordinary Play obtains one consent, prepares the Windows environment and ru
   const spawned = calls.find(call => call.stage === "spawn");
   const state = entry.runtimeData.sikarugir;
   const plan = calls.find(call => call.stage === "graphics").translatorPlan;
-  const { RELATIVE_PATHS } = require("../src/modules/crossover/sikarugir/graphics/closure");
+  const { RELATIVE_PATHS } = require("../src/modules/crossover/sikarugir/runtime/template-closure");
   assert.equal(plan.components["vulkan-driver"].used.icd,
     path.join(root, "runtime-payloads", "engine-12", "support", RELATIVE_PATHS.vulkan, "MoltenVK_icd.json"));
   assert.equal(plan.components["d3d-renderer"].fallback, false);

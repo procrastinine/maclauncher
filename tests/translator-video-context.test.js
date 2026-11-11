@@ -3,7 +3,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const Binary = require('../src/modules/shared/runtime/binary-compatibility');
 const Description = require('../src/modules/shared/runtime/translator-description');
 const { resolvePluginLibraries } = require('../src/modules/shared/runtime/native-plugin-libraries');
-const Closure = require('../src/modules/crossover/sikarugir/graphics/closure');
+const Closure = require('../src/modules/crossover/sikarugir/runtime/template-closure');
 const { readMachOLoadCommands } = require('../src/modules/shared/runtime/macho-load-commands');
 const { image, X64, ARM64 } = require('./fixtures/macho-image');
 

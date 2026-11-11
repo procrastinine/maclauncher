@@ -1,6 +1,6 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypto");
-const Manager=require("./manager"),Graphics=require("../graphics"),Source=require("../../sources").get("sikarugir"),Launch=require("../../sources/wine-launch").forSource(Source);
+const Manager=require("./manager"),Graphics=require("../../sources/wine-graphics"),Template=require("./template-closure"),Source=require("../../sources").get("sikarugir"),Launch=require("../../sources/wine-launch").forSource(Source);
 const Writable=require("../../../shared/writable-input"),Rosetta=require("../../../shared/runtime/rosetta");
 const Environments=require("../../../shared/runtime/wine-environment");
 const Catalog=require("./catalog"),{versionAtLeast,systemVersionSync}=require("../../../shared/runtime/bundled-native");
@@ -27,7 +27,7 @@ function state({userDataDir,settings}={}){
   if(process.platform==="darwin"&&architecture()==="arm64"){
     const candidates=Manager.core.listCatalog({userDataDir}).filter(pin=>Catalog.validateEntry(pin)&&(runtime.catalog?.installableVersions||[]).includes(pin.version));
     for(const backend of ["d3d12","vulkan"]){
-      if(installs[backend]||!versionAtLeast(systemVersionSync(),Graphics.MINIMUM_MACOS[backend==="vulkan"?"kosmickrisp":"d3dmetal"]))continue;
+      if(installs[backend]||!versionAtLeast(systemVersionSync(),Template.MINIMUM_MACOS[backend==="vulkan"?"kosmickrisp":"d3dmetal"]))continue;
       const pin=backend==="d3d12"?candidates.find(row=>Number(row.engineVersion.split(".")[0])>=11):candidates.find(row=>row.version===selected.version)||candidates[0];
       if(pin)plans[backend]={managerId:"sikarugir",version:pin.version,label:"Sikarugir GPU helper",requiresDownload:true,
         installOptions:{sectionId:"default"},detail:"Required for the selected XeSS GPU backend. GPU support is checked after installation."};

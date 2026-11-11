@@ -256,7 +256,7 @@ function executableEvidence(entry, settings = {}) {
 async function prepareLaunch(entry, context, dependencies = {}) {
   const source = dependencies.source;
   const manager = dependencies.manager || source.manager();
-  const prepareGraphicsView = dependencies.prepareGraphicsView || require("../sikarugir/graphics").prepareGraphicsView;
+  const prepareGraphicsView = dependencies.prepareGraphicsView || require("./wine-graphics").prepareGraphicsView;
   const rosetta = dependencies.rosetta || Rosetta;
   const existingEnvironment = await require("../../shared/runtime/wine-processes").prepareEnvironment(
     Environments.readEnvironment(context.runtimeSettings?.environmentReference), context, context.processOptions);

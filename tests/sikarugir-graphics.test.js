@@ -4,8 +4,9 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const Graphics = require("../src/modules/crossover/sikarugir/graphics");
-const Hardware = require("../src/modules/crossover/sikarugir/graphics/hardware");
+const Graphics = require("../src/modules/crossover/sources/wine-graphics");
+const Template = require("../src/modules/crossover/sikarugir/runtime/template-closure");
+const Hardware = require("../src/modules/shared/runtime/graphics-hardware");
 const { X64, image } = require("./fixtures/macho-image");
 
 function put(file, bytes = "fixture") { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file; }
@@ -59,7 +60,7 @@ function fixture(t, { rendererParent = "Frameworks" } = {}) {
   return { root, contents, frameworks, renderers, engineRoot, support: path.join(root, "install", "support") };
 }
 async function installed(t, options) {
-  const f = fixture(t, options), metadata = await Graphics.stageTemplateClosure({ templateRoot: f.contents, destinationRoot: f.support });
+  const f = fixture(t, options), metadata = await Template.stageTemplateClosure({ templateRoot: f.contents, destinationRoot: f.support });
   return { ...f, metadata, install: { templateRoot: f.support, engineRoot: f.engineRoot, executablePath: path.join(f.engineRoot, "bin", "wine"), capabilities: { msync: true } } };
 }
 const hash = file => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
@@ -98,7 +99,7 @@ test("D3DMetal is not offered below its measured or recorded macOS floor", async
   assert.equal(capabilities("26.4").d3dmetal, true);
   const early = fixture(t);
   fs.rmSync(path.join(early.renderers, "d3dmetal", "external", "D3DMetal.framework", "Versions", "A", "Resources", "libdxccontainer.dylib"));
-  assert.equal(Graphics.inspectTemplateClosure(early.contents).graphicsCapabilities.minimumMacOS.d3dmetal, Graphics.MINIMUM_MACOS.d3dmetal);
+  assert.equal(Template.inspectTemplateClosure(early.contents).graphicsCapabilities.minimumMacOS.d3dmetal, Template.MINIMUM_MACOS.d3dmetal);
 });
 test("recorded renderer floors, physical CPU and unknown host facts remain independent", async t => {
   const f = await installed(t), metadata = structuredClone(f.metadata);
@@ -127,32 +128,32 @@ test("recorded renderer floors, physical CPU and unknown host facts remain indep
 test("graphics discovery orders known layouts by an open-ended version threshold", t => {
   const f = fixture(t);
   fs.mkdirSync(path.join(f.contents, "SharedSupport", "renderer"), { recursive: true });
-  for (const version of ["1.0.24", "1.0.25", "2.0.0"]) assert.equal(Graphics.templateRenderers(f.contents, version), "SharedSupport/renderer");
-  assert.equal(Graphics.templateRenderers(f.contents, "1.0.23"), "Frameworks/renderer");
+  for (const version of ["1.0.24", "1.0.25", "2.0.0"]) assert.equal(Template.templateRenderers(f.contents, version), "SharedSupport/renderer");
+  assert.equal(Template.templateRenderers(f.contents, "1.0.23"), "Frameworks/renderer");
   fs.rmSync(f.renderers, { recursive: true });
-  assert.equal(Graphics.templateRenderers(f.contents, "1.0.21"), "SharedSupport/renderer", "the other layout remains a fallback");
+  assert.equal(Template.templateRenderers(f.contents, "1.0.21"), "SharedSupport/renderer", "the other layout remains a fallback");
   fs.rmSync(path.join(f.contents, "SharedSupport"), { recursive: true });
   fs.mkdirSync(path.join(f.contents, "Resources", "Libraries", "renderer"), { recursive: true });
-  assert.equal(Graphics.inspectTemplateClosure(f.contents, { templateVersion: "2.0.0" }).relativePaths.templateRenderers, "Resources/Libraries/renderer");
+  assert.equal(Template.inspectTemplateClosure(f.contents, { templateVersion: "2.0.0" }).relativePaths.templateRenderers, "Resources/Libraries/renderer");
 });
 test("graphics staging without a renderer folder records none and rejects ambiguous content search", async t => {
   const f = fixture(t);
   fs.rmSync(f.renderers, { recursive: true });
-  const metadata = Graphics.inspectTemplateClosure(f.contents);
+  const metadata = Template.inspectTemplateClosure(f.contents);
   assert.equal(metadata.relativePaths.templateRenderers, null);
   for (const name of ["dxmt", "dxvk", "d3dmetal"]) assert.equal(metadata.graphicsCapabilities[name], false);
   fs.mkdirSync(path.join(f.contents, "Other", "renderer"), { recursive: true }); fs.mkdirSync(path.join(f.contents, "Another", "renderer"), { recursive: true });
-  assert.throws(() => Graphics.inspectTemplateClosure(f.contents), /more than one renderer folder/);
+  assert.throws(() => Template.inspectTemplateClosure(f.contents), /more than one renderer folder/);
 });
 test("graphics staging rejects escaping library aliases before copying", async t => {
   const f = fixture(t), outside = put(path.join(f.root, "outside.dylib"));
   fs.symlinkSync(outside, path.join(f.frameworks, "libescape.dylib"));
-  await assert.rejects(Graphics.stageTemplateClosure({ templateRoot: f.contents, destinationRoot: f.support }), /escapes its package/);
+  await assert.rejects(Template.stageTemplateClosure({ templateRoot: f.contents, destinationRoot: f.support }), /escapes its package/);
   assert.equal(fs.existsSync(f.support), false);
 });
 test("graphics staging cancellation does not publish a partial runtime", async t => {
   const f = fixture(t), controller = new AbortController(); controller.abort();
-  await assert.rejects(Graphics.stageTemplateClosure({ templateRoot: f.contents, destinationRoot: f.support, signal: controller.signal }), { name: "AbortError" });
+  await assert.rejects(Template.stageTemplateClosure({ templateRoot: f.contents, destinationRoot: f.support, signal: controller.signal }), { name: "AbortError" });
   assert.equal(fs.existsSync(f.support), false);
 });
 test("Automatic on older macOS uses DXMT without forcing Tahoe D9VK and selects MoltenVK", async t => {

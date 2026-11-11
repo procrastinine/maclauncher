@@ -1,14 +1,14 @@
 const fs = require("node:fs");
-const { cloneOrCopy } = require("../../../shared/copy-file");
+const { cloneOrCopy } = require("../../shared/copy-file");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { versionAtLeast, systemVersionSync } = require("../../../shared/runtime/bundled-native");
-const Requirements = require("../../../shared/runtime/feature-requirements");
-const Closure = require("./closure");
-const Hardware = require("./hardware");
-const DLSS = require("../../dlss");
-const Writable = require("../../../shared/writable-input");
-const { wineLayout } = require("../../../shared/runtime/wine-layout");
+const { versionAtLeast, systemVersionSync } = require("../../shared/runtime/bundled-native");
+const Requirements = require("../../shared/runtime/feature-requirements");
+const Closure = require("../sikarugir/runtime/template-closure");
+const Hardware = require("../../shared/runtime/graphics-hardware");
+const DLSS = require("../dlss");
+const Writable = require("../../shared/writable-input");
+const { wineLayout } = require("../../shared/runtime/wine-layout");
 
 const GRAPHICS_BACKENDS = Object.freeze(["auto", "wined3d", "dxmt", "dxvk", "d3dmetal"]);
 const VULKAN_BACKENDS = Object.freeze(["auto", "moltenvk", "kosmickrisp"]);
@@ -110,7 +110,7 @@ async function linkFile(source, destination, signal) {
       const header = Buffer.alloc(128), coff = Buffer.alloc(24);
       if ((await handle.read(header, 0, header.length, 0)).bytesRead !== header.length || header.readUInt16LE(0) !== 0x5a4d ||
         !header.subarray(64).includes(Buffer.from("Wine builtin DLL\0"))) fail("The selected renderer requires a supported Wine builtin DLL package.");
-      const pe = header.readUInt32LE(60), machine = require("../../../shared/runtime/binary-compatibility").requiredMachine(path.basename(path.dirname(destination)).replace(/-windows$/, "")) || 0x8664;
+      const pe = header.readUInt32LE(60), machine = require("../../shared/runtime/binary-compatibility").requiredMachine(path.basename(path.dirname(destination)).replace(/-windows$/, "")) || 0x8664;
       if (pe < 80 || pe > stat.size - coff.length || (await handle.read(coff, 0, coff.length, pe)).bytesRead !== coff.length ||
         coff.readUInt32LE(0) !== 0x4550 || coff.readUInt16LE(4) !== machine || !(coff.readUInt16LE(22) & 0x2000))
         fail("A selected renderer DLL does not match its Windows architecture.");
@@ -229,21 +229,21 @@ async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, la
 }
 // `source` is the Wine source descriptor (sources/<id>.js). Without a
 // translator plan, the Sikarugir Template's own renderer selection applies.
-async function prepareGraphicsView({ source = require("../../sources").get("sikarugir"), install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, vulkanDLSS, helperLibraries = [], translatorPlan, translatorView, environment, context, userDataDir } = {}) {
+async function prepareGraphicsView({ source = require(".").get("sikarugir"), install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, vulkanDLSS, helperLibraries = [], translatorPlan, translatorView, environment, context, userDataDir } = {}) {
   signal?.throwIfAborted();
   if (!translatorPlan && context) {
-    const shared = require('../../../shared/runtime/wine-translators');
+    const shared = require('../../shared/runtime/wine-translators');
     if (environment) context.wineEnvironment = environment;
     context.runtimeSettings ||= settings;
     translatorPlan = context.translatorPlan?.layout?.root === wineLayout(install).root ? context.translatorPlan :
       await shared.resolve(install, source.id, context, { executableArchitecture, host });
     settings = shared.settingsForPlan(settings, translatorPlan);
   }
-  if (translatorPlan && !translatorView) translatorView = await require('../../../shared/runtime/translator-files').prepareTranslatorFiles(translatorPlan,
+  if (translatorPlan && !translatorView) translatorView = await require('../../shared/runtime/translator-files').prepareTranslatorFiles(translatorPlan,
     { userDataDir: userDataDir || context?.userDataDir, layout: translatorPlan.layout, signal });
   const native = source.nativeLibraries(install);
   const support = translatorPlan ? null : supportRoot(install), engine = engineRoot(install), hostInfo = {
-    hardwareArch: require("../../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, ...host };
+    hardwareArch: require("../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, ...host };
   const layout = translatorPlan?.layout || wineLayout(install);
   let capabilities = translatorPlan ? { ...install.capabilities, wined3d: true, componentVersions: {} } : capabilitiesFor(install, support, hostInfo);
   const hardware = capabilities.kosmickrisp && (!settings.vulkanBackend || settings.vulkanBackend === "auto")
@@ -277,7 +277,7 @@ async function prepareGraphicsView({ source = require("../../sources").get("sika
     if (!fs.statSync(windows).isFile() || !fs.statSync(unix).isFile() ||
         path.basename(windows) !== item.name + ".dll" || path.basename(unix) !== item.name + ".so")
       fail("The GPU helper pair is unavailable.");
-    const image = require("../../../shared/runtime/macho-load-commands").readMachOLoadCommands(unix, { architecture: layout.architecture, signal });
+    const image = require("../../shared/runtime/macho-load-commands").readMachOLoadCommands(unix, { architecture: layout.architecture, signal });
     if (!image.slices.some(slice => slice.architecture === layout.architecture && slice.platform === 1)) fail("The GPU helper requires an Intel macOS library.");
     helperNames.add(item.name); helpers.push({ name: item.name, windows, unix });
   }
@@ -291,7 +291,7 @@ async function prepareGraphicsView({ source = require("../../sources").get("sika
   if (!translatorPlan) await clearUnusedRenderers(dllRoot, renderers, selection.components, signal);
   if (translatorView) {
     for (const [relative, original] of Object.entries(translatorView.links)) {
-      const source = cameraBridge ? require("../../temporal").rendererFile(cameraBridge, path.basename(path.dirname(relative)), path.basename(relative), original) : original;
+      const source = cameraBridge ? require("../temporal").rendererFile(cameraBridge, path.basename(path.dirname(relative)), path.basename(relative), original) : original;
       await linkFile(source, path.join(loader.wineRoot, relative), signal);
     }
     // Wine opens a builtin's Unix module beside the folder it loaded the
@@ -315,14 +315,14 @@ async function prepareGraphicsView({ source = require("../../sources").get("sika
       modules = name === "dxmt" && dlss.dxmt ? [...CORE_DLLS[name], ...DLSS.DLLS] : CORE_DLLS[name];
     for (const architecture of ["i386-windows", layout.primaryWindows]) {
       for (const module of modules) {
-        const source = require("../../temporal").rendererFile(name === "dxmt" ? cameraBridge : null, architecture, module + ".dll", path.join(root, architecture, module + ".dll"));
+        const source = require("../temporal").rendererFile(name === "dxmt" ? cameraBridge : null, architecture, module + ".dll", path.join(root, architecture, module + ".dll"));
         if (fs.existsSync(source)) await linkFile(source, path.join(dllRoot, architecture, module + ".dll"), signal);
       }
     }
     const unix = path.join(root, layout.unixName);
     if (fs.existsSync(unix)) {
       selectedUnix.push(unix);
-      for (const file of await fs.promises.readdir(unix)) if (/\.(?:so|dylib)$/.test(file)) await linkFile(require("../../temporal").rendererFile(name === "dxmt" ? cameraBridge : null,
+      for (const file of await fs.promises.readdir(unix)) if (/\.(?:so|dylib)$/.test(file)) await linkFile(require("../temporal").rendererFile(name === "dxmt" ? cameraBridge : null,
         layout.unixName, file, path.join(unix, file)), path.join(dllRoot, layout.unixName, file), signal);
     }
     dllOverrides.push(modules.join(",") + "=b");
@@ -342,7 +342,7 @@ async function prepareGraphicsView({ source = require("../../sources").get("sika
     ...(native.frameworks.length || external ? { DYLD_FALLBACK_FRAMEWORK_PATH: [...native.frameworks, ...(external ? [external] : [])].join(path.delimiter) } : {}),
     GST_REGISTRY_1_0: path.join(viewRoot, "gstreamer-registry.bin") };
   Object.assign(env, DLSS.environment(dlss), DLSS.adapterEnvironment(dlss, install?.capabilities));
-  if (selection.components.includes("dxmt") && dlss.dxmt) Object.assign(env, require("../../temporal").environment(cameraBridge, dllRoot));
+  if (selection.components.includes("dxmt") && dlss.dxmt) Object.assign(env, require("../temporal").environment(cameraBridge, dllRoot));
   if (gstreamer) {
     env.GST_PLUGIN_SYSTEM_PATH_1_0 = gstreamer.plugins;
     env.GST_PLUGIN_PATH_1_0 = "";
@@ -381,5 +381,5 @@ async function prepareGraphicsView({ source = require("../../sources").get("sika
     capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath };
 }
 
-module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, ...Closure, prepareGraphicsView, capabilitiesFor,
+module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, prepareGraphicsView, capabilitiesFor,
   __test: { capabilitiesFor, selectGraphics, ownDirectory, CORE_DLLS } };
