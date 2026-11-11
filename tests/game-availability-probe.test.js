@@ -95,3 +95,26 @@ fs.statSync = function(file, ...args) {
   assert.equal(Atomics.load(gate, 2), 2, "completion releases the path for a fresh probe");
   assert.equal(workers.length, 2, "the replacement thread answers later stats");
 });
+
+test("a probe thread that is slow to start does not count against the location or start another thread", async t => {
+  const root = fixture(t), first = path.join(root, "first"), second = path.join(root, "second");
+  fs.mkdirSync(first); fs.mkdirSync(second);
+  // The thread sleeps before it can answer, as a thread started under heavy load does.
+  const preload = path.join(root, "slow-start.js");
+  fs.writeFileSync(preload, "Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 800);\n");
+  const workers = [], Availability = fresh(), OriginalWorker = threads.Worker;
+  t.mock.method(threads, "Worker", function(filename, options) {
+    const worker = new OriginalWorker(filename, { ...options, execArgv: ["--require", preload] });
+    workers.push(worker);
+    return worker;
+  });
+  t.after(() => Promise.all(workers.map(worker => worker.terminate())));
+  const started = performance.now(), options = { timeoutMs: 300 };
+  const results = await Promise.all([first, second].map(gamePath => Availability.checkGameAvailability({ gamePath }, options)));
+  assert.ok(performance.now() - started >= 700, "both checks waited for the thread to start");
+  assert.deepEqual(results, [{ available: true }, { available: true }], "startup time is not the location's time");
+  assert.equal(workers.length, 1, "stats queued during startup are not treated as stalled");
+  const warm = performance.now();
+  assert.deepEqual(await Availability.checkGameAvailability({ gamePath: first }, options), { available: true });
+  assert.ok(performance.now() - warm < 300, "the running thread answers later checks at once");
+});

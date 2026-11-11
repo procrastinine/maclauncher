@@ -7,6 +7,10 @@ const PathStat = require("./path-stat-probe");
 // what the launcher stored for it. Callers ask here first and skip the work.
 const CODE = "GAME_FILES_UNAVAILABLE";
 const TIMEOUT_MS = 3000;
+// How long a check waits for the probe thread to begin a stat. Thread startup
+// under heavy load is not the location's time; only a thread that never starts
+// reports the location as not responding.
+const STARTUP_MS = 30000;
 const AVAILABLE = Object.freeze({ available: true });
 const TIMED_OUT = "ETIMEDOUT";
 
@@ -47,8 +51,17 @@ function statOnce(file, stat) {
   if (!pending) pendingByStat.set(stat, pending = new Map());
   let probe = pending.get(file);
   if (!probe) {
-    probe = { started: Date.now() };
-    probe.result = Promise.resolve().then(() => stat(file)).then(() => null, errorCode).then(code => {
+    probe = { created: Date.now(), started: null };
+    probe.begun = new Promise(resolve => {
+      probe.start = () => { if (probe.started === null) { probe.started = Date.now(); resolve(); } };
+    });
+    // The probe thread reports when it begins the stat. Any other stat function
+    // is timed from its call.
+    const reportsStart = stat === PathStat.statPath;
+    probe.result = Promise.resolve().then(() => {
+      if (!reportsStart) probe.start();
+      return stat(file, { started: probe.start });
+    }).then(() => null, errorCode).then(code => {
       if (pending.get(file) === probe) pending.delete(file);
       return code;
     });
@@ -59,22 +72,31 @@ function statOnce(file, stat) {
 
 // Resolves to { available: true } or { available: false, reason, path, message }
 // with reason "missing", "unresponsive" or "unreadable". It stats the game's
-// root once and never walks the folder. A stat that outlasts timeoutMs reports
-// "unresponsive", and later checks of that path report it at once until the
-// stat finishes.
-async function checkGameAvailability(entry, { userDataDir, stat = PathStat.statPath, timeoutMs = TIMEOUT_MS } = {}) {
+// root once and never walks the folder. The time limit starts when the probe
+// thread begins the stat, not while the thread is starting. A stat that outlasts
+// timeoutMs reports "unresponsive", and later checks of that path report it at
+// once until the stat finishes.
+async function checkGameAvailability(entry, { userDataDir, stat = PathStat.statPath, timeoutMs = TIMEOUT_MS, startupMs = STARTUP_MS } = {}) {
   const file = rootPath(entry, { userDataDir });
   if (!file) return AVAILABLE;
   const probe = statOnce(file, stat);
-  const remaining = timeoutMs - (Date.now() - probe.started);
-  if (remaining <= 0) return describe(TIMED_OUT, file);
+  const outcome = code => code === TIMED_OUT ? describe(TIMED_OUT, file) : code ? describe(code, file) : AVAILABLE;
+  if (probe.started === null) {
+    const waited = await within([probe.result, probe.begun.then(() => STARTED)], startupMs - (Date.now() - probe.created));
+    if (waited !== STARTED) return outcome(waited);
+  }
+  return outcome(await within([probe.result], timeoutMs - (Date.now() - probe.started)));
+}
+
+// The first of PROMISES to settle, or TIMED_OUT after MS. The probe threads never
+// keep the process running, so this wait does.
+const STARTED = Symbol("started");
+async function within(promises, ms) {
+  if (ms <= 0) return TIMED_OUT;
   let timer;
-  // The probe threads never keep the process running, so this wait does.
-  const timeout = new Promise(resolve => { timer = setTimeout(resolve, remaining, TIMED_OUT); });
-  try {
-    const code = await Promise.race([probe.result, timeout]);
-    return code ? describe(code, file) : AVAILABLE;
-  } finally { clearTimeout(timer); }
+  const timeout = new Promise(resolve => { timer = setTimeout(resolve, ms, TIMED_OUT); });
+  try { return await Promise.race([...promises, timeout]); }
+  finally { clearTimeout(timer); }
 }
 
 // The same check for synchronous backend code, such as the save service. It
@@ -119,6 +141,6 @@ function sameAvailability(a, b) {
 }
 
 module.exports = {
-  CODE, TIMEOUT_MS, rootPath, checkGameAvailability, checkGameAvailabilitySync,
+  CODE, TIMEOUT_MS, STARTUP_MS, rootPath, checkGameAvailability, checkGameAvailabilitySync,
   assertGameAvailable, unavailableError, affectsPath, insideRoot, sameAvailability
 };
