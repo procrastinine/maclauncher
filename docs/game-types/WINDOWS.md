@@ -1,6 +1,6 @@
 # Windows Game
 
-This game type covers Windows games with no recognized engine, that is, an x86 or x64 Windows executable that no other game type claims. MacLauncher plays these games through Wine, with either of two Windows compatibility runtimes: [Sikarugir (Wine)](../runtimes/SIKARUGIR.md), the default, or a locally installed [CrossOver](../runtimes/CROSSOVER.md) application. Both runtimes also serve games of other types that include a compatible Windows executable, as [Windows executables in other game types](#windows-executables-in-other-game-types) describes. The game type's module is `crossover`.
+This game type covers Windows games with no recognized engine, that is, an x86 or x64 Windows executable that no other game type claims. MacLauncher plays these games through Wine, with either of two Windows compatibility runtimes: [Sikarugir](../runtimes/SIKARUGIR.md), the default, or a locally installed [CrossOver](../runtimes/CROSSOVER.md) application. Both runtimes also serve games of other types that include a compatible Windows executable, as [Windows executables in other game types](#windows-executables-in-other-game-types) describes. The game type's module is `crossover`.
 
 Beyond running Wine, MacLauncher prepares a private Windows environment for each game, can use an existing CrossOver bottle or Sikarugir wrapper instead, and lets each game choose its own [graphics translators](../runtimes/TRANSLATORS.md).
 
@@ -59,12 +59,12 @@ The inspector details show the Windows CPU, the executable and, with CrossOver, 
 
 | Runtime | Delivery |
 | --- | --- |
-| **Sikarugir (Wine)**, default | Wine engines and support libraries from the Sikarugir publisher |
+| **Sikarugir**, default | Wine engines and support libraries from the Sikarugir publisher |
 | **CrossOver** | Locally installed CrossOver applications, registered in Runtimes |
 
-### Sikarugir (Wine)
+### Sikarugir
 
-Sikarugir runs the game with [Sikarugir Wine engines](https://github.com/Sikarugir-App/Engines) and their matching support libraries, which are downloaded from the publisher on first use. [Sikarugir (Wine)](../runtimes/SIKARUGIR.md) describes its requirements, versions, storage, settings and graphics.
+Sikarugir runs the game with [Sikarugir Wine engines](https://github.com/Sikarugir-App/Engines) and their matching support libraries, which are downloaded from the publisher on first use. [Sikarugir](../runtimes/SIKARUGIR.md) describes its requirements, versions, storage, settings and graphics.
 
 ### CrossOver
 

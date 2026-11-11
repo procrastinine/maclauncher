@@ -22,7 +22,7 @@ Runtime versions are chosen in a fixed order: the version chosen for the game co
 
 **Runtimes** is the window that installs, removes and refreshes runtime versions and sets their defaults, with one tab for each runtime manager. Runtimes that need changes to work on macOS come from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds), a companion repository that publishes compiled builds of them with MacLauncher's patches and their version history. The other runtimes come from their publishers. The app itself includes only the core graphics component and the internal helpers for importing, extracting and integrating games, as [runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md) describes.
 
-Games of other types that include a compatible Windows executable also offer the three [Wine runtimes](runtimes/WINE.md), [Sikarugir (Wine)](runtimes/SIKARUGIR.md), [CrossOver](runtimes/CROSSOVER.md) and [WineCX (Wine)](runtimes/WINECX.md), while known engines keep their native default. Sikarugir and WineCX are free Wine distributions that MacLauncher downloads itself; CrossOver runs from a licensed CrossOver application that is already installed on the Mac.
+Games of other types that include a compatible Windows executable also offer the three [Wine runtimes](runtimes/WINE.md), [Sikarugir](runtimes/SIKARUGIR.md), [CrossOver](runtimes/CROSSOVER.md) and [WineCX](runtimes/WINECX.md), while known engines keep their native default. Sikarugir and WineCX are free Wine distributions that MacLauncher downloads itself; CrossOver runs from a licensed CrossOver application that is already installed on the Mac.
 
 **Settings**, **Runtimes**, **External** and **Credits** open in separate macOS windows, and reopening a view focuses its existing window. The library stays usable, changes appear in every window, and the native close controls or Cmd-W close the focused window. The [launcher UI guide](development/UI_GUIDE.md) describes every window, menu and shortcut.
 
@@ -33,7 +33,7 @@ Games of other types that include a compatible Windows executable also offer the
 - [Android runtime architecture](game-types/android/ARCHITECTURE.md) and [Android native code](game-types/android/NATIVE_CODE.md): how MacLauncher Android's JVM and ART engines run applications, and how their ARM64 and ARM32 native libraries load on macOS.
 - [Runtime system](runtimes/README.md): downloads and offline use, runtime selection, versions, runtime managers, the Runtimes window, per-game overrides, runtime settings and launch.
 - [Web runtimes](runtimes/WEB_RUNTIMES.md): Electron and NW.js, including Greenworks.
-- [Wine runtimes](runtimes/WINE.md), [Sikarugir (Wine)](runtimes/SIKARUGIR.md), [CrossOver](runtimes/CROSSOVER.md) and [WineCX (Wine)](runtimes/WINECX.md): the Windows runtimes, their versions, environments and settings.
+- [Wine runtimes](runtimes/WINE.md), [Sikarugir](runtimes/SIKARUGIR.md), [CrossOver](runtimes/CROSSOVER.md) and [WineCX](runtimes/WINECX.md): the Windows runtimes, their versions, environments and settings.
 - [Rosetta](runtimes/ROSETTA.md): installing Apple's Intel translation for Intel runtimes on Apple Silicon.
 - [Game detection](library/DETECTION.md): import scanning, engine detection and version evidence.
 - [Game preparation and storage](library/GAME_PREPARATION.md): original game paths, private adaptations, unavailable games, locating moved files and removing games.

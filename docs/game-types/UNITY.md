@@ -93,6 +93,6 @@ Shared graphics uses the selected Mac player's CPU architecture, including its R
 
 When the game ships its own Mac build, **Game's macOS app** runs that build.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
-Compatible x86 and x64 Windows exports, including IL2CPP and Direct3D-only builds, can use [Sikarugir (Wine)](../runtimes/SIKARUGIR.md) or an available [CrossOver](../runtimes/CROSSOVER.md) application instead. The asset and source tools stay available. These runtimes keep their own private writable files and Windows environments. [Windows Game](WINDOWS.md#windows-executables-in-other-game-types) describes how they are offered.
+Compatible x86 and x64 Windows exports, including IL2CPP and Direct3D-only builds, can use [Sikarugir](../runtimes/SIKARUGIR.md) or an available [CrossOver](../runtimes/CROSSOVER.md) application instead. The asset and source tools stay available. These runtimes keep their own private writable files and Windows environments. [Windows Game](WINDOWS.md#windows-executables-in-other-game-types) describes how they are offered.

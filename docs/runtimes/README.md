@@ -10,7 +10,7 @@ The documentation uses three terms:
 
 Each [game-type page](../game-types/README.md) describes the runtimes, settings and tools of one game type. This page covers what they have in common: downloads, runtime selection, versions, runtime managers, per-game overrides, runtime settings and launch. Related references:
 
-- [Web runtimes](WEB_RUNTIMES.md) and the [Wine runtimes](WINE.md), [Sikarugir (Wine)](SIKARUGIR.md), [CrossOver](CROSSOVER.md) and [WineCX (Wine)](WINECX.md): runtimes shared by several game types.
+- [Web runtimes](WEB_RUNTIMES.md) and the [Wine runtimes](WINE.md), [Sikarugir](SIKARUGIR.md), [CrossOver](CROSSOVER.md) and [WineCX](WINECX.md): runtimes shared by several game types.
 - [Graphics translators](TRANSLATORS.md): the libraries, shared by the Wine runtimes, that carry a Windows game's Direct3D or Vulkan calls to Metal.
 - [Translator environment variables](TRANSLATOR_ENVIRONMENT.md): global and per-game environment variables for every runtime with a translator choice.
 - [KosmicKrisp](KOSMICKRISP.md): the Vulkan driver on Metal 4, MacLauncher's adapted build of it, the CPU build that each consumer loads, and a comparison with MoltenVK.
@@ -138,7 +138,7 @@ The inspector also records the game's engine and bytecode versions with their so
 
 ### Windows games and Mac apps
 
-A game with a compatible x86 or x64 Windows executable is also offered [Sikarugir (Wine)](SIKARUGIR.md), even before Sikarugir's first download. [WineCX (Wine)](WINECX.md) is offered the same way, and [CrossOver](CROSSOVER.md) is offered as well when a usable local CrossOver application is detected or registered. Known engines keep their usual default runtime, while generic Windows games default to Sikarugir, and a saved CrossOver choice stays unchanged.
+A game with a compatible x86 or x64 Windows executable is also offered [Sikarugir](SIKARUGIR.md), even before Sikarugir's first download. [WineCX](WINECX.md) is offered the same way, and [CrossOver](CROSSOVER.md) is offered as well when a usable local CrossOver application is detected or registered. Known engines keep their usual default runtime, while generic Windows games default to Sikarugir, and a saved CrossOver choice stays unchanged.
 
 Some detected engines, such as BGI / Ethornell, CatSystem2 and Windows Haxe hxcpp/Lime builds, have no runtime of their own that can launch the game. These games keep their detection, version and tools, and automatic selection takes the first compatible Windows runtime: a registered CrossOver application, otherwise Sikarugir. An import without a compatible Windows executable can only be inspected.
 

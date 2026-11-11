@@ -67,7 +67,7 @@ function label(value) {
 function displayText(value) { return String(value ?? '').replace(/[\s\x00-\x1f\x7f]+/g, ' ').trim(); }
 // Raised when inspectDescription learns new facts, so retained descriptions
 // are prepared again once.
-const DESCRIPTION_FORMAT = 2;
+const DESCRIPTION_FORMAT = 3;
 function inspectionKey(root, options) {
   const { logger, userDataDir, signal, ...selection } = options;
   return JSON.stringify([fs.realpathSync(root), selection, DESCRIPTION_FORMAT]);
@@ -252,6 +252,7 @@ function inspectDescription(root, { engine, source, version, component, id, apis
       } catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') warnings.push(`Could not read optional framework version ${file}: ${error.message}`); }
     }
   }
+  if (!version && (engine === 'moltenvk' || engine === 'kosmickrisp')) version = driverVersion(files, engine, warnings);
   apis = [...new Set([...apisForFiles(files), ...files.flatMap(file => {
     if (file.format === 'json') { try { const api = JSON.parse(fs.readFileSync(file.path, 'utf8')).ICD?.api_version; return api ? [`Vulkan ${api}`] : []; } catch {} }
     return [];
@@ -263,6 +264,19 @@ function inspectDescription(root, { engine, source, version, component, id, apis
     macosFloor: floors.sort(compareVersions).at(-1) || null });
   if (!result.version && engine === 'gstreamer') result.version = require('./gstreamer-source').libraryVersion(result);
   return result;
+}
+// A Vulkan driver without version text names its release in its library's
+// strings: MoltenVK keeps its version as one string (it logs "MoltenVK
+// version %s"), and Mesa's KosmicKrisp keeps "Mesa <version> (git-...)". A
+// version is taken only when every slice names the same one.
+const DRIVER_VERSION = Object.freeze({ moltenvk: /\0(\d+\.\d+\.\d+)\0/g, kosmickrisp: /\0Mesa (\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)[ \0]/g });
+function driverVersion(files, engine, warnings) {
+  const versions = new Set();
+  for (const file of files.filter(file => file.format === 'macho')) {
+    try { for (const match of fs.readFileSync(file.realPath || file.path).toString('latin1').matchAll(DRIVER_VERSION[engine])) versions.add(match[1]); }
+    catch (error) { warnings.push(`Could not read the driver version of ${file.path}: ${error.message}`); }
+  }
+  return versions.size === 1 ? [...versions][0] : '';
 }
 function compareVersions(a, b) {
   const left = String(a).split('.').map(Number), right = String(b).split('.').map(Number);

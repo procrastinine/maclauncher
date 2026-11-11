@@ -2,7 +2,7 @@
 
 Game detection, preparation and launch, along with module actions, do not depend on the Electron launcher. That work runs in MacLauncher's shared backend, `src/core/launcher.js`. The Electron app calls the backend through backend workers, and the `pnpm launch` command line calls it directly. Other interfaces can therefore use the same command line and services without reimplementing engine behavior.
 
-How a game runs depends on its engine. Native engines run as native macOS processes, whereas web engines can use the standalone Electron game host, so Chromium remains a runtime dependency for those games. Compatible Windows games can use the downloadable [Sikarugir (Wine)](../runtimes/SIKARUGIR.md) or a locally registered [CrossOver](../runtimes/CROSSOVER.md) application. The engine-specific decisions belong to modules, which also stage their own files; the [module system](MODULES.md) defines their hooks.
+How a game runs depends on its engine. Native engines run as native macOS processes, whereas web engines can use the standalone Electron game host, so Chromium remains a runtime dependency for those games. Compatible Windows games can use the downloadable [Sikarugir](../runtimes/SIKARUGIR.md) or a locally registered [CrossOver](../runtimes/CROSSOVER.md) application. The engine-specific decisions belong to modules, which also stage their own files; the [module system](MODULES.md) defines their hooks.
 
 ## Command line
 

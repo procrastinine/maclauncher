@@ -54,6 +54,6 @@ The application includes DOSBox Staging's own dependency notices, and Runtimes a
 
 Import and each library refresh record the main game file of a [Doom-engine](DOOM_ENGINE.md), [Build-engine](BUILD_ENGINE.md) or [DREAMM](DREAMM.md) game when the game folder holds exactly one at its top level, and that engine is then offered as the game's runtime. It runs the game data in place the same way as the engine's own game type, with its configuration and saves in the game's launcher data. A folder holding several main game files of one engine does not offer that engine; selecting one of the files imports it as that engine's own game type. The library checks the game folder's files each time it loads, so a DOS game imported earlier gains the choice without being imported again, and a folder that no longer holds exactly one main game file loses it.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
 When the game folder also includes a compatible x86 or x64 Windows executable, the [Windows runtimes](WINDOWS.md#windows-executables-in-other-game-types) Sikarugir and CrossOver are offered for it. They do not run DOS programs themselves.

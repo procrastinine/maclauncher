@@ -59,9 +59,10 @@ test('an installed provider version is not described as an unavailable download'
     label: 'MacLauncher Builds', source: 'https://procrastinine.github.io/maclauncher-builds/#native-installed' }] },
     [{ version: '1.0-MCLv1', ready: true }]);
   const markup = render([runtime]);
-  assert.match(markup, />Installed<\/button>/);
+  // The menu tags the installed version, and no install button repeats it.
+  assert.match(markup, /<option value="1\.0-MCLv1" selected="">[^<]*Installed<\/option>/);
+  assert.doesNotMatch(markup, /class="btn primary"[^>]*>Install/);
   assert.doesNotMatch(markup, /No compatible download|No compatible macOS/);
-  assert.match(markup, /title="This version is installed\."/);
 });
 test('download controls replace an unavailable saved variant with the section variant', () => {
   const runtime = { ...manager('legacy-engine', {}, { versions: ['2.1.6'], installable: true,
@@ -219,7 +220,7 @@ test('CrossOver and Sikarugir manage one shared DXMT support download under Dire
   for (const label of ['CrossOver', 'Sikarugir', 'DirectX → Metal']) assert.match(markup, new RegExp(`class="launcherSidebarItem[^>]*>${label}</button>`));
   assert.match(markup, /class="runtimePanelTitle">DXMT<\/div>/);
   assert.match(markup, /id="runtime-group-panel-directx-metal"/);
-  assert.match(markup, />Installed<\/button>/);
+  assert.doesNotMatch(markup, /class="btn primary"[^>]*>Install/);
   // Translator versions are chosen per game; the manager has no global default.
   assert.doesNotMatch(markup, /Set default/);
   assert.equal(markup.match(/class="runtimePanelTitle">DXMT<\/div>/g).length, 1);
@@ -709,7 +710,7 @@ test('cached source build choices display compact source/help links and explicit
   assert.doesNotMatch(markup, /Reviewed pinned catalog|docs\/NATIVE_TOOL_SETUP/);
   assert.match(render([runtime], runtime.id, { downloadTasks: [{ id: 'build', managerId: runtime.id,
     sectionId: 'default', version: '1.2.3', downloaded: 0, total: null }] }), /<button class="btn primary" disabled="">Installing…<\/button>/);
-  assert.match(render([{ ...runtime, installed: [{ version: '1.2.3' }] }]), /<button class="btn primary" disabled="" title="This version is installed\.">Installed<\/button>/);
+  assert.doesNotMatch(render([{ ...runtime, installed: [{ version: '1.2.3' }] }]), /class="btn primary"[^>]*>Install/);
 });
 test('direct grouped backend selection renders the correct tab and its version without sibling leakage', () => {
   const older = manager('opaque-a', { groupId: 'alice', tabLabel: 'AliceSoft', order: 110,
@@ -988,8 +989,8 @@ test('included translator references use host records and shared release facts w
   assert.ok(state.references.every(row=>row.included&&row.readOnly&&row.removable===false&&row.supportsDefault===false));
   assert.ok(state.references.every(row=>row.platformKey==='x86_64'&&row.architectures.includes('x86_64')));
   assert.ok(state.references.every(row=>row.apis.includes('Direct3D 11')));
-  assert.ok(state.references.some(row=>row.versionLabel==='DXMT 0.80 · CrossOver 26.3 · Alpha.app'&&row.detail==='Component 0.80'));
-  assert.ok(state.references.some(row=>row.versionLabel==='DXMT 0.80 · CrossOver 26.3 · Beta.app'&&row.detail==='Component 0.80'));
+  assert.ok(state.references.some(row=>row.versionLabel==='DXMT 0.80 · CrossOver 26.3 · Alpha'&&row.detail==='Component 0.80'));
+  assert.ok(state.references.some(row=>row.versionLabel==='DXMT 0.80 · CrossOver 26.3 · Beta'&&row.detail==='Component 0.80'));
   assert.ok(state.references.some(row=>row.versionLabel==='DXMT 0.81 · Sikarugir Template 1.0.26'&&row.detail==='Component v0.81'));
   assert.ok(state.references.some(row=>row.versionLabel==='DXMT 0.81 · Sikarugir Template 1.0.27'));
   assert.deepEqual(state.references.filter(row=>row.source.runtime==='sikarugir').map(row=>row.versionLabel),['DXMT 0.81 · Sikarugir Template 1.0.27','DXMT 0.81 · Sikarugir Template 1.0.26']);
@@ -1016,7 +1017,7 @@ test('included translator references use host records and shared release facts w
   assert.equal(wine.customRuntime,false);assert.equal(wine.registerCustomRuntime,undefined);assert.equal(wineState.supportsDefault,false);
   assert.equal(wineState.references.length,4);assert.deepEqual(wineState.installed,[]);assert.deepEqual(wineState.catalog.versions,[]);
   assert.ok(wineState.references.every(row=>row.readOnly&&row.included&&row.reference.managerId!=='translator-vkd3d-proton'));
-  assert.ok(wineState.references.some(row=>row.versionLabel.includes('Alpha.app')));assert.ok(wineState.references.some(row=>row.versionLabel.includes('Template 1.0.27')));
+  assert.ok(wineState.references.some(row=>row.versionLabel.endsWith(' · Alpha')));assert.ok(wineState.references.some(row=>row.versionLabel.includes('Template 1.0.27')));
   const wineMarkup=render([{...wineState,id:wine.id,label:wine.label,ui:wine.ui}],wine.id,{onRuntimeRegister(){assert.fail('No standalone Wine registration');}});
   assert.match(wineMarkup,/Included copies/);assert.match(wineMarkup,/Refresh included copies/);assert.match(wineMarkup,/href="https:\/\/gitlab\.winehq\.org\/wine\/vkd3d"/);
   assert.doesNotMatch(wineMarkup,/Imported files|Register custom|Load versions|No downloadable|saveRowActions|Set default|>Install<|>Repair</);
@@ -1407,13 +1408,13 @@ test('per-game version menus use only the selected runtime recommendation and pr
   const engine = moduleInfo.runtime.default, portable = 'sikarugir';
   const engineVersion = '4.6.3-stable', wineVersion = '10.0_8-template-1.0.24';
   moduleInfo.runtime.supported = [engine, portable];
-  moduleInfo.runtime.entries[portable] = {label: 'Sikarugir (Wine)', runtimeProvider: true};
-  moduleInfo.runtime.labels = {...moduleInfo.runtime.labels, [portable]: 'Sikarugir (Wine)'};
+  moduleInfo.runtime.entries[portable] = {label: 'Sikarugir', runtimeProvider: true};
+  moduleInfo.runtime.labels = {...moduleInfo.runtime.labels, [portable]: 'Sikarugir'};
   moduleInfo.runtime.manager = {...moduleInfo.runtime.manager, [engine]: 'engine-version-scope', [portable]: portable};
   state.runtimeManagers['engine-version-scope'] = {...manager('engine-version-scope', {}, {}, [{version: engineVersion}]),
     defaultVersion: engineVersion};
   state.runtimeManagers[portable] = {...manager(portable, {}, {}, [{version: wineVersion}]), defaultVersion: wineVersion,
-    versionLabels: {[wineVersion]: 'Wine 10.0 (rev 8) · Template 1.0.24'}};
+    versionLabels: {[wineVersion]: 'Sikarugir 1.0.24 · Wine 10.0 rev 8'}};
   const original = {...state.recents[0], nativeAppPath: null, moduleRuntimeSupport: [engine, portable],
     runtimeData: {[engine]: {version: engineVersion}, [portable]: {version: wineVersion}}};
   const before = structuredClone(original);
@@ -1438,7 +1439,7 @@ test('per-game version menus use only the selected runtime recommendation and pr
     assert.doesNotMatch(versionMenu(renderGame(engine, true, pending)), /Automatic \(/);
   }
   assert.match(versionMenu(renderGame(portable, true, wineVersion)),
-    /<option value="" title="10\.0_8-template-1\.0\.24" selected="">Automatic \(Wine 10\.0 \(rev 8\) · Template 1\.0\.24\)<\/option>/);
+    /<option value="" title="10\.0_8-template-1\.0\.24" selected="">Automatic \(Sikarugir 1\.0\.24 · Wine 10\.0 rev 8\)<\/option>/);
   // Automatic names the version Play uses, such as a compatible installed
   // version, rather than the recommended one.
   assert.match(versionMenu(renderGame(engine, true, '4.6.1-stable')), /<option value="" title="4\.6\.1-stable" selected="">Automatic \(v?4\.6\.1-stable\)<\/option>/);
@@ -1449,7 +1450,7 @@ test('per-game version menus use only the selected runtime recommendation and pr
     assert.match(attributes, new RegExp('value="' + engineVersion + '"'));
     assert.match(label, /^v?4\.6\.3-stable$/);
   }
-  assert.match(selected(renderGame(portable, false, wineVersion))[1], /^Wine 10\.0 \(rev 8\) · Template 1\.0\.24$/);
+  assert.match(selected(renderGame(portable, false, wineVersion))[1], /^Sikarugir 1\.0\.24 · Wine 10\.0 rev 8$/);
   // (b) A chosen version that is neither installed nor listed stays selected
   // and never falls back to Automatic. Until Play's answer for that choice
   // arrives it reads as itself without a marker; a pending lookup, a failed one

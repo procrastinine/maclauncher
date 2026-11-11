@@ -45,7 +45,7 @@ test('actual two-line Template DXVK version text keeps every Sikarugir translato
   assert.doesNotMatch(option.label, /[\x00-\x1f\x7f]/);
   const fields = withSettings(manifest).runtime.entries.sikarugir.settings.fields.filter(field => field.optionsAction === 'listTranslatorOptions');
   assert.ok(fields.length > 1);
-  const result = Object.fromEntries(fields.map(field => [field.optionsKey || field.key, [{ value: 'automatic', label: "Template's automatic choice" }, option]]));
+  const result = Object.fromEntries(fields.map(field => [field.optionsKey || field.key, [{ value: 'automatic', label: "Sikarugir's automatic choice" }, option]]));
   const loaded = await load(result, fields);
   assert.deepEqual(loaded.failures, []); assert.equal(loaded.received.length, 1);
   for (const field of fields) assert.equal(loaded.received[0][field.optionsKey || field.key][1], option);
@@ -56,7 +56,7 @@ test('a malformed optional choice or list preserves valid siblings, atomic patch
   const fields = withSettings(manifest).runtime.entries.sikarugir.settings.fields.filter(field => field.optionsAction === 'listTranslatorOptions');
   const first = fields[0].optionsKey || fields[0].key, second = fields[1].optionsKey || fields[1].key;
   const valid = { value: 'included:prepared', label: 'Prepared component', runtimeSettingsPatch: { translatorD3D9: 'included:prepared' } };
-  const sibling = { value: 'automatic', label: "Template's automatic choice" }, metadata = { future: 'preserved' };
+  const sibling = { value: 'automatic', label: "Sikarugir's automatic choice" }, metadata = { future: 'preserved' };
   const result = { [first]: [valid, { value: 'invalid-label', label: 123 }, { value: 'bad\nidentity', label: 'Invalid identity' },
     { value: 'bad-label', label: 'DXVK-Sikarugir-async-v1.10.3\nD9VK-Sikarugir-v2.3' }, sibling], [second]: 'not a choice list',
     futureMetadata: metadata, unrelated: [{ notAnOption: true }] };

@@ -80,8 +80,10 @@ test('actual provider status rows render selected to used for every API, Vulkan 
       const labelRows = rendered.rows.filter(node => elements(node).some(child => child.props.className === 'detailLabel' && child.props.children === row.label));
       assert.equal(labelRows.length, 1, row.label + ' appears once');
       const value = elements(labelRows[0]).find(child => child.props.className === 'detailValue');
-      assert.equal(React.Children.toArray(value.props.children).filter(child => typeof child === 'string').join(''), row.selected + ' → ' + row.used);
-      assert.ok(renderToStaticMarkup(labelRows[0]).includes(' → '));
+      // A choice that is also what runs reads once.
+      const text = row.selected === row.used ? row.used : row.selected + ' → ' + row.used;
+      assert.equal(React.Children.toArray(value.props.children).filter(child => typeof child === 'string').join(''), text);
+      assert.equal(renderToStaticMarkup(labelRows[0]).includes(' → '), row.selected !== row.used);
     }
     assert.ok(rendered.markup.includes('Required fixture symbol is absent.'));
     assert.equal(rendered.markup.includes('Identical choices need no reason.'), false);
@@ -131,4 +133,17 @@ test('a runtime with nothing to inspect settles its status entry, so no pending 
   const harness = componentHarness(() => { inspect(context, react.useEffect); return null; }, {});
   try { harness.render(); await harness.settle(); } finally { harness.close(); }
   assert.deepEqual(statusByPath['/Game.exe'], { runtimeId: 'crossover', status: null });
+});
+test('an automatic selection reads Automatic before what it uses, and the runtime\'s own choice reads once', () => {
+  const included = (id, component, engine, version, apis) => Description.description({ id, component, engine, version, form: 'builtin', included: true, files: [], apis,
+    source: { kind: 'winecx', runtime: 'winecx', label: 'WineCX' } });
+  const dxmt = included('included:d3d-renderer:dxmt', 'd3d-renderer', 'dxmt', '0.80', ['Direct3D 10', 'Direct3D 11']);
+  const moltenVK = included('included:vulkan-driver:moltenvk', 'vulkan-driver', 'moltenvk', '1.4.2');
+  const plan = Plan.projectRoles(Plan.resolvePlan({ runtime: 'winecx', selections: { 'd3d-renderer': dxmt.id }, included: [dxmt, moltenVK], choices: [] }));
+  plan.components['vulkan-driver'].used = moltenVK;
+  const rows = Object.fromEntries(Translators.inspectorRows(plan).map(row => [row.label, [row.selected, row.used]]));
+  assert.deepEqual(rows['Vulkan'], ['Automatic', 'MoltenVK 1.4.2 · WineCX']);
+  assert.deepEqual(rows['Direct3D 11'], ['DXMT 0.80 · WineCX', 'DXMT 0.80 · WineCX']);
+  // DXMT has no Direct3D 9 library, so that API is left to WineCX.
+  assert.deepEqual(rows['Direct3D 9'], ["WineCX's automatic choice", "WineCX's automatic choice"]);
 });

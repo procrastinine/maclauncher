@@ -16,7 +16,7 @@ When it is available, the library title comes from `gameTitle` in the game's `da
 | NW.js | Downloaded from **Runtimes → NW.js** |
 | NW.js (Patched) | The same NW.js installation with compatibility patches |
 | Game's macOS app | A compatible Mac app supplied with the game |
-| CrossOver, Sikarugir (Wine) | Windows runtimes for the game's Windows executable |
+| CrossOver, Sikarugir | Windows runtimes for the game's Windows executable |
 
 The automatic runtime depends on what is installed. When a usable NW.js SDK is installed, MV and MZ games use **NW.js (Patched)**, and otherwise they use Electron. This automatic choice keeps the selected NW.js version and patch options, and it does not change a runtime chosen for the game or an explicit default for the game type. Other web game types keep their own defaults.
 

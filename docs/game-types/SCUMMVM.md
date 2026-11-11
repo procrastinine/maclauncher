@@ -38,7 +38,7 @@ An existing installation that still carries the publisher's signatures is re-sig
 
 The ScummVM packages support Apple Silicon and Intel. Apple Silicon requires macOS 11 or later, and MacLauncher's own minimum macOS version also applies. Game support differs between ScummVM releases; the publisher's [compatibility lists](https://www.scummvm.org/compatibility/) describe which games each release supports.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
 When the game includes a compatible x86 or x64 Windows executable, the [Windows runtimes](WINDOWS.md#windows-executables-in-other-game-types) Sikarugir and CrossOver are also offered.
 

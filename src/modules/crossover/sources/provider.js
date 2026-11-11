@@ -12,12 +12,17 @@ const Translators = require("../../shared/runtime/wine-translators");
 // already installed.
 const supportsEntry = entry => Detection.supportsWindowsRuntimes(entry);
 const decorateEntry = Detection.decorateEntry;
-function resolveSaveLocations(entry, context, { source, launch }) {
-  const directory = launch.runtimeDirectory(entry, context), gameRoot = Detection.cachedWindowsExecutable(entry)?.sourceRoot || entry.gamePath;
+// Every Wine source offers the game's save folders and no save editing.
+const SUPPORTS = Object.freeze({ cheats: false, cheatsPatcher: false, saveEditing: false, saveLocation: true });
+// The game's own files, an existing environment's save folders and the
+// profile files of the private Windows environment, for every Wine source.
+function resolveSaveLocations(entry, context, { source }) {
+  const directory = require("./launch-steps").runtimeDirectory(entry, context, source), gameRoot = Detection.cachedWindowsExecutable(entry)?.sourceRoot || entry.gamePath;
   const directories = path.isAbsolute(gameRoot || "") ? [{ directory: gameRoot, role: "primary", source: "Original Windows game files", confidence: "exact" }] : [];
   directories.push(...Environments.saveLocations(context.runtimeSettings));
-  const prefixPath = entry.runtimeData?.[source.id]?.prefixPath;
-  if (typeof prefixPath === "string" && path.isAbsolute(prefixPath) && Detection.inside(path.join(directory, "prefixes"), prefixPath)) {
+  const record = entry.runtimeData?.[source.id], bottle = source.prefixModel === "bottleTemplate";
+  const prefixPath = bottle ? record?.bottlePath : record?.prefixPath;
+  if (typeof prefixPath === "string" && path.isAbsolute(prefixPath) && Detection.inside(path.join(directory, bottle ? "bottles" : "prefixes"), prefixPath)) {
     const users = path.join(prefixPath, "drive_c", "users");
     if (fs.existsSync(users)) {
       Writable.assertOwnDirectory(directory, users, { create: false });
@@ -74,8 +79,8 @@ function createProvider({ source, manager, launch = WineLaunch.forSource(source)
         ...await require("../temporal/vulkan-dlss").requirements(entry, context),
         ...await require("../runtime/steam-bridge").requirements(entry, { ...context, runtimeId: id })];
     },
-    runtimeDirectory: launch.runtimeDirectory, resolveSaveLocations: (entry, context) => resolveSaveLocations(entry, context, { source, launch }),
-    supports: { cheats: false, cheatsPatcher: false, saveEditing: false, saveLocation: true },
+    runtimeDirectory: launch.runtimeDirectory, resolveSaveLocations: (entry, context) => resolveSaveLocations(entry, context, { source }),
+    supports: SUPPORTS,
     canLaunchRuntime: (runtimeId, entry) => runtimeId === id && platform === "darwin" && supportsEntry(entry),
     ensureRuntime: async (entry, context) => {
       if (!supportsEntry(entry)) throw new Error(notSupported);
@@ -117,4 +122,4 @@ function createProvider({ source, manager, launch = WineLaunch.forSource(source)
     }
   };
 }
-module.exports = { createProvider, createLog };
+module.exports = { createProvider, createLog, resolveSaveLocations, SUPPORTS };

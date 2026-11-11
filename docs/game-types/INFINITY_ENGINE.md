@@ -5,7 +5,7 @@ Infinity Engine games are role-playing games such as Baldur's Gate, Icewind Dale
 | Runtime | Description |
 | --- | --- |
 | GemRB (default) | Native GemRB command-line player from MacLauncher Builds |
-| CrossOver, Sikarugir (Wine) | Run the original Windows executable |
+| CrossOver, Sikarugir | Run the original Windows executable |
 
 ## Importing games
 
@@ -69,9 +69,9 @@ When neither the game nor the global settings name a version, Play uses the newe
 
 GemRB asks to come to the foreground through the shared native launch helper and the [SDL foreground hint](https://wiki.libsdl.org/SDL2/SDL_HINT_MAC_BACKGROUND_APP), which is set only for the game process. The helper waits for the game's window and makes a single AppKit activation request, so the launcher stays responsive. No Accessibility permission or system setting change is needed.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
-Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir (Wine)](../runtimes/SIKARUGIR.md). The detected engine and its inspector tools stay available with either runtime.
+Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir](../runtimes/SIKARUGIR.md). The detected engine and its inspector tools stay available with either runtime.
 
 ## Versions and installation
 

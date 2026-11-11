@@ -652,7 +652,10 @@ test("CrossOver Play automatically creates a private bottle and launches the sel
   assert.equal(Launch.runtimeDirectory(entry, context), path.join(userDataDir, "games", "testgame", "runtimes", "crossover"));
   await Launch.prepareLaunch(entry, context, { run });
   assert.equal(calls.length, 1);
-  assert.deepEqual(Module.resolveSaveLocations(entry, context), { primaryDirectory: null, directories: [] });
+  // CrossOver games list the same save locations as the other Wine sources.
+  const saves = Module.resolveSaveLocations(entry, context);
+  assert.equal(fs.realpathSync(saves.primaryDirectory), fs.realpathSync(game));
+  assert.deepEqual(saves.directories.map(row => row.source), ["Original Windows game files"]);
   pe(path.join(game, "ArmGame.exe"), { machine: 0xaa64 });
   await assert.rejects(Launch.prepareLaunch(entry, { ...context, runtimeSettings: { executable: "ArmGame.exe" } }, { run }), /Windows ARM64/);
   assert.equal(calls.length, 1);

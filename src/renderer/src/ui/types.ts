@@ -105,6 +105,8 @@ export type RuntimeSettingField = {
   type: "boolean" | "number" | "string" | "select" | "list" | "display";
   label: string;
   description?: string;
+  /** Text an empty string field shows, naming what an empty value means. */
+  placeholder?: string;
   section?: string;
   advanced?: boolean;
   inheritFrom?: string;

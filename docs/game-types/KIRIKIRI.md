@@ -5,7 +5,7 @@ KiriKiri is a Windows visual novel engine. Its games are written in TJS scripts 
 | Runtime | Description |
 | --- | --- |
 | KiriKiri SDL2 (default) | Native interpreter for KAG3/TJS2 games |
-| CrossOver, Sikarugir (Wine) | Run the original Windows executable |
+| CrossOver, Sikarugir | Run the original Windows executable |
 
 ## Importing games
 
@@ -96,9 +96,9 @@ Each package declares the native APIs it provides, and these APIs are backed by 
 
 With these declarations, Play can match a package to the APIs that the game's scripts call. When neither the game nor the global settings name a version and the automatic choice lacks one of those APIs, Play recommends the first listed package that provides every required API. If an explicitly selected version lacks one, Play instead reports a capability error, which names a compatible listed version when there is one.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
-Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir (Wine)](../runtimes/SIKARUGIR.md). The detected version and the script tools stay available with either runtime.
+Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir](../runtimes/SIKARUGIR.md). The detected version and the script tools stay available with either runtime.
 
 ## Local registration
 

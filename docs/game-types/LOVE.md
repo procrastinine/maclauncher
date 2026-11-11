@@ -16,7 +16,7 @@ Library metadata reads literal `t.window.title` and `t.window.icon` values from 
 | --- | --- |
 | LÖVE (default) | Official release or nightly build from **Runtimes → LÖVE** |
 | Game's macOS app | A LÖVE app bundle imported as is |
-| CrossOver, Sikarugir (Wine) | Windows runtimes for the game's Windows executable |
+| CrossOver, Sikarugir | Windows runtimes for the game's Windows executable |
 
 An imported LÖVE app bundle can switch to **Game's macOS app**. Packaged `.love` files, fused executables, packaged Linux builds and extracted AppImages use the LÖVE runtime.
 

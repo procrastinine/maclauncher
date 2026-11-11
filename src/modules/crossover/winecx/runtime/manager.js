@@ -34,6 +34,7 @@ async function verifyChecksumFile({ archiveSha256, pin, signal }, dependencies =
 function createManager({ discoverCatalog = Catalog.discover, dependencies = {} } = {}) {
   const base = createPinnedNativeManager({
     id: "winecx", label: "WineCX", sourceUrl: Catalog.SOURCE_URL, sourceName: "dappermint/winecx-gptk",
+    sourceDescription: "Wine runtimes published by dappermint as winecx-gptk releases, with DXVK and DXMT included.",
     formatVersionLabel: Catalog.versionLabel, discoverCatalog,
     resolveExecutable: root => path.join(root, Payload.WINE, "bin", "wine"),
     verifyArtifact: options => verifyChecksumFile(options, dependencies),

@@ -1,11 +1,11 @@
 # CatSystem2
 
-CatSystem2 is a Windows visual novel engine. Its games keep their scenes and other data in KIF archives, the `.int` files, which can be encrypted. No native CatSystem2 interpreter is available, so MacLauncher plays these games by running the original Windows executable through CrossOver or Sikarugir (Wine). It also identifies CatSystem2 games and decodes their archives and scripts in the inspector.
+CatSystem2 is a Windows visual novel engine. Its games keep their scenes and other data in KIF archives, the `.int` files, which can be encrypted. No native CatSystem2 interpreter is available, so MacLauncher plays these games by running the original Windows executable through CrossOver or Sikarugir. It also identifies CatSystem2 games and decodes their archives and scripts in the inspector.
 
 | Runtime | Description |
 | --- | --- |
 | Archive and script tools (default) | Detection and inspector tools; does not launch the game |
-| CrossOver, Sikarugir (Wine) | Run the original Windows executable |
+| CrossOver, Sikarugir | Run the original Windows executable |
 
 ## Detection and versions
 
@@ -43,9 +43,9 @@ For HG-3 images, MacLauncher includes its own reader, which adapts algorithms fr
 
 Archive and script tools, the default runtime, provides detection, the engine version and the inspector tools but cannot launch the game. [FelineSystem2](https://github.com/kokseen1/FelineSystem2) does not play CatSystem2 games, so MacLauncher uses it only as a reference and neither runs nor distributes it.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
-Play runs the original Windows executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application when one is available, and otherwise through [Sikarugir (Wine)](../runtimes/SIKARUGIR.md). Either one can be chosen in the game's runtime selector, and detection, the engine version and the archive and script tools stay available with both.
+Play runs the original Windows executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application when one is available, and otherwise through [Sikarugir](../runtimes/SIKARUGIR.md). Either one can be chosen in the game's runtime selector, and detection, the engine version and the archive and script tools stay available with both.
 
 ## Source and licenses
 

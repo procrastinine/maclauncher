@@ -14,19 +14,12 @@ module.exports = Object.freeze({
   ownComponents: true,
   graphicsSelector: true,
   vulkanLibrarySelector: () => true,
-  includedTranslators(install, add, { layout, describe, source, requestedEngine, warnings, Description }) {
+  includedTranslators(install, add, { layout, requestedEngine, gstreamerVersion }) {
     for (const engine of ["dxmt", "dxvk"]) add(path.join(layout.root, "lib", engine), engine, "d3d-renderer");
     add(path.join(layout.root, "lib64/apple_gptk"), "d3dmetal", "d3d-renderer");
     add(path.join(layout.root, "lib64/libMoltenVK.dylib"), "moltenvk", "vulkan-driver", { form: "dylib" });
-    if (!requestedEngine || requestedEngine === "gstreamer") {
-      let version = "";
-      try {
-        const core = (describe || Description.describeTranslator)(path.join(layout.root, "lib64/libgstreamer-1.0.0.dylib"),
-          { engine: "gstreamer", component: "video", source, form: "dylib" });
-        if (core) version = core.version || require("../../shared/runtime/gstreamer-source").libraryVersion(core);
-      } catch (error) { if (error.code !== "ENOENT") warnings.push(`gstreamer: ${error.message}`); }
-      add(path.join(layout.root, "lib64/gstreamer-1.0"), "gstreamer", "video", { form: "dylib", version });
-    }
+    if (!requestedEngine || requestedEngine === "gstreamer")
+      add(path.join(layout.root, "lib64/gstreamer-1.0"), "gstreamer", "video", { form: "dylib", version: gstreamerVersion(path.join(layout.root, "lib64/libgstreamer-1.0.0.dylib")) });
   },
   // CrossOver's automatic selector can choose another renderer, so its DXMT is
   // the camera adapter's base only for an explicit DXMT selection.

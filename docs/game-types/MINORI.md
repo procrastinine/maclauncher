@@ -5,7 +5,7 @@ Minori games are Windows visual novels that store their data in PAZ archives. Ma
 | Runtime | Description |
 | --- | --- |
 | ReMinori (default) | Native interpreter for the supported PAZ profiles |
-| CrossOver, Sikarugir (Wine) | Run the original Windows executable |
+| CrossOver, Sikarugir | Run the original Windows executable |
 
 ## Importing games
 
@@ -40,9 +40,9 @@ As the default runtime, ReMinori supports title and menu interaction, story text
 
 MacLauncher Builds publishes the native ReMinori packages, and they are listed in **Runtimes → Minori**. Each package records its source revision, dependencies, build options and CPU architectures, and Runtimes lists its architectures and minimum macOS version.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
-Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir (Wine)](../runtimes/SIKARUGIR.md). The detected version and the inspector tools stay available with either runtime.
+Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir](../runtimes/SIKARUGIR.md). The detected version and the inspector tools stay available with either runtime.
 
 ## Source and licenses
 

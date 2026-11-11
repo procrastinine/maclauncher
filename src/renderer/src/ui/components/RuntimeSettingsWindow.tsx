@@ -471,7 +471,7 @@ export function RuntimeSettingsWindow({
                     <div className="settingsRow">
                       <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
                       <div className="settingsControl">
-                        <CommitTextInput aria-label={field.label} value={String((displaySettings as any)[field.key] || "")}
+                        <CommitTextInput aria-label={field.label} value={String((displaySettings as any)[field.key] || "")} placeholder={field.placeholder}
                           onCommit={next => onFieldChange(field.key, next)} disabled={!canEdit || fieldsDisabled} />
                         {field.pickerAction && <button type="button" className="btn" disabled={fieldsDisabled || pickingField !== null}
                           onClick={() => void pickSettingFile(field.key, field.pickerAction!, field.pickerResultKey)}>

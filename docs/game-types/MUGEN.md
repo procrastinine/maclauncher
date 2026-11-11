@@ -5,7 +5,7 @@ MUGEN is a fighting game engine whose games are built from character, stage and 
 | Runtime | Description |
 | --- | --- |
 | Ikemen GO (default) | Upstream Ikemen GO macOS release for the selected architecture |
-| CrossOver, Sikarugir (Wine) | Run the original Windows executable |
+| CrossOver, Sikarugir | Run the original Windows executable |
 
 ## Importing games
 
@@ -65,9 +65,9 @@ SFF Tools is downloaded from the [publisher's releases](https://github.com/openk
 
 Ikemen GO is the default runtime. It interprets the selected character, stage, motif and Lua definitions with its original engine, and **Runtimes → Ikemen GO** lists its upstream releases. The upstream 1.x macOS archives contain an ARM64 executable that requires Apple Silicon and macOS 14, whereas version 0.99 is an Intel build, which runs through [Rosetta](../runtimes/ROSETTA.md) on Apple Silicon. An archive named for one processor is listed for that processor only. During installation, MacLauncher reads these requirements from the downloaded executable and finds the executable or app bundle wherever the archive places it. Launch then runs it directly instead of through the upstream shell wrappers.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
-Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir (Wine)](../runtimes/SIKARUGIR.md). The detected engine and its inspector tools stay available with either runtime.
+Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir](../runtimes/SIKARUGIR.md). The detected engine and its inspector tools stay available with either runtime.
 
 ## Versions and installation
 

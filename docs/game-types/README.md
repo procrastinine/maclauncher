@@ -6,7 +6,7 @@ Each page below covers one game type: accepted inputs, detection and version evi
 
 ## Game types and their runtimes
 
-The table lists game types by the name the app shows. In it, *Windows runtimes* means the [Wine runtimes](../runtimes/WINE.md) [Sikarugir (Wine)](../runtimes/SIKARUGIR.md), [CrossOver](../runtimes/CROSSOVER.md) and [WineCX (Wine)](../runtimes/WINECX.md), which a game type offers when the game includes a compatible Windows executable.
+The table lists game types by the name the app shows. In it, *Windows runtimes* means the [Wine runtimes](../runtimes/WINE.md) [Sikarugir](../runtimes/SIKARUGIR.md), [CrossOver](../runtimes/CROSSOVER.md) and [WineCX](../runtimes/WINECX.md), which a game type offers when the game includes a compatible Windows executable.
 
 | Game type | Default runtime | Other runtimes |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ The table lists game types by the name the app shows. In it, *Windows runtimes* 
 | [VNDS](VNDS.md) | VNDS-LOVE | Windows runtimes |
 | [Web](WEB.md) | Electron | NW.js, NW.js (Patched), Game's macOS app, Windows runtimes |
 | [Window](WINDOW.md) | Window capture | |
-| [Windows Game](WINDOWS.md) | Sikarugir (Wine) | CrossOver |
+| [Windows Game](WINDOWS.md) | Sikarugir | CrossOver |
 | [WOLF RPG Editor](WOLFRPG.md) | Browser Woditor | Windows runtimes |
 
 Window entries are not imported. MacLauncher creates one for each window graphics session, which applies graphics to another app's window or to a display, and the entry exists only while that session runs.

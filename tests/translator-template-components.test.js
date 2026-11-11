@@ -57,12 +57,18 @@ test('an installed Wine runtime summarizes its translator versions after local p
   const executablePath = put('engine/wine/bin/wine', image({ cpu: X64, fileType: 2 }));
   put('engine/wine/lib/wine/x86_64-unix/ntdll.so', image({ cpu: X64, symbols: ['wine_unix_call'] }));
   template(put, 'engine/support/Frameworks');
+  // Vulkan drivers without version text: MoltenVK's version string and KosmicKrisp's Mesa identity name their releases.
+  put('engine/support/Frameworks/libMVK.dylib', Buffer.concat([image({ cpu: X64, fileType: 6 }), Buffer.from('\0MoltenVK version %s\0' + '1.4.1\0')]));
+  put('engine/support/Frameworks/libvulkan_kosmickrisp.dylib', Buffer.concat([image({ cpu: X64, fileType: 6 }), Buffer.from('\0Mesa 26.3.0-devel (git-063dfaeec5)\0')]));
+  put('engine/support/Resources/vulkan/icd.d/MoltenVK_icd.json', JSON.stringify({ ICD: { library_path: '../../../Frameworks/libMVK.dylib', api_version: '1.4.0' } }));
+  put('engine/support/Resources/vulkan/icd.d/kosmickrisp_mesa_icd.json', JSON.stringify({ ICD: { library_path: '../../../Frameworks/libvulkan_kosmickrisp.dylib', api_version: '1.4.363' } }));
   const install = { ready: true, engineRoot: wine, installDir: wine, executablePath, architecture: 'x64', templateRoot: support,
     engineVersion: '10.0_8', version: '10.0_8-template-1.0.24', catalogEntry: { template: { version: '1.0.24' } } };
   assert.equal(Wine.includedSummary(install, 'sikarugir', { userDataDir }), '', 'a state reads retained descriptions only');
   await Wine.describedIncluded(install, 'sikarugir', { userDataDir, logger: { warn() {} } });
   const summary = Wine.includedSummary(install, 'sikarugir', { userDataDir });
-  assert.deepEqual(summary.split(' · ').sort(), ['DXMT 0.80-244-g7c8dee1', 'DXVK 1.10.3 async (dxvk)', 'DXVK 3.1.1 async (d9vk, dxvk3)']);
+  assert.deepEqual(summary.split(' · '), ['DXMT 0.80-244-g7c8dee1', 'DXVK 3.1.1 async (d9vk, dxvk3)', 'DXVK 1.10.3 async (dxvk)', 'MoltenVK 1.4.1', 'KosmicKrisp 26.3.0-devel'],
+    'engines follow one order on every Wine source, the newest version of an engine first');
   assert.equal(Wine.includedSummary(install, 'sikarugir', {}), '', 'without a profile nothing is read');
 });
 

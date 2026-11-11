@@ -5,7 +5,7 @@ AI5WIN is a Windows visual novel engine. Its games are configured by an INI file
 | Runtime | Description |
 | --- | --- |
 | AI5-SDL2 (default) | Native interpreter for original AI5WIN game data |
-| CrossOver, Sikarugir (Wine) | Run the original Windows executable |
+| CrossOver, Sikarugir | Run the original Windows executable |
 
 ## Importing games
 
@@ -59,6 +59,6 @@ AI5-SDL2 is the default runtime, and MacLauncher Builds publishes it as Mac pack
 
 The packages are listed in **Runtimes → AI5WIN** and need neither Wine nor Windows fonts. Installed versions are stored in `~/Library/Application Support/maclauncher/runtimes/ai5/<arm64|x64>/<version>/`, and their source, patches and build scripts are in the MacLauncher Builds repository.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
-Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir (Wine)](../runtimes/SIKARUGIR.md). The detected version and the inspector tools stay available with either runtime.
+Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir](../runtimes/SIKARUGIR.md). The detected version and the inspector tools stay available with either runtime.

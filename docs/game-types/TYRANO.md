@@ -18,7 +18,7 @@ For library titles and icons, MacLauncher reads the local NW.js `window.title`, 
 | NW.js | Downloaded from **Runtimes → NW.js** |
 | NW.js (Patched) | The same NW.js installation with compatibility patches |
 | Game's macOS app | A compatible Mac app supplied with the game |
-| CrossOver, Sikarugir (Wine) | Windows runtimes for the game's Windows executable |
+| CrossOver, Sikarugir | Windows runtimes for the game's Windows executable |
 
 [Web runtimes](../runtimes/WEB_RUNTIMES.md) describes the hosts and their settings. When a Tyrano game runs in Electron, it uses the shared legacy NW.js window interface, and its browser scripts keep their global libraries instead of loading through CommonJS.
 

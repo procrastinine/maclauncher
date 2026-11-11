@@ -5,7 +5,7 @@ This game type covers Half-Life and the Half-Life mods that run on its own game 
 | Runtime | Description |
 | --- | --- |
 | Xash3D FWGS (default) | The publisher's macOS build for this Mac's CPU |
-| CrossOver, Sikarugir (Wine) | Run the original Windows executable |
+| CrossOver, Sikarugir | Run the original Windows executable |
 
 ## Accepted inputs
 
@@ -52,7 +52,7 @@ Installation keeps the publisher's archive unchanged. The archive holds the `xas
 
 Versions follow the [shared selection rules](../runtimes/README.md#versions), and installations are stored under `userData/runtimes/xash3d-fwgs/<arm64|x64>/<version>/`.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
 When the imported folder includes a compatible Windows executable, such as Steam's `hl.exe`, the [Windows runtimes](WINDOWS.md#windows-executables-in-other-game-types) Sikarugir and CrossOver are also offered. They run the original Windows game libraries, so they also cover mods without macOS libraries.
 

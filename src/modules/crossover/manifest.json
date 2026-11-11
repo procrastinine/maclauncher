@@ -210,7 +210,8 @@
             "key": "locale",
             "type": "string",
             "label": "Language locale",
-            "description": "Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8."
+            "placeholder": "System language",
+            "description": "Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. Empty uses the language of macOS."
           },
           {
             "key": "windowsVersion",

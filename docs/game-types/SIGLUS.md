@@ -6,7 +6,7 @@ This game type covers three Windows visual novel formats: Siglus, RealLive and A
 | --- | --- |
 | Siglus (default) | Siglus, RealLive and AVG32, through siglus_rs |
 | RealLive (RLVM) | RealLive games with a `SEEN.TXT` archive |
-| CrossOver, Sikarugir (Wine) | Run the original Windows executable |
+| CrossOver, Sikarugir | Run the original Windows executable |
 
 ## Detection and versions
 
@@ -76,9 +76,9 @@ The RLVM releases are listed under **Runtimes → RealLive (RLVM)**, and the ada
 
 To launch, a small per-game folder links to the original assets and exposes `SEEN.TXT` where RLVM expects it. RLVM saves are stored in `userData/games/<gameId>/modules/siglus/rlvm/saves/`, in a subfolder named after the game's REGNAME, as upstream does, and a save-folder override changes that root. Switching back to the Siglus runtime keeps both sets of saves, although their formats are not interchangeable.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
-Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir (Wine)](../runtimes/SIKARUGIR.md). With either runtime, the detected version and the inspector tools stay available.
+Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir](../runtimes/SIKARUGIR.md). With either runtime, the detected version and the inspector tools stay available.
 
 ## Implementation
 

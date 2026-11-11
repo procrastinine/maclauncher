@@ -182,11 +182,16 @@ test("the WineCX source lists its included translators through the shared Wine t
   const wineRoot = path.join(root, "Libraries/Wine"), install = { version: "4.8.1", installDir: root, librariesRoot: path.join(root, "Libraries"), wineRoot, engineRoot: wineRoot,
     executablePath: path.join(wineRoot, "bin/wine"), serverPath: path.join(wineRoot, "bin/wineserver"), libraryRoot: path.join(wineRoot, "lib"),
     componentVersions: { dxvk: "1.10.3", dxmt: "0.80" }, capabilities: { vulkanLibrarySelector: true } };
+  fs.mkdirSync(path.join(wineRoot, "lib/gstreamer-1.0"), { recursive: true }); fs.writeFileSync(path.join(wineRoot, "lib/libgstreamer-1.0.0.dylib"), "");
   const seen = [];
   const inventory = Translators.includedTranslators(install, "winecx", { describe: (file, selection) => {
     seen.push([path.relative(root, file), selection.engine, selection.component, selection.source.label]);
-    return { component: selection.component, engine: selection.engine, form: selection.form || "builtin", files: [], version: selection.version || "" };
+    // GStreamer's version comes from its core library, the same way as for CrossOver.
+    const version = file.endsWith("libgstreamer-1.0.0.dylib") ? "1.26.3" : selection.version || "";
+    return { component: selection.component, engine: selection.engine, form: selection.form || "builtin", files: [], version };
   } });
+  assert.deepEqual(inventory.included.filter(item => item.engine === "gstreamer").map(item => item.version), ["1.26.3"]);
+  assert.ok(seen.some(([file, engine]) => file === "Libraries/Wine/lib/libgstreamer-1.0.0.dylib" && engine === "gstreamer"));
   assert.deepEqual(seen.slice(0, 3), [["Libraries/DXMT", "dxmt", "d3d-renderer", "WineCX"], ["Libraries/DXVK", "dxvk", "d3d-renderer", "WineCX"],
     ["Libraries/Wine/lib/libMoltenVK.dylib", "moltenvk", "vulkan-driver", "WineCX"]]);
   assert.deepEqual(inventory.included.filter(item => item.engine === "dxmt").map(item => item.version), ["0.80"]);

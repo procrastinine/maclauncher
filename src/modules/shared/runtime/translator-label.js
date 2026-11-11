@@ -35,8 +35,12 @@ function sourceText(value, host) {
 function label(value, host, { folder = value?.labelFolder, hostVersionLabel, hostName } = {}) {
   if (!value) return "";
   const parts = [componentLabel(value), sourceText(value, host)].filter(Boolean);
+  // A qualifier adds only the words the label does not already state, so
+  // "CrossOver Preview 26.3" beside "CrossOver 26.3" adds "Preview".
   for (const part of [folder, ...displayText(hostVersionLabel).split(/\s*·\s*/), hostName].map(displayText)) {
-    if (part && !parts.some(existing => existing.includes(part))) parts.push(part);
+    if (!part || parts.some(existing => existing.includes(part))) continue;
+    const stated = new Set(parts.join(" ").split(/\s+/)), rest = part.split(/\s+/).filter(word => !stated.has(word)).join(" ");
+    if (rest) parts.push(rest);
   }
   return displayText(parts.join(" · "));
 }

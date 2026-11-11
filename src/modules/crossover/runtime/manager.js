@@ -59,7 +59,7 @@ function inspectApplication(runtimePath) {
   const loaderArchitectures = readMachOArchitectures(loaderPath);
   const architectures = graphicsExecutablePath === loaderPath ? loaderArchitectures : readMachOArchitectures(graphicsExecutablePath);
   const serverArchitectures = readMachOArchitectures(serverPath);
-  const install = { version: identity(appPath), upstreamVersion, buildVersion: info?.CFBundleVersion || null, versionLabel: `${upstreamVersion} · ${path.basename(appPath)}`,
+  const install = { version: identity(appPath), upstreamVersion, buildVersion: info?.CFBundleVersion || null, versionLabel: `${path.basename(appPath, ".app")} ${upstreamVersion}`,
     appPath, installDir: appPath, runtimePath: appPath, executablePath, bottleToolPath, loaderPath, serverPath,
     crossoverRoot: root, graphicsExecutablePath, architectures, loaderArchitectures, serverArchitectures,
     needsRosetta: [loaderArchitectures, architectures, serverArchitectures].some(list => imageRequiresRosetta(list)),
@@ -83,7 +83,7 @@ function listInstalled(userDataDir, { automaticPaths = AUTOMATIC_PATHS } = {}) {
     catch (error) {
       if (!record.imported) continue;
       row = { version: identity(record.appPath), appPath: record.appPath, installDir: record.appPath, runtimePath: record.appPath,
-        upstreamVersion: "Unavailable", versionLabel: `${path.basename(record.appPath)} · Unavailable`, ready: false,
+        upstreamVersion: "Unavailable", versionLabel: `${path.basename(record.appPath, ".app")} · Unavailable`, ready: false,
         reason: "CrossOver application is unavailable. Add its current location in Runtimes.", external: true, imported: true,
         removalLabel: "Remove", removalConfirm: "Remove this application from Runtimes? The application will remain installed." };
     }

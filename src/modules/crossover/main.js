@@ -155,10 +155,10 @@ async function launchRuntime(runtimeId, entry, context) {
   require("../shared/runtime/wine-activation").followWineActivation(child, context);
   return child;
 }
-const resolveSaveLocations = (_entry, context) => ({ primaryDirectory: null, directories: Environments.saveLocations(context?.runtimeSettings) });
+const resolveSaveLocations = (entry, context) => require("./sources/provider").resolveSaveLocations(entry, context || {}, { source: require("./sources").get("crossover") });
 const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.entries.crossover, managerId: "crossover",
     actions: crossoverActions, settingsActions: crossoverSettingsActions,
-    supports: manifest.supports, decorateEntry: Detection.decorateEntry,
+    supports: require("./sources/provider").SUPPORTS, decorateEntry: Detection.decorateEntry,
     supportsEntry, canLaunchRuntime, ensureRuntime, launchRuntime, resolveSaveLocations,
     getRuntimeRequirements: async (entry, context) => [
       ...await require("./temporal").requirements(entry, { ...context, runtimeId: "crossover" }),

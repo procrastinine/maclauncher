@@ -69,7 +69,9 @@ function versionLabel(pin, installed) {
   const template = record?.template?.version || installed?.templateVersion;
   if (!engine) return record?.versionLabel;
   const [version, revision] = engine.split("_");
-  return `Wine ${version}${revision ? ` (rev ${Number(revision)})` : ""}${template ? ` · Template ${template}` : ""}`;
+  // The same form as the other Wine sources: the source and its release, then
+  // the Wine release and engine revision.
+  return `Sikarugir${template ? ` ${template}` : ""} · Wine ${version}${revision ? ` rev ${Number(revision)}` : ""}`;
 }
 function entryFor(engine, asset, template, releaseTag = "v1.0") {
   return {

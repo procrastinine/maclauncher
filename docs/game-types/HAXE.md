@@ -5,7 +5,7 @@
 | Runtime | Description |
 | --- | --- |
 | Native build inspection (default) | Detection and binary inspection; does not launch the game |
-| CrossOver, Sikarugir (Wine) | Run the original Windows executable |
+| CrossOver, Sikarugir | Run the original Windows executable |
 
 A Windows executable cannot be converted into a Mac game by replacing `lime.ndll` with a Mac library. Native playback on macOS needs a macOS, Flash, HTML5 or HashLink export of the game. HashLink bytecode exports are a separate game type, [HashLink (Haxe bytecode)](HASHLINK.md).
 
@@ -27,6 +27,6 @@ Available hxcpp versions are read from build strings in the support library and 
 
 Native build inspection, the default runtime, provides detection, version information and **Inspect binary** but cannot launch the game.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
-Play runs a Windows hxcpp/Lime build through a registered [CrossOver](../runtimes/CROSSOVER.md) application when one is available, and otherwise through [Sikarugir (Wine)](../runtimes/SIKARUGIR.md). Detection and **Inspect binary** stay available with either runtime.
+Play runs a Windows hxcpp/Lime build through a registered [CrossOver](../runtimes/CROSSOVER.md) application when one is available, and otherwise through [Sikarugir](../runtimes/SIKARUGIR.md). Detection and **Inspect binary** stay available with either runtime.

@@ -87,7 +87,7 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
   const check = Shared.createInventoryCheck({ label: LABEL, systemVersionSync });
   const important = new Set([`${WINE_ROOT}/bin/wine`, `${WINE_ROOT}/bin/wineserver`, `${WINE_ROOT}/lib/wine/x86_64-unix/ntdll.so`, `${SUPPORT_ROOT}/graphics.json`]);
   return function resolvePayload(install, { verification = "full", signal } = {}) {
-    if (!install) return { install: null, reason: "Sikarugir Wine is not installed." };
+    if (!install) return { install: null, reason: "Sikarugir is not installed." };
     try {
       throwIfAborted(signal);
       const evidence = install.installationMetadata;

@@ -19,8 +19,9 @@ const sameArchive = (recorded, listed) => !listed || recorded === listed;
 
 function createManager({ discoverCatalog = Catalog.discover, dependencies = {} } = {}) {
   const base = createPinnedNativeManager({
-    id: "sikarugir", label: "Sikarugir Wine", sourceUrl: Catalog.SOURCE_URL,
+    id: "sikarugir", label: "Sikarugir", sourceUrl: Catalog.SOURCE_URL,
     sourceName: "Sikarugir Engines / Template", formatVersionLabel: Catalog.versionLabel,
+    sourceDescription: "Wine engines published by Sikarugir, each installed with its matching Template.",
     discoverCatalog, resolveExecutable: root => path.join(root, Payload.WINE_ROOT, "bin", "wine"),
     prepareInstall: options => Payload.preparePayload(options, dependencies),
     dependencies: { ...dependencies, extractArchive: dependencies.extractArchive || extractArchive }

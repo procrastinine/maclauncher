@@ -30,7 +30,15 @@ function includedTranslators(install, runtime, { engine: requestedEngine, descri
       if (engine === 'd3dmetal' && component === 'd3d-renderer') result.push({ ...value, component: 'd3d12', id: 'included:d3d12:d3dmetal' });
     } catch (error) { warnings.push(`${engine}: ${error.message}`); }
   };
-  wine.includedTranslators(install, add, { layout, describe, source, requestedEngine, warnings, nativeRoots, result, Description });
+  // GStreamer's release, read from its core library for a source whose
+  // plugins folder carries no version text.
+  const gstreamerVersion = core => {
+    try {
+      const value = (describe || Description.describeTranslator)(core, { engine: 'gstreamer', component: 'video', source, form: 'dylib' });
+      return value ? value.version || require('./gstreamer-source').libraryVersion(value) : '';
+    } catch (error) { if (error.code !== 'ENOENT') warnings.push(`gstreamer: ${error.message}`); return ''; }
+  };
+  wine.includedTranslators(install, add, { layout, describe, source, requestedEngine, warnings, nativeRoots, result, Description, gstreamerVersion });
   const direct3DWindows = [layout.primaryWindows, ...layout.windows.filter(name => name !== layout.primaryWindows)].filter(Boolean);
   const direct3DFiles = (!requestedEngine || requestedEngine === 'wined3d' || requestedEngine === 'vkd3d') ? direct3DWindows.flatMap(windows => fs.readdirSync(path.join(layout.dllRoot, windows)).filter(name => /^(?:d3d\d.*|dxgi)\.dll$/i.test(name)).map(name => {
     const file = path.join(layout.dllRoot, windows, name), relative = `${windows}/${name}`;
@@ -44,6 +52,8 @@ function includedTranslators(install, runtime, { engine: requestedEngine, descri
     version: d3d12Files[0].version || '', form: 'builtin', root: layout.root, files: d3d12Files }));
   return { included: result, warnings, layout, nativeRoots };
 }
+const SUMMARY_ORDER = Object.freeze(['dxmt', 'dxvk', 'd3dmetal', 'vkd3d-proton', 'moltenvk', 'kosmickrisp', 'gstreamer']);
+const MACHINE_GAMES = Object.freeze({ 0x14c: '32-bit', 0x8664: '64-bit', 0xaa64: 'ARM64' });
 // An installed Wine runtime names the translator versions it includes, from
 // descriptions already prepared for its files; a component not described yet
 // is left out until local preparation reads it. Wine's own WineD3D and vkd3d
@@ -55,11 +65,17 @@ function includedSummary(install, runtime, { userDataDir, logger } = {}) {
     included = includedTranslators(install, runtime, { describe: (root, selection) =>
       Description.cachedTranslator(root, { ...selection, userDataDir, logger }) }).included;
   } catch { return ''; }
-  // Template folders are named when one engine has several versions.
+  // Engines follow one order on every Wine source, newest version first
+  // within an engine; Template folders are named when one engine has several
+  // versions. A set complete only for some game architectures names them.
+  const order = engine => (i => i < 0 ? SUMMARY_ORDER.length : i)(SUMMARY_ORDER.indexOf(engine));
+  included = included.slice().sort((a, b) => order(a.engine) - order(b.engine) || compareRuntimeVersions(a.version || '', b.version || ''));
   const labels = new Map(), engines = new Map();
   for (const value of included) {
     if (value.hiddenChoice || value.engine === 'wined3d' || value.engine === 'vkd3d') continue;
-    const text = require('./translator-label').componentLabel(value), group = labels.get(text) || { engine: value.engine, folders: new Set() };
+    const games = value.incompleteMachines?.length && [...new Set(value.files.filter(file => file.format === 'pe').map(file => MACHINE_GAMES[file.machine]).filter(Boolean))];
+    const text = require('./translator-label').componentLabel(value) + (games?.length ? ` for ${games.join(' and ')} games` : '');
+    const group = labels.get(text) || { engine: value.engine, folders: new Set() };
     if (value.templateComponent) group.folders.add(value.templateComponent);
     labels.set(text, group);
     engines.set(value.engine, (engines.get(value.engine) || new Set()).add(text));
@@ -558,8 +574,16 @@ function inspectorRows(plan, { host } = {}) {
   const builtin = plan.builtinRenderer && require('./translator-files').placesDirect3D(plan) ? Description.label(plan.builtinRenderer) : null;
   return presentInspectorRows(entries.map(([component, key]) => {
     const row = plan.components[component], direct3D = Roles.DIRECT3D_ROLES.some(role => role.id === component);
-    return { id: key, component, label: labels[component] || Roles.ROLES.find(role => role.id === component)?.label, selected: row.selected ? Description.label(row.selected) : row.fallback ? Plan.UNAVAILABLE_CHOICE_LABEL : row.inherited ? 'Inherited' : automatic,
-      used: row.used ? Description.label(row.used) + nativeBuildSuffix(row.used, plan.layout, host) : direct3D && builtin || automatic, reason: row.reason, reasonCode: row.reasonCode, fallback: row.fallback,
+    // A default Direct3D engine without this API, such as DXMT for Direct3D 9,
+    // leaves the API to the runtime's automatic choice.
+    const apis = Roles.ROLES.find(role => role.id === component)?.apis;
+    const selected = row.selected && (!apis?.length || !row.selected.apis?.length || row.selected.apis.some(api => apis.includes(api))) ? row.selected : null;
+    const used = row.used ? Description.label(row.used) + nativeBuildSuffix(row.used, plan.layout, host) : direct3D && builtin || automatic;
+    // An automatic selection reads "Automatic" before the component it uses,
+    // as the Version row does; left to the runtime, its choice reads once.
+    return { id: key, component, label: labels[component] || Roles.ROLES.find(role => role.id === component)?.label,
+      selected: selected ? Description.label(selected) : row.fallback ? Plan.UNAVAILABLE_CHOICE_LABEL : row.inherited ? 'Inherited' : used === automatic ? automatic : 'Automatic',
+      used, reason: row.reason, reasonCode: row.reasonCode, fallback: row.fallback,
       ...(row.conflictRoles?.length ? { conflictRoles: row.conflictRoles } : {}) };
   }));
 }

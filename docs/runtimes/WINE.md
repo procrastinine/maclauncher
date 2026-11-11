@@ -4,9 +4,9 @@ MacLauncher runs [Windows games](../game-types/WINDOWS.md) and the compatible Wi
 
 | Source | Runtime selector | Origin | Delivery |
 | --- | --- | --- | --- |
-| [Sikarugir](SIKARUGIR.md) | **Sikarugir (Wine)** | Sikarugir Wine engines with their Templates | Downloaded after consent; the default for Windows games |
+| [Sikarugir](SIKARUGIR.md) | **Sikarugir** | Sikarugir Wine engines with their Templates | Downloaded after consent; the default for Windows games |
 | [CrossOver](CROSSOVER.md) | **CrossOver** | CodeWeavers' CrossOver application | Registered from an installed, licensed application; never downloaded |
-| [WineCX](WINECX.md) | **WineCX (Wine)** | dappermint's winecx-gptk runtime: CodeWeavers' CrossOver Wine changes on a current Wine release | Downloaded after consent |
+| [WineCX](WINECX.md) | **WineCX** | dappermint's winecx-gptk runtime: CodeWeavers' CrossOver Wine changes on a current Wine release | Downloaded after consent |
 
 All three use one Wine layer. Its settings, translator choices, graphics effects, DLSS routing, Steam client bridge and private Windows environments work the same way for each source. The source pages describe only what differs: where the Wine tree comes from, how its versions are listed and installed, and the source's own environment kind.
 

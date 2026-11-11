@@ -5,7 +5,7 @@
 | Runtime | Description |
 | --- | --- |
 | HashLink (Intel Mac; Rosetta on Apple Silicon) (default) | Intel HashLink VM: upstream releases and development snapshots, or MacLauncher Builds 1.9 and 1.12 packages |
-| CrossOver, Sikarugir (Wine) | Run the original Windows executable |
+| CrossOver, Sikarugir | Run the original Windows executable |
 
 Haxe games compiled to native machine code instead of bytecode are a separate game type, [Haxe native build](HAXE.md).
 
@@ -91,9 +91,9 @@ A native primitive profile records the function signatures observed in a package
 
 A complete matching native distribution can also be imported in **Runtimes → HashLink** by selecting its version and choosing **Import local build…**. The imported Intel process runs under Rosetta on Apple Silicon, and Play can request the Rosetta installation with explicit consent to Apple's license.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
-Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir (Wine)](../runtimes/SIKARUGIR.md). The detected engine and its inspector tools stay available with either runtime.
+Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application or [Sikarugir](../runtimes/SIKARUGIR.md). The detected engine and its inspector tools stay available with either runtime.
 
 ## Versions and installation
 

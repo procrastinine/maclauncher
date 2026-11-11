@@ -5,7 +5,7 @@ MAGES. games keep their scripts and system data in MPK archives, with the script
 | Runtime | Description |
 | --- | --- |
 | Impacto Windows HD (default) | Native player for the supported Windows HD profile, Apple Silicon with macOS 13 or later |
-| CrossOver, Sikarugir (Wine) | Run the original Windows executable |
+| CrossOver, Sikarugir | Run the original Windows executable |
 
 ## Importing games
 
@@ -38,9 +38,9 @@ The player needs a supported layout of the original Windows executable, because 
 
 Each package's manifest declares the versions of MacLauncher's Windows adaptation interfaces it uses and a check for the Bink 2 decoder. Play uses the game profile the package ships; otherwise the declared interfaces select MacLauncher's game profile for them. A downloaded package is never refused for needing a newer MacLauncher: Play uses the declared interfaces whose versions this MacLauncher implements and leaves the others unused. For a Windows HD game that needs the Bink 2 decoder, the package must also provide that decoder. Installation checks the selected package, its native dependencies, its architecture and its macOS version, and Runtimes lists each package's architectures and minimum macOS version.
 
-### CrossOver and Sikarugir (Wine)
+### CrossOver and Sikarugir
 
-Compatible x86 and x64 Windows games can also use [Sikarugir (Wine)](../runtimes/SIKARUGIR.md) or an available [CrossOver](../runtimes/CROSSOVER.md) application. The module declares `Launcher.exe` as its Windows entry when it is present beside the original game program, or the game program otherwise. A present launcher is marked as required, so an imported game program identifies the game and Play still starts `Launcher.exe`. The **Windows executable** runtime setting and a publisher entry recorded with a Steam download take precedence. The original game program remains the source of edition and input metadata for Impacto. Windows playback uses the original game files and a separate Windows environment, and the archive and script tools stay available.
+Compatible x86 and x64 Windows games can also use [Sikarugir](../runtimes/SIKARUGIR.md) or an available [CrossOver](../runtimes/CROSSOVER.md) application. The module declares `Launcher.exe` as its Windows entry when it is present beside the original game program, or the game program otherwise. A present launcher is marked as required, so an imported game program identifies the game and Play still starts `Launcher.exe`. The **Windows executable** runtime setting and a publisher entry recorded with a Steam download take precedence. The original game program remains the source of edition and input metadata for Impacto. Windows playback uses the original game files and a separate Windows environment, and the archive and script tools stay available.
 
 ## Adapted source
 

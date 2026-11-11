@@ -772,7 +772,8 @@ export const GameDetails = memo(function GameDetails({
           {translatorRows.map((row, index) => (
             <div className="detailRow" key={`translator:${row.id || index}`}>
               <div className="detailLabel">{row.label}</div>
-              <div className="detailValue">{row.selected} → {row.used}
+              {/* A choice that is also what runs reads once. */}
+              <div className="detailValue">{row.selected === row.used ? row.used : `${row.selected} → ${row.used}`}
                 {(row.selected !== row.used || row.reasonCode === 'dlss-forwarding') && row.reason && (!row.fallback || row.reasonCode) && <div className="detailMeta">{row.reason}</div>}
               </div>
             </div>

@@ -1,6 +1,6 @@
-# WineCX (Wine)
+# WineCX
 
-[winecx-gptk](https://github.com/dappermint/winecx-gptk) is dappermint's Wine runtime built from CodeWeavers' CrossOver Wine changes rebased onto a current Wine release. Its Wine follows the CrossOver internals that Apple's D3DMetal component loads into. MacLauncher downloads its published releases and runs compatible Windows games with them. Game runtime selectors list it as **WineCX (Wine)**. It uses the shared [Wine layer](WINE.md): settings, translators, private environments, graphics effects and the Steam bridge behave as they do for [Sikarugir](SIKARUGIR.md).
+[winecx-gptk](https://github.com/dappermint/winecx-gptk) is dappermint's Wine runtime built from CodeWeavers' CrossOver Wine changes rebased onto a current Wine release. Its Wine follows the CrossOver internals that Apple's D3DMetal component loads into. MacLauncher downloads its published releases and runs compatible Windows games with them. Game runtime selectors list it as **WineCX**. It uses the shared [Wine layer](WINE.md): settings, translators, private environments, graphics effects and the Steam bridge behave as they do for [Sikarugir](SIKARUGIR.md).
 
 ## Requirements
 
@@ -12,7 +12,7 @@ Each release states its supported macOS versions; installation reads the minimum
 
 A release is a runtime when it offers exactly one archive together with a checksum file named after it, such as `Libraries.tar.gz` and `Libraries.tar.gz.sha256`. The version number comes from the release tag, such as `runtime-v4.8.1`. Asset names, versions and checksums are read from each release, so new releases need no MacLauncher update. The download is checked against the SHA-256 that GitHub lists and against the publisher's checksum file. [Release catalogs](RUNTIME_CATALOGS.md#winecx) describes the catalog.
 
-Version labels name the release and the Wine version read from the installed `ntdll.so`, in the form **WineCX 4.8.1 · Wine 11.19**. An installed version's row also names the DXVK and DXMT versions that its version plist states.
+Version labels name the release and the Wine version read from the installed `ntdll.so`, in the form **WineCX 4.8.1 · Wine 11.19**. An installed version's row also names its included translators, as in **Includes DXMT 0.80 · DXVK 1.10.3 for 32-bit games · MoltenVK 1.4.2 · GStreamer 1.26.3**: DXVK and DXMT with the versions that its version plist states, MoltenVK with the version its library states and GStreamer with the version of its core library ([Graphics translators](TRANSLATORS.md#versions-and-sources)).
 
 **Install** can replace an incomplete installation of the same version, and Play offers the same repair through its download prompt. Installation records every installed file in a sealed inventory, and a changed or missing Wine file makes the version unavailable until it is installed again.
 

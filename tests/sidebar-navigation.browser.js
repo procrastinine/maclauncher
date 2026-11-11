@@ -114,7 +114,7 @@ module.exports = async function sidebarNavigationBrowserTests(page, fixture, out
   await searchAllChoices(runtimeSearch);
   await runtimeSearch.fill('Mac.apk');
   assert(await runtimeNav.getByRole('button', { name: 'Mac.apk', exact: true }).count() === 1, 'Runtimes search must match runtime names');
-  await runtimeSearch.fill('Sikarugir Wine');
+  await runtimeSearch.fill('Sikarugir');
   assert(await runtimeNav.getByRole('button', { name: 'Sikarugir', exact: true }).count() === 1, 'Search must match full Sikarugir runtime name');
   assert(await macapkPanel.getByText('Mac.apk', { exact: true }).isVisible(), 'Filtered runtime panel must retain the actual runtime title');
   await runtimeSearch.fill('none-23947');

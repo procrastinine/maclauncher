@@ -5,10 +5,10 @@ const path = require("node:path");
 // for it. The Template supplies the engine's translators and native libraries.
 const support = install => install.templateRoot || install.supportRoot || path.join(install.installDir, "support");
 module.exports = Object.freeze({
-  id: "sikarugir", label: "Sikarugir", runtimeLabel: "Sikarugir (Wine)", managerId: "sikarugir", invocation: "wine",
+  id: "sikarugir", label: "Sikarugir", runtimeLabel: "Sikarugir", managerId: "sikarugir", invocation: "wine",
   order: 201, graphicsArchitecture: "x86_64",
   manager: () => require("../sikarugir/runtime/manager"),
-  labels: Object.freeze({ source: "Sikarugir Template", automatic: "Template's automatic choice", environment: "Wrapper setting", environmentName: "Sikarugir wrapper" }),
+  labels: Object.freeze({ source: "Sikarugir Template", automatic: "Sikarugir's automatic choice", environment: "Wrapper setting", environmentName: "Sikarugir wrapper" }),
   environmentKind: "sikarugir-wrapper",
   // Its Template includes the CNC-DDraw DirectDraw wrapper.
   directDraw: true, prefixModel: "windowsVersion", downloads: true,

@@ -35,7 +35,7 @@ The game-type and runtime pages describe what each one prepares:
 - [ScummVM](../game-types/SCUMMVM.md#saves-and-storage)
 - [FAVORITE / FVP](../game-types/FVP.md#preparation-and-storage)
 - [WOLF RPG Editor](../game-types/WOLFRPG.md#detection-and-preparation)
-- [CrossOver](../runtimes/CROSSOVER.md#bottles-and-private-game-files) and [Sikarugir (Wine)](../runtimes/SIKARUGIR.md#private-game-files-and-prefixes)
+- [CrossOver](../runtimes/CROSSOVER.md#bottles-and-private-game-files) and [Sikarugir](../runtimes/SIKARUGIR.md#private-game-files-and-prefixes)
 
 <a id="writable-input-views"></a>
 

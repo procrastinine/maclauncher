@@ -207,12 +207,13 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
               {(sourceVariants.length ? availableVariants : variants).map((item: any) => <option key={item.id} value={item.id}>{item.label || item.id}</option>)}
             </select>
           </div>}
-          {versions.length > 0 && !included && <button className="btn primary"
-            disabled={!canInstall || !version || sourceBusy || isInstalled || downloading}
-            title={blocked ? reason : isInstalled ? "This version is installed." : undefined}
+          {/* The version menu tags an installed version; the button is only an action. */}
+          {versions.length > 0 && !included && (!isInstalled || downloading) && <button className="btn primary"
+            disabled={!canInstall || !version || sourceBusy || downloading}
+            title={blocked ? reason : undefined}
             aria-describedby={blocked ? `${fieldId}-reason` : undefined}
             onClick={() => architecture ? onInstall(version, section.architectureVariants ? architecture : selectedVariant || undefined, architecture) : onInstall(version, selectedVariant || undefined)}>
-            {downloading ? "Installing…" : isInstalled ? "Installed" : needsRepair ? "Reinstall" : presentation.installLabel}
+            {downloading ? "Installing…" : needsRepair ? "Reinstall" : presentation.installLabel}
           </button>}
           {recommended && !recommendedInstalled && !recommendedPresentation?.included && <button className="btn"
             disabled={sourceBusy || !canInstallVersion(recommended) || Boolean(recommendedDownloading)}

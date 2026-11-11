@@ -16,7 +16,7 @@ Launch uses the game's original root folder, and game assets are not copied. A p
 | ONScripter-EN | Native Mac package from MacLauncher Builds |
 | ONScripter-Yuri Web | Upstream web package, run in an NW.js host |
 | External runtime | An interpreter app or executable whose path is set in the NScripter settings |
-| CrossOver, Sikarugir (Wine) | Windows runtimes for the original executable |
+| CrossOver, Sikarugir | Windows runtimes for the original executable |
 
 The interpreter for a game is selected in **Runtime Settings**, and each interpreter keeps its own runtime settings and per-game version choice.
 
