@@ -82,7 +82,7 @@ Guide: [Unity](https://github.com/procrastinine/maclauncher/blob/master/docs/gam
 
 Games built on Microsoft's [XNA](https://en.wikipedia.org/wiki/Microsoft_XNA) framework, a big part of the 2010s indie scene, belong to the FNA / XNA 4 game type. They run on [FNA](https://fna-xna.github.io/), a reimplementation of XNA, together with [FNA3D](https://github.com/FNA-XNA/FNA3D), [FAudio](https://github.com/FNA-XNA/FAudio) and .NET.
 
-Some Windows builds also lean on Windows itself, through Windows Forms or WPF windows or a 32-bit .NET process. Those games start in a WINE runtime by default, where [Wine Mono](https://gitlab.winehq.org/mono/wine-mono) runs their .NET code and supplies XNA through its own build of FNA.
+Some Windows builds also lean on Windows itself, through Windows Forms or WPF windows or a 32-bit .NET process. Those games start in a WINE runtime by default, where [Wine Mono](https://gitlab.winehq.org/mono/wine-mono) runs their .NET code and supplies XNA through its own build of FNA. Play prepares access to these included libraries along with the game's Windows environment.
 
 **Example games:** Terraria, Celeste, Fez.
 

@@ -103,6 +103,18 @@ function gamePaths(entry, prefixPath, { originalRoot, gameRoot, executable, exec
     { gameRoot: gameRoot === originalRoot ? driveRoot : gameRoot, executablePath, workingRoot: driveRoot, workingDirectory });
   return { workingDirectory, ...paths };
 }
+
+// ntdll derives WINEDATADIR from its own location, including the game bundle.
+// Its Unix-to-Windows conversion recognizes drive roots by device/inode, so a
+// mapping of the original data directory also covers the bundle's share link.
+// Keep Mono discovery inside Wine's MAX_PATH buffers without copying runtime
+// files or selecting a Mono version independently of the chosen Wine engine.
+function runtimeDataPath(prefixPath, install) {
+  const root = require("../../shared/runtime/wine-layout").wineLayout(install).root;
+  const data = path.join(root, "share", "wine");
+  if (!fs.existsSync(data)) return null;
+  return require("../../shared/runtime/wine-game-paths").windowsDirectoryPath(prefixPath, data, data);
+}
 function shaderCache(directory, prefixPath) {
   return require("../runtime/shader-cache").prepare(directory, prefixPath);
 }
@@ -125,4 +137,4 @@ function recordRuntime(entry, context, { runtimeId, match, gameRoot, existingEnv
 }
 
 module.exports = { runtimeDirectory, safeText, dllOverrides, localeEnvironment, existingEnvironment, launchFolder, detachProfileAliases,
-  steamBridge, adapterDescription, gamePaths, shaderCache, keepLaunchFolder, recordRuntime };
+  steamBridge, adapterDescription, gamePaths, runtimeDataPath, shaderCache, keepLaunchFolder, recordRuntime };

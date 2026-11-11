@@ -306,6 +306,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const adapterDescription = await Steps.adapterDescription(environment, { translatorPlan, host, signal: context.signal, existingEnvironment });
   Object.assign(environment, adapterDescription); Object.assign(overrides, adapterDescription);
   const { workingDirectory, windowsExecutablePath, windowsWorkingDirectory } = Steps.gamePaths(entry, bottlePath, { originalRoot, gameRoot, executable, executablePath });
+  Steps.runtimeDataPath(bottlePath, selected.install);
   const shaderCache = Steps.shaderCache(directory, bottlePath);
   Object.assign(environment, shaderCache); Object.assign(overrides, shaderCache);
   const args = ["--bottle", bottlePath, "--wait-children", "--workdir", windowsWorkingDirectory];
