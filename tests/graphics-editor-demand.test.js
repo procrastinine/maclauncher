@@ -14,46 +14,47 @@ const sender = id => {
 };
 const hook = description => `//!HOOK MAIN\n//!BIND HOOKED\n//!DESC ${description}\nvec4 hook() { return HOOKED_tex(HOOKED_pos); }\n`;
 
-test("the graphics catalog is built only while a view asks for it and reused until its inventory changes", () => {
+test("the graphics catalog is built only while a view asks for it and reused until its inventory changes", async () => {
   let builds = 0, value = "a", inputs = "one";
-  const catalog = createGraphicsCatalog({build: () => {builds++;return {value};}, inputs: () => inputs});
-  for (let index = 0; index < 5; index++) catalog.refresh();
-  catalog.changed();inputs = "two";catalog.refresh();
+  // The build runs in a backend worker; the catalog owner awaits it.
+  const catalog = createGraphicsCatalog({build: async () => {builds++;return {value};}, inputs: () => inputs});
+  for (let index = 0; index < 5; index++) await catalog.refresh();
+  await catalog.changed();inputs = "two";await catalog.refresh();
   assert.equal(builds, 0, "no view, no build");
   const first = sender(1), second = sender(2);
-  const opened = catalog.request(first, {open: true, revision: null});
+  const opened = await catalog.request(first, {open: true, revision: null});
   assert.deepEqual(opened, {revision: 1, reshade: {value: "a"}});assert.equal(builds, 1);
-  assert.deepEqual(catalog.request(first, {open: true, revision: 1}), {revision: 1}, "a second view in one window shares the request");
-  catalog.refresh();catalog.refresh();
+  assert.deepEqual(await catalog.request(first, {open: true, revision: 1}), {revision: 1}, "a second view in one window shares the request");
+  await catalog.refresh();await catalog.refresh();
   assert.equal(builds, 1, "unchanged inputs reuse the catalog");
-  assert.deepEqual(catalog.request(second, {open: true, revision: null}), {revision: 1, reshade: {value: "a"}});
+  assert.deepEqual(await catalog.request(second, {open: true, revision: null}), {revision: 1, reshade: {value: "a"}});
   assert.equal(builds, 2, "a newly opened window reads the sources again");
   assert.equal(first.sent.length, 0, "the same catalog is not sent again");
   const revision = catalog.revision();
-  inputs = "three";catalog.refresh();
+  inputs = "three";await catalog.refresh();
   assert.equal(builds, 3);assert.notEqual(catalog.revision(), revision);
   assert.equal(first.sent.length, 0, "equal content keeps the published revision");
-  value = "b";catalog.changed();
+  value = "b";await catalog.changed();
   assert.equal(builds, 4);
   assert.deepEqual(first.sent.at(-1), ["launcher:graphicsCatalog", {revision: 2, reshade: {value: "b"}}]);
   assert.deepEqual(second.sent.at(-1), ["launcher:graphicsCatalog", {revision: 2, reshade: {value: "b"}}]);
-  catalog.request(first, {open: false});catalog.request(first, {open: false});second.destroy();
+  await catalog.request(first, {open: false});await catalog.request(first, {open: false});second.destroy();
   assert.equal(catalog.demanded, false);
-  value = "c";catalog.changed();inputs = "four";catalog.refresh();
+  value = "c";await catalog.changed();inputs = "four";await catalog.refresh();
   assert.equal(builds, 4, "closed views stop all catalog work");
 });
 
-test("an opening view finds a shader edited in place and editor discovery is read again", t => {
+test("an opening view finds a shader edited in place and editor discovery is read again", async t => {
   const userDataDir = temporary(t, "graphics-demand-"), file = path.join(userDataDir, "Edit.glsl");
   fs.writeFileSync(file, hook("First"));Filters.importFiles(userDataDir, [file]);
-  const catalog = createGraphicsCatalog({build: () => ReShade.getState({app: {}, userDataDir, settings: {}}), inputs: () => "inventory"});
+  const catalog = createGraphicsCatalog({build: async () => ReShade.getState({app: {}, userDataDir, settings: {}}), inputs: () => "inventory"});
   const view = sender(1), description = reply => reply.reshade.filters.find(row => row.path === file).traits.description;
-  const opened = catalog.request(view, {open: true, revision: null});
+  const opened = await catalog.request(view, {open: true, revision: null});
   assert.equal(description(opened), "First");
-  catalog.request(view, {open: false});
+  await catalog.request(view, {open: false});
   const revision = catalog.revision();
   fs.writeFileSync(file, hook("Second"));
-  const reopened = catalog.request(view, {open: true, revision: opened.revision});
+  const reopened = await catalog.request(view, {open: true, revision: opened.revision});
   assert.equal(reopened.revision, opened.revision + 1);assert.equal(description(reopened), "Second");
   assert.notEqual(catalog.revision(), revision, "reuse keys change with the edited source");
 });

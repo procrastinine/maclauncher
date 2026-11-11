@@ -255,6 +255,15 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     },
     // The inspector worker lets each module read what its games share, such as
     // installed runtimes, before the first game is selected.
+    // The launcher's graphics catalog (src/main/graphics-catalog.js).
+    graphicsCatalog(settings) {
+      return require("../modules/shared/reshade").getState({ app: null, userDataDir, settings });
+    },
+    // The graphics editor's discovery and catalog for a game that is not
+    // running, from main's data options; module callbacks stay with main.
+    gameEffectsInfo(entry, options) {
+      return require("../modules/shared/effects/runtime").info(entry, { ...options, userDataDir, app: null });
+    },
     // Modules prepare in the given order, then in registry order.
     async warmInspectorLane(settings, order = []) {
       const rank = id => { const index = order.indexOf(id); return index < 0 ? order.length : index; };

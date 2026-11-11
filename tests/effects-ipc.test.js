@@ -48,7 +48,12 @@ function fixture(t, {live = false} = {}) {
       assert.equal(id, "../modules/shared/reshade/live-controls");return { write: entry => calls.push(["controls", entry]) };
     },
     backendService: {invalidateGraphicsPreparation: async entry => {invalidated.push(entry.gameId);return false;},
-      request: async (lane, method, _entry, action) => {
+      request: async (lane, method, requested, action) => {
+        // A stopped game's editor discovery runs in the inspector's worker with data options only.
+        if (method === "gameEffectsInfo") {
+          assert.equal(lane, "inspector");
+          return structuredClone(context.EffectsRuntime.info(structuredClone(requested), structuredClone(action)));
+        }
         assert.deepEqual([lane, method, action], [`game:${entry.gameId}`, "moduleAction", "graphicsInputs"]);return structuredClone(context.graphicsInputsResult);
       }},
     refreshRuntimeSnapshots: async ids => calls.push(["refresh", ids])
@@ -128,13 +133,17 @@ test("effects metadata resolves graphics inputs on the game's backend lane and k
   f.context.launcherService.graphicsCallbacks = (entry, settings) => { callbacks.push(entry.gameId);return { runtimeId: "player", prepareEffectsEntry, withGraphicsUpdate }; };
   await f.invoke("getGameEffects", f.entry.gamePath);
   let options = f.calls.filter(row => row[0] === "info").at(-1)[1];
-  assert.deepEqual(options.graphicsInputs, { depth: true });assert.equal(options.prepareEffectsEntry, prepareEffectsEntry);assert.equal(options.withGraphicsUpdate, withGraphicsUpdate);
-  assert.deepEqual(callbacks, [f.entry.gameId]);
+  assert.deepEqual(options.graphicsInputs, { depth: true });assert.equal(options.graphicsHost, "window");
+  assert.equal(options.prepareEffectsEntry, undefined, "editor discovery receives data only");
+  await f.invoke("getGameEffectParameters", f.entry.gamePath, "node", shaderPlan());
+  options = f.calls.filter(row => row[0] === "describe").at(-1)[3];
+  assert.equal(options.prepareEffectsEntry, prepareEffectsEntry);assert.equal(options.withGraphicsUpdate, withGraphicsUpdate);
+  assert.deepEqual(callbacks, [f.entry.gameId, f.entry.gameId]);
   f.context.graphicsInputsResult = { runtimeId: "player", graphicsInputs: null, filesUnavailable: true };
-  await f.invoke("getGameEffects", f.entry.gamePath);
-  options = f.calls.filter(row => row[0] === "info").at(-1)[1];
+  await f.invoke("getGameEffectParameters", f.entry.gamePath, "node", shaderPlan());
+  options = f.calls.filter(row => row[0] === "describe").at(-1)[3];
   assert.equal(options.graphicsInputs, null);assert.equal(options.prepareEffectsEntry, undefined);assert.equal(options.withGraphicsUpdate, undefined);
-  assert.equal(options.graphicsHost, "window");assert.deepEqual(callbacks, [f.entry.gameId], "callbacks wait for the game's files");
+  assert.equal(options.graphicsHost, "window");assert.deepEqual(callbacks, [f.entry.gameId, f.entry.gameId], "callbacks wait for the game's files");
 });
 test("live publication reports the prepared document without rewriting the requested model choice", async t => {
   const f = fixture(t, {live: true});

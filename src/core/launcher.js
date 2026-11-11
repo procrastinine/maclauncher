@@ -908,11 +908,12 @@ function createLauncher({
   function graphicsCallbacks(entry, settings = loadSettings(), target = graphicsTarget(entry, settings)) {
     const { mod, runtimeId, effective } = target;
     if (typeof mod?.prepareEffectsEntry !== "function" && typeof mod?.withGraphicsUpdate !== "function") return { runtimeId };
-    const context = target.context ||= getLaunchContext(effective, settings, { runtimeId });
+    // The launch context is read when a callback first runs, not when the editor opens.
+    const context = () => target.context ||= getLaunchContext(effective, settings, { runtimeId });
     return { runtimeId,
-      ...(typeof mod.prepareEffectsEntry === "function" ? {prepareEffectsEntry: value => mod.prepareEffectsEntry(value, context)} : {}),
+      ...(typeof mod.prepareEffectsEntry === "function" ? {prepareEffectsEntry: value => mod.prepareEffectsEntry(value, context())} : {}),
       ...(typeof mod.withGraphicsUpdate === "function" ? {
-        withGraphicsUpdate: (value, options, publish) => mod.withGraphicsUpdate(value, context, options, publish)
+        withGraphicsUpdate: (value, options, publish) => mod.withGraphicsUpdate(value, context(), options, publish)
       } : {}) };
   }
 

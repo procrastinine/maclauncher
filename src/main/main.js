@@ -3902,7 +3902,7 @@ const graphicsStatus = GraphicsStatus.createGraphicsStatusOwner({logger, models:
 // The graphics catalog follows editor demand (src/main/graphics-catalog.js).
 // Its inputs are the inventories and settings ReShade.getState reads.
 const graphicsCatalog = require("./graphics-catalog").createGraphicsCatalog({logger,
-  build: () => ReShade.getState({app, userDataDir, settings: loadSettings()}),
+  build: () => backendService.request("inspector", "graphicsCatalog", loadSettings()),
   inputs: () => JSON.stringify([runtimeInventoryRevision, ReShade.stateSettings(loadSettings()),
     require("../modules/shared/reshade/hardware-support").snapshot(ReShade.runtimeRoot(app))])});
 // Rows of `plan` waiting for a curated model download, one acquisition per
@@ -4188,10 +4188,17 @@ function refreshShaderSelections(presetIds) {
     if (session.live) publishGraphics(gamePath, seq, stored.revision, stored.plan, {forceShaderPresets: presets});
   }
 }
+// The editor's discovery reads runtime and graphics inventories. For a game
+// that is not running it runs in the inspector's worker with the data options;
+// a running game's editor reads its live session here.
+const EFFECTS_INFO_OPTIONS = ["settings", "root", "graphicsHost", "graphicsArchitecture", "running", "runningPids", "launchBinding",
+  "graphicsInputs", "graphicsHardware", "inventoryRevision"];
 ipcMain.handle("launcher:getGameEffects", async (_event, gamePath) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
   if (!entry) throw new Error("Game not found in library.");
-  const info = EffectsRuntime.info(entry, await gameEffectsOptions(entry));
+  const options = await gameEffectsOptions(entry);
+  const info = options.running ? EffectsRuntime.info(entry, options) : await backendService.request("inspector", "gameEffectsInfo", entry,
+    Object.fromEntries(EFFECTS_INFO_OPTIONS.filter(key => options[key] !== undefined).map(key => [key, options[key]])));
   adoptGraphicsStatus(entry);
   // Notices from the one-time upgrade, then parts the read left out (GraphicsNotice).
   const notices = [...entry.effectsNotices?.length ? entry.effectsNotices : [], ...info.notices || []];

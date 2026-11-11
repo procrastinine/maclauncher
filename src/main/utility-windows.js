@@ -45,9 +45,12 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
         if (!win.isDestroyed()) win.destroy();
         throw error;
       });
-      // The new page reads its request with its first state; nothing is resent.
+      // The native frame shows at once in its background color, and the view
+      // fills in as it loads. The new page reads its request with its first
+      // state; nothing is resent.
+      focus(win,activate);
       await record.ready;
-      return focus(win,activate);
+      return win;
     } catch (error) {
       forget(record);
       if (!win.isDestroyed()) win.destroy();

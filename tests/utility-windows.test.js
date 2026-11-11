@@ -47,7 +47,7 @@ test("utility windows use independent native frames and keep one window per kind
   for (const win of windows) {
     assert.equal(win.options.frame, true);
     assert.equal(win.options.modal, false);
-    assert.equal(win.options.show, false, "Show after the local view loads");
+    assert.equal(win.options.show, false, "Created hidden and shown before its view loads");
     assert.equal(win.options.parent, undefined, "The library stays independently usable");
     assert.ok(win.options.minWidth > 0 && win.options.minHeight > 0);
     assert.equal(win.focuses, 1);
