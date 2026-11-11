@@ -287,10 +287,14 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   let translatorView = await TranslatorFiles.prepareTranslatorFiles(translatorPlan, { userDataDir: context.userDataDir, layout: translatorPlan.layout, signal: context.signal });
   const vulkanDLSS=await require("../temporal/vulkan-dlss").prepare(entry,context,settings,translatorPlan,match.executableArchitecture,translatorView);
   translatorView=vulkanDLSS.view;
+  const scenePlan = Temporal.resolveScenePlan(entry, context, { settings, translatorPlan, verify: true, root: dependencies.graphicsRoot });
+  // A FidelityFX scene source requests no other Direct3D renderer.
+  if (scenePlan) settings = { ...settings, dlss: context.runtimeSettings?.dlss === true || settings.dlssOptional === true };
   let cameraBridge = Temporal.resolvePlan(entry, context, { install: selected.install, settings, translatorPlan, host,
     runtimeId: source.id, verify: true, root: dependencies.graphicsRoot, automatic: settings.dlss !== true });
   if (cameraBridge) settings = { ...settings, dlss: true };
   if (cameraBridge?.dependency) await context.useRuntime?.(cameraBridge.dependency);
+  for (const dependency of scenePlan?.dependencies || []) await context.useRuntime?.(dependency);
   await context.flushRuntimeUses?.();
   if (selected.install.needsRosetta && !rosetta.isAvailable()) await rosetta.ensure(context);
   context.signal?.throwIfAborted();
@@ -300,21 +304,13 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   if (!existingEnvironment) for (const name of ["home", "tmp", "prefixes", "runtime-view"]) Writable.assertOwnDirectory(directory, path.join(directory, name));
   const originalRoot = match.sourceRoot, recovery = { overrides: {}, omitted: new Set(), libraries: [] };
   let gameRoot = originalRoot, executablePath = match.windowsExecutablePath, cameraView;
-  if (cameraBridge) {
-    try {
-      const program = require('../runtime/steam-bridge-launch').declaredProgram(match.windowsExecutablePath, originalRoot, match.executableArchitecture);
-      cameraView = await GameView.camera(directory, originalRoot, match.windowsExecutablePath, { ...cameraBridge, programs: program ? [program] : [] }, recovery, context.signal);
-      if (!Temporal.prepareGame(cameraBridge, cameraView.gameRoot, context.signal)) cameraBridge = null;
-      else {GameView.prepared(cameraView, cameraBridge);GameView.remember(entry, context, source.id, cameraView, recovery);gameRoot = cameraView.gameRoot;executablePath = cameraView.executablePath;}
-    }
-    catch (error) {
-      GameView.discard(cameraView);
-      if (context.signal?.aborted || isAbortError(error)) throw error;
-      cameraBridge = null;
-      warnGraphics(context.logger, `${source.label} camera integration could not be prepared. Using the selected graphics backend.`, error?.message || String(error));
-    }
+  if (cameraBridge || scenePlan?.packageReady) {
+    const plans = [...(cameraBridge ? [{ kind: "camera", plan: cameraBridge }] : []), ...(scenePlan?.packageReady ? [{ kind: "scene", plan: scenePlan }] : [])];
+    const folder = await GameView.prepareLaunchFolder(entry, context, { runtimeId: source.id, label: source.label, directory, originalRoot,
+      executable: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture, plans });
+    ({ view: cameraView, gameRoot, executablePath } = folder);
+    if (!folder.ready.has("camera")) cameraBridge = null;
   }
-  if (!cameraBridge) {GameView.discard(cameraView);cameraView = null;}
   context.graphicsInputs = require("../graphics-inputs").inputs(selected.install, cameraBridge?.inputs, { fallback: "x86_64" });
   const nativeInputs = [selected.install.executablePath, selected.install.serverPath,
     ...(translatorPlan.layout.unixRoot ? ["ntdll.so", "wine"].map(name => path.join(translatorPlan.layout.unixRoot, name)).filter(file => fs.existsSync(file)) : [])]
@@ -382,7 +378,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     install: selected.install, executablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
     graphicsBackend: graphics.graphicsBackend });
   const args = WineSettings.desktopArguments(settings, ["start.exe", "/d", windowsWorkingDirectory, "/exec", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(bridgeLaunch?.arguments || []), ...applicationArguments]);
-  if (cameraBridge && cameraView) {
+  if (cameraView) {
     GameView.remember(entry, context, source.id, cameraView, recovery);
     GameView.watch(entry, context, directory, source.id, cameraView);
   }

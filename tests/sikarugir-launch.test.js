@@ -889,3 +889,55 @@ test("MV selects legacy ANGLE D3D9 with WineD3D for missing Win32 sharing, prese
   library(browserPath, [], { isDll: false });
   assert.deepEqual(await context.resolveRuntimeArguments(launch), launch.arguments, "a browser without the legacy D3D9 selector cannot be selected");
 });
+
+// A PE image whose export table holds the FidelityFX API's five functions.
+function fidelityFXLibrary(marker) {
+  const names = require("../src/modules/crossover/temporal/catalog").FIDELITYFX_PROFILE.exports;
+  const bytes = Buffer.alloc(4096), offset = 0x80, optional = offset + 24, section = optional + 240;
+  bytes.writeUInt16LE(0x5a4d); bytes.writeUInt32LE(offset, 60); bytes.writeUInt32LE(0x4550, offset); bytes.writeUInt16LE(0x8664, offset + 4); bytes.writeUInt16LE(1, offset + 6); bytes.writeUInt16LE(240, offset + 20);
+  bytes.writeUInt16LE(0x20b, optional); bytes.writeUInt32LE(16, optional + 108); bytes.writeUInt32LE(0x1000, optional + 112); bytes.writeUInt32LE(0x400, optional + 116);
+  bytes.writeUInt32LE(0x1000, section + 12); bytes.writeUInt32LE(3584, section + 16); bytes.writeUInt32LE(512, section + 20);
+  bytes.writeUInt32LE(1, 0x210); bytes.writeUInt32LE(names.length, 0x214); bytes.writeUInt32LE(names.length, 0x218);
+  bytes.writeUInt32LE(0x1050, 0x21c); bytes.writeUInt32LE(0x1090, 0x220); bytes.writeUInt32LE(0x10d0, 0x224);
+  let cursor = 0x300;
+  names.forEach((name, i) => { bytes.writeUInt32LE(0x1800 + i, 0x250 + 4 * i); bytes.writeUInt32LE(cursor + 0xe00, 0x290 + 4 * i); bytes.writeUInt16LE(i, 0x2d0 + 2 * i); bytes.write(name, cursor); cursor += name.length + 1; });
+  bytes[4095] = marker; return bytes;
+}
+for (const id of ["sikarugir", "winecx"]) test(`a ${id} launch stages the FidelityFX proxy in its launch folder when the plan uses scene data`, async t => {
+  const directory = fs.realpathSync(fixture(t)), entry = game(directory), install = installation(directory), dependencies = adapters(install);
+  const Temporal = require("../src/modules/crossover/temporal"), Profile = require("../src/modules/crossover/temporal/catalog").FIDELITYFX_PROFILE;
+  const sha = bytes => require("node:crypto").createHash("sha256").update(bytes).digest("hex");
+  const original = fidelityFXLibrary(1), proxy = fidelityFXLibrary(2), library = path.join(entry.gamePath, Profile.libraries.vk), providerRoot = path.join(directory, "fidelityfx-api");
+  fs.writeFileSync(library, original); fs.mkdirSync(providerRoot); fs.writeFileSync(path.join(providerRoot, Profile.libraries.vk), proxy);
+  fs.writeFileSync(path.join(providerRoot, "provider.json"), JSON.stringify({ schema: 2, profile: Profile.id, temporalFrames: 1,
+    backends: { vk: { library: Profile.libraries.vk, sha256: sha(proxy) } } }));
+  const dependency = { managerId: "fidelityfx-api", version: "fixture", sourcePath: providerRoot };
+  const plan = { packageReady: true, providerRoot, driver: "kosmickrisp", requirements: [], dependencies: [dependency], libraries: [{ adapter: "fidelityfx", backend: "vk",
+    sourcePath: library, sourceSha256: sha(original), relativePath: Profile.libraries.vk, proxySha256: sha(proxy), providerRoot }] };
+  t.mock.method(Temporal, "resolvePlan", () => null);
+  t.mock.method(Temporal, "resolveScenePlan", (_entry, _context, options) => { assert.ok(options.translatorPlan, "the scene plan reads the final translator plan"); return plan; });
+  const used = [], context = { userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {}, useRuntime: async value => { used.push(value); } };
+  const Wine = require("./helpers/wine-source.cjs").launch(id), launch = await Wine.prepareLaunch(entry, context, dependencies);
+  const managed = Wine.runtimeDirectory(entry, context);
+  assert.ok(launch.gameRoot.startsWith(managed + path.sep), "the game runs from a launch folder under its runtime directory");
+  assert.deepEqual(fs.readFileSync(path.join(launch.gameRoot, Profile.libraries.vk)), proxy, "the proxy replaces the copied library");
+  assert.deepEqual(fs.readFileSync(path.join(launch.gameRoot, Profile.originals.vk)), original, "the game's library stays beside the proxy");
+  assert.deepEqual(fs.readFileSync(library), original, "the original game folder is unchanged");
+  assert.deepEqual(fs.readdirSync(entry.gamePath).sort(), ["Game.exe", Profile.libraries.vk].sort());
+  assert.deepEqual(used, [dependency], "the adapter package is recorded as in use");
+  assert.ok(entry.runtimeData[id].cameraGameView, "the launch folder is remembered for this source");
+});
+test("Play requirements consult the FidelityFX scene plan on every Wine source", t => {
+  const Temporal = require("../src/modules/crossover/temporal"), Demand = require("../src/modules/shared/effects/scene-demand");
+  const demanded = [];
+  t.mock.method(Demand, "sceneDemand", entry => { demanded.push(entry.runtimeId); return entry.effects ? ["depth", "motion"] : []; });
+  for (const id of ["crossover", "sikarugir", "winecx"]) {
+    const asked = [], manager = { resolveSelection: (...args) => { asked.push(args); return { ready: false }; } };
+    const context = { runtimeId: id, settings: {}, runtimeSettings: {} };
+    assert.deepEqual(Temporal.requirements({ gameId: "fixture", runtimeId: id }, context, { manager }), []);
+    assert.equal(asked.length, 0, id + ": without scene demand no version is resolved");
+    assert.deepEqual(Temporal.requirements({ gameId: "fixture", runtimeId: id, effects: { schema: 2 } }, context, { manager }), []);
+    assert.equal(asked.length, 1, id + " resolves its version once for the scene plan");
+  }
+  assert.deepEqual([...new Set(demanded)], ["crossover", "sikarugir", "winecx"]);
+});

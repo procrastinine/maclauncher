@@ -300,29 +300,13 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     // Verify the camera bridge's native closure before replacing a private game
     // DLL. A loader failure must leave the ordinary vendor game path available.
     if (cameraBridge) { loader = await prepareLoader();if (!loader) cameraBridge = null; }
-    if (cameraBridge || sceneReady) try {
+    if (cameraBridge || sceneReady) {
       const plans = [...(cameraBridge ? [{ kind: "camera", plan: cameraBridge }] : []), ...(sceneReady ? [{ kind: "scene", plan: scenePlan }] : [])];
-      const program = require('./steam-bridge-launch').declaredProgram(executable, originalRoot, selectedExecutable.executableArchitecture);
-      cameraView = await GameView.camera(directory, originalRoot, executable, { libraries: plans.flatMap(item => item.plan.libraries), programs: program ? [program] : [] }, recovery, context.signal);
-      const preparedLibraries = [];
-      for (const item of plans) {
-        let ready = false;
-        try { ready = Temporal.prepareGame(item.plan, cameraView.gameRoot, context.signal); }
-        catch (error) {
-          if (context.signal?.aborted || isAbortError(error) || error.code === "STREAMLINE_RESTORE_FAILED") throw error;
-          warnGraphics(context.logger, "CrossOver temporal integration could not be prepared. Using its original game API.", error.message);
-        }
-        if (ready) preparedLibraries.push(...item.plan.libraries);
-        else if (item.kind === "camera") { cameraBridge = null;loader = null; }
-        else sceneReady = false;
-      }
-      if (preparedLibraries.length) {GameView.prepared(cameraView, { libraries: preparedLibraries });GameView.remember(entry, context, "crossover", cameraView, recovery);gameRoot = cameraView.gameRoot;executablePath = cameraView.executablePath;}
-      else {GameView.discard(cameraView);cameraView = null;}
-    } catch (error) {
-      GameView.discard(cameraView);
-      if (context.signal?.aborted || isAbortError(error) || error.code === "STREAMLINE_RESTORE_FAILED") throw error;
-      warnGraphics(context.logger, "CrossOver camera integration could not be prepared. Using the selected vendor graphics backend.", error?.message || String(error));
-      cameraBridge = null;sceneReady = false;cameraView = null;
+      const folder = await GameView.prepareLaunchFolder(entry, context, { runtimeId: "crossover", label: "CrossOver", directory, originalRoot, executable,
+        executableArchitecture: selectedExecutable.executableArchitecture, plans });
+      ({ view: cameraView, gameRoot, executablePath } = folder);
+      if (cameraBridge && !folder.ready.has("camera")) { cameraBridge = null; loader = null; }
+      sceneReady = folder.ready.has("scene");
     }
     if (requestedCameraBridge && !cameraBridge) {
       loader = null;

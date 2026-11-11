@@ -868,9 +868,11 @@ test("CrossOver loader failure disables only optional camera adaptation before a
   Temporal.prepareGame.mock.mockImplementation(() => {throw restoration;});
   const preserved = [source, original.executablePath, ...['sl.interposer.dll', Streamline.ORIGINAL, Streamline.RECORD].map(name => path.join(oldGameRoot, name))]
     .map(file => [file, fs.readFileSync(file)]);
-  await assert.rejects(Launch.prepareLaunch(entry, {...context,
-    applyGameEnvironment: async base => require('../src/modules/shared/reshade').mergeEnvironment(base, crt), getGameEffectsEnvironment: async () => crt}, {run}),
-  error => error === restoration && error.code === 'STREAMLINE_RESTORE_FAILED');
+  // The unrestored library stays in the unused launch folder; Play continues from the original folder.
+  const unrestored = [], continued = await Launch.prepareLaunch(entry, {...context, logger: {warn: (...args) => unrestored.push(args)},
+    applyGameEnvironment: async base => require('../src/modules/shared/reshade').mergeEnvironment(base, crt), getGameEffectsEnvironment: async () => crt}, {run});
+  assert.equal(continued.environment.CX_GRAPHICS_BACKEND, 'dxmt');assert.equal(continued.environment.MACLAUNCHER_DXMT_BASE_LIBRARY, undefined);
+  assert.match(unrestored[0][1], /Original DLL could not be restored/);
   for (const [file, bytes] of preserved) assert.deepEqual(fs.readFileSync(file), bytes, 'failed rollback preserves ' + file);
   assert.deepEqual(entry.effects, saved, 'failed rollback leaves the saved effects selected');
   assert.equal(bottles, 1, 'failed rollback does not replace the existing Windows bottle');

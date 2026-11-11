@@ -279,11 +279,14 @@ function resolveScenePlan(entry, context = {}, { settings = context.runtimeSetti
     dependencies: [{ managerId: "fidelityfx-api", version: selected.version, sourcePath: selected.install.installDir }] };
 }
 function requirements(entry, context, options = {}) {
-  const camera = cameraRequirements(entry, context, options), runtimeId = context.runtimeId || entry?.runtimeId;
-  // The Vulkan scene adapter matches CrossOver's winevulkan modules.
-  if (Sources.get(runtimeId)?.invocation !== "crossover") return camera;
-  const manager = options.manager || require("../runtime/manager"), selected = manager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
-  const scene = selected.ready && resolveScenePlan(entry, context, { root: options.root });
+  const source = Sources.get(context.runtimeId || entry?.runtimeId);
+  if (!source) return [];
+  // The camera and scene plans of one Play share one version resolution.
+  const manager = options.manager || source.manager();let selected;
+  const once = { resolveSelection: (...args) => selected ||= manager.resolveSelection(...args) };
+  const camera = cameraRequirements(entry, context, { ...options, manager: once });
+  if (!sceneDemand(entry, context, { root: options.root }).length) return camera;
+  const scene = once.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings).ready && resolveScenePlan(entry, context, { root: options.root });
   return [...camera, ...(scene?.requirements || [])];
 }
 module.exports = { FILES, rendererFiles,adapter, payload, libraries, libraryAdapter, matchingSupport, resolvePlan, prepareGame, restoreGame, environment, rendererFile,

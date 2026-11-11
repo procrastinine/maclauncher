@@ -121,6 +121,37 @@ function remember(entry, context, runtimeId, view) {
   if (view.binding && !view.record.selected) {view.record.selected = true;save(view.directory, view.file, view.record);}
   entry.runtimeData = {...entry.runtimeData, [runtimeId]: {...entry.runtimeData?.[runtimeId], cameraGameView: view.binding}};
 }
+// Camera and scene adapters share one launch folder under the game's runtime
+// directory. Each plan's proxy is written only into that folder, and the
+// original game folder is never changed. A plan that cannot be prepared is left
+// out, and the game keeps that API's original library. A library that cannot
+// be restored stays inside the unused launch folder, so Play continues from the
+// original folder; only cancellation stops it.
+async function prepareLaunchFolder(entry, context, { runtimeId, label, directory, originalRoot, executable, executableArchitecture, plans }) {
+  const stop = error => context.signal?.aborted || require("../../shared/runtime/download-utils").isAbortError(error);
+  let view = null;
+  try {
+    const program = require("../runtime/steam-bridge-launch").declaredProgram(executable, originalRoot, executableArchitecture);
+    view = await camera(directory, originalRoot, executable, { libraries: plans.flatMap(item => item.plan.libraries), programs: program ? [program] : [] }, null, context.signal);
+    const ready = new Set(), libraries = [];
+    for (const item of plans) {
+      try { if (require("./index").prepareGame(item.plan, view.gameRoot, context.signal)) { ready.add(item.kind); libraries.push(...item.plan.libraries); } }
+      catch (error) { if (stop(error)) throw error; warn(context.logger, `${label} temporal integration could not be prepared. Using its original game API.`, error.message); }
+    }
+    if (libraries.length) {
+      prepared(view, { libraries }); remember(entry, context, runtimeId, view);
+      return { ready, view, gameRoot: view.gameRoot, executablePath: view.executablePath };
+    }
+    // A plan with no game library to replace runs from the original folder.
+    discard(view);
+    return { ready, view: null, gameRoot: originalRoot, executablePath: executable };
+  } catch (error) {
+    discard(view);
+    if (stop(error)) throw error;
+    warn(context.logger, `${label} temporal integration could not be prepared. Using the selected graphics backend.`, error?.message || String(error));
+  }
+  return { ready: new Set(), view: null, gameRoot: originalRoot, executablePath: executable };
+}
 function clearWatch(context) {
   const previous = context[watcher];if (!previous) return;
   if (context.onProcessSpawn === previous.onSpawn) context.onProcessSpawn = previous.originalOnSpawn;
@@ -156,4 +187,4 @@ function watch(entry, context, directory, runtimeId, view) {
   context[watcher] = {originalOnSpawn, originalSpawn, onSpawn, spawn};context.onProcessSpawn = onSpawn;
   if (spawn) context.spawnDetachedChecked = spawn;
 }
-module.exports = {reconcile, camera, prepared, discard, remember, clearWatch, watch};
+module.exports = {reconcile, camera, prepared, discard, remember, clearWatch, watch, prepareLaunchFolder};
