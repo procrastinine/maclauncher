@@ -29,7 +29,8 @@ async function translatorOptions(entry, payload, context, dependencies = {}) {
   const consumerArchitecture = selected.architecture;
   const input = await Translators.optionsInventory(install, runtime, preparedContext, { ...dependencies, entry, consumerArchitecture, reuse: true });
   const plan = Translators.optionsPlan(input, preparedContext);
-  return { ...Translators.optionLists(install, runtime, preparedContext, { ...dependencies, plan, inventory: input, consumerArchitecture }),
+  const executableArchitecture = Detection.cachedWindowsExecutable(entry)?.executableArchitecture;
+  return { ...Translators.optionLists(install, runtime, preparedContext, { ...dependencies, plan, inventory: input, consumerArchitecture, executableArchitecture }),
     ...(!install ? { notice: 'Included choices appear when the selected runtime is installed.' +
       (typeof runtimeManager.installRuntime === 'function' ? ' Play installs it after confirmation.' : '') } : {}), effectiveSettings: [
     { value: 'graphicsBackend', label: Translators.engines(plan)['d3d-renderer'] || 'auto' },

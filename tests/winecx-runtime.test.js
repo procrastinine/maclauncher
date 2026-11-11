@@ -168,6 +168,32 @@ test("the WineCX source lists its included translators through the shared Wine t
   assert.deepEqual(source.nativeLibraries(install).libraries, [path.join(wineRoot, "lib")]);
 });
 
+test("a translator set that ships its own DXGI is offered only for the architectures that have it", t => {
+  // WineCX 4.8.1's DXVK has dxgi.dll in x32 only; CrossOver's DXVK has none and uses Wine's DXGI.
+  const X86 = 0x14c, X64 = 0x8664, pe = (folder, name, machine) => ({ format: "pe", machine, path: `/set/${folder}/${name}`, relative: `${folder}/${name}`,
+    apis: name === "dxgi.dll" ? ["DXGI"] : name === "d3d11.dll" ? ["Direct3D 11"] : [] });
+  const sets = { dxvk: [pe("x32", "d3d11.dll", X86), pe("x32", "dxgi.dll", X86), pe("x64", "d3d11.dll", X64)],
+    dxmt: [pe("x32", "d3d11.dll", X86), pe("x32", "dxgi.dll", X86), pe("x64", "d3d11.dll", X64), pe("x64", "dxgi.dll", X64), pe("x64", "nvngx.dll", X64)] };
+  const root = temporary(t);
+  for (const folder of ["DXVK", "DXMT", "Wine/lib"]) fs.mkdirSync(path.join(root, folder), { recursive: true });
+  const install = { version: "4.8.1", wineRoot: path.join(root, "Wine"), librariesRoot: root, libraryRoot: path.join(root, "Wine/lib"), componentVersions: {} };
+  const inventory = Translators.includedTranslators(install, "winecx", { describe: (file, selection) => sets[selection.engine] &&
+    { component: selection.component, engine: selection.engine, form: "builtin", files: sets[selection.engine], apis: ["Direct3D 11"], version: "1" } });
+  const included = engine => inventory.included.find(item => item.engine === engine);
+  assert.deepEqual(included("dxvk").files.map(file => file.relative), ["x32/d3d11.dll", "x32/dxgi.dll"], "the x64 DXVK libraries without their DXGI are left out");
+  assert.deepEqual(included("dxvk").incompleteMachines, [X64]);
+  assert.equal(included("dxmt").files.length, 5, "a set with DXGI for both architectures stays whole, x64-only helpers included");
+  const wineDxgi = require("../src/modules/shared/runtime/translator-pairing").completeSets({ files: [pe("x32", "d3d11.dll", X86), pe("x64", "d3d11.dll", X64)] });
+  assert.equal(wineDxgi.files.length, 2, "a set built for Wine's DXGI is complete for every architecture it has");
+  const Plan = require("../src/modules/shared/runtime/translator-plan");
+  const input = { included: inventory.included.filter(item => sets[item.engine]), choices: [], selections: {}, environment: null };
+  const offered = executableArchitecture => Translators.optionLists(install, "winecx", { runtimeSettings: {} },
+    { inventory: structuredClone(input), plan: Plan.resolvePlan(input), executableArchitecture }).translatorD3D11Options.map(row => row.value);
+  assert.ok(offered("x86").includes("included:d3d-renderer:dxvk"), "32-bit games are offered the complete x32 DXVK set");
+  assert.ok(!offered("x86_64").includes("included:d3d-renderer:dxvk"), "64-bit games are not offered a DXVK set without its x64 DXGI");
+  assert.ok(offered("x86_64").includes("included:d3d-renderer:dxmt"));
+});
+
 test("all three Wine sources share one settings definition", () => {
   const manifest = require("../src/modules/crossover/main").manifest;
   const keys = id => manifest.runtime.entries[id].settings.fields.map(field => field.key);

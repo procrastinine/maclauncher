@@ -107,4 +107,21 @@ function resolvePairing(plan, { choices = [], included = [], compatibility = {},
   }
   return true;
 }
-module.exports = { resolvePairing, isDxgi };
+// A set that ships its own DXGI is complete for an architecture only when that
+// architecture has its dxgi.dll; a set with no dxgi.dll at all is built for
+// Wine's DXGI and is complete wherever it has libraries. Read from the files'
+// PE machines, the same way for every Wine source.
+function completeMachines(description) {
+  const pe = (description?.files || []).filter(file => file.format === 'pe' && file.machine);
+  const dxgi = new Set(pe.filter(isDxgi).map(file => file.machine));
+  return new Set(dxgi.size ? dxgi : pe.map(file => file.machine));
+}
+// The set limited to its complete architectures. An architecture without its
+// DXGI is left out, so the set is not offered for games of that architecture.
+function completeSets(description) {
+  const complete = completeMachines(description), files = description?.files || [];
+  const incomplete = [...new Set(files.filter(file => file.format === 'pe' && file.machine && !complete.has(file.machine)).map(file => file.machine))];
+  if (!incomplete.length) return description;
+  return { ...description, files: files.filter(file => file.format !== 'pe' || !file.machine || complete.has(file.machine)), incompleteMachines: incomplete };
+}
+module.exports = { resolvePairing, isDxgi, completeMachines, completeSets };

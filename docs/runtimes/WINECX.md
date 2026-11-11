@@ -21,7 +21,7 @@ Version labels name the release and the Wine version read from the installed `nt
 | Component | Location in the release | Role |
 | --- | --- | --- |
 | Wine | `Libraries/Wine` | The Wine tree, with its own FreeType, GnuTLS, GStreamer, wine-mono and wine-gecko |
-| DXVK | `Libraries/DXVK` | Direct3D 10 and 11 to Vulkan |
+| DXVK | `Libraries/DXVK` | Direct3D 10 and 11 to Vulkan, for 32-bit games when the 64-bit folder has no `dxgi.dll` |
 | DXMT | `Libraries/DXMT` | Direct3D 10 and 11 to Metal |
 | MoltenVK | `Libraries/Wine/lib/libMoltenVK.dylib` | Vulkan-to-Metal driver |
 

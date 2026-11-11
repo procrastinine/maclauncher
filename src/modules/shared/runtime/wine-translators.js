@@ -7,6 +7,7 @@ const warn = require('../graphics-warning');
 const Architecture = require('./architecture');
 const Roles = require('./translator-roles');
 const Requirements = require('./feature-requirements');
+const Pairing = require('./translator-pairing');
 const { compareRuntimeVersions } = require('./pinned-native-manager');
 const SETTINGS = Object.freeze({ 'd3d-renderer': 'translatorRenderer', 'vulkan-driver': 'translatorVulkan', d3d12: 'translatorD3D12', video: 'translatorVideo' });
 
@@ -23,7 +24,7 @@ function includedTranslators(install, runtime, { engine: requestedEngine, descri
       let value = (describe || Description.describeTranslator)(root, { engine, component, source, ...extra });
       if (!value) return;
       // A supplied version is the reader's fallback; the component's own version text precedes it.
-      value = { ...value, included: true, id: `included:${component}:${extra.templateComponent || engine}`, ...extra, version: value.version };
+      value = Pairing.completeSets({ ...value, included: true, id: `included:${component}:${extra.templateComponent || engine}`, ...extra, version: value.version });
       if (!value.version && wine.includedVersion) value.version = wine.includedVersion(engine, layout, Description);
       result.push(value);
       if (engine === 'd3dmetal' && component === 'd3d-renderer') result.push({ ...value, component: 'd3d12', id: 'included:d3d12:d3dmetal' });
@@ -514,6 +515,10 @@ function nativeBuildSuffix(description, layout, host) {
 }
 function optionLists(install, runtime, context, dependencies = {}) {
   const input = dependencies.inventory || inventory(install, runtime, context, dependencies), plan = dependencies.plan || Plan.resolvePlan(input);
+  // A Direct3D set with no complete libraries for the game's architecture is not offered.
+  const machine = Binary.requiredMachine(dependencies.executableArchitecture);
+  if (machine) for (const key of ['included', 'choices']) input[key] = input[key].filter(item => !['d3d-renderer', 'd3d12'].includes(item.component) ||
+    !item.files?.some(file => file.format === 'pe' && file.machine) || item.files.some(file => file.format === 'pe' && file.machine === machine));
   if (plan.compatibility) for (const key of ['included', 'choices']) input[key] = input[key].map(item => {
     const files = plan.compatibility[item.id]?.files || plan.compatibility[item.id]?.inspectedFiles || item.files;
     return { ...item, files, ...(['d3d-renderer', 'd3d12'].includes(item.component) && files.some(file => file.format === 'pe') ? { apis: Roles.apisForFiles(files) } : {}) };
