@@ -35,7 +35,7 @@ app.whenReady().then(async () => {
     const slice = source.slice(source.indexOf("const sameIconFile = "), source.indexOf("\\nfunction normalizeGameEntry("));
     let rebuilds = 0, rebuilt;
     const context = { fs, nativeImage, performance, setImmediate, iconDataUrlCache: new Map(), gameRecordsCache: null,
-      scheduleStateRebuild: () => { rebuilds += 1; rebuilt?.(); } };
+      scheduleStateRebuild: () => { rebuilds += 1; rebuilt?.(); }, saveIconPreviewsSoon() {} };
     vm.createContext(context); vm.runInContext(slice, context);
     assert.notEqual(fs.statSync(options.icon).ino, fs.statSync(options.icon).ino, "Electron reports a new inode on every stat inside the archive");
     assert.deepEqual({ ...context.libraryIcon(options.icon) }, { pending: true });

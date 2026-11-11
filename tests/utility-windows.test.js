@@ -24,10 +24,58 @@ function fixture(options = {}) {
     createWindow: configuration => { const win = new Window(configuration); windows.push(win); return win; },
     registerWindow: (win, view) => registrations.push({ win, view }),
     loadView: async (win, request) => { loads.push({ win, request }); await options.load?.(win, request); },
-    onContextChange: options.changed
+    onContextChange: options.changed,
+    ...(options.kept ? { keptViews: options.kept, beforeShow: options.beforeShow, onHidden: options.hidden, isQuitting: options.quitting } : {})
   });
   return { controller, windows, registrations, loads };
 }
+
+function closeWindow(win) {
+  let prevented = false;
+  win.emit("close", { preventDefault: () => { prevented = true; } });
+  if (!prevented) win.destroy();
+  return prevented;
+}
+
+test("kept utility views are prepared hidden, open by showing, and hide when closed until the launcher quits", async () => {
+  const shownWith = [], hidden = [];
+  let quitting = false;
+  const f = fixture({ kept: ["runtimes", "settings", "credits"], beforeShow: win => shownWith.push(f.controller.stateForWindow(win, {}).utilityWindow),
+    hidden: win => hidden.push(win), quitting: () => quitting });
+  Window.prototype.hide = function () { this.hides = (this.hides || 0) + 1; };
+  await f.controller.prepare();
+  assert.deepEqual(f.registrations.map(value => value.view), ["runtimes", "settings", "credits"]);
+  assert.equal(f.loads.length, 3, "Each prepared view loads once, one after another");
+  assert.ok(f.windows.every(win => win.shows === 0 && win.focuses === 0 && !win.inactive), "Prepared windows stay hidden");
+  assert.ok(f.windows.every(win => f.controller.isHidden(win)));
+  await f.controller.prepare();
+  assert.equal(f.windows.length, 3, "Preparing again creates nothing");
+
+  const settings = await f.controller.open({ view: "settings", sectionId: "launcher" });
+  assert.equal(settings, f.windows[1], "Opening shows the prepared window");
+  assert.equal(f.windows.length, 3);
+  assert.equal(f.loads.length, 3, "Opening a prepared view loads nothing");
+  assert.equal(settings.shows, 1); assert.equal(settings.focuses, 1);
+  assert.equal(shownWith.length, 1);
+  assert.equal(shownWith[0].sectionId, "launcher", "The state sent before showing carries the request");
+  assert.equal(f.controller.isHidden(settings), false);
+
+  assert.equal(closeWindow(settings), true, "Closing hides a kept view");
+  assert.equal(settings.destroyed, false); assert.equal(settings.hides, 1);
+  assert.deepEqual(hidden, [settings]);
+  assert.equal(f.controller.isHidden(settings), true);
+  assert.equal(await f.controller.open({ view: "settings" }), settings, "Reopening shows the same window");
+  assert.equal(shownWith.length, 2);
+
+  const external = await f.controller.open({ view: "external" });
+  assert.equal(closeWindow(external), false, "Other views close as before");
+  assert.equal(external.destroyed, true);
+
+  quitting = true;
+  assert.equal(closeWindow(settings), false, "Quitting closes kept views");
+  assert.equal(settings.destroyed, true);
+  delete Window.prototype.hide;
+});
 
 test('inactive utility requests keep one native window and never persist presentation intent',async()=>{
   const f=fixture(),request={view:'runtimes',managerId:'graphics-neural-models',activate:false};

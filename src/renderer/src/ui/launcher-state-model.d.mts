@@ -8,7 +8,8 @@ export function subscribeLauncherState<T>(api: {
   getState(): Promise<T>;
   onState(callback: (state: T) => void): () => void;
   onActivity?(callback: (activity: LauncherActivity) => void): () => void;
-}, receive: (state: T) => void, fail: (error: any) => void): () => void;
+}, receive: (state: T) => void, fail: (error: any) => void, initial?: T | null): () => void;
+export function restoreLauncherState<T>(snapshot: T): T;
 export function subscribeLauncherGameFailures(api: {
   onGameFailed?(callback: (failure: GameFailure) => void): () => void;
 } | undefined, receive: (message: string, failure: GameFailure) => void): () => void;

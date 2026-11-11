@@ -80,10 +80,20 @@ export function mergeLauncherActivity(previous, activity) {
   return result;
 }
 
-export function subscribeLauncherState(api, receive, fail) {
+// A state as a view renders it, with runtime states decoded.
+export function restoreLauncherState(snapshot) {
+  const managers = snapshot?.runtimeManagers;
+  if (!managers || typeof managers !== "object") return snapshot;
+  return { ...snapshot, runtimeManagers: Object.fromEntries(Object.entries(managers).map(([id, state]) =>
+    [id, state && typeof state === "object" ? restoreRuntimeState(state) : state])) };
+}
+
+// initial is a state the view already rendered, such as a utility view's first
+// state; with it, no separate request follows.
+export function subscribeLauncherState(api, receive, fail, initial = null) {
   let active = true;
   let receivedBroadcast = false;
-  let current = null;
+  let current = initial;
   let pendingActivity = {};
   const managerViews = new WeakMap(), collections = new WeakMap();
   const restore = snapshot => {
@@ -116,7 +126,7 @@ export function subscribeLauncherState(api, receive, fail) {
     if (current) deliver(mergeLauncherActivity(current, activity));
     else pendingActivity = mergeLauncherActivity(pendingActivity, activity);
   });
-  Promise.resolve().then(() => api.getState()).then(next => {
+  if (!initial) Promise.resolve().then(() => api.getState()).then(next => {
     if (active && !receivedBroadcast) {
       deliver(mergeLauncherActivity(next, pendingActivity));
       pendingActivity = {};

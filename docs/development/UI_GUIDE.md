@@ -11,7 +11,7 @@ The main window, called the library window, lists the games and shows the detail
 - the game library on the left;
 - the selected game's inspector on the right.
 
-Settings, Runtimes, External and Credits open in separate windows. Each window's frame appears at once in the window's background color, and its view fills in as it loads. Save editing, runtime settings and live-variable editing also have their own dedicated windows, while cheat controls open in a modal.
+Settings, Runtimes, External and Credits open in separate windows. Settings, Runtimes and Credits are loaded in hidden windows once the launcher's startup runtime inventory finishes, so opening one shows a view that has already drawn; closing one hides it, and the next opening shows it again with the current state. The launcher still quits when its last visible window closes. A window opened before it is prepared, and External, shows its frame at once in the window's background color and draws its view with its first state, without an intermediate loading message. Save editing, runtime settings and live-variable editing also have their own dedicated windows, while cheat controls open in a modal.
 
 When CrossOver or Sikarugir requests activation during launch, MacLauncher cooperatively yields to a window belonging to that launch's Wine process tree. This initial handoff runs only while the launcher is active and ends if the foreground application changes. It waits at most two minutes for the window and stops when activation is confirmed or the launch ends.
 

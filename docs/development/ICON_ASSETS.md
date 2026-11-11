@@ -16,7 +16,7 @@ MacLauncher's app mark is an open doorway with a warm launch arrow on a teal til
 
 ## Icons in the launcher
 
-Wherever a game's icon appears, in the library or in the inspector, the launcher draws it with the same `GameIcon` component. This component prefers the artwork extracted from the game, executable or app. When there is none, or when it cannot be decoded, the main process supplies the game's bundled engine icon instead, and a game of an unknown type shows a gamepad symbol. Images keep their aspect ratio, and the renderer never fetches artwork from the network. Bundled engine artwork is drawn directly on the launcher surface, without an extra background tile or inset, and monochrome engine logos use a light foreground for the dark interface.
+Wherever a game's icon appears, in the library or in the inspector, the launcher draws it with the same `GameIcon` component. This component prefers the artwork extracted from the game, executable or app. When there is none, or when it cannot be decoded, the main process supplies the game's bundled engine icon instead, and a game of an unknown type shows a gamepad symbol. Images keep their aspect ratio, and the renderer never fetches artwork from the network. Every library row's image loads with the list rather than when it scrolls into view, so rows show their icons as soon as they appear. Bundled engine artwork is drawn directly on the launcher surface, without an extra background tile or inset, and monochrome engine logos use a light foreground for the dark interface.
 
 ## Engine icons
 

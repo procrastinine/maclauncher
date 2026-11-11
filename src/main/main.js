@@ -1045,7 +1045,40 @@ function resolveModuleDefaultIconPath(moduleId) {
   return normalizeIconPath(path.join(moduleDir, "resources", "icon.png"));
 }
 
-const iconDataUrlCache = new Map();
+// Decoded previews persist across launches in their own file, so the first
+// library paint after a start shows every icon whose file has not changed.
+const ICON_PREVIEW_FORMAT = 1;
+const iconPreviewFile = path.join(userDataDir, "icon-previews.json");
+function readIconPreviews(file, version) {
+  const previews = new Map();
+  try {
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 32 * 1024 ** 2) return previews;
+    const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (cached?.format !== ICON_PREVIEW_FORMAT || cached.version !== version || !Array.isArray(cached.previews)) return previews;
+    for (const [iconPath, value] of cached.previews) {
+      if (typeof iconPath !== "string" || !value || ![value.mtimeMs, value.ctimeMs, value.size].every(Number.isFinite)) continue;
+      if (value.url !== null && !(typeof value.url === "string" && value.url.startsWith("data:image/"))) continue;
+      previews.set(iconPath, { mtimeMs: value.mtimeMs, ctimeMs: value.ctimeMs, size: value.size, url: value.url });
+    }
+  } catch {}
+  return previews;
+}
+const iconDataUrlCache = readIconPreviews(iconPreviewFile, app.getVersion());
+let iconPreviewSaveTimer, iconPreviewWrite = Promise.resolve();
+function saveIconPreviewsSoon() {
+  clearTimeout(iconPreviewSaveTimer);
+  iconPreviewSaveTimer = setTimeout(() => {
+    const value = JSON.stringify({ format: ICON_PREVIEW_FORMAT, version: app.getVersion(), previews: [...iconDataUrlCache] });
+    iconPreviewWrite = iconPreviewWrite.catch(() => {}).then(async () => {
+      const temporary = iconPreviewFile + ".tmp";
+      await fs.promises.mkdir(userDataDir, { recursive: true });
+      try { await fs.promises.writeFile(temporary, value, { mode: 0o600 }); await fs.promises.rename(temporary, iconPreviewFile); }
+      finally { await fs.promises.rm(temporary, { force: true }); }
+    }).catch(error => logger.debug("[icons] preview cache write failed", error.message));
+  }, 250);
+  iconPreviewSaveTimer.unref?.();
+}
 // Size and timestamps identify a file version. Inode numbers are not compared:
 // Electron's ASAR file system reports a new inode on every stat of an archived
 // file, such as a module's default icon inside a packaged app.
@@ -1136,6 +1169,7 @@ function decodePendingIcons() {
   if (!iconsChanged) return;
   iconsChanged = false;
   iconGeneration += 1;
+  saveIconPreviewsSoon();
   scheduleStateRebuild();
 }
 
@@ -1445,7 +1479,14 @@ function decorateRecentEntry(entry, settings) {
   const pendingBefore = iconPendingReads;
   const {effectsNotices: _notices, ...normalized} = normalizeGameEntry(entry, settings, { ...checks, libraryIcons: true });
   const icon = libraryIcon(normalized.iconPath);
-  const value = { ...normalized, ...graphicsView(entry), iconUrl: icon?.url || null, ...(icon?.pending ? {iconPending: true} : {}),
+  // An icon inside the game's own files is not read until they are known to be
+  // reachable. Until then the row shows that icon's preview from an earlier
+  // launch, when there is one, instead of the module's icon.
+  const held = !availabilityKnown && typeof entry.iconPath === "string" &&
+    GameAvailability.insideRoot(entry, entry.iconPath, { userDataDir }) ? iconDataUrlCache.get(entry.iconPath.trim())?.url : null;
+  const heldSource = typeof entry.iconSource === "string" && entry.iconSource.trim() || null;
+  const value = { ...normalized, ...graphicsView(entry), iconUrl: held || icon?.url || null,
+    ...(held ? {iconSource: heldSource} : icon?.pending ? {iconPending: true} : {}),
     ...(graphicsWarnings?.length ? {graphicsWarnings} : {}), ...(launchNotices?.length ? {launchNotices} : {}), ...(availability ? {availability} : {}) };
   recentDecorationCache.set(entry.gameId || entry.gamePath, { key, value, ...(iconPendingReads !== pendingBefore ? { iconGeneration } : {}) });
   return value;
@@ -2183,8 +2224,23 @@ const utilityWindows = createUtilityWindowController({
     attachDevToolsShortcut(win);
     if (activate) attachDevToolsAutoOpen(win, view);
   },
-  onContextChange: win => sendState(win)
+  onContextChange: win => sendState(win),
+  // Settings, Runtimes and Credits are prepared hidden after the startup
+  // inventory and hide when closed, so opening one only shows it.
+  keptViews: ["runtimes", "settings", "credits"],
+  beforeShow: win => sendState(win, undefined, { hidden: true }),
+  onHidden: () => quitWithoutVisibleWindows(),
+  isQuitting: () => launcherQuitting
 });
+let launcherQuitting = false;
+// The launcher quits when its last visible window closes, as it does when the
+// last window is destroyed; prepared hidden utility windows do not keep it open.
+function quitWithoutVisibleWindows() {
+  if (launcherQuitting || isChildGame || isSmoke) return;
+  const windows = BrowserWindow.getAllWindows().filter(win => !win.isDestroyed());
+  if (windows.length && windows.every(win => utilityWindows.isHidden(win))) app.quit();
+}
+app.on("browser-window-created", (_event, win) => win.on("closed", () => setImmediate(quitWithoutVisibleWindows)));
 const downloadManager = new DownloadManager({
   onChange: () => {
     if (!cachedState) return;
@@ -2374,8 +2430,9 @@ function broadcastActivity({ runningChanged = false } = {}) {
   }
 }
 
-function sendState(win, state = getLauncherState()) {
-  if (!launcherWindows.has(win)) return;
+// A hidden utility window receives the state just before it shows instead.
+function sendState(win, state = getLauncherState(), { hidden = false } = {}) {
+  if (!launcherWindows.has(win) || (!hidden && utilityWindows.isHidden(win))) return;
   try {
     activityDelivery.supersede(win);
     win.webContents.send("launcher:state", utilityWindows.stateForWindow(win, state));
@@ -3176,7 +3233,9 @@ async function init() {
       .flatMap(game => [resolveModuleId(game), providers.get(game.runtimeId)]).filter(Boolean))];
     backendService.prepareInspectorLane(loadSettings(), recentModules);
     backendService.prepareSpareLane();
-    void readRuntimeInventory();
+    void readRuntimeInventory().then(() => {
+      if (mainWindow && !mainWindow.isDestroyed() && !launcherQuitting) return utilityWindows.prepare();
+    }).catch(error => logger.warn("[utility] prepare failed", error.message));
     void refreshModuleSnapshots();
     void refreshLibraryMetadata(games, settings);
     void moduleAppActions.maintain({ userDataDir, logger });
@@ -3363,6 +3422,15 @@ async function init() {
 
 ipcMain.handle("launcher:getState", event =>
   utilityWindows.stateForWindow(BrowserWindow.fromWebContents(event.sender), getLauncherState()));
+// A utility view's first render reads its state synchronously, so its first
+// drawing is the view itself; other views receive null and use getState.
+ipcMain.on("launcher:initialState", event => {
+  try {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const state = cachedState && launcherWindows.has(win) ? utilityWindows.stateForWindow(win, getLauncherState()) : null;
+    event.returnValue = state?.utilityWindow ? state : null;
+  } catch { event.returnValue = null; }
+});
 ipcMain.handle("launcher:getStartupMigration", () => startupMigration);
 ipcMain.handle("launcher:prioritizeGame", (_event, gamePath) => {
   prioritizeLibraryEntry(gameRecordsCache?.find(entry => entry.gamePath === gamePath));
@@ -3524,6 +3592,7 @@ ipcMain.handle("launcher:cancelImport", (_event, inputPath) => gameImports.cance
 
 let quitCleanupPending = false, quitCleanupComplete = false;
 app.on("before-quit", event => {
+  launcherQuitting = true;
   if (quitCleanupComplete) return;
   if (quitCleanupPending) { event.preventDefault(); return; }
   require("../modules/shared/effects/prepared-rows").flush();

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { filterGames, gameTypeOptionsForModules } from "./search-utils.mjs";
 import { prioritizeDroppedPaths } from "./drop-path-utils.mjs";
 import { closePopoversForDrop, dropGameTargets, graphicsDropTargets } from "./drop-game-targets.mjs";
-import { createGameFailureRecovery, createInspectionRequests, shareLauncherValue, subscribeLauncherGameFailures, subscribeLauncherState, updatePathValue } from "./launcher-state-model.mjs";
+import { createGameFailureRecovery, createInspectionRequests, restoreLauncherState, shareLauncherValue, subscribeLauncherGameFailures, subscribeLauncherState, updatePathValue } from "./launcher-state-model.mjs";
 import { useGamePathState } from "./use-game-path-state";
 import { readUtilityWindowContext } from "../../../core/utility-window-model.mjs";
 import type {
@@ -103,7 +103,12 @@ export default function App() {
   const importBatches = useImportBatches(api || undefined);
   const utilityWindowContext = useMemo(() => readUtilityWindowContext(window.location.search), []);
   const runtimesOpen = utilityWindowContext?.view === "runtimes";
-  const [state, setState] = useState<LauncherState | null>(null);
+  // A utility view renders its first state in its first frame.
+  const [initialState] = useState<LauncherState | null>(() => {
+    if (!utilityWindowContext) return null;
+    try { return api?.initialState?.() || null; } catch { return null; }
+  });
+  const [state, setState] = useState<LauncherState | null>(() => initialState && restoreLauncherState(initialState));
   const gamePaths = useMemo(() => new Set((state?.recents || []).map(game => game.gamePath)), [state?.recents]);
   const latestState = useRef(state);
   latestState.current = state;
@@ -220,7 +225,7 @@ export default function App() {
       if (failureRecovery.update(next.running, errorRevision.current)) setError(null);
       latestState.current = next;
       setState(next);
-    }, error => setError(String(error?.message || error)));
+    }, error => setError(String(error?.message || error)), initialState);
   }, [api, failureRecovery, setError]);
 
   const [startupMigration, setStartupMigration] = useState<StartupMigration | null>(null);

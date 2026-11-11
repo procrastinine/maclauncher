@@ -52,9 +52,9 @@ test("a large library keeps every game's icon preview between state rebuilds", (
 
 test("library rows never wait for icon decoding: pending icons decode in short slices and one rebuild follows", () => {
   const immediates = [], decoded = [];
-  let clock = 0, rebuilds = 0;
+  let clock = 0, rebuilds = 0, saves = 0;
   const context = { iconDataUrlCache: new Map(), gameRecordsCache: null, setImmediate: run => immediates.push(run),
-    performance: { now: () => (clock += 5) }, scheduleStateRebuild: () => { rebuilds += 1; },
+    performance: { now: () => (clock += 5) }, scheduleStateRebuild: () => { rebuilds += 1; }, saveIconPreviewsSoon: () => { saves += 1; },
     fs: { statSync: () => ({ isFile: () => true, mtimeMs: 1, ctimeMs: 1, ino: 1, size: 100 }) },
     nativeImage: { createFromPath: file => { decoded.push(file); return { isEmpty: () => file.endsWith(".txt"),
       getSize: () => ({ width: 64, height: 64 }), toDataURL: () => "data:" + file }; } } };
@@ -68,6 +68,7 @@ test("library rows never wait for icon decoding: pending icons decode in short s
   assert.ok(slices >= 2, "decoding yields between slices");
   assert.deepEqual(decoded.sort(), files.slice().sort());
   assert.equal(rebuilds, 1, "one state rebuild carries every decoded icon");
+  assert.equal(saves, 1, "the round's previews are saved for the next launch once");
   assert.equal(vm.runInContext("iconGeneration", context), 1);
   assert.equal(context.libraryIcon("/a.png").url, "data:/a.png");
   assert.equal(context.libraryIcon("/broken.txt"), null, "a file that is not a readable image falls back");
@@ -78,7 +79,7 @@ test("library rows never wait for icon decoding: pending icons decode in short s
 function sliceContext({ statSync, decode }) {
   const immediates = [], decoded = [];
   const context = { iconDataUrlCache: new Map(), gameRecordsCache: null, setImmediate: run => immediates.push(run), performance,
-    scheduleStateRebuild: () => { context.rebuilds += 1; }, rebuilds: 0, fs: { statSync },
+    scheduleStateRebuild: () => { context.rebuilds += 1; }, saveIconPreviewsSoon() {}, rebuilds: 0, fs: { statSync },
     nativeImage: { createFromPath: file => { decoded.push(file); return { isEmpty: () => false, getSize: () => ({ width: 64, height: 64 }), toDataURL: () => decode(file) }; } } };
   vm.createContext(context); vm.runInContext(iconFunction, context);
   const settle = () => { let rounds = 0; while (immediates.length) { immediates.shift()(); rounds += 1; } return rounds; };
@@ -129,4 +130,35 @@ test("a pending icon whose file disappears before decoding releases its row", ()
   assert.equal(context.rebuilds, 1);
   assert.equal(context.libraryIcon("/gone.png"), null);
   assert.deepEqual(decoded, []);
+});
+
+test("decoded previews persist across launches, so unchanged icons are in the first library paint", async t => {
+  const os = require("node:os");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "icon-previews-"));
+  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  const persistence = source.slice(source.indexOf("const ICON_PREVIEW_FORMAT = "), source.indexOf("// Size and timestamps identify"));
+  const stat = { isFile: () => true, mtimeMs: 3, ctimeMs: 3, ino: 1, size: 100 };
+  const launch = version => {
+    const timers = [], decoded = [];
+    const context = { fs: { ...fs, statSync: () => stat }, path, userDataDir, app: { getVersion: () => version }, Number, Array, JSON, Map, Promise,
+      logger: { debug() {} }, setTimeout: run => (timers.push(run), { unref() {} }), clearTimeout() {}, gameRecordsCache: null, performance,
+      setImmediate: run => run(), scheduleStateRebuild() {},
+      nativeImage: { createFromPath: file => { decoded.push(file); return { isEmpty: () => false, getSize: () => ({ width: 64, height: 64 }), toDataURL: () => "data:image/png;base64," + file }; } } };
+    vm.createContext(context); vm.runInContext(persistence + iconFunction, context);
+    return { context, timers, decoded, write: () => vm.runInContext("iconPreviewWrite", context) };
+  };
+  const first = launch("1.0.0");
+  assert.equal(first.context.libraryIcon("/icon.png").pending, true);
+  assert.equal(first.timers.length, 1, "the decoding round schedules one save");
+  first.timers.shift()(); await first.write();
+  const second = launch("1.0.0");
+  assert.deepEqual({ ...second.context.libraryIcon("/icon.png") }, { url: "data:image/png;base64,/icon.png" }, "the next launch shows the preview at once");
+  assert.deepEqual(second.decoded, [], "an unchanged file is not decoded again");
+  stat.mtimeMs = 4;
+  assert.equal(second.context.libraryIcon("/icon.png").url, "data:image/png;base64,/icon.png", "a changed file shows its previous preview while it decodes");
+  assert.deepEqual(second.decoded, ["/icon.png"]);
+  assert.equal(launch("2.0.0").context.libraryIcon("/icon.png").pending, true, "another app version decodes again");
+  fs.writeFileSync(path.join(userDataDir, "icon-previews.json"), JSON.stringify({ format: 1, version: "1.0.0",
+    previews: [["/script.png", { mtimeMs: 4, ctimeMs: 3, size: 100, url: "javascript:alert(1)" }]] }));
+  assert.equal(launch("1.0.0").context.libraryIcon("/script.png").pending, true, "only image data URLs are taken from the file");
 });

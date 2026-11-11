@@ -711,6 +711,7 @@ declare global {
     MacLauncher?: {
       launcher: {
         getState(): Promise<LauncherState>;
+        initialState?(): LauncherState | null;
         prioritizeGame?(gamePath: string): Promise<boolean>;
         openUtilityWindow(request: UtilityWindowRequest): Promise<boolean>;
         appActionPickerState: import("./components/AppActionPicker").AppActionPickerApi["appActionPickerState"];

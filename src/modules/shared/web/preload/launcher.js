@@ -33,6 +33,8 @@ function subscribeActivity(callback) {
 contextBridge.exposeInMainWorld("MacLauncher", {
   launcher: {
     getState: () => ipcRenderer.invoke("launcher:getState"),
+    // A utility view's state for its first render; null for other views.
+    initialState: () => ipcRenderer.sendSync("launcher:initialState"),
     prioritizeGame: gamePath => ipcRenderer.invoke("launcher:prioritizeGame", gamePath),
     openUtilityWindow: request => ipcRenderer.invoke("launcher:openUtilityWindow", request),
     appActionPickerState: () => ipcRenderer.invoke("launcher:appActionPickerState"),

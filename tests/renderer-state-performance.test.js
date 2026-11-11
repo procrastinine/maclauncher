@@ -75,6 +75,22 @@ test('activity received before the initial snapshot is rebased per field without
   assert.deepEqual(received.at(-1).running, { '/other': 1 });
   stop();
 });
+test('a utility view rendered from its first state requests none and applies later activity to it', async () => {
+  const received = [];
+  let activity, requests = 0;
+  const initial = { recents: [], downloads: [], preparing: {}, running: {}, utilityWindow: { view: 'runtimes', revision: 1 } };
+  assert.equal(model.restoreLauncherState(initial).utilityWindow, initial.utilityWindow);
+  const stop = model.subscribeLauncherState({ getState: () => { requests++; return new Promise(() => {}); },
+    onState() { return () => {}; }, onActivity(callback) { activity = callback; return () => {}; }
+  }, next => received.push(next), error => { throw error; }, initial);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests, 0, 'The first state was read with the first render');
+  activity({ downloads: [{ id: 'java', downloaded: 10 }] });
+  assert.equal(received.length, 1);
+  assert.equal(received[0].utilityWindow, initial.utilityWindow);
+  assert.equal(received[0].downloads[0].downloaded, 10);
+  stop();
+});
 test('a full broadcast supersedes buffered activity and a late initial response', async () => {
   const pending = deferred(), received = [];
   let activity, state, stateRemoved = false, activityRemoved = false;
@@ -131,7 +147,7 @@ test('library work shares availability, runs checks off main, retains previous r
     normalizeIconPath: file => { iconReads.push(file); return file; },
     ICON_SOURCES: { MODULE_DEFAULT: 'module-default' },
     iconUrlForPath: file => file ? 'icon:' + file : null, libraryIcon: file => file ? { url: 'icon:' + file } : null,
-    iconGeneration: 0, iconPendingReads: 0,
+    iconGeneration: 0, iconPendingReads: 0, iconDataUrlCache: new Map([['/game/icon.png', { url: 'data:image/png;base64,earlier' }]]),
     buildRuntimeManagerState: () => structuredClone(context.runtimeStateSnapshots),
     launcherService: { getResolvedModuleSettings: () => settings.modules },
     saveStateSnapshotsSoon() {}, broadcastState() {}, scheduleStateRebuild: () => { scheduled++; },
@@ -156,7 +172,8 @@ test('library work shares availability, runs checks off main, retains previous r
     await turn(); flush(); await turn();
   };
   context.cachedState = context.buildState();
-  assert.equal(context.cachedState.recents[0].iconUrl, null);
+  assert.equal(context.cachedState.recents[0].iconUrl, 'data:image/png;base64,earlier', 'the preview from an earlier launch shows while the files are checked');
+  assert.equal(context.cachedState.recents[0].iconPending, undefined);
   assert.deepEqual(iconReads, [], 'a hung first probe cannot trigger an icon read');
   vm.runInContext('queueLibraryWork(gameRecordsCache[0], loadSettings(), { refreshMetadata: true })', context);
   await turn();

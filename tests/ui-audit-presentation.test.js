@@ -224,7 +224,8 @@ test('row and inspector icons share artwork without initial-letter boxes', () =>
   const markup = renderToStaticMarkup(React.createElement(components.GameIcon, { game, inspector: true }));
   assert.match(markup, /gameIconInspector gameIconEngine/);
   assert.match(markup, /data-icon-source="module-default"/);
-  assert.match(markup, /<img[^>]+alt=""[^>]+loading="eager"/);
+  assert.match(markup, /<img[^>]+alt=""[^>]+decoding="sync"/);
+  assert.doesNotMatch(row + markup, /loading="lazy"/, 'Every row paints its icon with the list');
   assert.equal(/src="([^"]+)"/.exec(row)[1], /src="([^"]+)"/.exec(markup)[1], 'The row and the inspector show the same artwork');
   const unknown = renderToStaticMarkup(React.createElement(components.GameIcon, { game: { iconUrl: null, iconSource: null } }));
   assert.match(unknown, /data-icon-source="generic"/);
