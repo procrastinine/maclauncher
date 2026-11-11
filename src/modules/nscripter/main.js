@@ -716,7 +716,7 @@ async function launchRuntime(runtimeId, entry, context) {
     const needsRosetta = require("../shared/runtime/architecture").requiresRosetta(install.variant);
     args.push(...(context.gameArguments || []));
     context.logger?.info?.(`[runtime] launch onsyuri ${binaryPath} ${args.join(" ")}`);
-    return context.spawnDetachedChecked(binaryPath, args, { cwd: gameRootDir }, needsRosetta);
+    return context.spawnDetachedChecked(binaryPath, args, { cwd: gameRootDir, env: { ...process.env, MACLAUNCHER_GAME_NAME: entry.name || "", MACLAUNCHER_GAME_ICON: entry.iconPath || "" } }, needsRosetta);
   }
 
   if (runtimeId === "onscripter_en") {
