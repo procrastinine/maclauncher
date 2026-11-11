@@ -77,7 +77,7 @@ async function preparePayload({ unpacked, pin, signal, logger, onProgress }, dep
   const capabilities = Shared.wineCapabilities(path.join(unpacked, WINE_ROOT));
   return { schemaVersion: 1, engineVersion: pin.engineVersion, wineRoot: WINE_ROOT, supportRoot: SUPPORT_ROOT,
     inventory,
-    minimumMacOS, architectures: native.architectures, nativeComponents: native.nativeComponents, capabilities,
+    minimumMacOS, architectures: native.architectures, nativeComponents: native.nativeComponents, inspectionVersion: Shared.INSPECTION_VERSION, capabilities,
     template: { version: template.version, archiveSha256, assetUrl: template.asset.url },
     graphics: { minimumBaseMacOS: graphics.minimumBaseMacOS, graphicsCapabilities: graphics.graphicsCapabilities,
       componentVersions: graphics.componentVersions, relativePaths: graphics.relativePaths } };
@@ -98,10 +98,11 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
       const supported = check(install.installDir, evidence.inventory, { verification, signal, important, minimumMacOS: evidence.minimumMacOS });
       if (!supported.supported) return { install: null, reason: supported.reason, minimumMacOS: evidence.minimumMacOS };
       const wineRoot = path.join(install.installDir, WINE_ROOT), templateRoot = path.join(install.installDir, SUPPORT_ROOT);
+      const inspected = Shared.currentInspection(install.installDir, evidence, wineRoot);
       return { install: { ...install, wineRoot, engineRoot: wineRoot, executablePath: path.join(wineRoot, "bin", "wine"),
         serverPath: path.join(wineRoot, "bin", "wineserver"), templateRoot, supportRoot: templateRoot,
         frameworksRoot: path.join(templateRoot, "Frameworks"), runtimeLibraries: templateRoot,
-        capabilities: evidence.capabilities, graphicsCapabilities: evidence.graphics?.graphicsCapabilities,
+        capabilities: inspected.capabilities, graphicsCapabilities: evidence.graphics?.graphicsCapabilities,
         graphicsMetadata: evidence.graphics, minimumMacOS: evidence.minimumMacOS, engineVersion: evidence.engineVersion },
         reason: null, minimumMacOS: evidence.minimumMacOS };
     } catch (error) { if (error.name === "AbortError") throw error; return { install: null, reason: error.message }; }

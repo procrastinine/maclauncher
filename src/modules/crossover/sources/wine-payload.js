@@ -10,6 +10,10 @@ const Host = require("../../shared/runtime/bundled-native");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
 
 const INVENTORY = "payload.json", MAXIMUM_FILES = 20000, MAXIMUM_INVENTORY_BYTES = 8 * 1024 * 1024;
+// The version of what installation reads from a Wine tree's binaries, kept in
+// the installation record. A record without one is version 1, which predates
+// the win32u and winevulkan capabilities.
+const INSPECTION_VERSION = 2;
 const MAGIC = new Set([0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe, 0xcafebabe, 0xbebafeca, 0xcafebabf, 0xbfbafeca]);
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
 const stamp = stat => [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeMs, stat.ctimeMs].join(":");
@@ -182,8 +186,25 @@ function createInventoryCheck({ label = "Wine", systemVersionSync = Host.systemV
   };
 }
 
+// What the current inspector reads from an installed Wine tree. A record from
+// an earlier inspector is read again from the installed binaries, without a
+// download, once per launcher session and installation. The result is kept in
+// memory: the installation record is immutable, and a file inside the sealed
+// tree would read as a changed payload to earlier MacLauncher versions. Call
+// only after the inventory check has passed.
+const inspections = new Map();
+function currentInspection(installDir, evidence, wineRoot) {
+  if ((evidence?.inspectionVersion || 1) >= INSPECTION_VERSION)
+    return { capabilities: evidence.capabilities, wineVersion: evidence.wineVersion };
+  const key = `${installDir}:${evidence?.inventory?.sha256 || ""}`;
+  if (!inspections.has(key)) {
+    if (inspections.size >= 64) inspections.delete(inspections.keys().next().value);
+    inspections.set(key, { capabilities: wineCapabilities(wineRoot), wineVersion: wineVersion(wineRoot) || evidence?.wineVersion || "" });
+  }
+  return inspections.get(key);
+}
 // The one wording for a floor the running macOS does not meet, the same as
 // the stable platform requirements use.
 const requiresMacOS = version => `Requires macOS ${String(version).replace(/(?:\.0)+$/, "")} or later.`;
 module.exports = { INVENTORY, MAXIMUM_FILES, MAXIMUM_INVENTORY_BYTES, safeRelative, regularFile, walk, nativeInfo, inspectClosure,
-  hashAsync, writeInventory, mentions, wineCapabilities, wineVersion, createInventoryCheck, requiresMacOS, later, inside, stamp };
+  hashAsync, writeInventory, mentions, wineCapabilities, wineVersion, createInventoryCheck, requiresMacOS, currentInspection, INSPECTION_VERSION, later, inside, stamp };

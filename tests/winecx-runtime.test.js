@@ -112,6 +112,16 @@ test("WineCX installs only an archive that matches its published checksum file",
   assert.deepEqual((({ version, ready, preferredVersion }) => ({ version, ready, preferredVersion }))(manager.resolveSelection({}, saved, userDataDir)),
     { version: "4.8.1", ready: true, preferredVersion: "4.8.2" });
   assert.equal(manager.resolveSelection({}, saved, userDataDir, { version: "4.8.2" }).ready, false);
+  // A record from an earlier inspector is read again from the installed
+  // binaries, without a download and without a file in the sealed tree.
+  const registration = path.join(installed.installDir, "runtime.json"), record = JSON.parse(fs.readFileSync(registration, "utf8"));
+  delete record.installationMetadata.inspectionVersion; record.installationMetadata.capabilities = { msync: true, esync: false, graphicsSelector: false, vulkanLibrarySelector: false };
+  fs.writeFileSync(registration, JSON.stringify(record));
+  const reread = manager.resolveSelection({}, {}, userDataDir, { version: "4.8.1" });
+  assert.equal(reread.ready, true, "the inspection record is not a payload change");
+  assert.equal(reread.install.capabilities.adapterIdentity, true);
+  assert.equal(installed.installationMetadata.inspectionVersion, 2, "new installations record the current inspection version");
+  assert.equal(manager.resolveSelection({}, {}, userDataDir, { version: "4.8.1" }).install.capabilities.vulkanLibrarySelector, true);
   // A changed file makes the installation unusable until it is installed again.
   fs.appendFileSync(path.join(installed.installDir, "Libraries/Wine/lib/wine/x86_64-unix/ntdll.so"), "changed");
   assert.match(manager.resolveSelection({}, {}, userDataDir, { version: "4.8.1" }).reason, /WineCX runtime files changed/);

@@ -51,7 +51,7 @@ async function preparePayload({ unpacked, pin, signal, onProgress }, dependencie
   const versions = readVersionFile(path.join(unpacked, ROOT)), wineRoot = path.join(unpacked, WINE);
   const inventory = await Shared.writeInventory(unpacked, records, signal, LABEL);
   return { schemaVersion: 1, root: ROOT, wineRoot: WINE, inventory, minimumMacOS: native.minimumMacOS, architectures: native.architectures,
-    nativeComponents: native.nativeComponents, capabilities: Shared.wineCapabilities(wineRoot), wineVersion: Shared.wineVersion(wineRoot), ...versions };
+    nativeComponents: native.nativeComponents, inspectionVersion: Shared.INSPECTION_VERSION, capabilities: Shared.wineCapabilities(wineRoot), wineVersion: Shared.wineVersion(wineRoot), ...versions };
 }
 function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = {}) {
   const check = Shared.createInventoryCheck({ label: LABEL, systemVersionSync }), important = new Set(REQUIRED);
@@ -65,10 +65,11 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
       const supported = check(install.installDir, evidence.inventory, { verification, signal, important, minimumMacOS: evidence.minimumMacOS });
       if (!supported.supported) return { install: null, reason: supported.reason, minimumMacOS: evidence.minimumMacOS };
       const librariesRoot = path.join(install.installDir, ROOT), wineRoot = path.join(install.installDir, WINE);
+      const inspected = Shared.currentInspection(install.installDir, evidence, wineRoot);
       return { install: { ...install, librariesRoot, wineRoot, engineRoot: wineRoot,
         executablePath: path.join(wineRoot, "bin", "wine"), serverPath: path.join(wineRoot, "bin", "wineserver"),
-        libraryRoot: path.join(wineRoot, "lib"), capabilities: evidence.capabilities, minimumMacOS: evidence.minimumMacOS,
-        wineVersion: evidence.wineVersion || "", engineVersion: evidence.wineVersion || install.version,
+        libraryRoot: path.join(wineRoot, "lib"), capabilities: inspected.capabilities, minimumMacOS: evidence.minimumMacOS,
+        wineVersion: inspected.wineVersion || "", engineVersion: inspected.wineVersion || install.version,
         componentVersions: evidence.componentVersions || {}, gptkCapable: evidence.gptkCapable === true },
         reason: null, minimumMacOS: evidence.minimumMacOS };
     } catch (error) { if (error.name === "AbortError") throw error; return { install: null, reason: error.message }; }
