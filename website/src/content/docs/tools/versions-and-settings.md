@@ -19,7 +19,7 @@ The **Runtimes** window is MacLauncher's download manager. Everything MacLaunche
 - <span id="remove"></span>**Remove** deletes an installed version you no longer need. Each installed version shows how much disk space it takes, which helps when deciding what to remove.
 - <span id="the-default"></span>The default is the version used by games that don't ask for a specific one. A version picked for a particular game, or one the game's own files call for, takes precedence. [Choosing a runtime](/maclauncher/background/choosing-a-runtime/#versions) explains the order.
 
-Many runtimes have two sources: the upstream project's own releases, and [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/), which provides ready-to-run macOS builds of engines that need adapting. Each source has its own version list, and everything you've installed from either one shows up together when you choose a version for a game. A few components ship inside MacLauncher itself and are marked **Included**.
+Many runtimes have two sources: the upstream project's own releases, and [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/), which provides ready-to-run macOS builds of engines that need adapting. Those builds are published as packages, and the [MacLauncher Builds package index](https://procrastinine.github.io/maclauncher-builds/) lists every package with its published versions. Each source has its own version list, and everything you've installed from either one shows up together when you choose a version for a game. A few components ship inside MacLauncher itself and are marked **Included**.
 
 ### Processor builds
 

@@ -8,7 +8,8 @@ export const sidebar = [
     label: "Native runtimes",
     items: [
       "games", "background/how-games-run", "background/choosing-a-runtime",
-      "games/desktop-engines", "games/visual-novels", "games/windows", "games/mobile-and-consoles", "games/more"
+      "games/desktop-engines", "games/visual-novels", "games/windows", "games/mobile-and-consoles", "games/more",
+      { label: "MacLauncher Builds packages", link: "https://procrastinine.github.io/maclauncher-builds/" }
     ]
   },
   {

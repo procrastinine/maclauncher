@@ -301,6 +301,7 @@ MacLauncher is **alpha software!** Things might be unstable or stupid, and it is
 - [Development and app builds](docs/development/DEVELOPMENT.md)
 - [Verifying builds](docs/development/VERIFYING.md)
 - [Repository guide](docs/development/REPO_GUIDE.md)
+- [MacLauncher Builds package index](https://procrastinine.github.io/maclauncher-builds/)
 
 # License
 
