@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DownloadIcon, FolderIcon, RefreshIcon, XIcon } from "../icons";
 import { LibrarySearch } from "./LibraryToolbar";
-import { ExternalStoreView, gameVersionLabel, useDownloadQueueExpansion, PlatformTagFilter, TagCheckboxFilter, LibrarySortSelect, sortExternalGames, allExternalPlatforms, VersionFilterTools, filterGameVersions } from "./ExternalStoreView";
+import { ExternalStoreView, iconLoading, gameVersionLabel, useDownloadQueueExpansion, PlatformTagFilter, TagCheckboxFilter, LibrarySortSelect, sortExternalGames, allExternalPlatforms, VersionFilterTools, filterGameVersions } from "./ExternalStoreView";
 import type { ExternalStoreApi, ExternalLibrarySort, ExternalPlatform } from "./ExternalStoreView";
 import { HelpTip } from "./HelpTip";
 import { ScrollableTabStrip } from "./ScrollableTabStrip";
@@ -128,8 +128,9 @@ export function ExternalMark({ size = 22 }: { size?: number }) {
 function SteamGameIcon({ name, url }: { name: string; url?: string | null }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   // Steam artwork is local or supplied by the connected account. Opening Installed never loads remote artwork.
+  // Local artwork paints with its row; remote account artwork loads as rows near the view.
   return <span className="steamGameIcon" aria-hidden="true">
-    {url && failedUrl !== url ? <img src={url} alt="" loading="lazy" onError={() => setFailedUrl(url)} /> :
+    {url && failedUrl !== url ? <img src={url} alt="" {...iconLoading(url)} onError={() => setFailedUrl(url)} /> :
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none"><path d="M7 7h10c2 0 3 2 3.4 4l.7 4c.5 2.6-2.2 4-4 2l-1.8-2H8.7l-1.8 2c-1.8 2-4.5.6-4-2l.7-4C4 9 5 7 7 7Z" stroke="currentColor" strokeWidth="1.5" /><path d="M8 9.5v5m-2.5-2.5h5" stroke="currentColor" strokeWidth="1.5" /><circle cx="16" cy="11" r="1" fill="currentColor" /><circle cx="18" cy="13.5" r="1" fill="currentColor" /></svg>}
   </span>;
 }

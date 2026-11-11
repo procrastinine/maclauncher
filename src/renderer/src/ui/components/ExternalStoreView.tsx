@@ -154,9 +154,15 @@ export function useDownloadQueueExpansion() {
   return [expanded, setExpanded] as const;
 }
 
+// A local icon decodes in the frame that first paints its row; only remote
+// artwork loads lazily, so a long account list fetches what is near the view.
+export function iconLoading(url: string): { loading?: "lazy"; decoding: "sync" | "async" } {
+  return /^https?:/i.test(url) ? { loading: "lazy", decoding: "async" } : { decoding: "sync" };
+}
+
 function StoreIcon({ url }: { url?: string | null }) {
   const [failed, setFailed] = useState<string | null>(null);
-  return <span className="steamGameIcon" aria-hidden="true">{url && failed !== url ? <img src={url} alt="" loading="lazy" onError={() => setFailed(url)} /> : <DownloadIcon size="21" />}</span>;
+  return <span className="steamGameIcon" aria-hidden="true">{url && failed !== url ? <img src={url} alt="" {...iconLoading(url)} onError={() => setFailed(url)} /> : <DownloadIcon size="21" />}</span>;
 }
 function ErrorNotice({ text }: { text: string }) { return <div className="steamNotice error" role="alert">{formatUserError(text)}</div>; }
 function StoreEmpty({ title, description }: { title: string; description: string }) {
