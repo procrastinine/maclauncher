@@ -102,7 +102,7 @@ Once detection has set the game's type and metadata, MacLauncher selects a runti
 2. The game type's default runtime from **Settings**.
 3. The game type's automatic preference, then the default declared by the module.
 
-If the requested runtime is not supported, the first supported runtime is used. Even a supported runtime can be unavailable for a particular game, for example when a native app path is missing. When none of a game type's own runtimes can launch the game, automatic selection turns to the runtimes that serve several game types and apply to this game, such as Sikarugir and CrossOver, in their declared order.
+If the requested runtime is not supported, the first supported runtime is used. Even a supported runtime can be unavailable for a particular game, for example when a native app path is missing. When none of a game type's own runtimes can launch the game, automatic selection turns to the runtimes that serve several game types and apply to this game, such as the Wine runtimes CrossOver, Sikarugir and WineCX, in their declared order.
 
 The command-line launcher uses the same service. There, an explicit `--runtime <id>` is strict, so the requested runtime keeps its own input and installation requirements. [Backend and CLI](../development/BACKEND.md) describes the shared entry point.
 

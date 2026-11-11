@@ -2,61 +2,61 @@
 
 This reference lists, for each game type, its playback backends, every runtime setting and every inspector action, while the runtime guides describe the behavior behind each setting and action. Runtime settings appear in two places: in **Settings** as module defaults and in a game's **Runtime Settings** as per-game overrides. Settings marked *per game* are the exception, because they exist only in the inspector. When a backend also has common settings, those marked *(Advanced)* follow the others inside a collapsed **Advanced** group.
 
-Backends with a translator choice, namely CrossOver, Sikarugir, MacLauncher Android, Mac.apk, AnyPS5 and Prosper, also have an **Environment variables** section in a game's Runtime Settings. Its global values are in **Settings → Environment variables**, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes.
+Backends with a translator choice, namely CrossOver, Sikarugir, WineCX, MacLauncher Android, Mac.apk, AnyPS5 and Prosper, also have an **Environment variables** section in a game's Runtime Settings. Its global values are in **Settings → Environment variables**, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes.
 
 Some backends belong to another game type and are offered wherever they accept the game's input. These provider backends are marked *(provider)*, and their settings are listed under their own game type.
 
 | Game type | Default backend | Backends |
 | --- | --- | --- |
 | [32-bit Mac](#32-bit-mac) | 32-bit Mac | 32-bit Mac |
-| [AI5WIN](#ai5win) | AI5-SDL2 | AI5-SDL2, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [AliceSoft](#alicesoft) | System 1–3 | System 1–3, System 3.5–3.9, System 4, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [AI5WIN](#ai5win) | AI5-SDL2 | AI5-SDL2, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [AliceSoft](#alicesoft) | System 1–3 | System 1–3, System 3.5–3.9, System 4, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [Android](#android) | MacLauncher Android | MacLauncher Android, Mac.apk, AIM |
-| [BGI / Ethornell](#bgi--ethornell) | Program tools | Program tools, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [BGI / Ethornell](#bgi--ethornell) | Program tools | Program tools, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [Build engine (Raze)](#build-engine-raze) | Raze | Raze |
-| [CatSystem2](#catsystem2) | Archive and script tools | Archive and script tools, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [Construct](#construct) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [DOS](#dos) | DOSBox Staging | DOSBox Staging, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [CatSystem2](#catsystem2) | Archive and script tools | Archive and script tools, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [Construct](#construct) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [DOS](#dos) | DOSBox Staging | DOSBox Staging, UZDoom *(provider)*, Raze *(provider)*, DREAMM *(provider)*, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [Doom engine (UZDoom)](#doom-engine-uzdoom) | UZDoom | UZDoom |
-| [FAVORITE / FVP](#favorite--fvp) | RFVP | RFVP, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [FAVORITE / FVP](#favorite--fvp) | RFVP | RFVP, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [Flash](#flash) | Adobe Flash Player | Adobe Flash Player, Ruffle |
-| [FNA / XNA 4](#fna--xna-4) | FNA | FNA, Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [GameMaker](#gamemaker) | Butterscotch | OpenGMK, Butterscotch, Official GameMaker, Game's macOS app, Inspect only, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [FNA / XNA 4](#fna--xna-4) | FNA | FNA, Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [GameMaker](#gamemaker) | Butterscotch | OpenGMK, Butterscotch, Official GameMaker, Game's macOS app, Inspect only, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [GameMaker HTML5](#gamemaker-html5) | Electron | Electron, NW.js, Game's macOS app |
-| [Godot](#godot) | Godot | Godot, Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [Half-Life (Xash3D FWGS)](#half-life-xash3d-fwgs) | Xash3D FWGS | Xash3D FWGS, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [HashLink (Haxe bytecode)](#hashlink-haxe-bytecode) | HashLink (Intel Mac; Rosetta on Apple Silicon) | HashLink (Intel Mac; Rosetta on Apple Silicon), CrossOver *(provider)*, Sikarugir *(provider)* |
-| [Haxe native build](#haxe-native-build) | Native build inspection | Native build inspection, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [Infinity Engine (GemRB)](#infinity-engine-gemrb) | GemRB | GemRB, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [Godot](#godot) | Godot | Godot, Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [Half-Life (Xash3D FWGS)](#half-life-xash3d-fwgs) | Xash3D FWGS | Xash3D FWGS, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [HashLink (Haxe bytecode)](#hashlink-haxe-bytecode) | HashLink (Intel Mac; Rosetta on Apple Silicon) | HashLink (Intel Mac; Rosetta on Apple Silicon), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [Haxe native build](#haxe-native-build) | Native build inspection | Native build inspection, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [Infinity Engine (GemRB)](#infinity-engine-gemrb) | GemRB | GemRB, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [iOS / iPadOS](#ios--ipados) | PlayCover | PlayCover |
 | [Java](#java) | Java | Java |
-| [KiriKiri](#kirikiri) | KiriKiri SDL2 | KiriKiri SDL2, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [LÖVE](#löve) | LÖVE | LÖVE, Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [KiriKiri](#kirikiri) | KiriKiri SDL2 | KiriKiri SDL2, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [LÖVE](#löve) | LÖVE | LÖVE, Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [macOS Game](#macos-game) | Native macOS | Native macOS, 32-bit Mac *(provider)* |
 | [LucasArts (DREAMM)](#lucasarts-dreamm) | DREAMM | DREAMM |
-| [MAGES.](#mages) | Impacto Windows HD | Impacto Windows HD, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [Minori](#minori) | ReMinori | ReMinori, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [MUGEN / Ikemen GO](#mugen--ikemen-go) | Ikemen GO | Ikemen GO, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [MAGES.](#mages) | Impacto Windows HD | Impacto Windows HD, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [Minori](#minori) | ReMinori | ReMinori, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [MUGEN / Ikemen GO](#mugen--ikemen-go) | Ikemen GO | Ikemen GO, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [Nintendo Switch](#nintendo-switch) | Switch / Switch 2 (nxnative) | Switch / Switch 2 (nxnative), Inspect only |
-| [Nitroplus](#nitroplus) | Nitroplus | Nitroplus, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [NScripter](#nscripter) | ONScripter-Yuri | ONScripter-Yuri, ONScripter-EN, ONScripter-Yuri Web, External runtime, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [Nitroplus](#nitroplus) | Nitroplus | Nitroplus, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [NScripter](#nscripter) | ONScripter-Yuri | ONScripter-Yuri, ONScripter-EN, ONScripter-Yuri Web, External runtime, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [PlayStation 5](#playstation-5) | PS5 (AnyPS5) | PS5 (AnyPS5), Inspect only, Prosper *(provider)* |
 | [Prosper](#prosper) | Prosper | Prosper |
-| [Ren'Py](#renpy) | Ren'Py SDK | Ren'Py Patch, Ren'Py SDK, Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [RPG Maker 2000/2003](#rpg-maker-20002003) | EasyRPG Player | EasyRPG Player, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [RPG Maker MV](#rpg-maker-mv) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [RPG Maker MZ](#rpg-maker-mz) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [RPG Maker XP/VX/VX Ace](#rpg-maker-xpvxvx-ace) | MKXP-Z | MKXP-Z, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [ScummVM](#scummvm) | ScummVM | ScummVM, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [Siglus / RealLive](#siglus--reallive) | Siglus | Siglus, RealLive (RLVM), CrossOver *(provider)*, Sikarugir *(provider)* |
-| [Tyrano](#tyrano) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [Unity](#unity) | Unity Mono player | Unity Mono player, Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [Ren'Py](#renpy) | Ren'Py SDK | Ren'Py Patch, Ren'Py SDK, Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [RPG Maker 2000/2003](#rpg-maker-20002003) | EasyRPG Player | EasyRPG Player, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [RPG Maker MV](#rpg-maker-mv) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [RPG Maker MZ](#rpg-maker-mz) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [RPG Maker XP/VX/VX Ace](#rpg-maker-xpvxvx-ace) | MKXP-Z | MKXP-Z, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [ScummVM](#scummvm) | ScummVM | ScummVM, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [Siglus / RealLive](#siglus--reallive) | Siglus | Siglus, RealLive (RLVM), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [Tyrano](#tyrano) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [Unity](#unity) | Unity Mono player | Unity Mono player, Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [Video](#video) | mpv player | mpv player |
-| [VNDS](#vnds) | VNDS-LOVE | VNDS-LOVE, CrossOver *(provider)*, Sikarugir *(provider)* |
-| [Web](#web) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [VNDS](#vnds) | VNDS-LOVE | VNDS-LOVE, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [Web](#web) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [Window](#window) | Window capture | Window capture |
-| [Windows Game](#windows-game) | Sikarugir | Sikarugir, CrossOver |
-| [WOLF RPG Editor](#wolf-rpg-editor) | Browser Woditor | Browser Woditor, CrossOver *(provider)*, Sikarugir *(provider)* |
+| [Windows Game](#windows-game) | Sikarugir | Sikarugir, CrossOver, WineCX |
+| [WOLF RPG Editor](#wolf-rpg-editor) | Browser Woditor | Browser Woditor, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 
 ## 32-bit Mac
 
@@ -84,7 +84,7 @@ Runtimes tabs: 32-bit Mac (managed).
 
 Module `ai5`.
 
-Backends: AI5-SDL2 (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: AI5-SDL2 (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: AI5WIN (managed).
 
@@ -106,7 +106,7 @@ Inspector details: Game profile, Original file version, Version source, Script a
 
 Module `alicesoft`.
 
-Backends: System 1–3 (default), System 3.5–3.9, System 4, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: System 1–3 (default), System 3.5–3.9, System 4, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: AliceSoft → Alice tools (managed); AliceSoft → System 1–3 (managed); AliceSoft → System 3.5–3.9 (managed); AliceSoft → System 4 (managed); AliceSoft → System1–3 source (managed); AliceSoft → System3.x source (managed).
 
@@ -197,7 +197,7 @@ Runtimes tabs: Tools → Apktool (managed); Tools → JADX (managed); MacLaunche
 
 Module `bgi`.
 
-Backends: Program tools (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Program tools (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: Tools → msg-tool (managed).
 
@@ -223,7 +223,7 @@ Inspector details: Game file.
 
 Module `catsystem2`.
 
-Backends: Archive and script tools (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Archive and script tools (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Inspector details: Archive format, Native requirements, Support.
 
@@ -236,7 +236,7 @@ Inspector details: Archive format, Native requirements, Support.
 
 Module `construct`.
 
-Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 ### Electron settings
 
@@ -268,7 +268,7 @@ Inspector details: Construct runtime.
 
 Module `dosbox`.
 
-Backends: DOSBox Staging (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: DOSBox Staging (default), UZDoom *(provider)*, Raze *(provider)*, DREAMM *(provider)*, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: DOSBox (managed).
 
@@ -302,7 +302,7 @@ Inspector details: Game file.
 
 Module `fvp`.
 
-Backends: RFVP (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: RFVP (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: RFVP (managed); Tools → msg-tool (managed).
 
@@ -337,7 +337,7 @@ Runtimes tabs: Flash → Flash Player (managed); Flash → Ruffle (managed); Fla
 
 Module `fna`.
 
-Backends: FNA (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: FNA (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: FNA (managed).
 
@@ -362,7 +362,7 @@ Inspector details: Game assembly version, Game framework version, Framework, .NE
 
 Module `gamemaker`.
 
-Backends: OpenGMK, Butterscotch (default), Official GameMaker, Game's macOS app, Inspect only, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: OpenGMK, Butterscotch (default), Official GameMaker, Game's macOS app, Inspect only, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: GameMaker → Official (managed); GameMaker → Butterscotch (managed); GameMaker → Classic (OpenGMK) (managed); GameMaker → GM8Decompiler (managed); GameMaker → UMT (managed); GameMaker → Graphics helper (managed).
 
@@ -404,7 +404,7 @@ Inspector details: Asset compiler version, Version evidence, Game app version, D
 
 Module `godot`.
 
-Backends: Godot (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Godot (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: Godot (managed).
 
@@ -423,7 +423,7 @@ Runtimes tabs: Godot (managed).
 
 Module `xash3d`.
 
-Backends: Xash3D FWGS (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Xash3D FWGS (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: Xash3D FWGS (managed).
 
@@ -435,7 +435,7 @@ Inspector details: Game folder, Game library.
 
 Module `hashlink`.
 
-Backends: HashLink (Intel Mac; Rosetta on Apple Silicon) (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: HashLink (Intel Mac; Rosetta on Apple Silicon) (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: HashLink (managed); HashLink → hlbc (managed).
 
@@ -456,7 +456,7 @@ Inspector details: Bytecode version, Bytecode, Version source, Confidence, SDL p
 
 Module `haxe`.
 
-Backends: Native build inspection (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Native build inspection (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Inspector details: Target, CPU, Support.
 
@@ -468,7 +468,7 @@ Inspector details: Target, CPU, Support.
 
 Module `gemrb`.
 
-Backends: GemRB (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: GemRB (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: GemRB (managed); GemRB → Near Infinity (managed).
 
@@ -547,7 +547,7 @@ Runtimes tabs: Java (Temurin) (managed).
 
 Module `kirikiri`.
 
-Backends: KiriKiri SDL2 (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: KiriKiri SDL2 (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: Tools → msg-tool (managed); KiriKiri (managed).
 
@@ -568,7 +568,7 @@ Inspector details: Detected engine/script version, Engine family, Version confid
 
 Module `love`.
 
-Backends: LÖVE (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: LÖVE (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: LÖVE → LJD (managed); LÖVE → unluac (managed); LÖVE (managed).
 
@@ -607,7 +607,7 @@ Inspector details: Game file.
 
 Module `mages`.
 
-Backends: Impacto Windows HD (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Impacto Windows HD (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: MAGES. → sc3tools (managed); MAGES. (managed).
 
@@ -621,7 +621,7 @@ Inspector details: Data edition, Archive format, Script format, Original executa
 
 Module `minori`.
 
-Backends: ReMinori (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: ReMinori (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: Minori (managed).
 
@@ -636,7 +636,7 @@ Inspector details: Data format, Original executable version.
 
 Module `ikemen`.
 
-Backends: Ikemen GO (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Ikemen GO (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: Ikemen GO (managed); Ikemen GO → SFF Tools (managed).
 
@@ -680,7 +680,7 @@ Inspector details: Title ID, Build ID, Selected update.
 
 Module `nitroplus`.
 
-Backends: Nitroplus (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Nitroplus (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: Nitroplus (managed).
 
@@ -694,7 +694,7 @@ Inspector details: Script format, Authored script version, Script version source
 
 Module `nscripter`.
 
-Backends: ONScripter-Yuri (default), ONScripter-EN, ONScripter-Yuri Web, External runtime, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: ONScripter-Yuri (default), ONScripter-EN, ONScripter-Yuri Web, External runtime, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: NScripter → ONScripter-Yuri (managed); NScripter → ONScripter-EN (managed).
 
@@ -800,7 +800,7 @@ Runtimes tabs: Prosper (managed).
 
 Module `renpy`.
 
-Backends: Ren'Py Patch, Ren'Py SDK (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Ren'Py Patch, Ren'Py SDK (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: Ren'Py (managed).
 
@@ -819,7 +819,7 @@ Inspector details: Runtime version.
 
 Module `easyrpg`.
 
-Backends: EasyRPG Player (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: EasyRPG Player (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: EasyRPG Player (managed).
 
@@ -849,7 +849,7 @@ Inspector details: Game format, Maps, Declared text encoding, DynRPG plug-ins.
 
 Module `mv`.
 
-Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: NW.js (managed).
 
@@ -885,7 +885,7 @@ Runtimes tabs: NW.js (managed).
 
 Module `mz`.
 
-Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 ### Electron settings
 
@@ -919,7 +919,7 @@ Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOve
 
 Module `rgss`.
 
-Backends: MKXP-Z (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: MKXP-Z (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: MKXP-Z (managed).
 
@@ -1006,7 +1006,7 @@ Runtimes tabs: MKXP-Z (managed).
 
 Module `scummvm`.
 
-Backends: ScummVM (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: ScummVM (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: ScummVM → ScummVM player (managed); ScummVM → ScummVM Tools (managed).
 
@@ -1036,7 +1036,7 @@ Inspector details: Data format, Game ID, Game edition, Inspected with ScummVM.
 
 Module `siglus`.
 
-Backends: Siglus (default), RealLive (RLVM), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Siglus (default), RealLive (RLVM), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: Siglus → Siglus SceneScript Utility (managed); RealLive (RLVM) → RLdev (managed); Siglus (managed); RealLive (RLVM) (managed); RealLive (RLVM) → MacLauncher adapter (managed).
 
@@ -1058,7 +1058,7 @@ Inspector details: Format, Script compiler.
 
 Module `tyrano`.
 
-Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 ### Electron settings
 
@@ -1090,7 +1090,7 @@ Inspector details: Tyrano version.
 
 Module `unity`.
 
-Backends: Unity Mono player (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Unity Mono player (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: Unity (managed); Unity → AssetRipper (managed); Unity → Cpp2IL (managed).
 
@@ -1139,7 +1139,7 @@ Inspector details: Container.
 
 Module `vnds`.
 
-Backends: VNDS-LOVE (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: VNDS-LOVE (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: VNDS → VNDS-LOVE (managed).
 
@@ -1157,7 +1157,7 @@ Runtimes tabs: VNDS → VNDS-LOVE (managed).
 
 Module `web`.
 
-Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 ### Electron settings
 
@@ -1197,9 +1197,9 @@ Backends: Window capture (default).
 
 Module `crossover`.
 
-Backends: Sikarugir (default), CrossOver.
+Backends: Sikarugir (default), CrossOver, WineCX.
 
-Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics → DirectX → Vulkan, DirectX → Metal, Vulkan drivers and Video codecs (managed).
+Runtimes tabs: CrossOver (managed); Sikarugir (managed); WineCX (managed); Graphics → DirectX → Vulkan, DirectX → Metal, Vulkan drivers and Video codecs (managed).
 
 ### Sikarugir settings
 
@@ -1240,6 +1240,25 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); Graphics → DirectX �
 | Game arguments | List |  | One argument per line. |
 | Wine debug channels (optional) | Text |  | Wine channel filters, such as -all or +seh. |
 
+### WineCX settings
+
+| Setting | Values | Default | Description |
+| --- | --- | --- | --- |
+| Default Direct3D engine | Runtime automatic, the runtime's named engines and versions installed in Runtimes | Runtime automatic | Applies to every Direct3D API without a choice of its own. [Translator selection](TRANSLATORS.md). |
+| Direct3D 8 / 9 / 10 / 11 | Installed implementations of that API or Automatic | Default Direct3D engine | Without a choice of its own, the API uses the default Direct3D engine. The list marks this on its automatic entry, or as **Default Direct3D engine** when that default names a specific engine. Choices that share DXGI or native modules change together. A missing or incompatible choice falls back to a consistent set of components, and the inspector shows the selected and used components with the reason. |
+| Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
+| Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
+| Video codecs | Runtime default or installed codec component | Runtime default | Plugin-only search paths use a shared dependency view and the runtime's established core; optional unusable plugins are reported separately. |
+| Game temporal integration | On/Off | Off | Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later with a Wine version that supports its game integration, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver build with a temporal carrier, a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, independent of this setting; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
+| Synchronization | Automatic; MSync; Off | Automatic | Availability depends on the selected Wine version. |
+| Language locale | Text |  | Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. Empty uses the language of macOS. |
+| Windows version | Windows 10; Windows 11; Windows 7; Windows XP | Windows 10 |  |
+| Windows executable (optional) | Text |  | Relative path inside the game folder. Automatic selects the game's executable. |
+| Enable BepInEx winhttp override | On/Off | Off | Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed. |
+| Wine DLL overrides | List |  | One library=order entry per line, such as winhttp=n,b. |
+| Game arguments | List |  | One argument per line. |
+| Wine debug channels (optional) | Text |  | Wine channel filters, such as -all or +seh. |
+
 Inspector details: Windows CPU, Executable, CrossOver application.
 
 | Action group | Actions |
@@ -1251,7 +1270,7 @@ Inspector details: Windows CPU, Executable, CrossOver application.
 
 Module `wolfrpg`.
 
-Backends: Browser Woditor (default), CrossOver *(provider)*, Sikarugir *(provider)*.
+Backends: Browser Woditor (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
 Runtimes tabs: WOLF RPG → WolfTL (managed); WOLF RPG → UberWolf (managed); WOLF RPG → Browser Woditor (managed).
 

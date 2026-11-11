@@ -13,7 +13,7 @@ The main window, called the library window, lists the games and shows the detail
 
 Settings, Runtimes, External and Credits open in separate windows. Settings, Runtimes and Credits are loaded in hidden windows once the launcher's startup runtime inventory finishes, so opening one shows a view that has already drawn; closing one hides it, and the next opening shows it again with the current state. The launcher still quits when its last visible window closes. A window opened before it is prepared, and External, shows its frame at once in the window's background color and draws its view with its first state, without an intermediate loading message. Save editing, runtime settings and live-variable editing also have their own dedicated windows, while cheat controls open in a modal.
 
-When CrossOver or Sikarugir requests activation during launch, MacLauncher cooperatively yields to a window belonging to that launch's Wine process tree. This initial handoff runs only while the launcher is active and ends if the foreground application changes. It waits at most two minutes for the window and stops when activation is confirmed or the launch ends.
+When a Wine runtime (CrossOver, Sikarugir or WineCX) requests activation during launch, MacLauncher cooperatively yields to a window belonging to that launch's Wine process tree. This initial handoff runs only while the launcher is active and ends if the foreground application changes. It waits at most two minutes for the window and stops when activation is confirmed or the launch ends.
 
 By default the window is up to 1440 × 900, fitted to the usable desktop, and it has a minimum size of 900 × 560. At first the library uses the full width. Selecting a game opens a wide inspector on the right, and switching games keeps row heights stable. When the inspector is closed, or Details is turned off in the toolbar, its space goes back to the library; closing the inspector also returns keyboard focus to the selected row. Each pane scrolls on its own.
 
@@ -346,7 +346,7 @@ Sidebar entries are grouped under headings, in this order:
 
 - **Game engines**, listed alphabetically.
 - **Consoles and mobile**: PS5 (AnyPS5), Prosper, Switch / Switch 2 (nxnative), MacLauncher Android, Mac.apk, AIM and PlayCover.
-- **Compatibility**: CrossOver, Sikarugir, Steam client bridge, DOSBox and 32-bit Mac.
+- **Compatibility**: CrossOver, Sikarugir, WineCX, Steam client bridge, DOSBox and 32-bit Mac.
 - **Graphics**: the Effects, DirectX → Vulkan, DirectX → Metal, Vulkan drivers and Video codecs entries.
 - **Tools**, a single entry set apart by a divider line, without a heading that would repeat its name.
 

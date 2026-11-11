@@ -15,7 +15,7 @@ A game receives the variables of the translators that its runtime and settings c
 | AnyPS5 | AnyPS5 and the selected Vulkan driver. |
 | Prosper | Prosper and the selected Vulkan driver. |
 
-AIM has no translator choice and no translator environment. WineD3D and Wine vkd3d belong to the Wine runtime, so their variables, such as `WINE_D3D_CONFIG`, are set with CrossOver or Sikarugir.
+AIM has no translator choice and no translator environment. WineD3D and Wine vkd3d belong to the Wine runtime, so their variables, such as `WINE_D3D_CONFIG`, are set with CrossOver, Sikarugir or WineCX.
 
 ## Global values
 
@@ -25,7 +25,7 @@ AIM has no translator choice and no translator environment. WineD3D and Wine vkd
 | --- | --- |
 | MacLauncher Android | MacLauncher Android, Android JVM, Android ART and ANGLE |
 | Mac.apk | Mac.apk |
-| AnyPS5, Prosper, CrossOver, Sikarugir | The runtime's own translator |
+| AnyPS5, Prosper, CrossOver, Sikarugir, WineCX | The runtime's own translator |
 | DXVK, vkd3d-proton, DXMT, D3DMetal, GStreamer codecs, MoltenVK, KosmicKrisp | The graphics translator or Vulkan driver |
 
 These values apply to every game that uses the translator. ANGLE's values are set in the **MacLauncher Android** block and also reach Mac.apk games. A setting change in one Settings window appears in every open launcher window at once.
@@ -195,7 +195,7 @@ Applies to games whose Direct3D 8, 9, 10 or 11 choice uses DXVK, D8VK or D9VK. I
 | Locked | Reason |
 | --- | --- |
 
-For CrossOver and Sikarugir launches using DXVK's DXGI, an NVIDIA vendor override (`dxgi.customVendorId = 10de`) adds `dxgi.customDeviceDesc = "<GPU name> (DXVK)"` to `DXVK_CONFIG`. This applies to both DXVK and vkd3d-proton. The name comes from cached graphics hardware metadata; if it is unavailable or several adapter names are present, no description is added. Every existing `DXVK_CONFIG` entry is kept, and an explicit `dxgi.customDeviceDesc`, including an empty value, takes precedence. The suffix distinguishes DXGI's presentation from Wine's display driver description without changing the GPU model. NVAPI continues to report its own device name.
+For CrossOver, Sikarugir and WineCX launches using DXVK's DXGI, an NVIDIA vendor override (`dxgi.customVendorId = 10de`) adds `dxgi.customDeviceDesc = "<GPU name> (DXVK)"` to `DXVK_CONFIG`. This applies to both DXVK and vkd3d-proton. The name comes from cached graphics hardware metadata; if it is unavailable or several adapter names are present, no description is added. Every existing `DXVK_CONFIG` entry is kept, and an explicit `dxgi.customDeviceDesc`, including an empty value, takes precedence. The suffix distinguishes DXGI's presentation from Wine's display driver description without changing the GPU model. NVAPI continues to report its own device name.
 
 ### vkd3d-proton
 

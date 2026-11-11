@@ -48,7 +48,7 @@ Some temporal upscalers, such as MacLauncher's FSR 2 and FSR 3, need the camera 
 - In Godot games, the metadata comes from eligible native Metal views through the [Godot adapter](../../src/modules/godot/graphics/README.md).
 - The [Streamline adapter](../../src/modules/crossover/temporal/streamline/README.md) keeps the game's original interposer and passes its camera constants through the [DXMT adapter](../../src/modules/crossover/temporal/dxmt/README.md).
 
-DXMT is a Direct3D renderer that runs Windows games on Metal. The adapted DXMT components include their LGPL notice and corresponding source, whereas compatible original DXMT support libraries are installed separately from the selected CrossOver or Sikarugir engine.
+DXMT is a Direct3D renderer that runs Windows games on Metal. The adapted DXMT components include their LGPL notice and corresponding source, whereas compatible original DXMT support libraries are installed separately from the selected Wine runtime.
 
 ### Model acquisition
 
