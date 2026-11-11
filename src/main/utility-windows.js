@@ -81,12 +81,14 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     if (spare === record) spare = null;
     record.hidden = false;
     const { win } = record;
-    if (!record.loaded) {
+    if (!record.loaded && !switched) {
       focus(win, activate);
       record.shown = true;
       await record.ready;
       return win;
     }
+    // A spare switched while loading draws the view from the first state it reads.
+    if (!record.loaded) await record.ready;
     if (navigation) beforeShow(win);
     if (present) await present(win, { view: record.context.view, revision: record.context.revision, switched, navigation, shown: record.shown, activate });
     else focus(win, activate);
@@ -108,8 +110,8 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
       return win;
     }
     let switched = false;
-    // A spare still loading another view is left to finish; this view gets its own window.
-    if (!record && kept.has(request.view) && spare?.loaded && !spare.win.isDestroyed()) {
+    // A spare still loading is already partway: it takes this view once loaded.
+    if (!record && kept.has(request.view) && spare && !spare.win.isDestroyed()) {
       // The spare takes this view: its previous view no longer has a window.
       record = spare;
       if (windows.get(record.context.view) === record) windows.delete(record.context.view);

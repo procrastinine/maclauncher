@@ -2235,6 +2235,7 @@ const launcherWindows = new Set();
 const activityDelivery = require("./activity-delivery").createActivityDelivery((win, message) =>
   win.webContents.send("launcher:activity", message));
 const saveEditorWindows = new Map();
+const KEPT_UTILITY_VIEWS = ["settings", "runtimes", "credits"];
 function utilityWindowSize(options) {
   const workArea = screen.getPrimaryDisplay().workAreaSize;
   return { width: Math.min(options.width, Math.max(options.minWidth, workArea.width - 48)),
@@ -2262,25 +2263,16 @@ function utilityViewDrawn(win, revision, limitMs) {
 }
 // A Settings, Runtimes or Credits page holds all three views, kept current by
 // every state, so switching only changes which one is displayed; a request
-// that navigates is drawn from the state sent with it. Either way the window
-// shows once its page reports the request drawn. A page never shown draws
-// while hidden and reports before the window shows; one hidden after it was
-// shown draws only while visible, so its window shows transparent until then.
-async function presentUtilityWindow(win, { view, revision, switched, navigation, shown, activate }) {
-  const show = () => {
-    if (win.isDestroyed()) return;
-    if (!activate) { win.showInactive(); return; }
-    if (win.isMinimized()) win.restore();
-    win.show(); win.focus();
-  };
-  if (!switched && !navigation) { show(); return; }
+// that navigates is drawn from the state sent with it. These pages keep
+// drawing while hidden, so the window shows once its page reports that the
+// frame holding the request has been produced.
+async function presentUtilityWindow(win, { view, revision, switched, navigation, activate }) {
   if (switched && !navigation && !win.isDestroyed()) win.webContents.send("launcher:utilityViewSwitch", { view, revision });
-  if (!shown) { await utilityViewDrawn(win, revision, 500); show(); return; }
+  if (switched || navigation) await utilityViewDrawn(win, revision, 300);
   if (win.isDestroyed()) return;
-  win.setOpacity(0);
-  show();
-  await utilityViewDrawn(win, revision, 300);
-  if (!win.isDestroyed()) win.setOpacity(1);
+  if (!activate) { win.showInactive(); return; }
+  if (win.isMinimized()) win.restore();
+  win.show(); win.focus();
 }
 const utilityWindows = createUtilityWindowController({
   createWindow: (options, request) => {
@@ -2288,8 +2280,12 @@ const utilityWindows = createUtilityWindowController({
       ...(request?.view === "appAction" ? { title: moduleAppActions.title(request.moduleId, request.actionId) || options.title } : {}),
       ...utilityWindowSize(options),
       backgroundColor: nativeTheme.shouldUseDarkColors ? "#111318" : "#f5f6f8",
+      // A Settings, Runtimes or Credits window may wait hidden for its next
+      // view; it keeps drawing and running its frame callbacks while hidden.
+      ...(KEPT_UTILITY_VIEWS.includes(request?.view) ? { paintWhenInitiallyHidden: true } : {}),
       webPreferences: { preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
-        nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: devtoolsEnabled }
+        nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: devtoolsEnabled,
+        ...(KEPT_UTILITY_VIEWS.includes(request?.view) ? { backgroundThrottling: false } : {}) }
     });
   },
   loadView: (win, request) => loadLauncherView(win, request),
@@ -2303,7 +2299,7 @@ const utilityWindows = createUtilityWindowController({
   onContextChange: win => sendState(win),
   // Settings, Runtimes and Credits share one hidden window prepared after the
   // startup inventory and again after each opening; closing one hides it.
-  keptViews: ["settings", "runtimes", "credits"],
+  keptViews: KEPT_UTILITY_VIEWS,
   adaptWindow: (win, options, request) => {
     win.__maclauncherWindowType = request.view;
     win.setTitle(options.title);

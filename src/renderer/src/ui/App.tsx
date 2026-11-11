@@ -122,14 +122,20 @@ export default function App() {
   if (utilityView && utilityRevision !== undefined) utilityNavigation.current[utilityView] = utilityRevision;
   useEffect(() => {
     if (!keptUtility || !api?.onUtilityViewSwitch) return;
-    // The main process switches the displayed view directly, without a render, then shows the window once drawn.
-    let frames: number[] = [];
+    // The main process switches the displayed view directly, without a render,
+    // then shows the window once the frame holding it has been produced: the
+    // task after the next frame callback. A window that receives no frames
+    // while hidden reports after one frame interval instead.
+    let frame = 0, timer = 0;
     const unsubscribe = api.onUtilityViewSwitch(({ view, revision }) => {
       for (const slot of document.querySelectorAll<HTMLElement>("[data-utility-view]")) slot.hidden = slot.dataset.utilityView !== view;
-      frames.forEach(cancelAnimationFrame);
-      frames = [requestAnimationFrame(() => { frames.push(requestAnimationFrame(() => api.utilityWindowDrawn?.(revision))); })];
+      cancelAnimationFrame(frame); clearTimeout(timer);
+      let reported = false;
+      const report = () => { if (reported) return; reported = true; cancelAnimationFrame(frame); clearTimeout(timer); api.utilityWindowDrawn?.(revision); };
+      frame = requestAnimationFrame(() => { const channel = new MessageChannel(); channel.port1.onmessage = report; channel.port2.postMessage(0); });
+      timer = window.setTimeout(report, 20);
     });
-    return () => { frames.forEach(cancelAnimationFrame); unsubscribe(); };
+    return () => { cancelAnimationFrame(frame); clearTimeout(timer); unsubscribe(); };
   }, [api, keptUtility]);
   useEffect(() => {
     if (!utilityView || utilityRevision === undefined || !api?.utilityWindowDrawn) return;

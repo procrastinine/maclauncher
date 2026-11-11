@@ -92,25 +92,32 @@ test("one hidden spare serves Settings, Runtimes and Credits: switched on open, 
   assert.equal(reopened.destroyed, true);
   assert.equal(live().length, 1, "Idle, one hidden window remains");
 
-  // A spare still loading another view is left to finish; the view gets its own window.
+  // A spare still loading is already partway: it takes the requested view once loaded.
   live()[0].destroy();
   let release; holdLoad = new Promise(resolve => { release = resolve; });
   void f.controller.prepare();
   const loading = f.windows.at(-1);
   assert.equal(f.loads.at(-1).request.view, "settings");
+  const count = f.windows.length;
   const opening = f.controller.open({ view: "credits" });
-  const credits = f.windows.at(-1);
-  assert.notEqual(credits, loading);
-  assert.equal(credits.shows, 1, "Its frame shows at once");
-  release(); holdLoad = null; await opening; await runIdle();
+  await settle();
+  assert.equal(f.windows.length, count, "No fresh window while the spare loads");
+  assert.equal(loading.shows, 0, "It shows only after its load");
+  assert.equal(f.controller.stateForWindow(loading, {}).utilityWindow.view, "credits", "Its first state names the requested view");
+  release(); holdLoad = null;
+  const credits = await opening;
+  assert.equal(credits, loading);
+  assert.equal(credits.shows, 1);
+  assert.equal(presented.at(-1).switched, true);
+  await runIdle();
 
   // With no other hidden window, a closed view stays as the spare.
-  loading.destroy();
+  live().filter(win => win !== credits).forEach(win => win.destroy());
   assert.equal(closeWindow(credits), true); await runIdle();
   assert.equal(credits.destroyed, false);
   assert.ok(f.controller.isHidden(credits));
   assert.equal(await f.controller.open({ view: "credits" }), credits, "Reopening shows the same window");
-  assert.equal(adapted.length, 2, "Its own view needs no switch");
+  assert.equal(adapted.length, 3, "Its own view needs no switch");
   await runIdle();
 
   quitting = true;
