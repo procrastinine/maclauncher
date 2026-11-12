@@ -431,3 +431,36 @@ test("D3DMetal resolves only the selected matched camera builtin without DXMT", 
   assert.equal(Temporal.resolvePlan(entry,{}, {...options,runtimeId:"sikarugir"}),null);
   fs.writeFileSync(path.join(providerRoot,cameraBridge.unix),"changed");assert.equal(Temporal.resolvePlan(entry,{},options),null);
 });
+
+test("the Vulkan DLSS route places the Streamline camera adapter for the NGX core without DXMT or a setting", async t => {
+  const f = fixture(t), Temporal = require("../src/modules/crossover/temporal"), Steps = require("../src/modules/crossover/sources/launch-steps");
+  const graphicsRoot = path.join(f.root, "graphics");
+  fs.cpSync(f.providerRoot, path.join(graphicsRoot, "temporal/streamline"), { recursive: true });
+  const exe = path.join(f.gameRoot, "game.exe"), bytes = pe();bytes.writeUInt16LE(2, 0x96);bytes.writeUInt16LE(3, 0x98 + 68);fs.writeFileSync(exe, bytes);
+  const entry = { gamePath: f.gameRoot, runtimeData: { crossover: { sourceRoot: f.gameRoot, windowsExecutablePath: exe, executableArchitecture: "x86_64", detectionComplete: true } } };
+  fs.unlinkSync(f.target);fs.writeFileSync(f.target, pe());
+  const original = fs.readFileSync(f.target);
+  // Without forwarding, the game keeps its interposer.
+  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { root: graphicsRoot, forwarding: false }), null);
+  const plan = Temporal.resolveVulkanCameraPlan(entry, {}, { root: graphicsRoot, forwarding: true });
+  const streamline = { source: "streamline", depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true, methods: ["fsr2", "fsr3"] };
+  assert.equal(plan.kind, "vulkan-camera");assert.equal(plan.dxmt, undefined);
+  assert.deepEqual(plan.inputs, { ...streamline, routes: [streamline] });
+  assert.deepEqual(plan.libraries.map(row => [row.relativePath, row.adapter]), [["plugins/sl.interposer.dll", "streamline"]]);
+  // The camera unlocks the camera-based upscalers beside a FidelityFX scene source.
+  const merged = require("../src/modules/crossover/graphics-inputs").merge(plan.inputs, { depth: true, cameraProjection: true, source: "fidelityfx" });
+  assert.equal(merged.cameraProjection, true);assert.equal(merged.source, "streamline+fidelityfx");
+  // The launch folder replaces only its private copy; the game's own folder keeps the original library.
+  const directory = path.join(f.root, "runtime");fs.mkdirSync(directory);
+  const context = { userDataDir: f.root, logger: { warn() {}, info() {}, log() {} } };
+  const folder = await Steps.launchFolder(entry, context, { source: { id: "crossover", label: "CrossOver" }, directory, originalRoot: f.gameRoot,
+    executable: exe, executableArchitecture: "x86_64", vulkanCamera: plan });
+  assert.equal(folder.vulkanCamera, plan);assert.equal(folder.cameraBridge, null);
+  assert.notEqual(folder.gameRoot, f.gameRoot);
+  assert.deepEqual(fs.readFileSync(path.join(folder.gameRoot, "plugins/sl.interposer.dll")), fs.readFileSync(path.join(f.providerRoot, "sl.interposer.dll")));
+  assert.deepEqual(fs.readFileSync(path.join(folder.gameRoot, "plugins", Streamline.ORIGINAL)), original);
+  assert.deepEqual(fs.readFileSync(f.target), original);
+  // An interposer whose interface the adapter does not cover stays in place.
+  fs.writeFileSync(f.target, pe([...names, "slFutureAPI"]));
+  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { root: graphicsRoot, forwarding: true }), null);
+});

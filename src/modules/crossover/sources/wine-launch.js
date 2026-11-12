@@ -256,7 +256,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const plans = await require("./launch-graphics").resolve(entry, context, { source, install: selected.install, settings, host,
     executableArchitecture: match.executableArchitecture, root: dependencies.graphicsRoot, resolveTranslators: dependencies.resolveTranslators });
   const { translatorPlan, translatorEnvironment, translatorView, vulkanDLSS, ngxScene, scenePlan } = plans;
-  let { cameraBridge } = plans;settings = plans.settings;
+  let { cameraBridge, vulkanCamera } = plans;settings = plans.settings;
   await context.flushRuntimeUses?.();
   if (selected.install.needsRosetta && !rosetta.isAvailable()) await rosetta.ensure(context);
   context.signal?.throwIfAborted();
@@ -266,10 +266,10 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   if (!existingEnvironment) for (const name of ["home", "tmp", "prefixes", "runtime-view"]) Writable.assertOwnDirectory(directory, path.join(directory, name));
   const originalRoot = match.sourceRoot;
   const folder = await Steps.launchFolder(entry, context, { source, directory, originalRoot,
-    executable: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture, cameraBridge, scenePlan });
-  let { view: cameraView, gameRoot, executablePath } = folder;cameraBridge = folder.cameraBridge;
+    executable: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture, cameraBridge, vulkanCamera, scenePlan });
+  let { view: cameraView, gameRoot, executablePath } = folder;cameraBridge = folder.cameraBridge;vulkanCamera = folder.vulkanCamera;
   const GraphicsInputs = require("../graphics-inputs");
-  context.graphicsInputs = GraphicsInputs.inputs(selected.install, GraphicsInputs.merge(cameraBridge?.inputs, plans.sceneInputs), { fallback: "x86_64" });
+  context.graphicsInputs = GraphicsInputs.inputs(selected.install, GraphicsInputs.merge(cameraBridge?.inputs, vulkanCamera?.inputs, plans.sceneInputs), { fallback: "x86_64" });
   const nativeInputs = [selected.install.executablePath, selected.install.serverPath,
     ...(translatorPlan.layout.unixRoot ? ["ntdll.so", "wine"].map(name => path.join(translatorPlan.layout.unixRoot, name)).filter(file => fs.existsSync(file)) : [])]
     .map(file => ({ path: file, sha256: require("../../shared/runtime/verified-identity").fileDigest(file).sha256 }));

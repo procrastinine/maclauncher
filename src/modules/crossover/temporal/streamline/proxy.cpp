@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <initializer_list>
 #include <sl_core_api.h>
 #include "camera.hpp"
 #include "resources.hpp"
@@ -67,6 +68,14 @@ bool viewport(const sl::BaseStructure **inputs, uint32_t count, uint32_t &id) {
     }
     return found;
 }
+// MacLauncher's NGX core, under either name its routes place in system32: the
+// game's NGX loads one of nvngx.dll and _nvngx.dll.
+HMODULE ngxCore(std::initializer_list<const char *> symbols) {
+    for (const auto name : {L"nvngx.dll", L"_nvngx.dll"})
+        if (const auto module = GetModuleHandleW(name))
+            for (const auto symbol : symbols) if (GetProcAddress(module, symbol)) return module;
+    return nullptr;
+}
 using SetCamera = int (__cdecl *)(const RSTemporalCamera *);
 using ClearCamera = void (__cdecl *)();
 thread_local const RSTemporalCamera *activeCamera = nullptr;
@@ -75,7 +84,7 @@ struct CameraScope {
     const RSTemporalCamera *previous;
     SetCamera set = nullptr;ClearCamera clear = nullptr;bool deferred=false;
     explicit CameraScope(const RSTemporalCamera *next,bool deferredOnly=false,bool deferredPublished=false) : previous(activeCamera) {
-        auto ngx = GetModuleHandleW(L"nvngx.dll");
+        auto ngx = ngxCore({"MacLauncherSetTemporalCamera"});
         if (ngx) { set = reinterpret_cast<SetCamera>(GetProcAddress(ngx, "MacLauncherSetTemporalCamera"));clear = reinterpret_cast<ClearCamera>(GetProcAddress(ngx, "MacLauncherClearTemporalCamera")); }
         if (!set || !clear) {
             auto bridge=GetModuleHandleW(L"maclauncher-temporal-camera.dll");
@@ -108,7 +117,7 @@ struct ResourceScope {
         std::memcpy(&legacy,next,sizeof(legacy));legacy.size=sizeof(legacy);legacy.version=1;return set(&legacy)!=0;
     }
     explicit ResourceScope(const MLStreamlineResourcesV2 *next):previous(activeResources){
-        auto ngx=GetModuleHandleW(L"nvngx.dll");
+        auto ngx=ngxCore({"MacLauncherSetStreamlineResourcesV2","MacLauncherSetStreamlineResourcesV1"});
         if(ngx){set=reinterpret_cast<SetResources>(GetProcAddress(ngx,"MacLauncherSetStreamlineResourcesV2"));clear=reinterpret_cast<ClearResources>(GetProcAddress(ngx,"MacLauncherClearStreamlineResourcesV2"));version2=set&&clear;
             if(!version2){set=reinterpret_cast<SetResources>(GetProcAddress(ngx,"MacLauncherSetStreamlineResourcesV1"));clear=reinterpret_cast<ClearResources>(GetProcAddress(ngx,"MacLauncherClearStreamlineResourcesV1"));}}
         if(!set||!clear)return;clear();activeResources=nullptr;

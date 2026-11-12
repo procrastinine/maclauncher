@@ -158,6 +158,29 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       inputs };
   } catch { return null; }
 }
+// The Streamline adapter on the Vulkan DLSS route (vulkan-dlss.js): the game's
+// Streamline interposer is replaced in the launch folder, and the adapter hands
+// the camera of the game's Streamline constants to the staged NGX core's
+// MacLauncherSetTemporalCamera, which adds it to that evaluation's frame. The
+// route forwards without a setting, so the adapter needs none either, and no
+// DXMT library or renderer setting is involved.
+function resolveVulkanCameraPlan(entry, context = {}, { settings = context.runtimeSettings || {}, forwarding = false, root } = {}) {
+  try {
+    if (!forwarding) return null;
+    const match = Detection.cachedWindowsExecutable(entry);if (!match) return null;
+    const executable = settings.executable ? path.resolve(match.sourceRoot, settings.executable) : match.windowsExecutablePath;
+    if (!Detection.inside(match.sourceRoot, executable)) return null;
+    root ||= require("../../shared/reshade").runtimeRoot(context.app);
+    const providerRoot = path.join(root, "temporal", "streamline");
+    const sources = libraries(match, executable).filter(sourcePath => libraryAdapter({ sourcePath }) === Streamline).flatMap(sourcePath => {
+      const inspected = Streamline.inspect(sourcePath, providerRoot);
+      return inspected.available ? [{ sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath), sourceSha256: inspected.sourceSha256, adapter: "streamline", providerRoot }] : [];
+    });
+    if (!sources.length) return null;
+    const route = { source: "streamline", depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true, methods: ["fsr2", "fsr3"] };
+    return { kind: "vulkan-camera", sourceRoot: match.sourceRoot, libraries: sources, inputs: { ...route, routes: [route] } };
+  } catch { return null; }
+}
 function restoreLibraries(libraries, gameRoot, cause, logger) {
   const failures = [];
   for (const library of libraries) {
@@ -300,5 +323,5 @@ function requirements(entry, context, options = {}) {
   const scene = once.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings).ready && resolveScenePlan(entry, context, { root: options.root });
   return [...camera, ...(scene?.requirements || [])];
 }
-module.exports = { FILES, rendererFiles,adapter, payload, libraries, libraryAdapter, matchingSupport, resolvePlan, sceneSourceInputs, prepareGame, restoreGame, environment, rendererFile,
+module.exports = { FILES, rendererFiles,adapter, payload, libraries, libraryAdapter, matchingSupport, resolvePlan, resolveVulkanCameraPlan, sceneSourceInputs, prepareGame, restoreGame, environment, rendererFile,
   requirements, sceneLibraries, sceneDemand, resolveScenePlan, restoreLibraries };
