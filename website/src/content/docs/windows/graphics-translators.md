@@ -103,7 +103,7 @@ MacLauncher KosmicKrisp is MacLauncher's own build of KosmicKrisp, published in 
 - transform feedback with primitives-generated queries, which ANGLE, the layer that provides OpenGL ES to Android games, needs before it offers the geometry and tessellation shaders of OpenGL ES 3.2 through Vulkan
 - sparse resources, on GPUs where Metal supports them, which Direct3D's tiled resources and feature level 12_0 rest on
 - pixel interlock, which vkd3d-proton turns into the rasterizer-ordered views of Direct3D 12 feature level 12_1
-- ray tracing, mesh shaders and variable rate shading, which feature level 12_2 adds; ray tracing and variable rate shading are on in conformance mode
+- ray tracing, mesh shaders and variable rate shading, which feature level 12_2 adds; ray tracing and variable rate shading are on in conformance mode, where ray tracing runs in shader code instead of on ray tracing hardware and is slow on every Mac
 
 The build adds plenty more, from mesh shaders to 64-bit floating point; [KosmicKrisp](/maclauncher/windows/kosmickrisp/#maclauncher-kosmickrisp) goes through it.
 

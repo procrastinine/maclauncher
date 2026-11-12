@@ -147,7 +147,7 @@ Many of these features are emulations that `KK_EMULATION` selects, as [Performan
 | Simultaneous memory allocations | 4,096 | 8,192 |
 | Indirect draw count | 65,535 | 2<sup>30</sup> |
 
-Upstream KosmicKrisp does not expose ray tracing. MacLauncher KosmicKrisp builds and traverses acceleration structures in compute passes and runs ray tracing pipelines as continuation dispatches, without Metal ray tracing. It reports acceleration structures, ray queries and ray tracing pipelines only when `KK_EMULATION` selects the `ray_tracing` entry. On top of ray tracing, it provides opacity micromaps (`VK_KHR_opacity_micromap`) and hit objects (`VK_EXT_ray_tracing_invocation_reorder`), whose execution is not reordered; the `opacity_micromap` and `invocation_reorder` entries select them.
+Upstream KosmicKrisp does not expose ray tracing. MacLauncher KosmicKrisp builds and traverses acceleration structures in compute passes and runs ray tracing pipelines as continuation dispatches, without Metal ray tracing. It reports acceleration structures, ray queries and ray tracing pipelines only when `KK_EMULATION` selects the `ray_tracing` entry. On top of ray tracing, it provides opacity micromaps (`VK_KHR_opacity_micromap`) and hit objects (`VK_EXT_ray_tracing_invocation_reorder`), whose execution is not reordered; the `opacity_micromap` and `invocation_reorder` entries select them. Ray tracing is slow on every Mac. Traversal is a shader walk on every Apple GPU family, so the ray tracing hardware of Apple9 and later is not used, and ray tracing pipelines are not stored in the Metal binary archive, so every launch compiles and links them again.
 
 ## Compatibility with MoltenVK
 
@@ -215,7 +215,7 @@ Tiled resources tier 2 rests on Vulkan sparse residency, so feature level 12_0 n
 | Performance, the default | 12_1 | 6.8 |
 | Conformance | 12_2 | 6.9 |
 
-Performance mode leaves ray tracing and fragment shading rates off, so vkd3d-proton reports neither ray tracing nor variable shading rate tier 2 and stays at feature level 12_1. Shader model 6.9 also needs the hit objects and opacity micromaps that build on ray tracing, so performance mode stays at shader model 6.8. Mesh shaders and the fragment barycentrics that vkd3d-proton requires for them are on in performance mode on every Apple GPU family, as are depth bounds tests on Apple10 and later. Conformance mode enables every entry: vkd3d-proton then reports feature level 12_2 and shader model 6.9, with ray tracing tier 1.2, variable shading rate tier 2 and, on every family, depth bounds tests. DXVK offers no level above 12_1.
+Performance mode leaves ray tracing and fragment shading rates off, so vkd3d-proton reports neither ray tracing nor variable shading rate tier 2 and stays at feature level 12_1. Shader model 6.9 also needs the hit objects and opacity micromaps that build on ray tracing, so performance mode stays at shader model 6.8. Mesh shaders and the fragment barycentrics that vkd3d-proton requires for them are on in performance mode on every Apple GPU family, as are depth bounds tests on Apple10 and later. Conformance mode enables every entry: vkd3d-proton then reports feature level 12_2 and shader model 6.9, with ray tracing tier 1.2, variable shading rate tier 2 and, on every family, depth bounds tests. Ray tracing in conformance mode is slow on every Mac, as [Limits](#limits) describes. DXVK offers no level above 12_1.
 
 ### OpenGL ES on Android through ANGLE
 
