@@ -130,6 +130,7 @@ Many of these features are emulations that `KK_EMULATION` selects, as [Performan
 - Independent float controls for each width. A shader can request preserved or flushed 32-bit denormals, and 16-bit and 64-bit denormals are preserved.
 - 8-bit floating point (`VK_EXT_shader_float8`), cooperative matrices in compute shaders (`VK_KHR_cooperative_matrix`) and long vectors (`VK_EXT_shader_long_vector`).
 - Compute shader derivatives in linear groups, fragment shader barycentrics where Metal reports barycentric coordinate support, and quad control (`VK_KHR_shader_quad_control`).
+- Mixed Float16 dot products with Float32 accumulation (`VK_VALVE_shader_mixed_float_dot_product`).
 - Subgroup operations in vertex, tessellation and geometry shaders as well as compute and fragment shaders, and required subgroup sizes for compute shaders.
 
 ### Presentation
@@ -262,11 +263,11 @@ Two modes set the starting selection:
 
 A chip preset, `apple7` to `apple11` or `mode=7` to `mode=11`, adds the entries that the named family runs natively to the selection. It does not apply that family's performance selection. `+name` and `-name` turn one entry on or off, with the names in the [switch table](#switch-table).
 
-Of the 43 entries, 33 are on in performance mode on every Apple GPU family. The other ten stay off:
+Of the 44 entries, 35 are on in performance mode on every Apple GPU family. The other nine stay off:
 
 - Ray tracing, with its opacity micromaps and hit objects, runs on software traversal on every family and is reported only when selected explicitly, with `+ray_tracing` or `conformance`.
 - Fragment shading rates would place every pixel shader of a vkd3d-proton game on the quad-group path, because vkd3d-proton enables the dynamic rate on every graphics pipeline with render targets.
-- 64-bit floating point, multisampled storage images, zero-initialized device memory and the FORCE_UNORM and FLOAT depth bias representations are off as well.
+- 64-bit floating point, multisampled storage images and the FORCE_UNORM and FLOAT depth bias representations are off as well.
 - Depth bounds tests are off on Apple7 to Apple9, where they would send every pipeline state object that enables the test through a software transaction; Apple10 and later run them natively.
 
 Without ray tracing and fragment shading rates, vkd3d-proton reports feature level 12_1 and shader model 6.8 in performance mode, as [Direct3D feature levels](#direct3d-feature-levels) explains. [Performance selections by Apple GPU family](#performance-selections-by-apple-gpu-family) lists every entry's selection and cost on each family.
@@ -389,7 +390,7 @@ The table gives each entry's state in performance mode on each Apple GPU family,
 | `fragment_shading_rate` | Off | Off | Off | Off | Off | Off Apple7-11: Metal variable rasterization rate is a separable map, not Vulkan per-draw primitive/attachment coarse shading. The driver uses quad reconstruction and sample publication on all families. |
 | `sampler_filter_minmax` | On | On | On | On | On | On Apple7-9: selected reduction samplers use multiple native taps to retain tiled tier4. On Apple10-11: native sampler reduction. |
 | `descriptor_heap` | On | On | On | On | On | On Apple7-11: Actual heap users load heap roots and descriptor packets through native resource handles. Descriptor-set shaders add no heap access, and device enablement alone does not defer command recording. |
-| `zero_initialize_device_memory` | Off | Off | Off | Off | Off | Off Apple7-11: Each flagged allocation clears the whole BO with CPU stores or a Metal buffer fill and completion wait. ZERO_INITIALIZED images use unoptimized storage to preserve zero bits. No shader instructions are added. |
+| `zero_initialize_device_memory` | On | On | On | On | On | On Apple7-11: explicit allocation clearing and one-time native image initialization preserve uncompressed image optimization. Block-compressed zero images keep raw native zero blocks; no additional shader or draw operations. |
 | `sliced_3d_views` | On | On | On | On | On | On Apple7-11: Selected 3D storage operations load slice bounds and adjust or reject Z coordinates; image-size queries replace the depth result. The native texture operation is retained. Sparse descriptors can add query-record loads. |
 | `maintenance11_views` | On | On | On | On | On | On Apple7-11: Native Metal plain and array views share the existing backing. Shader accesses select a typed descriptor address for the view dimension. |
 | `layered_block_views` | On | On | On | On | On | On Apple7-11: Reporting the property does not change shader lowering. Existing per-layer native views, descriptor selection, cube taps and retained layered attachment readers remain selected by actual operations and views. |
@@ -402,6 +403,7 @@ The table gives each entry's state in performance mode on each Apple GPU family,
 | `depth_bounds` | Off | Off | Off | On | On | Off Apple7-9: per-sample depth/stencil replay. On Apple10-11: native Metal depth bounds. |
 | `image_atomic64` | On | On | On | On | On | On Apple7: split-word image transactions under the existing hashed lock. On Apple8-11: native texture min/max publishes under the same mixed-operation lock. Actual atomics retain CAS retries and fences; shaders without 64-bit image operations are unchanged. |
 | `shader_module_identifier` | On | On | On | On | On | On Apple7-11: CPU-only stable identifier hashing and existing pipeline-cache lookups; no per-draw or per-sample work. |
+| `mixed_float_dot_product` | On | On | On | On | On | On Apple7-11: Float32 conversion and two native FMAs for each requested mixed dot product. No packed mixed-precision instruction is assumed. Float16 accumulation, BFloat16 and Float8 variants are not reported. |
 
 ## Feature table
 
@@ -533,6 +535,7 @@ KosmicKrisp variables have global values in **Settings → Environment variables
 | `KK_PERF_TRACKING_LOG` | Appends the timing records to this file instead of standard error. |
 | `KK_PERF_TRACKING_INTERVAL_MS`, `KK_PERF_TRACKING_INTERVAL_FRAMES` | Interval between records in milliseconds, 1000 by default, and in frames, 60 by default. A record is written when either interval elapses. |
 | `KK_PERF_TRACKING_COMPILES` | Any value other than `0` or `false` adds a record for each shader compilation. |
+| `KK_PERF_TRACKING_BUILD_REASONS` | `1`, together with `KK_PERF_TRACKING_COMPILES`, adds the outcome of each Metal library and binary archive lookup, the archive search keys and digests of function-constant values to the compile records, which tells shader-cache misses, archive misses and constant specializations apart. Deferred compute compiles are then followed from their start to shader destruction, with their first bind and first recorded dispatch, and a compile that was cancelled or whose shader was destroyed without a recorded dispatch is reported as such. |
 | `KK_PERF_TRACKING_SUBMITS` | `1` adds records for each queue submission and timeline wait. |
 | `KK_PERF_TRACKING_BARRIERS` | `1` adds records for each render pass, with its attachments, and for each barrier. |
 | `KK_PERF_TRACKING_GPU_ENCODERS` | `1` adds the GPU time of command encoders, measured with Metal 4 counter heaps, to the records. |
