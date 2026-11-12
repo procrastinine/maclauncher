@@ -129,6 +129,7 @@
       "!src/modules/shared/reshade/generation/fsr3/{build.mjs,backend.mm,metal-backend.hpp}",
       "!src/modules/crossover/temporal/vulkan/{build.mjs,overlay.mjs,source.json,*.[ch]}",
       "!src/modules/crossover/temporal/dxmt{,/**}",
+      "!src/modules/crossover/temporal/*.{h,hpp}",
       "!src/modules/crossover/temporal/{fidelityfx,streamline,xess}/{build.mjs,*.cpp,*.h,*.hpp}",
       "!src/modules/crossover/temporal/xess/reference-exports.json",
       "!src/modules/godot/graphics/{build.mjs,bridge.cpp,*.gd,*.glsl}",
