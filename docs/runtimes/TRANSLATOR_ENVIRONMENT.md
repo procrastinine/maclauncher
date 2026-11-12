@@ -148,9 +148,9 @@ Applies to games whose Direct3D 11 or 12 choice uses D3DMetal. Its global values
 | `D3DM_ENABLE_METALFX` | 1 translates DLSS requests to MetalFX. | Set by Game temporal integration in Runtime Settings. |
 | `D3DM_MAX_FPS` | Frame rate limit. | Set by D3DMetal FPS limit in Runtime Settings. |
 | `D3DM_MTL4` | 1 renders with Metal 4 where available. | Set by D3DMetal Metal 4 in Runtime Settings. |
-| `D3DM_VENDOR_ID` | PCI vendor ID that the adapter reports to the game. |  |
-| `D3DM_DEVICE_ID` | PCI device ID that the adapter reports to the game. |  |
-| `D3DM_DEVICE_DESCRIPTION` | Adapter name that the game sees. |  |
+| `D3DM_VENDOR_ID` | PCI vendor ID that the adapter reports to the game. | `0x10de` while D3DMetal performs a game's DLSS through game temporal integration in a Wine whose `win32u.so` reads it; a value set here replaces it. |
+| `D3DM_DEVICE_ID` | PCI device ID that the adapter reports to the game. | `0x2684` while D3DMetal performs a game's DLSS through game temporal integration in a Wine whose `win32u.so` reads it; a value set here replaces it. |
+| `D3DM_DEVICE_DESCRIPTION` | Adapter name that the game sees. | `NVIDIA GeForce RTX 4090` while D3DMetal performs a game's DLSS through game temporal integration in a Wine whose `win32u.so` reads it; a value set here replaces it. |
 
 | Locked | Reason |
 | --- | --- |
