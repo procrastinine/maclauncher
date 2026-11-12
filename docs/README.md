@@ -157,4 +157,4 @@ pnpm launch --game /path/to/game --action <action-id>
 
 [Attributions](ATTRIBUTIONS.md) links the upstream projects and their licenses. **Credits → Game port resources** in the app also links [Awesome Decomp Games](https://github.com/SubmitGame/awesome-decomp-games), a community index of source ports, decompilations and engine remakes.
 
-Release notes: [0.3.0](releases/0.3.0.md), [0.3.1](releases/0.3.1.md), [0.4.0](releases/0.4.0.md), [0.5.0](releases/0.5.0.md), [0.5.3](releases/0.5.3.md), [0.6.0](releases/0.6.0.md), [0.6.1](releases/0.6.1.md) and [0.6.3](releases/0.6.3.md).
+Release notes: [0.3.0](releases/0.3.0.md), [0.3.1](releases/0.3.1.md), [0.4.0](releases/0.4.0.md), [0.5.0](releases/0.5.0.md), [0.5.3](releases/0.5.3.md), [0.6.0](releases/0.6.0.md), [0.6.1](releases/0.6.1.md), [0.6.3](releases/0.6.3.md) and [0.6.4](releases/0.6.4.md).
