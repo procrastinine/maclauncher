@@ -71,7 +71,7 @@ WebP conversion, available when an image adapter is present, writes only to the 
 
 ## Dock icons
 
-Game windows get a separate generated Dock icon: a 256-pixel image with transparent padding and rounded macOS corners. A shared AppKit bitmap renderer draws it for Electron game hosts and for the generated application entries of Android JVM, ART, AIM and Mac.apk. The library keeps showing the original artwork. A cached Dock image is refreshed during an ordinary launch when its content or style changes, and images that are already prepared keep their size when passed between launch adapters. Imported native publisher apps keep their own icons.
+Game windows get a separate generated Dock icon: a 256-pixel image with transparent padding and rounded macOS corners. A shared AppKit bitmap renderer draws it for Electron game hosts, for the generated application entries of Android JVM, ART, AIM and Mac.apk, and for the prepared application bundle of an AnyPS5 game. The library keeps showing the original artwork. A cached Dock image is refreshed during an ordinary launch when its content or style changes, and images that are already prepared keep their size when passed between launch adapters. Imported native publisher apps keep their own icons.
 
 ## Implementation
 

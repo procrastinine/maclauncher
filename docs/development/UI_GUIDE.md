@@ -13,7 +13,7 @@ The main window, called the library window, lists the games and shows the detail
 
 Settings, Runtimes, External and Credits open in separate nonmodal native windows, one per view. Settings, Runtimes and Credits share one unrequested hidden window prepared after startup. It can become any requested view; a replacement starts when that loaded spare is taken. A window already requested keeps its view, including during consecutive opens. Replacement pages load in separate renderer processes, independently of each other. The hidden spare holds all three views; a requested replacement initially mounts its own view and prepares the others if retained while hidden. A new window shows its lightweight shell as soon as it paints, and its controls and data fill asynchronously. Credits placeholders use the table’s content inset and column layout. The next spare is created after the native window becomes visible and its controls have drawn. Section or runtime requests are retained while controls load and applied to that window. Closing hides the window at once and retains one hidden window for later opens; excess closed windows are removed in idle time. Hidden utility windows keep painting with background throttling disabled. The launcher quits when its last visible window closes. Save editing, runtime settings and live-variable editing also have dedicated windows, while cheat controls open in a modal.
 
-Measured with a library of 65 games on Apple silicon, the library window's renderer uses about 290 MiB of resident memory and the hidden window's about 200 MiB, for about 490 MiB in all while no utility window is open. Holding all three views adds about 10 to 15 MiB to a window that would otherwise hold one. Three hidden windows, one per view, used 568 MiB together.
+Holding all three views in the one hidden window uses less memory than a separate hidden window for each view.
 
 When a Wine runtime (CrossOver, Sikarugir or WineCX) requests activation during launch, MacLauncher cooperatively yields to a window belonging to that launch's Wine process tree. This initial handoff runs only while the launcher is active and ends if the foreground application changes. It waits at most two minutes for the window and stops when activation is confirmed or the launch ends.
 
@@ -419,7 +419,7 @@ The Effects entry downloads what the inspector's graphics menus can offer: upsca
 
 ### External window
 
-The External window is for games that stores have installed and for store downloads. It opens as a separate window with separate **Installed** and **Downloaded** tables, plus Steam, Epic, GOG, itch.io and Android tabs for accounts, versions and downloads. Downloaded versions stay independent of store installations. [External libraries](../library/EXTERNAL.md) describes selection, refresh, Finder shortcuts and importing.
+The External window is for games that stores have installed and for store downloads. It opens as a separate window with separate **Installed** and **Downloaded** tables, plus Steam, Epic, GOG, itch.io and Android tabs for accounts, versions and downloads. Until an account is connected, the Steam, Epic, GOG and itch.io tabs open with a sign-in introduction headed by the store's logo. Downloaded versions stay independent of store installations. [External libraries](../library/EXTERNAL.md) describes selection, refresh, Finder shortcuts and importing.
 
 ### Credits window
 
