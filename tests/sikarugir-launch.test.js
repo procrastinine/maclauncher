@@ -352,14 +352,21 @@ test("trusted optional game effects follow prefix setup and preserve disabled la
 test("a successful explicit Wine camera adapter keeps the original working directory", async t => {
   const directory = fixture(t), entry = game(directory), dependencies = adapters(installation(directory));
   const Temporal = require("../src/modules/crossover/temporal");
-  const plan = {libraries: [], inputs: {cameraProjection: true, source: "streamline", methods: ["fsr2"]}, dxmt: {identity: "camera-fixture"}, baseRoot: directory};
-  t.mock.method(Temporal, "resolvePlan", () => plan);t.mock.method(Temporal, "prepareGame", () => true);
+  const library = {relativePath: "sl.interposer.dll", sourcePath: pe(path.join(entry.gamePath, "sl.interposer.dll"))};
+  const originalLibrary=fs.readFileSync(library.sourcePath);
+  const plan = {libraries: [library], inputs: {cameraProjection: true, source: "streamline", methods: ["fsr2"]}, dxmt: {identity: "camera-fixture"}, baseRoot: directory};
+  t.mock.method(Temporal, "resolvePlan", () => plan);t.mock.method(Temporal, "prepareGame", (_plan, gameRoot) => {
+    const target=path.join(gameRoot,library.relativePath);fs.copyFileSync(target,target+".original");fs.writeFileSync(target,"owned proxy");fs.writeFileSync(target+".json","{}");return true;
+  });
+  t.mock.method(Temporal,"libraryAdapter",()=>({ownership:({gameRoot})=>{const target=path.join(gameRoot,library.relativePath);return{target,original:target+".original",record:target+".json",sourceSha256:"a".repeat(64),proxySha256:"b".repeat(64)};}}));
   const prepared = await Launch.prepareLaunch(entry, {userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {}}, dependencies);
   assert.notEqual(prepared.gameRoot, entry.gamePath, "the required DLL loader projection is explicit");
   assert.equal(prepared.workingDirectory, path.dirname(fs.realpathSync(path.join(entry.gamePath, "Game.exe"))));
   assert.equal(fs.existsSync(path.join(prepared.directory, "game")), false, "there is no preceding whole-game baseline");
   const saves = Provider.resolveSaveLocations(entry, {userDataDir: path.join(directory, "data")});
   assert.equal(fs.realpathSync(saves.primaryDirectory), fs.realpathSync(entry.gamePath));
+  assert.equal(fs.readFileSync(path.join(prepared.gameRoot, library.relativePath), "utf8"), "owned proxy");
+  assert.deepEqual(fs.readFileSync(library.sourcePath), originalLibrary, "the original game library is preserved");
 });
 
 test("Advanced-only temporal selection reaches the Wine launch camera bridge", async t => {
