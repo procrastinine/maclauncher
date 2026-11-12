@@ -54,16 +54,17 @@ async function existingEnvironment(context, source) {
   if (existing?.running) settings = { ...settings, synchronization: existing.settings.synchronization, retina: Environments.INHERIT };
   return { existingEnvironment: existing, settings };
 }
-// The camera adapter and the FidelityFX scene adapter replace game DLLs in one
+// The camera adapters and the FidelityFX scene adapter replace game DLLs in one
 // launch folder. A plan whose files could not be placed is dropped; the game
 // then starts from the folder that holds the other plan, or its own folder.
-async function launchFolder(entry, context, { source, directory, originalRoot, executable, executableArchitecture, cameraBridge, scenePlan }) {
-  const plans = [...(cameraBridge ? [{ kind: "camera", plan: cameraBridge }] : []), ...(scenePlan?.packageReady ? [{ kind: "scene", plan: scenePlan }] : [])];
-  if (!plans.length) return { view: null, gameRoot: originalRoot, executablePath: executable, cameraBridge: null, sceneReady: false };
+async function launchFolder(entry, context, { source, directory, originalRoot, executable, executableArchitecture, cameraBridge, vulkanCamera, scenePlan }) {
+  const plans = [...(cameraBridge ? [{ kind: "camera", plan: cameraBridge }] : []), ...(vulkanCamera ? [{ kind: "vulkan-camera", plan: vulkanCamera }] : []),
+    ...(scenePlan?.packageReady ? [{ kind: "scene", plan: scenePlan }] : [])];
+  if (!plans.length) return { view: null, gameRoot: originalRoot, executablePath: executable, cameraBridge: null, vulkanCamera: null, sceneReady: false };
   const folder = await require("../temporal/game-view").prepareLaunchFolder(entry, context, { runtimeId: source.id, label: source.label,
     directory, originalRoot, executable, executableArchitecture, plans });
   return { view: folder.view, gameRoot: folder.gameRoot, executablePath: folder.executablePath,
-    cameraBridge: folder.ready.has("camera") ? cameraBridge : null, sceneReady: folder.ready.has("scene") };
+    cameraBridge: folder.ready.has("camera") ? cameraBridge : null, vulkanCamera: folder.ready.has("vulkan-camera") ? vulkanCamera : null, sceneReady: folder.ready.has("scene") };
 }
 // Keep known Windows profile folders private instead of the environment's
 // default aliases into macOS Documents, Desktop and other shared save locations.

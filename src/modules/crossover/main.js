@@ -195,8 +195,12 @@ async function resolveGraphicsInputs(entry, context = {}, resolved, plan) {
   translatorPlan ||= await currentPlan(entry, runtimeId, context, install);
   const Temporal = require("./temporal"), settings = Translators.settingsForPlan(context.runtimeSettings || {}, translatorPlan);
   const source = Temporal.resolvePlan(entry, context, { install, runtimeId, translatorPlan, settings, allowDownload: true })?.inputs;
+  // The Vulkan DLSS route forwards on its carrier driver, including one this Play installs.
+  const VulkanDLSS = require("./temporal/vulkan-dlss"), architecture = Detection.cachedWindowsExecutable(entry)?.executableArchitecture;
+  const forwarding = VulkanDLSS.requested(translatorPlan, architecture) || Boolean(translatorPlan?.vulkanPending) && VulkanDLSS.routeForwards(translatorPlan, architecture);
+  const vulkanCamera = Temporal.resolveVulkanCameraPlan(entry, context, { settings, forwarding })?.inputs;
   const GraphicsInputs = require("./graphics-inputs");
-  return GraphicsInputs.inputs(install, GraphicsInputs.merge(source, Temporal.sceneSourceInputs(entry, context, { settings, translatorPlan })), { fallback });
+  return GraphicsInputs.inputs(install, GraphicsInputs.merge(source, vulkanCamera, Temporal.sceneSourceInputs(entry, context, { settings, translatorPlan })), { fallback });
 }
 
 module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,

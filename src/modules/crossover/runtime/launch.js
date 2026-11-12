@@ -187,7 +187,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const plans = await require("../sources/launch-graphics").resolve(entry, context, { source: source(),
     install: selected.install, settings, host, executableArchitecture: selectedExecutable.executableArchitecture, root: graphicsRoot, translatorFiles: "selected", timing });
   const { translatorPlan, translatorEnvironment, translatorView, vulkanDLSS, ngxScene, scenePlan } = plans;
-  let { cameraBridge } = plans;settings = plans.settings;
+  let { cameraBridge, vulkanCamera } = plans;settings = plans.settings;
   const Temporal = require("../temporal");
   if (selectedExecutable.executableArchitecture === "arm64" && !translatorPlan.layout.windows.includes("aarch64-windows")) throw new Error("This Windows ARM64 executable is not supported by the CrossOver backend. Use an x86 or x64 Windows build.");
   const directory = runtimeDirectory(entry, context);
@@ -234,8 +234,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   // Verify the camera bridge's native closure before replacing a private game
   // DLL. A loader failure must leave the ordinary vendor game path available.
   if (cameraBridge) { loader = await prepareLoader();if (!loader) cameraBridge = null; }
-  ({ view: cameraView, gameRoot, executablePath, cameraBridge } = await Steps.launchFolder(entry, context, { source: source(), directory, originalRoot,
-    executable, executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, scenePlan }));
+  ({ view: cameraView, gameRoot, executablePath, cameraBridge, vulkanCamera } = await Steps.launchFolder(entry, context, { source: source(), directory, originalRoot,
+    executable, executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, vulkanCamera, scenePlan }));
   if (requestedCameraBridge && !cameraBridge) {
     loader = null;
     // Disable only the optional temporal adaptation, retaining renderer,
@@ -244,7 +244,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
       {executableArchitecture: selectedExecutable.executableArchitecture, host, existingEnvironment, translatorEnvironment}));
   }
   const GraphicsInputs = require("../graphics-inputs");
-  context.graphicsInputs = GraphicsInputs.inputs(selected.install, GraphicsInputs.merge(cameraBridge?.inputs, plans.sceneInputs));
+  context.graphicsInputs = GraphicsInputs.inputs(selected.install, GraphicsInputs.merge(cameraBridge?.inputs, vulkanCamera?.inputs, plans.sceneInputs));
   if (!existingEnvironment) {
     Writable.assertOwnDirectory(directory, path.dirname(bottlePath));
     await ensureBottle(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, bottlePath)), directory, settings, context, { run, translatorEnvironment });

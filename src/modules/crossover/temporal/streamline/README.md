@@ -19,7 +19,16 @@ distances and the vertical field of view must agree with the game's unjittered
 projection matrix, and an unspecified far plane is accepted only when the matrix
 describes an infinite perspective plane.
 
-The selected constants then travel to DXMT as one camera packet. The adapted
+On the Vulkan DLSS route (`../vulkan-dlss.js`), with DXVK or vkd3d-proton on a
+carrier driver, the selected constants go to MacLauncher's NGX core instead.
+The adapter finds the core's `MacLauncherSetTemporalCamera` and
+`MacLauncherClearTemporalCamera` exports under the name the game's NGX loaded,
+`nvngx.dll` or `_nvngx.dll`, and the core adds the camera to that evaluation's
+temporal frame. That route forwards without a setting, so the launch folder
+receives the adapter whenever the route forwards and the interposer's export
+interface is compatible. No DXMT library is involved.
+
+On the DXMT route, the selected constants travel to DXMT as one camera packet. The adapted
 DXMT library's `MacLauncherSetTemporalCamera` and
 `MacLauncherClearTemporalCamera` exports limit the packet to one NGX evaluation,
 and nested evaluations restore their caller's camera. When constants fail
@@ -28,8 +37,9 @@ Streamline call and its return value are kept. Camera capture adds no rendering
 passes or GPU waits.
 
 The launcher detects compatible interposers beside the selected executable or
-in the supported Streamline plugin directories. Camera data for FSR2/3 also
-requires a matching installed DXMT native library and Windows thunk, a 64-bit
+in the supported Streamline plugin directories. On the DXMT route, camera data
+for FSR2/3 also requires a matching installed DXMT native library and Windows
+thunk, a 64-bit
 Windows executable, Apple Silicon and macOS 14 or later. Game temporal
 integration prepares these components before launch, including when Game
 default is selected for temporal scaling. A live setting change, however, does
