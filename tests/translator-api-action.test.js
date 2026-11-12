@@ -345,6 +345,31 @@ test('resolved vkd3d-proton replaces stock DXGI in the actual private loader inp
   }
 });
 
+test("CrossOver's own D3DMetal chosen for Direct3D 12 uses CrossOver's D3DMetal route", async t => {
+  const f = fixture(t), root = path.join(f.root, 'wine/lib64/apple_gptk');
+  // CrossOver's D3DMetal has Direct3D 11 and 12 libraries and its DXGI, and no Direct3D 10 library.
+  for (const name of ['atidxx64', 'd3d11', 'd3d12', 'dxgi', 'nvapi64', 'nvngx'])
+    f.put(path.relative(f.root, path.join(root, 'x86_64-windows', name + '.dll')), dll());
+  const resolve = async settings => {
+    const context = f.context({ environmentReference: 'private', ...settings });
+    const plan = await Translators.resolve(f.install, 'crossover', context, { host: f.host, executableArchitecture: 'x86_64', managers: [] });
+    return { context, plan, view: await Files.prepareTranslatorFiles(plan, { userDataDir: context.userDataDir, layout: plan.layout }) };
+  };
+  const route = await resolve({ graphicsBackend: 'd3dmetal' });
+  assert.equal(route.view.env.CX_GRAPHICS_BACKEND, 'd3dmetal');
+  for (const translatorRenderer of ['', 'automatic', 'included:d3d-renderer:d3dmetal']) {
+    const { context, plan, view } = await resolve({ translatorRenderer, translatorD3D12: 'included:d3d12:d3dmetal' });
+    assert.equal(plan.pairingError, undefined); assert.equal(plan.apiMode, false); assert.equal(Files.placesDirect3D(plan), false);
+    assert.equal(plan.components['d3d-renderer'].used.id, 'included:d3d-renderer:d3dmetal');
+    assert.equal(plan.components.d3d12.selected.id, 'included:d3d12:d3dmetal'); assert.equal(plan.components.d3d12.fallback, false);
+    for (const role of ['d3d8', 'd3d9', 'd3d10', 'd3d11', 'd3d12'])
+      assert.equal(plan.components[role].used?.id ?? null, route.plan.components[role].used?.id ?? null, role);
+    assert.equal(Translators.settingsForPlan(context.runtimeSettings, plan).graphicsBackend, 'd3dmetal');
+    assert.equal(view.env.CX_GRAPHICS_BACKEND, 'd3dmetal');
+    assert.deepEqual(view.links, route.view.links); assert.deepEqual(view.dllOverrides, route.view.dllOverrides);
+  }
+});
+
 test('standalone D3DMetal and DXMT API12 choices resolve and place their matching libraries on both routes', async t => {
   const f = fixture(t), templateRoot = path.join(f.root, 'paired-template');
   const { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/runtime/template-closure');
@@ -363,6 +388,15 @@ test('standalone D3DMetal and DXMT API12 choices resolve and place their matchin
     const context = { ...f.context(settings), runtimeId: runtime }, install = { ...f.install, templateRoot };
     const plan = await Translators.resolve(install, runtime, context, { host: f.host, executableArchitecture: 'x86_64', managers: [] });
     assert.deepEqual(settings, before); assert.equal(settings.translatorRenderer, undefined);
+    if (runtime === 'crossover' && engine === 'd3dmetal') {
+      // CrossOver's selector runs its own D3DMetal; nothing is placed.
+      assert.equal(plan.components.d3d12.selected.id, selected); assert.equal(plan.apiMode, false);
+      assert.equal(plan.components['d3d-renderer'].used.id, 'included:d3d-renderer:d3dmetal');
+      const view = await Files.prepareTranslatorFiles(plan, { userDataDir: context.userDataDir, layout: plan.layout });
+      assert.equal(view.env.CX_GRAPHICS_BACKEND, 'd3dmetal');
+      assert.equal(Object.keys(view.links).some(file => /\/(?:dxgi|d3d1[0-2]\w*|winemetal)\.(?:dll|so)$/.test(file)), false);
+      continue;
+    }
     assert.equal(plan.components.d3d12.selected.id, selected); assert.equal(plan.components.d3d12.used.id, selected);
     assert.equal(plan.components.d3d12.fallback, false); assert.equal(plan.apiMode, true);
     assert.equal(plan.components.d3d10.used.engine, engine); assert.equal(plan.components.d3d11.used.engine, engine);

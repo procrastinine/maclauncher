@@ -38,6 +38,21 @@ function projectRoles(plan) {
   }
   return plan;
 }
+// CrossOver runs its own D3DMetal through its graphics selector
+// (CX_GRAPHICS_BACKEND=d3dmetal), which covers every Direct3D API. Choosing that
+// included Direct3D 12 component, with the renderer automatic, inherited or set
+// to the same included renderer and no other Direct3D API chosen, selects this
+// route.
+// A private placement of these libraries would need D3DMetal to supply the
+// DXGI-based Direct3D 10 library, which it does not.
+function selectorBackend(plan, selections, included) {
+  const row = plan.components.d3d12, chosen = row?.used;
+  if (!usesSelector(plan) || !chosen?.included || chosen.component !== 'd3d12' || row.fallback || identity(row.selected) !== identity(chosen)) return null;
+  const backend = included.find(item => item.component === 'd3d-renderer' && item.engine === chosen.engine && item.root === chosen.root);
+  const renderer = plan.components['d3d-renderer'];
+  if (!backend || renderer.used && identity(renderer.used) !== identity(backend) && ![AUTOMATIC, INHERIT].includes(renderer.value)) return null;
+  return Roles.DIRECT3D_ROLES.every(role => role.id === 'd3d12' || [undefined, '', AUTOMATIC, INHERIT].includes(selections[role.id])) ? backend : null;
+}
 const serves = (description, role) => !description?.apis?.length || description.apis.some(api => role.apis.includes(api));
 const findChoice = (choices, value) => choices.find(item => item.id === value) || choices.find(item => item.aliases?.includes(value)) || null;
 const identity = description => description && `${description.id}:${description.root || ''}`;
@@ -197,6 +212,19 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
   for (const role of Roles.DIRECT3D_ROLES) {
     const row = plan.components[role.id], files = row.used && apiCompatibility[role.id]?.[row.used.id]?.files;
     if (files) row.used = { ...row.used, files };
+  }
+  const backend = selectorBackend(plan, selections, included);
+  if (backend) {
+    // The runtime's selector runs its own renderer for every Direct3D API, so
+    // the plan is the one that selecting that renderer gives.
+    const renderer = plan.components['d3d-renderer'];
+    if (identity(renderer.used) !== identity(backend)) Object.assign(renderer, { used: backend, inherited: false, fallback: false, reason: null, reasonCode: null });
+    plan.additional = (plan.additional || []).filter(item => !item.apis?.some(api => Roles.DIRECT3D_ROLES.some(role => role.apis.includes(api))));
+    // Direct3D 12 keeps its saved choice and, as with that renderer, runs in it.
+    projectRoles(plan);
+    plan.components.d3d12 = { ...plan.components.d3d12, used: null };
+    plan.apiMode = false; plan.placements = []; plan.groups = apiGroups(plan);
+    return plan;
   }
   const pair = () => Pairing.resolvePairing(plan, { choices, included, compatibility, apiCompatibility, filesForRole });
   let paired = pair();
