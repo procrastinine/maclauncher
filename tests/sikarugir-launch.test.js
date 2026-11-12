@@ -397,7 +397,7 @@ test("inactive shared graphics still inspect automatic XeSS compatibility withou
   const Temporal = require("../src/modules/crossover/temporal");
   t.mock.method(Temporal, "resolvePlan", (_entry, _context, options) => {calls.push(options);return null;});
   await Launch.prepareLaunch(entry, {userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: settings}, dependencies);
-  assert.equal(calls.length, 1);assert.equal(calls[0].automatic, true);
+  assert.equal(calls.length, 1);assert.equal(calls[0].settings.dlss, false);
   assert.deepEqual(settings, before);assert.equal(dependencies.graphicsCalls[0].settings.dlss, false);
 });
 

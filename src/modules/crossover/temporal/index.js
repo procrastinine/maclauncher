@@ -85,16 +85,18 @@ function matchingSupport(context, root, { entry, runtimeId = context.runtimeId |
   }
   return null;
 }
-function resolvePlan(entry, context = {}, { install, runtimeId = context.runtimeId || entry?.runtimeId || "crossover", settings = context.runtimeSettings || {}, host = {}, root, verify = false, allowDownload = false, automatic = false, translatorPlan = context.translatorPlan } = {}) {
+function resolvePlan(entry, context = {}, { install, runtimeId = context.runtimeId || entry?.runtimeId || "crossover", settings = context.runtimeSettings || {}, host = {}, root, verify = false, allowDownload = false, translatorPlan = context.translatorPlan } = {}) {
   try {
     const d3d11=usedForApi(translatorPlan,"d3d11"),d3d12=usedForApi(translatorPlan,"d3d12");
     const translator=d3d11?.engine==="dxmt"?d3d11:d3d12?.engine==="dxmt"?d3d12:d3d11;
     const roles=[...(d3d11?.engine==="dxmt"?["d3d11"]:[]),...(d3d12?.engine==="dxmt"?["d3d12"]:[])];
     const d3dmetal = Sources.get(runtimeId)?.invocation === "crossover" && settings.dlss === true && translator?.engine !== "dxmt" &&
       (usedForApi(translatorPlan, "d3d12")?.engine || translator?.engine || settings.graphicsBackend) === "d3dmetal";
-    if (!d3dmetal && Object.hasOwn(translatorPlan?.components || {}, "d3d11") && !translator) return null;
+    // D3DMetal holds no MacLauncher component in the game process that could take a camera; its own NGX runs the
+    // game's DLSS, and the game's Streamline interposer is never replaced.
+    if (d3dmetal || Object.hasOwn(translatorPlan?.components || {}, "d3d11") && !translator) return null;
     if (Requirements.requirementSupport(Requirements.WINE_TEMPORAL, { ...Host.getHostCapabilities(), ...host }).supported === false ||
-      !install || !d3dmetal && !["auto", "dxmt"].includes(translator?.engine || settings.graphicsBackend || "auto")) return null;
+      !install || !["auto", "dxmt"].includes(translator?.engine || settings.graphicsBackend || "auto")) return null;
     if ((settings.dllOverrides || []).some(rule => {
       const [names, order] = String(rule).split("=");
       return order?.trim().toLowerCase() !== "b" && order?.trim().toLowerCase() !== "builtin" && names.split(",").some(name => /^(?:\*|d3d10core|d3d11|dxgi|winemetal|nvapi64|nvngx)(?:\.dll)?$/i.test(name.trim())||roles.includes("d3d12")&&/^d3d12(?:\.dll)?$/i.test(name.trim()));
@@ -103,24 +105,17 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
     const executable = settings.executable ? path.resolve(match.sourceRoot, settings.executable) : match.windowsExecutablePath;
     if (!Detection.inside(match.sourceRoot, executable) || Detection.readWindowsExecutable(executable)?.executableArchitecture !== "x86_64") return null;
     root ||= require("../../shared/reshade").runtimeRoot(context.app);
-    const sources = libraries(match, executable).flatMap(sourcePath => {
-      const selected = libraryAdapter({sourcePath}), adapter = selected === XeSS ? "xess" : "streamline", providerRoot = path.join(root, "temporal", adapter);
-      // In-game XeSS translation is a compatibility path, independent of the
-      // optional shared graph. Streamline replacement remains explicitly selected.
-      if (automatic && selected !== XeSS || d3dmetal && selected !== Streamline) return [];
-      const inspected = selected.inspect(sourcePath, providerRoot);
-      return inspected.available ? [{sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath), sourceSha256: inspected.sourceSha256, adapter, providerRoot}] : [];
+    // In-game XeSS translation is a compatibility path, independent of the optional shared graph. The game's
+    // Streamline interposer is never replaced, since a game can verify its NVIDIA signature, so DLSS through
+    // Streamline reaches the adapted DXMT library's NGX without a camera.
+    const sources = libraries(match, executable).filter(sourcePath => libraryAdapter({ sourcePath }) === XeSS).flatMap(sourcePath => {
+      const providerRoot = path.join(root, "temporal", "xess"), inspected = XeSS.inspect(sourcePath, providerRoot);
+      return inspected.available ? [{ sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath), sourceSha256: inspected.sourceSha256, adapter: "xess", providerRoot }] : [];
     });
     const directNgx=settings.dlss===true&&translator?.engine==="dxmt";
     if (!sources.length&&!directNgx) return null;
-    const hasProjection = sources.some(row => row.adapter === "streamline"), hasXeSS = sources.some(row => row.adapter === "xess");
-    const inputs = { depth:true,motionVectors:true,jitter:true,exposure:true,cameraProjection: hasProjection, source: hasProjection && hasXeSS ? "streamline+xess" : hasXeSS ? "xess" : directNgx&&!sources.length?"ngx":"streamline",
-      methods: [...(hasProjection ? ["fsr2", "fsr3"] : []), ...(hasXeSS||directNgx&&!sources.length ? ["metalfx"] : [])],
-      routes: sources.map(row => ({source: row.adapter, depth:true,motionVectors:true,jitter:true,exposure:true,cameraProjection: row.adapter === "streamline", methods: row.adapter === "xess" ? ["metalfx"] : ["fsr2", "fsr3"]})) };
-    if(d3dmetal){
-      const helper=require("./d3dmetal-camera").helper(path.join(root,"temporal/streamline"));
-      return helper ? {kind:"d3dmetal-camera",helper,sourceRoot:match.sourceRoot,libraries:sources,inputs} : null;
-    }
+    const route = { depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: false, methods: ["metalfx"] };
+    const inputs = { ...route, source: sources.length ? "xess" : "ngx", routes: sources.map(() => ({ source: "xess", ...route })) };
     let baseRoot, selectedSupport;
     if (translator && translator.engine !== "dxmt") return null;
     // The source's own DXMT is the base of the camera adapter's libraries.
@@ -158,27 +153,21 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       inputs };
   } catch { return null; }
 }
-// The Streamline adapter on the Vulkan DLSS route (vulkan-dlss.js): the game's
-// Streamline interposer is replaced in the launch folder, and the adapter hands
-// the camera of the game's Streamline constants to the staged NGX core's
-// MacLauncherSetTemporalCamera, which adds it to that evaluation's frame. The
-// route forwards without a setting, so the adapter needs none either, and no
-// DXMT library or renderer setting is involved.
-function resolveVulkanCameraPlan(entry, context = {}, { settings = context.runtimeSettings || {}, forwarding = false, root } = {}) {
+// The camera on the Vulkan DLSS route (vulkan-dlss.js) comes from the game's
+// own Streamline interposer. The selected NGX core captures the camera of the
+// game's Streamline constants in process and adds it to that evaluation's
+// frame, so the interposer stays the game's signed file and nothing in the
+// game folder is replaced. The route forwards without a setting, so the camera
+// needs none either, and no DXMT library is involved.
+function resolveVulkanCameraPlan(entry, context = {}, { settings = context.runtimeSettings || {}, forwarding = false } = {}) {
   try {
     if (!forwarding) return null;
     const match = Detection.cachedWindowsExecutable(entry);if (!match) return null;
     const executable = settings.executable ? path.resolve(match.sourceRoot, settings.executable) : match.windowsExecutablePath;
     if (!Detection.inside(match.sourceRoot, executable)) return null;
-    root ||= require("../../shared/reshade").runtimeRoot(context.app);
-    const providerRoot = path.join(root, "temporal", "streamline");
-    const sources = libraries(match, executable).filter(sourcePath => libraryAdapter({ sourcePath }) === Streamline).flatMap(sourcePath => {
-      const inspected = Streamline.inspect(sourcePath, providerRoot);
-      return inspected.available ? [{ sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath), sourceSha256: inspected.sourceSha256, adapter: "streamline", providerRoot }] : [];
-    });
-    if (!sources.length) return null;
+    if (!libraries(match, executable).some(sourcePath => libraryAdapter({ sourcePath }) === Streamline && Streamline.interposer(sourcePath))) return null;
     const route = { source: "streamline", depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true, methods: ["fsr2", "fsr3"] };
-    return { kind: "vulkan-camera", sourceRoot: match.sourceRoot, libraries: sources, inputs: { ...route, routes: [route] } };
+    return { kind: "vulkan-camera", sourceRoot: match.sourceRoot, inputs: { ...route, routes: [route] } };
   } catch { return null; }
 }
 function restoreLibraries(libraries, gameRoot, cause, logger) {
@@ -243,7 +232,7 @@ function cameraRequirements(entry, context, { manager, root } = {}) {
   }
   manager ||= Sources.get(runtimeId).manager();
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, settings);
-  const plan = selected.ready && resolvePlan(entry, context, { install: selected.install, runtimeId, root, settings, automatic, allowDownload: true });
+  const plan = selected.ready && resolvePlan(entry, context, { install: selected.install, runtimeId, root, settings, allowDownload: true });
   return plan?.requiresDownload ? [{ ...plan.download, installOptions: { sectionId: "default" },
     detail: "Downloads matching DXMT support libraries for the game's temporal API. The selected Wine engine remains unchanged." }] : [];
 }

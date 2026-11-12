@@ -66,7 +66,7 @@ test("CrossOver inspects automatic game API compatibility while shared processin
   t.mock.method(require("../src/modules/crossover/runtime/manager"), "resolveSelection", () => ({ready: true, install: {crossoverRoot}}));
   let calls = 0;
   t.mock.method(require("../src/modules/crossover/temporal"), "resolvePlan", (_entry, _context, options) => {
-    ++calls;assert.equal(options.automatic, true);assert.equal(options.settings.dlss, false);throw stop;
+    ++calls;assert.equal(options.settings.dlss, false);throw stop;
   });
   await assert.rejects(CrossOver.prepareLaunch({gamePath: game, graphics: {temporalMethod: "off"}}, {runtimeSettings: settings}), error => error === stop);
   assert.equal(calls, 1);assert.deepEqual(settings, {dlss: false, graphicsBackend: "dxmt"});

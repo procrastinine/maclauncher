@@ -17,7 +17,6 @@ function entitlements(xml) {
 async function prepare(installation, directory, { signal, execute = executeFile, cameraBridge, winemac, helperLibraries = [], translatorView, userDataDir, logger = console } = {}) {
   signal?.throwIfAborted();
   const vendor = fs.realpathSync(installation.crossoverRoot), layout = wineLayout(installation), unix = `lib/wine/${layout.unixName}`;
-  if(cameraBridge?.kind === "d3dmetal-camera") helperLibraries=[...helperLibraries,cameraBridge.helper];
   const separateLoader = fs.existsSync(path.join(vendor, unix, "ntdll.so")) && fs.existsSync(path.join(vendor, unix, "wine"));
   const sources = [["bin/wineloader", installation.loaderPath, true], ...(separateLoader ? [
     [`${unix}/ntdll.so`, path.join(vendor, unix, "ntdll.so"), false],
@@ -200,11 +199,6 @@ function environment(loader, previous = {}, { cameraBridge, installation, transl
     if (translatorView.dllOverrides.length) values.WINEDLLOVERRIDES = [values.WINEDLLOVERRIDES || previous.WINEDLLOVERRIDES, ...translatorView.dllOverrides].filter(Boolean).join(';');
     if (cameraBridge?.dxmt) values.CX_GRAPHICS_BACKEND = 'wined3d';
     if (values.CX_LIBVULKAN && (values.CX_GRAPHICS_BACKEND || previous.CX_GRAPHICS_BACKEND) !== 'wined3d') delete values.CX_LIBVULKAN;
-  }
-  if(cameraBridge?.kind === "d3dmetal-camera"){
-    const wine=path.resolve(unix,"..");
-    values.WINEDLLPATH=[path.join(wine,layout.primaryWindows),wine,values.WINEDLLPATH||previous.WINEDLLPATH,path.join(installation.crossoverRoot,"lib/wine")].filter(Boolean).join(path.delimiter);
-    values.WINEDLLOVERRIDES=[values.WINEDLLOVERRIDES||previous.WINEDLLOVERRIDES,"maclauncher-temporal-camera=b"].filter(Boolean).join(";");
   }
   return values;
 }

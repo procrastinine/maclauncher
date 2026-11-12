@@ -137,11 +137,16 @@ test("camera rollback attempts every owned DLL and blocks fallback only when res
   assert.equal(fs.readFileSync(path.join(f.gameRoot, relatives[0]), "utf8"), "separately modified DLL", "a changed mod is never replaced by an owned backup");
   assert.deepEqual(fs.readFileSync(f.sourcePath), pe());await new Promise(setImmediate);
 });
-test("camera capability follows the automatic default after consent and requires matched DXMT, x64 and the selected renderer", async t => {
+test("DXMT temporal integration follows the automatic default after consent, requires matched DXMT, x64 and the selected renderer, and keeps the Streamline interposer", async t => {
   const f = fixture(t), Temporal = require("../src/modules/crossover/temporal"), graphicsRoot = path.join(f.root, "graphics");
   const support = path.join(f.root, "support"), engine = path.join(f.root, "engine"), base = path.join(support, "Frameworks/renderer/dxmt/wine");
   function put(file, bytes) { fs.mkdirSync(path.dirname(file), { recursive: true });fs.writeFileSync(file, bytes); }
   fs.cpSync(f.providerRoot, path.join(graphicsRoot, "temporal/streamline"), { recursive: true });
+  // The XeSS adaptation is the only library this route replaces.
+  const xessNames = ["xessD3D11CreateContext", "xessD3D11Execute", "xessD3D11Init", "xessDestroyContext"], xessRoot = path.join(graphicsRoot, "temporal/xess");
+  put(path.join(xessRoot, "libxess_dx11.dll"), pe(xessNames, 2));
+  put(path.join(xessRoot, "provider.json"), JSON.stringify({ schema: 1, profile: "xess-sr-d3d11", library: "libxess_dx11.dll", sha256: sha(pe(xessNames, 2)), exports: PE.inspect(path.join(xessRoot, "libxess_dx11.dll")) }));
+  const xess = path.join(f.gameRoot, "plugins/libxess_dx11.dll");
   const dllRoot = path.join(graphicsRoot, "temporal/dxmt"), files = {};
   for (const name of Temporal.FILES) { put(path.join(dllRoot, name), name);files[name] = sha(name); }
   put(path.join(base, "x86_64-unix/winemetal.so"), "native base");put(path.join(base, "x86_64-windows/winemetal.dll"), "thunk base");
@@ -151,11 +156,15 @@ test("camera capability follows the automatic default after consent and requires
   const exe = path.join(f.gameRoot, "game.exe"), bytes = pe();bytes.writeUInt16LE(2, 0x96);bytes.writeUInt16LE(3, 0x98 + 68);put(exe, bytes);
   const entry = { gamePath: f.gameRoot, runtimeData: { crossover: { sourceRoot: f.gameRoot, windowsExecutablePath: exe, executableArchitecture: "x86_64", detectionComplete: true } } };
   // Keep the interposer inside the imported game rather than an external alias.
-  fs.unlinkSync(f.target);fs.writeFileSync(f.target, pe());
+  fs.unlinkSync(f.target);fs.writeFileSync(f.target, pe(["slEvaluateFeature", "slGetNewFrameToken", "slInit", "slSetConstants", "slShutdown"]));
   const options = { install: { templateRoot: support, engineRoot: engine }, runtimeId: "sikarugir", root: graphicsRoot, host: { platform: "darwin", hardwareArch: "arm64", macOSVersion: "26.0" } };
-  const plan = Temporal.resolvePlan(entry, {}, options);const streamline = {depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true};
-  assert.deepEqual(plan.inputs, {...streamline, source: "streamline", methods: ["fsr2", "fsr3"], routes: [{...streamline, source: "streamline", methods: ["fsr2", "fsr3"]}]});
-  assert.equal(plan.libraries[0].relativePath, "plugins/sl.interposer.dll");
+  // A game's Streamline interposer is never replaced: a game can verify its NVIDIA signature.
+  assert.equal(Temporal.resolvePlan(entry, {}, options), null);
+  assert.equal(Temporal.resolvePlan(entry, {}, { ...options, settings: { dlss: true } }), null);
+  fs.writeFileSync(xess, pe(xessNames));
+  const plan = Temporal.resolvePlan(entry, {}, options), route = {depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: false, methods: ["metalfx"]};
+  assert.deepEqual(plan.inputs, {...route, source: "xess", routes: [{...route, source: "xess"}]});
+  assert.deepEqual(plan.libraries.map(row => [row.relativePath, row.adapter]), [["plugins/libxess_dx11.dll", "xess"]]);
   // A used D3D12 provider must not replace the selected D3D11 DXMT camera route.
   const crossoverRoot=path.join(f.root,"CrossOver");put(path.join(crossoverRoot,"lib/wine/x86_64-unix/wine"),"loader");
   const mixed=Temporal.resolvePlan(entry,{}, {...options,runtimeId:"crossover",install:{crossoverRoot},
@@ -166,14 +175,14 @@ test("camera capability follows the automatic default after consent and requires
   assert.equal(Temporal.rendererFile(mixed,"x86_64-windows","d3d12.dll","d3dmetal-original"),"d3dmetal-original");
   const bridgeFile=path.join(dllRoot,"camera-bridge.json"),record=JSON.parse(fs.readFileSync(bridgeFile));
   put(path.join(dllRoot,"x86_64-windows/d3d12.dll"),"dxmt12");record.files["x86_64-windows/d3d12.dll"]=sha("dxmt12");record.temporalD3D12API=1;put(bridgeFile,JSON.stringify(record));
-  fs.unlinkSync(f.target);
+  fs.unlinkSync(xess);
   const directOptions={...options,runtimeId:"crossover",install:{crossoverRoot},settings:{dlss:true},translatorPlan:{apiMode:true,components:{d3d11:{used:{engine:"dxvk"}},d3d12:{used:{engine:"dxmt",root:base}}}}};
   const direct=Temporal.resolvePlan(entry,{},directOptions);
-  assert.ok(direct?.dxmt,"Direct NGX does not depend on a Streamline plugin");assert.deepEqual(direct.dxmtRoles,["d3d12"]);assert.equal(Temporal.rendererFiles(direct).includes("x86_64-windows/d3d11.dll"),false);assert.equal(Temporal.rendererFiles(direct).includes("x86_64-windows/d3d12.dll"),true);assert.equal(direct.inputs.source,"ngx");assert.equal(direct.inputs.cameraProjection,false);assert.deepEqual(direct.inputs.methods,["metalfx"]);
+  assert.ok(direct?.dxmt,"Direct NGX does not depend on a Streamline plugin");assert.deepEqual(direct.dxmtRoles,["d3d12"]);assert.equal(Temporal.rendererFiles(direct).includes("x86_64-windows/d3d11.dll"),false);assert.equal(Temporal.rendererFiles(direct).includes("x86_64-windows/d3d12.dll"),true);assert.equal(direct.inputs.source,"ngx");assert.deepEqual(direct.libraries,[]);assert.equal(direct.inputs.cameraProjection,false);assert.deepEqual(direct.inputs.methods,["metalfx"]);
   assert.equal(Temporal.rendererFile(direct,"x86_64-windows","d3d12.dll","stock"),path.join(dllRoot,"x86_64-windows/d3d12.dll"));
   assert.equal(Temporal.rendererFile({...direct,dxmtRoles:["d3d11"]},"x86_64-windows","d3d12.dll","stock"),"stock");
   record.temporalD3D12API=0;put(bridgeFile,JSON.stringify(record));assert.equal(Temporal.resolvePlan(entry,{},directOptions),null);
-  fs.writeFileSync(f.target,pe());
+  fs.writeFileSync(xess,pe(xessNames));
 
 
   for (const settings of [{ graphicsBackend: "wined3d" }, { graphicsBackend: "d3dmetal" }, { graphicsBackend: "dxvk" }]) assert.equal(Temporal.resolvePlan(entry, {}, { ...options, settings }), null);
@@ -187,10 +196,10 @@ test("camera capability follows the automatic default after consent and requires
   assert.ok(Temporal.adapter(graphicsRoot, { macOSVersion: "14.4.2" }));
   assert.ok(Temporal.adapter(graphicsRoot, { macOSVersion: null }));
   put(descriptor, JSON.stringify(camera));
-  fs.writeFileSync(f.target, pe([...names, "slFutureAPI"]));assert.equal(Temporal.resolvePlan(entry, {}, options), null);fs.writeFileSync(f.target, pe());
+  fs.writeFileSync(xess, pe(names));assert.equal(Temporal.resolvePlan(entry, {}, options), null);fs.writeFileSync(xess, pe(xessNames));
   fs.writeFileSync(path.join(base, "x86_64-unix/winemetal.so"), "different renderer");assert.equal(Temporal.resolvePlan(entry, {}, options), null);
-  put(path.join(base, "x86_64-unix/winemetal.so"), "native base");fs.unlinkSync(f.target);assert.equal(Temporal.resolvePlan(entry, {}, options), null);
-  fs.writeFileSync(f.target, pe());
+  put(path.join(base, "x86_64-unix/winemetal.so"), "native base");fs.unlinkSync(xess);assert.equal(Temporal.resolvePlan(entry, {}, options), null);
+  fs.writeFileSync(xess, pe(xessNames));
   const Support = require("../src/modules/crossover/temporal/support-manager"), vendor = path.join(f.root, "CrossOver");
   put(path.join(vendor, "lib/wine/x86_64-unix/wine"), "vendor loader");
   const pin = supportPin(), context = { userDataDir: path.join(f.root, "profile"), runtimeId: "crossover", runtimeSettings: { graphicsBackend: "dxmt", graphicsBridgeVersion: pin.version } };
@@ -202,7 +211,8 @@ test("camera capability follows the automatic default after consent and requires
   assert.equal(Temporal.resolvePlan(entry, context, crossover), null);
   assert.equal(Temporal.resolvePlan(entry, context, { ...crossover, allowDownload: true }).inputs.requiresDownload, true);
   const dependency = { root: graphicsRoot, manager: { resolveSelection: () => ({ ready: true, install: crossover.install }) } };
-  entry.effects = null;assert.deepEqual(Temporal.requirements(entry, context, dependency), []);
+  entry.effects = null;fs.unlinkSync(xess);assert.deepEqual(Temporal.requirements(entry, context, dependency), [], "the Streamline interposer alone needs no DXMT support");
+  fs.writeFileSync(xess, pe(xessNames));
   entry.effects = { schema: 2, mode: "advanced", enabled: true, video: [{ id: "scene", kind: "temporal", enabled: true, method: "fsr2", settings: {} }] };
   assert.equal(Temporal.requirements(entry, context, dependency)[0]?.managerId, "sikarugir-graphics-bridge", "CrossOver downloads the shared DXMT support package");
   const sikarugirContext = { ...context, runtimeId: "sikarugir", runtimeSettings: { graphicsBackend: "auto", graphicsBridgeVersion: pin.version } };
@@ -211,8 +221,8 @@ test("camera capability follows the automatic default after consent and requires
   assert.deepEqual(Temporal.resolvePlan(entry, context, { ...crossover, allowDownload: true, settings: { ...context.runtimeSettings, graphicsBridgeVersion: "missing-version" } }).download,
     {managerId:"sikarugir-graphics-bridge",version:null,discoveryRequired:true});
   assert.equal(Temporal.resolvePlan(entry, context, { ...crossover, allowDownload: true, settings: { ...context.runtimeSettings, dllOverrides: ["dxgi=n"] } }), null);
-  fs.writeFileSync(f.target, pe([...names, "slFutureAPI"]));assert.deepEqual(Temporal.requirements(entry, context, dependency), []);
-  fs.writeFileSync(f.target, pe());
+  fs.writeFileSync(xess, pe(names));assert.deepEqual(Temporal.requirements(entry, context, dependency), []);
+  fs.writeFileSync(xess, pe(xessNames));
   // Template releases whose actual renderer bytes match the camera adapter, or not.
   const archives = { older: templateArchive(f.root, "9.7.3"), newer: templateArchive(f.root, "9.7.4", { native: "different native", thunk: "different thunk" }),
     future: templateArchive(f.root, "12.3.8") };
@@ -441,7 +451,7 @@ test("never-used camera Off performs no projection filesystem work or process wr
  assert.equal(context.onProcessSpawn, undefined);assert.equal(context.spawnDetachedChecked, undefined);
 });
 
-test("D3DMetal resolves only the selected matched camera builtin without DXMT", t => {
+test("D3DMetal keeps the game's Streamline interposer and prepares no camera plan", t => {
   const f=fixture(t),Temporal=require("../src/modules/crossover/temporal"),graphicsRoot=path.join(f.root,"graphics");
   const providerRoot=path.join(graphicsRoot,"temporal/streamline");fs.cpSync(f.providerRoot,providerRoot,{recursive:true});
   const metadataFile=path.join(providerRoot,"provider.json"),metadata=JSON.parse(fs.readFileSync(metadataFile));
@@ -452,41 +462,36 @@ test("D3DMetal resolves only the selected matched camera builtin without DXMT", 
   const exe=path.join(f.gameRoot,"game.exe"),bytes=pe();bytes.writeUInt16LE(2,0x96);bytes.writeUInt16LE(3,0x98+68);fs.writeFileSync(exe,bytes);
   const entry={gamePath:f.gameRoot,runtimeData:{crossover:{sourceRoot:f.gameRoot,windowsExecutablePath:exe,executableArchitecture:"x86_64",detectionComplete:true}}};
   const options={runtimeId:"crossover",root:graphicsRoot,install:{crossoverRoot:path.join(f.root,"vendor")},settings:{dlss:true,graphicsBackend:"d3dmetal"},host:{platform:"darwin",hardwareArch:"arm64",macOSVersion:"26.0"}};
-  const plan=Temporal.resolvePlan(entry,{},options);assert.equal(plan.kind,"d3dmetal-camera");assert.equal(plan.dxmt,undefined);assert.equal(plan.helper.name,cameraBridge.name);
-  assert.equal(Temporal.resolvePlan(entry,{}, {...options,settings:{dlss:false,graphicsBackend:"d3dmetal"}}),null);
+  // D3DMetal's own NGX runs the game's DLSS; no MacLauncher library in the game process could take a camera.
+  for(const settings of [options.settings,{dlss:false,graphicsBackend:"d3dmetal"}])assert.equal(Temporal.resolvePlan(entry,{},{...options,settings}),null);
   assert.equal(Temporal.resolvePlan(entry,{}, {...options,runtimeId:"sikarugir"}),null);
-  fs.writeFileSync(path.join(providerRoot,cameraBridge.unix),"changed");assert.equal(Temporal.resolvePlan(entry,{},options),null);
 });
 
-test("the Vulkan DLSS route places the Streamline camera adapter for the NGX core without DXMT or a setting", async t => {
+test("the Vulkan DLSS route takes the camera from the game's own Streamline interposer without replacing a file", async t => {
   const f = fixture(t), Temporal = require("../src/modules/crossover/temporal"), Steps = require("../src/modules/crossover/sources/launch-steps");
-  const graphicsRoot = path.join(f.root, "graphics");
-  fs.cpSync(f.providerRoot, path.join(graphicsRoot, "temporal/streamline"), { recursive: true });
   const exe = path.join(f.gameRoot, "game.exe"), bytes = pe();bytes.writeUInt16LE(2, 0x96);bytes.writeUInt16LE(3, 0x98 + 68);fs.writeFileSync(exe, bytes);
   const entry = { gamePath: f.gameRoot, runtimeData: { crossover: { sourceRoot: f.gameRoot, windowsExecutablePath: exe, executableArchitecture: "x86_64", detectionComplete: true } } };
-  fs.unlinkSync(f.target);fs.writeFileSync(f.target, pe());
+  fs.unlinkSync(f.target);fs.writeFileSync(f.target, pe(["slEvaluateFeature", "slGetNewFrameToken", "slInit", "slSetConstants", "slShutdown"]));
   const original = fs.readFileSync(f.target);
-  // Without forwarding, the game keeps its interposer.
-  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { root: graphicsRoot, forwarding: false }), null);
-  const plan = Temporal.resolveVulkanCameraPlan(entry, {}, { root: graphicsRoot, forwarding: true });
+  // Without forwarding, the route declares no camera.
+  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: false }), null);
+  // No camera adapter or graphics payload is needed: the NGX core captures the camera in process.
+  const plan = Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true });
   const streamline = { source: "streamline", depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true, methods: ["fsr2", "fsr3"] };
-  assert.equal(plan.kind, "vulkan-camera");assert.equal(plan.dxmt, undefined);
+  assert.equal(plan.kind, "vulkan-camera");assert.equal(plan.dxmt, undefined);assert.equal(plan.libraries, undefined);
   assert.deepEqual(plan.inputs, { ...streamline, routes: [streamline] });
-  assert.deepEqual(plan.libraries.map(row => [row.relativePath, row.adapter]), [["plugins/sl.interposer.dll", "streamline"]]);
   // The camera unlocks the camera-based upscalers beside a FidelityFX scene source.
   const merged = require("../src/modules/crossover/graphics-inputs").merge(plan.inputs, { depth: true, cameraProjection: true, source: "fidelityfx" });
   assert.equal(merged.cameraProjection, true);assert.equal(merged.source, "streamline+fidelityfx");
-  // The launch folder replaces only its private copy; the game's own folder keeps the original library.
+  // The game starts from its own folder with its own interposer.
   const directory = path.join(f.root, "runtime");fs.mkdirSync(directory);
   const context = { userDataDir: f.root, logger: { warn() {}, info() {}, log() {} } };
   const folder = await Steps.launchFolder(entry, context, { source: { id: "crossover", label: "CrossOver" }, directory, originalRoot: f.gameRoot,
-    executable: exe, executableArchitecture: "x86_64", vulkanCamera: plan });
-  assert.equal(folder.vulkanCamera, plan);assert.equal(folder.cameraBridge, null);
-  assert.notEqual(folder.gameRoot, f.gameRoot);
-  assert.deepEqual(fs.readFileSync(path.join(folder.gameRoot, "plugins/sl.interposer.dll")), fs.readFileSync(path.join(f.providerRoot, "sl.interposer.dll")));
-  assert.deepEqual(fs.readFileSync(path.join(folder.gameRoot, "plugins", Streamline.ORIGINAL)), original);
-  assert.deepEqual(fs.readFileSync(f.target), original);
-  // An interposer whose interface the adapter does not cover stays in place.
-  fs.writeFileSync(f.target, pe([...names, "slFutureAPI"]));
-  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { root: graphicsRoot, forwarding: true }), null);
+    executable: exe, executableArchitecture: "x86_64" });
+  assert.equal(folder.view, null);assert.equal(folder.gameRoot, f.gameRoot);assert.equal(folder.executablePath, exe);
+  assert.deepEqual(fs.readFileSync(f.target), original);assert.equal(fs.existsSync(path.join(f.gameRoot, "plugins", Streamline.ORIGINAL)), false);
+  assert.deepEqual(fs.readdirSync(directory), []);
+  // A Streamline plugin or an interposer without the application API has no camera to capture.
+  fs.writeFileSync(f.target, pe(names));
+  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true }), null);
 });

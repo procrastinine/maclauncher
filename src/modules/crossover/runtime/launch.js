@@ -187,7 +187,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const plans = await require("../sources/launch-graphics").resolve(entry, context, { source: source(),
     install: selected.install, settings, host, executableArchitecture: selectedExecutable.executableArchitecture, root: graphicsRoot, translatorFiles: "selected", timing });
   const { translatorPlan, translatorEnvironment, translatorView, vulkanDLSS, ngxScene, scenePlan } = plans;
-  let { cameraBridge, vulkanCamera } = plans;settings = plans.settings;
+  const { vulkanCamera } = plans;let { cameraBridge } = plans;settings = plans.settings;
   const Temporal = require("../temporal");
   if (selectedExecutable.executableArchitecture === "arm64" && !translatorPlan.layout.windows.includes("aarch64-windows")) throw new Error("This Windows ARM64 executable is not supported by the CrossOver backend. Use an x86 or x64 Windows build.");
   const directory = runtimeDirectory(entry, context);
@@ -234,8 +234,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   // Verify the camera bridge's native closure before replacing a private game
   // DLL. A loader failure must leave the ordinary vendor game path available.
   if (cameraBridge) { loader = await prepareLoader();if (!loader) cameraBridge = null; }
-  ({ view: cameraView, gameRoot, executablePath, cameraBridge, vulkanCamera } = await Steps.launchFolder(entry, context, { source: source(), directory, originalRoot,
-    executable, executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, vulkanCamera, scenePlan }));
+  ({ view: cameraView, gameRoot, executablePath, cameraBridge } = await Steps.launchFolder(entry, context, { source: source(), directory, originalRoot,
+    executable, executableArchitecture: selectedExecutable.executableArchitecture, cameraBridge, scenePlan }));
   if (requestedCameraBridge && !cameraBridge) {
     loader = null;
     // Disable only the optional temporal adaptation, retaining renderer,

@@ -28,13 +28,13 @@ async function resolve(entry, context, { source, install, settings, executableAr
   // A FidelityFX scene source requests no other Direct3D renderer.
   if (scenePlan) settings = { ...settings, dlss: context.runtimeSettings?.dlss === true || settings.dlssOptional === true };
   const cameraBridge = Temporal.resolvePlan(entry, context, { install, settings, translatorPlan, host,
-    runtimeId: source.id, verify: true, root, automatic: settings.dlss !== true });
+    runtimeId: source.id, verify: true, root });
   if (cameraBridge) settings = { ...settings, dlss: true };
   if (cameraBridge?.dependency) await context.useRuntime?.(cameraBridge.dependency);
   for (const dependency of scenePlan?.dependencies || []) await context.useRuntime?.(dependency);
   const sceneInputs = Temporal.sceneSourceInputs(entry, context, { settings, translatorPlan });
   // The Vulkan DLSS route's camera comes from the game's Streamline constants.
-  const vulkanCamera = Temporal.resolveVulkanCameraPlan(entry, context, { settings, forwarding: vulkanDLSS.enabled === true, root });
+  const vulkanCamera = Temporal.resolveVulkanCameraPlan(entry, context, { settings, forwarding: vulkanDLSS.enabled === true });
   return { settings, translatorPlan, translatorEnvironment, translatorView, vulkanDLSS, ngxScene, scenePlan, cameraBridge, vulkanCamera, sceneInputs };
 }
 

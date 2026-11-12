@@ -256,7 +256,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const plans = await require("./launch-graphics").resolve(entry, context, { source, install: selected.install, settings, host,
     executableArchitecture: match.executableArchitecture, root: dependencies.graphicsRoot, resolveTranslators: dependencies.resolveTranslators });
   const { translatorPlan, translatorEnvironment, translatorView, vulkanDLSS, ngxScene, scenePlan } = plans;
-  let { cameraBridge, vulkanCamera } = plans;settings = plans.settings;
+  const { vulkanCamera } = plans;let { cameraBridge } = plans;settings = plans.settings;
   await context.flushRuntimeUses?.();
   if (selected.install.needsRosetta && !rosetta.isAvailable()) await rosetta.ensure(context);
   context.signal?.throwIfAborted();
@@ -266,8 +266,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   if (!existingEnvironment) for (const name of ["home", "tmp", "prefixes", "runtime-view"]) Writable.assertOwnDirectory(directory, path.join(directory, name));
   const originalRoot = match.sourceRoot;
   const folder = await Steps.launchFolder(entry, context, { source, directory, originalRoot,
-    executable: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture, cameraBridge, vulkanCamera, scenePlan });
-  let { view: cameraView, gameRoot, executablePath } = folder;cameraBridge = folder.cameraBridge;vulkanCamera = folder.vulkanCamera;
+    executable: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture, cameraBridge, scenePlan });
+  let { view: cameraView, gameRoot, executablePath } = folder;cameraBridge = folder.cameraBridge;
   const GraphicsInputs = require("../graphics-inputs");
   context.graphicsInputs = GraphicsInputs.inputs(selected.install, GraphicsInputs.merge(cameraBridge?.inputs, vulkanCamera?.inputs, plans.sceneInputs), { fallback: "x86_64" });
   const nativeInputs = [selected.install.executablePath, selected.install.serverPath,

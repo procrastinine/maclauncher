@@ -21,6 +21,13 @@ function provider(root, expected) {
     return null;
   } catch { return null; }
 }
+// The game's Streamline interposer: the library exporting Streamline's
+// application API, whose camera calls the NGX core captures in process.
+const APPLICATION_API = Object.freeze(["slInit", "slGetNewFrameToken", "slSetConstants", "slEvaluateFeature"]);
+function interposer(sourcePath) {
+  const exports = PE.inspect(sourcePath), names = new Set((exports || []).map(row => row.name));
+  return APPLICATION_API.every(name => names.has(name));
+}
 function inspect(sourcePath, providerRoot) {
   const exports = PE.inspect(sourcePath);
   const payload = provider(providerRoot,exports);
@@ -101,4 +108,4 @@ function restore({ gameRoot, relativePath }) {
   if (current === record.proxySha256) Writable.atomicCopy(files.original, files.target, { root: gameRoot, preserveTimes: false });
   fs.unlinkSync(files.original);fs.unlinkSync(files.record);return true;
 }
-module.exports = { ORIGINAL, RECORD, provider, inspect, prepare, restore, recorded, ownership, sameExports };
+module.exports = { ORIGINAL, RECORD, provider, inspect, interposer, prepare, restore, recorded, ownership, sameExports };

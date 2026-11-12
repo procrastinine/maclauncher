@@ -221,26 +221,6 @@ test("CrossOver translator dependencies use fallback paths instead of global ove
   assert.equal(result.MTL_HUD_ENABLED, "1");assert.equal(result.DYLD_INSERT_LIBRARIES, previous.DYLD_INSERT_LIBRARIES);
 });
 
-test("D3DMetal camera builtin stays in the owned loader without selecting DXMT", async t => {
-  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"d3dmetal-camera-loader-")));
-  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
-  const selected=installation(root),directory=path.join(root,"game"),helper={name:"maclauncher-temporal-camera"};
-  for(const kind of ["windows","unix"]){helper[kind]=path.join(root,"helper-"+kind);fs.writeFileSync(helper[kind],"owned "+kind);}
-  const plan={kind:"d3dmetal-camera",helper};
-  const execute=async(command,args)=>({stdout:args[0]==="-d"?permissions:""});
-  const loader=await Loader.prepare(selected,directory,{cameraBridge:plan,execute});
-  const closure=path.resolve(path.dirname(loader),"../lib/wine");
-  assert.equal(fs.realpathSync(path.join(closure,"x86_64-windows/maclauncher-temporal-camera.dll")),helper.windows);
-  assert.equal(fs.realpathSync(path.join(closure,"x86_64-unix/maclauncher-temporal-camera.so")),helper.unix);
-  const previous={CX_GRAPHICS_BACKEND:"d3dmetal",WINEDLLOVERRIDES:"existing=n,b"};
-  const env=Loader.environment(loader,previous,{cameraBridge:plan,installation:selected});
-  assert.equal(env.CX_GRAPHICS_BACKEND,undefined);
-  assert.equal(env.WINEDLLOVERRIDES,"existing=n,b;maclauncher-temporal-camera=b");
-  assert.equal(fs.existsSync(path.join(closure,"x86_64-unix/maclauncher-dxmt-original.so")),false);
-  const unused=Loader.environment(loader,previous,{installation:selected});
-  assert.equal(unused.WINEDLLOVERRIDES,undefined);
-});
-
 test("D3D12 DXMT adaptation preserves the independently selected D3D11 module", async t => {
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"dxmt12-loader-")));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const selected=installation(root),Temporal=require("../src/modules/crossover/temporal"),directory=path.join(root,"game"),adapter=path.join(root,"adapter"),baseRoot=path.join(root,"dxmt-base");
