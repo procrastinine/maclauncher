@@ -190,7 +190,7 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
     if (selected && !serves(selected, role)) { reason = `The selected component has no ${role.label} library.`; reasonCode = 'missing-api'; }
     const checked = item => apiCompatibility[role.id]?.[item.id] || compatibility[item.id];
     if (selected && checked(selected)?.compatible === false) { reason = checked(selected).reason; reasonCode = 'load-impossible'; }
-    if (reason) used = selected && included.find(item => item.engine === selected.engine && serves(item, role) && checked(item)?.compatible !== false) || automatic[role.id] || null;
+    if (reason) used = selected && !checked(selected)?.automaticFallback && included.find(item => item.engine === selected.engine && serves(item, role) && checked(item)?.compatible !== false) || automatic[role.id] || null;
     if (reason && !used && usesSelector(plan)) used = original[role.id].used;
     plan.components[role.id] = { value, selected, used, inherited, fallback: Boolean(reason), reason, reasonCode, scopeKnown: Boolean(selected?.apis?.length) };
   }
@@ -314,7 +314,9 @@ function resolvePlan({ runtime = 'crossover', selections = {}, choices = [], inc
     if (selected && compatibility[selected.id]?.compatible === false) {
       reason = compatibility[selected.id].reason;
       reasonCode = 'load-impossible';
-      used = included.find(item => item.component === component && item.engine === selected.engine && compatibility[item.id]?.compatible !== false) || null;
+      // A choice that needs a driver the runtime lacks takes the runtime's automatic choice.
+      used = compatibility[selected.id].automaticFallback ? null :
+        included.find(item => item.component === component && item.engine === selected.engine && compatibility[item.id]?.compatible !== false) || null;
     }
     components[component] = { value, selected, used, inherited: Boolean(inherited), fallback: Boolean(reason), reason, reasonCode };
   }
@@ -337,4 +339,4 @@ function options({ component, runtime = 'crossover', included = [], choices = []
     result.push({ value: item === selected ? selections[component] : item.id, label: label(item), apis: item.apis });
   return withOptionScopes(result);
 }
-module.exports = { AUTOMATIC, INHERIT, UNAVAILABLE_CHOICE_LABEL, fallbackNotice, resolvePlan, options, fallbackWarnings, projectRoles, resolveApiRoles, apiOptions, filesForRole, ROLES: Roles.ROLES };
+module.exports = { AUTOMATIC, INHERIT, UNAVAILABLE_CHOICE_LABEL, sourceLabels, fallbackNotice, resolvePlan, options, fallbackWarnings, projectRoles, resolveApiRoles, apiOptions, filesForRole, ROLES: Roles.ROLES };

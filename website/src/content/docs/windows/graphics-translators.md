@@ -135,7 +135,7 @@ A new game starts with every translator setting at its runtime's automatic choic
 
 WineCX's automatic choice is the same on every Mac it runs on: its own DXMT for Direct3D 10 and 11, WineD3D for Direct3D 8 and 9, WINE's vkd3d for Direct3D 12, and its MoltenVK for Vulkan.
 
-One exception applies on every runtime: when you pick a DXVK or vkd3d-proton version from Runtimes and leave the Vulkan driver on Automatic, the game runs on MacLauncher KosmicKrisp, or on MacLauncher's MoltenVK build where KosmicKrisp can't run, and the inspector says which one and why.
+One exception applies on every runtime: when you pick a DXVK or vkd3d-proton version from Runtimes and leave the Vulkan driver on Automatic, the game runs on MacLauncher KosmicKrisp, and the inspector says so. Current DXVK and vkd3d-proton releases can't start on MoltenVK, so where KosmicKrisp can't run, or when its download is skipped, those Direct3D versions go back to the runtime's own automatic choice, and the inspector says why. Only an older DXVK built for MoltenVK, such as DXVK-macOS, runs on MacLauncher's MoltenVK build instead.
 
 A game in an [existing bottle or wrapper](/maclauncher/windows/existing-bottles/) starts with that environment's own settings instead, so nothing changes until you choose something else. Whatever the choice, MacLauncher checks it before the game starts, as [the last section](#when-a-translator-cant-load) explains.
 
