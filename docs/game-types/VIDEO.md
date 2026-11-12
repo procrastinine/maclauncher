@@ -22,6 +22,8 @@ Local playback runs mpv with the selected configuration and plugins, and mpv kee
 
 ## Player configuration and plugins
 
+Playback stages writable configuration in an owned temporary session folder, named `maclauncher-mpv-<process ID>-<session ID>`. Original configuration files, scripts and fonts remain in their original locations. Preparation failures and player exit remove the folder; unused preparation is also removed when its launcher worker exits. A marker records the player process once it starts. After a forced termination, the next playback reclaims abandoned folders, including the generated folders from earlier releases, while preserving folders owned by live players. Recent preparations retain a one-minute handoff interval before reclamation. A player that outlives the launcher keeps its folder while it runs; a later playback reclaims it after that player exits.
+
 Playback defaults are set in **Settings → Video**, under the mpv player heading, and each video's mpv settings can override them.
 
 Two plugins are on by default. [uosc](https://github.com/tomasklaen/uosc), under **uosc controls**, provides the timeline and playback controls, and [thumbfast](https://github.com/po5/thumbfast), under **Timeline previews**, generates preview images while the pointer hovers over that timeline. When an enabled plugin is missing, Play offers it as an optional download and continues preparing playback once it is installed, while **Skip** plays without that plugin. Without uosc, playback uses mpv's standard on-screen controls, which also remain available when uosc is disabled. Plugins can also be installed and updated with the Install, Download and Update actions.

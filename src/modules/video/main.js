@@ -110,7 +110,7 @@ module.exports = {
     try {
       const child = await spawnForegroundNativeGame({ context, executablePath: selected.install.executablePath, args,
         options: { cwd: path.dirname(playback.file), env } });
-      child.once?.("close", cleanup);
+      if (!player.bind(child, cleanup)) return child;
       if (controls) try {
         controls.bind(child, Scaling.filtersFor(selected),{decodedFrameProducer:Boolean(renderHost), nativeProperties, source: playback.file, separateOSD: renderHost?.osdLayerAPI === 1});
         if (child.pid > 0) playbackCleanup = await Playlist.watch(child, controls.socket, playback, entry, context);

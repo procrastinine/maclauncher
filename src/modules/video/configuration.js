@@ -1,5 +1,5 @@
 const fs = require("node:fs");
-const os = require("node:os");
+const Sessions = require("./session-directory");
 const path = require("node:path");
 const Plugins = require("./plugins");
 
@@ -59,9 +59,7 @@ function addDirectory(destination, source) {
 function prepare(context, { executablePath, renderHost, thumbnailExecutablePath } = {}) {
   const cfg = settings(context.runtimeSettings);
   const usable = available(cfg, context.userDataDir);
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-mpv-"));
-  let cleaned = false;
-  const cleanup = () => { if (!cleaned) { cleaned = true; fs.rmSync(directory, { recursive: true, force: true }); } };
+  const session = Sessions.create(), { directory, cleanup } = session;
   try {
     const installs = required(cfg, context.userDataDir).map(pkg => {
       const install = Plugins.status(context.userDataDir, pkg.id, { verification: "full" });
@@ -77,7 +75,7 @@ function prepare(context, { executablePath, renderHost, thumbnailExecutablePath 
     // linked to their original locations, including arbitrary plugin modules.
     if (cfg.configDirectory) {
       for (const name of fs.readdirSync(cfg.configDirectory)) {
-        if (!["mpv.conf", "config", "fonts", "script-opts", "watch_later"].includes(name))
+        if (!["mpv.conf", "config", "fonts", "script-opts", "watch_later", Sessions.marker, Sessions.marker + ".tmp"].includes(name))
           fs.symlinkSync(path.join(cfg.configDirectory, name), path.join(directory, name));
       }
     }
@@ -111,7 +109,7 @@ function prepare(context, { executablePath, renderHost, thumbnailExecutablePath 
       const file = localPath(thumbnailExecutablePath || (!renderHost && executablePath), "The mpv thumbnail player");
       args.push(`--script-opts-append=thumbfast-mpv_path=${file}`);
     }
-    return { args, directory, cleanup };
+    return { args, ...session };
   } catch (error) { cleanup();throw error; }
 }
 module.exports = { settings, required, available, prepare };

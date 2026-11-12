@@ -113,7 +113,8 @@ for (const failure of ["create", "bind"]) test("optional video IPC " + failure +
       cleanup() {cleaned++;throw new Error("Cannot remove controls");}};
   });
   const entry = {gamePath: video, effects: {schema: 2, mode: "advanced", enabled: false, video: []}}, before = structuredClone(entry);
-  const calls = [], child = {pid: 0, exitCode: 0, signalCode: null};
+  const calls = [], child = Object.assign(new (require("node:events").EventEmitter)(), {pid: 2147483647, exitCode: null, signalCode: null, killed: true});
+  t.after(() => child.emit("close"));
   const context = {userDataDir: root, logger: {warn() {warnings++;throw new Error("Warning sink failed");}},
     applyGameEnvironment: async () => ({KEPT: "vendor environment"}),
     spawnDetachedChecked: async (...args) => {calls.push(args);return child;}};
@@ -248,4 +249,18 @@ test("a video shader that changes while it is read is read again", t => {
   calls = 0;t.mock.method(fs, "fstatSync", (...args) => {const stat = fstat(...args);return Object.assign(Object.create(Object.getPrototypeOf(stat)), stat, { mtimeMs: ++calls });});
   assert.throws(() => Shaders.snapshot(source, userDataDir), /changed while it was being prepared/);
   assert.equal(calls, 6, "a source that keeps changing is reported after three reads");
+});
+
+test("an already-exited video child releases its playback configuration without a later close event", async t => {
+  const {root, file} = fixture(t), video = file("ended.mp4", "video");
+  const Manager = require("../src/modules/video/runtime/manager"), Live = require("../src/modules/video/live"), Video = require("../src/modules/video/main");
+  t.mock.method(Manager, "resolveSelection", () => ({ready: true, install: {executablePath: "/player/mpv"}}));
+  let controlsClosed = 0, directory;
+  t.mock.method(Live, "create", () => ({socket: path.join(root, "mpv.sock"), bind() {assert.fail("bound an exited child");}, cleanup() {controlsClosed++;}}));
+  const child = {pid: 0, exitCode: 0, signalCode: null};
+  const context = {userDataDir: root, runtimeSettings: {uosc: false, timelinePreviews: false}, applyGameEnvironment: async () => ({}),
+    spawnDetachedChecked: async (_exe, args) => {directory = args.find(arg => arg.startsWith("--config-dir=")).slice(13);assert.ok(fs.existsSync(directory));return child;}};
+  assert.equal(await Video.launchRuntime("mpv", {gamePath: video}, context), child);
+  t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+  assert.equal(fs.existsSync(directory), false);assert.equal(controlsClosed, 1);
 });
