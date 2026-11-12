@@ -10,6 +10,27 @@ export function componentItemName(component: Pick<ComponentEntry, "label">, item
   return item.version ? `${component.label} ${item.version}` : component.label;
 }
 
+// The last list read is kept in the launcher's page storage, so the view
+// draws it as it opens while a backend worker reads the files again. Storage
+// that is unavailable or holds another shape keeps nothing.
+const RETAINED_LIST = "maclauncher:downloaded-files";
+const nullableText = (value: unknown) => value == null || typeof value === "string";
+export function retainedComponentList(): ComponentList | null {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(RETAINED_LIST) || "null");
+    return value && typeof value === "object" && Array.isArray(value.components) && value.components.every((component: any) =>
+      component && typeof component.id === "string" && typeof component.label === "string" &&
+      nullableText(component.description) && nullableText(component.error) && Array.isArray(component.items) &&
+      component.items.every((item: any) => item && typeof item.id === "string" && typeof item.version === "string" &&
+        [item.identity, item.architecture, item.path, item.status, item.removeReason].every(nullableText) &&
+        Array.isArray(item.users) && item.users.every((user: unknown) => typeof user === "string") && Number.isFinite(item.bytes)))
+      ? { components: value.components, gameRunning: value.gameRunning === true } : null;
+  } catch { return null; }
+}
+export function retainComponentList(list: ComponentList) {
+  try { window.localStorage.setItem(RETAINED_LIST, JSON.stringify(list)); } catch { /* The view still lists the files it read. */ }
+}
+
 // Installed items only, largest first.
 export function componentRows(list: ComponentList | null | undefined): ComponentRow[] {
   return (list?.components || []).flatMap(component => component.items.map(item => ({ component, item })))

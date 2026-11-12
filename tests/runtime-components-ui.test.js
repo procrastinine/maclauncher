@@ -60,6 +60,59 @@ test("Downloaded files lists installed items largest first with CPU, size, sourc
   assert.equal(elements(tree).filter(node => node.type === "button" && /^Add /.test(String(node.props.children))).length, 1, "one Add from file");
 });
 
+// Opening Downloaded files draws the last list it read at once; a backend
+// worker reads the files again and the rows follow. Deleting waits for that
+// read, since a file's users may have changed in the meantime.
+test("Downloaded files opens with the last list read, reads the files again and enables Delete after that read", async t => {
+  const stored = new Map(), previous = global.window;
+  const localStorage = { getItem: key => stored.has(key) ? stored.get(key) : null, setItem: (key, value) => stored.set(key, String(value)) };
+  global.window = { localStorage, MacLauncher: { launcher: { confirmAction: async () => true } } };
+  t.after(() => { global.window = previous; });
+  const mount = componentAction => { const h = componentHarness(UI.ComponentsView, { api: { componentAction } }); t.after(() => h.close()); return h; };
+
+  const first = mount(async () => listing());
+  first.render(); await flush(first);
+  assert.ok(stored.get("maclauncher:downloaded-files"), "a completed read is kept");
+
+  let answer;
+  const reading = mount(action => { assert.equal(action, "list"); return new Promise(resolve => { answer = resolve; }); });
+  const drawn = reading.render(), markup = renderToStaticMarkup(drawn);
+  assert.match(markup, /Fixture runtime 2\.0/, "the first drawing lists the kept rows");
+  assert.doesNotMatch(markup, /role="status">Reading downloaded files/);
+  assert.equal(button(drawn, "Reload downloaded files").props["aria-busy"], true, "the files are read again");
+  assert.equal(button(drawn, "Delete Fixture runtime 2.0").props.disabled, true, "Delete waits for the new read");
+  assert.equal(button(drawn, "Delete Fixture runtime 2.0").props.title, "Reading downloaded files…");
+  assert.equal(button(drawn, "Delete unused").props.disabled, true);
+  assert.equal(button(drawn, "Show Fixture runtime 2.0 in Finder").props.disabled, false);
+  const changed = listing();
+  changed.components[0].items = changed.components[0].items.filter(item => item.id !== "2.0");
+  answer(changed);
+  const read = await flush(reading);
+  assert.doesNotMatch(renderToStaticMarkup(read), /Fixture runtime 2\.0/, "the new read replaces the kept rows");
+  assert.equal(button(read, "Delete Fixture runtime 1.0").props.disabled, false);
+  assert.equal(button(read, "Delete unused").props.disabled, false);
+  assert.deepEqual(JSON.parse(stored.get("maclauncher:downloaded-files")), changed, "the new read is kept");
+
+  // Reload also waits for current users before allowing deletion.
+  button(read, "Reload downloaded files").props.onClick();
+  const reloading = reading.render();
+  assert.equal(button(reloading, "Delete unused").props.disabled, true);
+  assert.equal(button(reloading, "Delete Fixture runtime 1.0").props.disabled, true);
+  answer(changed); await flush(reading);
+
+  const malformedLabel = listing(); delete malformedLabel.components[0].label;
+  stored.set("maclauncher:downloaded-files", JSON.stringify(malformedLabel));
+  const invalidLabel = mount(() => new Promise(() => {}));
+  assert.match(renderToStaticMarkup(invalidLabel.render()), /role="status">Reading downloaded files/);
+
+  stored.set("maclauncher:downloaded-files", JSON.stringify({ components: [{ id: "broken" }] }));
+  const malformed = mount(() => new Promise(() => {}));
+  assert.match(renderToStaticMarkup(malformed.render()), /role="status">Reading downloaded files…/, "a kept value of another shape is not drawn");
+  global.window = { MacLauncher: previous?.MacLauncher };
+  const unavailable = mount(() => new Promise(() => {}));
+  assert.match(renderToStaticMarkup(unavailable.render()), /Reading downloaded files…/, "without page storage the view reads as before");
+});
+
 test("Delete warns with the item's users and a running game, and canceling deletes nothing", async t => {
   const declined = harness(t, { answer: false, gameRunning: true });
   declined.h.render(); button(await declined.h.settle(), "Delete Fixture runtime 2.0").props.onClick(); await flush(declined.h);
