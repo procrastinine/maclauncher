@@ -12,7 +12,7 @@ parentPort.on("message", async message => {
     const end = performance.now() + message.args[0];
     while (performance.now() < end) {} // Deliberately models synchronous runtime hashing.
     parentPort.postMessage({ type: "result", id: message.id, result: true });
-  } else if (message.method === "moduleAction") {
+  } else if (message.method === "moduleAction" || message.method === "moduleSettingsAction") {
     // Models an inspector read of installed runtimes: synchronous work in the worker.
     const end = performance.now() + (message.args[2]?.busyMs || 0);
     while (performance.now() < end) {}

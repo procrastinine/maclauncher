@@ -5048,7 +5048,9 @@ ipcMain.handle("launcher:componentAction", (_event, action, payload) =>
 ipcMain.handle("launcher:moduleSettingsAction", async (_event, moduleId, action, payload) => {
   if (!Modules.getModule(moduleId)) throw new Error("Module not found.");
   if (hostAccountActions.handles(moduleId, action)) return hostAccountActions.run(moduleId, action, payload);
-  return backendService.request(`module:${moduleId}:settings`, "moduleSettingsAction", moduleId, action, payload);
+  // A runtime's choice lists in Settings are inspector reads too; see settingChoiceReads.
+  const lane = settingChoiceReads(Modules.getModuleInfo(moduleId), payload?.runtimeId).has(action) ? "inspector" : `module:${moduleId}:settings`;
+  return backendService.request(lane, "moduleSettingsAction", moduleId, action, payload);
 });
 
 const moduleActionRequests = createModuleActionRequests({ request: (...args) => backendService.request(...args) });
@@ -5063,7 +5065,7 @@ ipcMain.handle("launcher:moduleAction", async (event, gamePath, action, payload,
     // The inspector's runtime reads share one worker that keeps installed
     // runtimes read between games, so they never start a worker or wait
     // behind the game's actions, Play or an install.
-    const lane = inspectorReads(entry).has(action) ? "inspector" : `game:${entry.gameId || entry.gamePath}`;
+    const lane = inspectorReads(entry, options?.runtimeId || entry.runtimeId).has(action) ? "inspector" : `game:${entry.gameId || entry.gamePath}`;
     const result = options?.requestId !== undefined ? await moduleActionRequests.run(event.sender, options.requestId,
       lane, [entry, action, payload, settings], actionOptions) :
       await backendService.request(lane, "moduleAction", entry, action, payload, settings, actionOptions);
@@ -5076,12 +5078,23 @@ ipcMain.handle("launcher:moduleAction", async (event, gamePath, action, payload,
 
 // The requests the inspector makes for a selected game: its runtime's status
 // action as the module declares it, graphics inputs, the recommended version
-// and the version Play uses without a choice.
-function inspectorReads(entry) {
-  const runtime = Modules.getModuleInfo(resolveModuleId(entry))?.runtime;
+// and the version Play uses without a choice, plus the choice lists of the
+// game's runtime settings window.
+function inspectorReads(entry, runtimeId = entry.runtimeId) {
+  const info = Modules.getModuleInfo(resolveModuleId(entry)), runtime = info?.runtime;
   return new Set(["graphicsInputs", "runtimeRecommendation", "runtimeAutomaticVersion",
     ...Object.values(runtime?.entries || {}).map(item => item?.statusAction),
-    ...Object.values(runtime?.preLaunch || {}).map(item => item?.statusAction)].filter(Boolean));
+    ...Object.values(runtime?.preLaunch || {}).map(item => item?.statusAction),
+    ...settingChoiceReads(info, runtimeId)].filter(Boolean));
+}
+// A runtime settings field's choice list, such as its translator or version
+// menu, reads installed runtimes and saved state only (see runActionOnce in
+// src/core/launcher.js). It shares the inspector worker, which keeps those
+// reads between games and windows, instead of a game or settings worker that
+// reads every installed translator again before the menu can open.
+function settingChoiceReads(info, runtimeId) {
+  return new Set((resolveRuntimeSettingsSchema(info, runtimeId)?.fields || []).map(field => field.optionsAction)
+    .filter(action => typeof action === "string" && action));
 }
 
 ipcMain.handle("launcher:setCheats", async (_event, gamePath, cheats) => {

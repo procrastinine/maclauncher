@@ -7,17 +7,24 @@ const vm = require("node:vm");
 const { monitorEventLoopDelay } = require("node:perf_hooks");
 const { createBackendService } = require("../src/core/backend-worker-client");
 const { createModuleActionRequests } = require("../src/main/module-action-requests");
+const { resolveRuntimeSettingsSchema } = require("../src/core/runtime-settings");
 const workerPath = path.join(__dirname, "fixtures", "backend-worker.cjs");
 
-// The launcher's moduleAction IPC handler, with the given main-process context.
-function moduleActionHandler(context) {
+// The launcher's moduleAction and moduleSettingsAction IPC handlers, with the
+// given main-process context.
+function launcherHandlers(context) {
   const source = fs.readFileSync(path.join(__dirname, "../src/main/main.js"), "utf8");
-  const start = source.indexOf('ipcMain.handle("launcher:moduleAction",'), end = source.indexOf('ipcMain.handle("launcher:setCheats",', start);
-  assert.ok(start >= 0 && end > start);
-  const handlers = new Map();
-  vm.runInNewContext(source.slice(start, end), { ...context, ipcMain: { handle: (name, handler) => handlers.set(name, handler) } });
-  return handlers.get("launcher:moduleAction");
+  const slice = (from, to) => {
+    const start = source.indexOf(from), end = source.indexOf(to, start);
+    assert.ok(start >= 0 && end > start);
+    return source.slice(start, end);
+  };
+  const handlers = new Map(), sandbox = vm.createContext({ ...context, ipcMain: { handle: (name, handler) => handlers.set(name, handler) } });
+  vm.runInContext(slice('ipcMain.handle("launcher:moduleAction",', 'ipcMain.handle("launcher:setCheats",'), sandbox);
+  vm.runInContext(slice('ipcMain.handle("launcher:moduleSettingsAction",', "const moduleActionRequests ="), sandbox);
+  return handlers;
 }
+function moduleActionHandler(context) { return launcherHandlers(context).get("launcher:moduleAction"); }
 
 // Selecting a game asks for its runtime status, graphics inputs, recommended
 // version and Automatic version. Each read of installed runtimes holds its
@@ -33,7 +40,7 @@ test("selected games read through the one inspector worker while the launcher's 
     loadGameHydrated: gamePath => structuredClone(games.find(game => game.gamePath === gamePath) || null),
     moduleActionRequests: createModuleActionRequests({ request }), backendService: { request }, gameGraphicsLive: () => false,
     isAbortError: error => error?.name === "AbortError", Modules: { getModuleInfo: id => id === "fixture" ? info : null },
-    resolveModuleId: game => game.moduleId });
+    resolveModuleId: game => game.moduleId, resolveRuntimeSettingsSchema });
   assert.equal(service.prepareInspectorLane({ prepared: true }), true);
   const owner = { id: 1, once() {}, removeListener() {} };
   const delay = monitorEventLoopDelay({ resolution: 5 });
@@ -58,6 +65,49 @@ test("selected games read through the one inspector worker while the launcher's 
   assert.equal(tool.lane, "game:game-0");
   assert.equal((await handler({ sender: owner }, games[0].gamePath, "otherStatus", {})).lane, "inspector",
     "a status action declared for another runtime of the module is an inspector read");
+});
+
+// A runtime settings window lists a game's translator, environment and version
+// choices from installed runtimes; Settings lists them for a game type. Both
+// use the inspector worker that the launcher prepared, with its reads of
+// installed runtimes, so opening either window starts no worker of its own.
+test("runtime settings choice lists read through the prepared inspector worker", { timeout: 20000 }, async t => {
+  const select = (key, optionsAction) => ({ key, label: key, type: "select", optionsAction, options: [{ value: "", label: "Automatic" }] });
+  const info = { runtime: { entries: {
+    wine: { statusAction: "runtimeStatus", settings: { fields: [select("translatorRenderer", "listTranslatorOptions"),
+      select("environmentReference", "listEnvironments"), { key: "retina", label: "Retina", type: "boolean" }] } },
+    player: { settings: { fields: [select("version", "listRuntimeVersions")] } } } } };
+  const game = { gameId: "game-0", gamePath: "/fixture/game-0", moduleId: "fixture", runtimeId: "wine" };
+  const service = createBackendService({ workerPath, onEvent() {} });
+  t.after(() => service.close());
+  const lanes = [], request = (lane, ...args) => { lanes.push(lane); return service.request(lane, ...args); };
+  const handlers = launcherHandlers({ loadSettings: () => ({}), loadGameHydrated: () => structuredClone(game),
+    moduleActionRequests: createModuleActionRequests({ request }), backendService: { request }, gameGraphicsLive: () => false,
+    isAbortError: error => error?.name === "AbortError", resolveModuleId: entry => entry.moduleId, resolveRuntimeSettingsSchema,
+    Modules: { getModule: id => id === "fixture" ? {} : null, getModuleInfo: id => id === "fixture" ? info : null },
+    hostAccountActions: { handles: () => false } });
+  const gameChoices = handlers.get("launcher:moduleAction"), settingsChoices = handlers.get("launcher:moduleSettingsAction");
+  assert.equal(service.prepareInspectorLane({ prepared: true }), true);
+  const owner = { id: 1, once() {}, removeListener() {} };
+  const results = [
+    ...await Promise.all(["listTranslatorOptions", "listEnvironments"].map(action =>
+      gameChoices({ sender: owner }, game.gamePath, action, { runtimeSettings: {} }, { runtimeId: "wine" }))),
+    await settingsChoices({}, "fixture", "listTranslatorOptions", { runtimeId: "wine", runtimeSettings: {} }),
+    await settingsChoices({}, "fixture", "listRuntimeVersions", { runtimeId: "player" })];
+  assert.deepEqual(results.map(result => [result.lane, result.warmed?.prepared]), Array(4).fill(["inspector", true]),
+    "each list found the inspector worker the launcher prepared");
+  assert.deepEqual([...new Set(lanes)], ["inspector"], "opening runtime settings started no game or settings worker");
+
+  // Other settings actions, and an action the requested runtime's settings do not list, keep their own workers.
+  assert.equal((await settingsChoices({}, "fixture", "setup", { runtimeId: "wine" })).lane, "module:fixture:settings");
+  assert.equal((await settingsChoices({}, "fixture", "listRuntimeVersions", { runtimeId: "wine" })).lane, "module:fixture:settings");
+  assert.equal((await gameChoices({ sender: owner }, game.gamePath, "listRuntimeVersions", {}, { runtimeId: "wine" })).lane, "game:game-0");
+  assert.equal((await gameChoices({ sender: owner }, game.gamePath, "listRuntimeVersions", {}, { runtimeId: "player" })).lane, "inspector");
+
+  // Sikarugir, WineCX and CrossOver declare their translator menus this way.
+  const wine = require("../src/modules/crossover/main").manifest;
+  for (const runtimeId of ["sikarugir", "winecx", "crossover"].filter(id => wine.runtime.entries[id]))
+    assert.ok(resolveRuntimeSettingsSchema(wine, runtimeId).fields.some(field => field.key === "translatorRenderer" && field.optionsAction === "listTranslatorOptions"), runtimeId);
 });
 
 // The inspector's lane keeps listed installations and verified app bundles

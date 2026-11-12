@@ -63,7 +63,7 @@ A new runtime takes effect the moment you pick it. Different runtimes can keep t
 
 ### Runtime settings
 
-A gear next to the runtime opens that runtime's settings for this game, such as window size, language, controls or launch flags, in a window of their own. Each game gets one such window per runtime, so pressing the gear again brings the open one forward. The defaults for each game type live in **Settings**; anything you change here applies to this game only, and **Reset** returns to the defaults. Less common options sit in a collapsed **Advanced** group.
+A gear next to the runtime opens that runtime's settings for this game, such as window size, language, controls or launch flags, in a window of their own. Each game gets one such window per runtime, so pressing the gear again brings the open one forward. The defaults for each game type live in **Settings**; anything you change here applies to this game only, and **Reset** returns to the defaults. Less common options sit in a collapsed **Advanced** group. Menus that list installed translators, environments or versions fill in from the runtimes MacLauncher already read for the inspector, here and in **Settings**, so they open without a fresh scan of every installed runtime.
 
 ### Launch arguments
 
