@@ -117,6 +117,8 @@ Many of these features are emulations that `KK_EMULATION` selects, as [Performan
 - Rasterization-order access (`VK_EXT_rasterization_order_attachment_access`) for color attachments on Apple GPU family 7 and later. Depth and stencil attachments have no such access.
 - Mesh and task shaders (`VK_EXT_mesh_shader`) with mesh shader queries, and multiview together with geometry and tessellation shaders.
 
+Native Mesh draws larger than 2,097,152 groups run as indirect slices. With a Task shader, that span counts each Task group's child bound. Each slice uses a separate render encoder, which stores the attachments and reloads them for the next slice.
+
 ### Resources and memory
 
 - Sparse binding and sparse residency for buffers, 2D and 3D images and aliased memory, together with shader resource residency. These are built on Metal placement sparse resources and are exposed when the Metal device supports them.
