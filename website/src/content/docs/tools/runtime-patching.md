@@ -8,7 +8,7 @@ sidebar:
   order: 0.5
 ---
 
-When a Windows game runs on a Mac through [CrossOver](https://www.codeweavers.com/crossover/) or [Sikarugir](https://github.com/Sikarugir-App/Sikarugir), a lot of what decides whether it draws correctly, and how fast, happens outside [WINE](https://www.winehq.org/) itself. Two smaller pieces handle the graphics: a graphics translator and, for some routes, a Vulkan driver. Each WINE distribution comes with the versions of these pieces that were current when it was released. Replacing them with other versions is what people usually mean by *patching a runtime*, and it's one of the most useful things to try when a game crashes at startup, draws something wrong or runs slowly.
+When a Windows game runs on a Mac through [CrossOver](https://www.codeweavers.com/crossover/), [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) or [WineCX](https://github.com/dappermint/winecx-gptk), a lot of what decides whether it draws correctly, and how fast, happens outside [WINE](https://www.winehq.org/) itself. Two smaller pieces handle the graphics: a graphics translator and, for some routes, a Vulkan driver. Each WINE distribution comes with the versions of these pieces that were current when it was released. Replacing them with other versions is what people usually mean by *patching a runtime*, and it's one of the most useful things to try when a game crashes at startup, draws something wrong or runs slowly.
 
 This page explains what those pieces do and why a different version can help. It then compares how [CXPatcher](https://github.com/italomandara/CXPatcher) and MacLauncher go about it, and finishes with a walkthrough for one game.
 

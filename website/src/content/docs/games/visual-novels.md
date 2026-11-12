@@ -51,4 +51,4 @@ Most of these game types come with tools for reading the script. KiriKiri script
 
 ### Engines without a native interpreter
 
-<span id="runtime-bgi-tools"></span><span id="runtime-catsystem2-tools"></span>BGI (also called Ethornell) and CatSystem2 have no native interpreter. MacLauncher still recognizes their games and offers their archive and script tools, and it plays the original Windows executable through [CrossOver or Sikarugir](/maclauncher/games/windows/).
+<span id="runtime-bgi-tools"></span><span id="runtime-catsystem2-tools"></span>BGI (also called Ethornell) and CatSystem2 have no native interpreter. MacLauncher still recognizes their games and offers their archive and script tools, and it plays the original Windows executable through [CrossOver, Sikarugir or WineCX](/maclauncher/games/windows/).

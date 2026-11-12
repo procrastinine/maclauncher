@@ -16,7 +16,7 @@ Many games can run in more than one way, though, and sometimes the second choice
 
 MacLauncher sorts every game it imports into a **game type**: the engine or platform the game was made for, such as Ren'Py, RPG Maker MV, Unity, Android or PlayStation 5. The game type decides how MacLauncher reads the game's files, which settings apply and which tools appear in the inspector.
 
-A **runtime** is one way to play a game type: an engine, a player or a compatibility layer. Every game type has a default runtime, and many have several. The PlayStation 5 game type, for example, can run on AnyPS5 or on Prosper. Ren'Py games can run in the Ren'Py SDK, through Ren'Py Patch, or as the game's own Mac app. Some runtimes serve many game types: Electron and NW.js play all the web-based game types, and Sikarugir and CrossOver can play the Windows executable of almost any game.
+A **runtime** is one way to play a game type: an engine, a player or a compatibility layer. Every game type has a default runtime, and many have several. The PlayStation 5 game type, for example, can run on AnyPS5 or on Prosper. Ren'Py games can run in the Ren'Py SDK, through Ren'Py Patch, or as the game's own Mac app. Some runtimes serve many game types: Electron and NW.js play all the web-based game types, and Sikarugir, WineCX and CrossOver can play the Windows executable of almost any game.
 
 Tools belong to the game type, not the runtime. A Unity game keeps its Unity decompiler and asset tools when you switch it to CrossOver, because the tools read the game's own data.
 
@@ -54,7 +54,7 @@ Try it when:
 
 [WineCX](https://github.com/dappermint/winecx-gptk) is a free WINE runtime built from CodeWeavers' CrossOver changes on a current WINE release. Like Sikarugir, it's downloaded and managed for you, with a private Windows environment for each game. Unlike Sikarugir, its WINE is the kind Apple's D3DMetal loads into in CrossOver, and D3DMetal comes from a version you install in Runtimes. Current releases need macOS 26 or later. Try it when you don't have CrossOver and a game does better on a newer, CrossOver-style WINE. Its requirements and included translators are on the [Windows games](/maclauncher/windows/crossover-and-sikarugir/#winecx) page.
 
-A few game types have tools but no Mac player: BGI / Ethornell, CatSystem2 and Haxe native builds. These games play their Windows executable through a registered CrossOver application when there is one, and through Sikarugir otherwise.
+A few game types have tools but no Mac player: BGI / Ethornell, CatSystem2 and Haxe native builds. These games play their Windows executable through a registered CrossOver application when there is one, and through Sikarugir otherwise, and WineCX can be chosen for them as well.
 
 :::tip[Rule of thumb]
 Use the native runtime first. If the game won't start or misbehaves, switch to WINE: CrossOver if you have it, otherwise Sikarugir or WineCX. Each runtime also has its own settings in the inspector, so check those too, for example a WINE game's **Direct3D engine** or locale.

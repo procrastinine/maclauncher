@@ -40,7 +40,7 @@ Guide: [RPG Maker 2000/2003](https://github.com/procrastinine/maclauncher/blob/m
 
 ## WOLF RPG Editor
 
-[WOLF RPG Editor](https://www.silversecond.com/WolfRPGEditor/) games run on [Browser Woditor](https://frostyhowl.com/browser-woditor/), a browser port of the engine. MacLauncher converts archives that use the standard WOLF encryption into a form Browser Woditor can read, without changing the original files. Games that use Windows-specific system functions, native DLLs, WOLF RPG Pro features or MP4 video can run in [Sikarugir or CrossOver](/maclauncher/games/windows/) instead.
+[WOLF RPG Editor](https://www.silversecond.com/WolfRPGEditor/) games run on [Browser Woditor](https://frostyhowl.com/browser-woditor/), a browser port of the engine. MacLauncher converts archives that use the standard WOLF encryption into a form Browser Woditor can read, without changing the original files. Games that use Windows-specific system functions, native DLLs, WOLF RPG Pro features or MP4 video can run in [Sikarugir, WineCX or CrossOver](/maclauncher/games/windows/) instead.
 
 **Example games:** Mad Father.
 
@@ -72,7 +72,7 @@ Guide: [GameMaker](https://github.com/procrastinine/maclauncher/blob/master/docs
 
 ## Unity
 
-[Unity](https://unity.com/) games use one of two [scripting backends](https://docs.unity.com/en-us/engine/current/manual/programming-environment/scripting-backends), and the backend decides how a game can run on a Mac. Mono games ship their code as [.NET](https://github.com/dotnet/runtime) assemblies, and MacLauncher can run them on the macOS Unity player of the exact version they were built with. Many work well, but games that rely on Windows-specific libraries, or that ship only Direct3D shaders, won't. IL2CPP games are compiled to Windows machine code, so they need [Sikarugir or CrossOver](/maclauncher/games/windows/).
+[Unity](https://unity.com/) games use one of two [scripting backends](https://docs.unity.com/en-us/engine/current/manual/programming-environment/scripting-backends), and the backend decides how a game can run on a Mac. Mono games ship their code as [.NET](https://github.com/dotnet/runtime) assemblies, and MacLauncher can run them on the macOS Unity player of the exact version they were built with. Many work well, but games that rely on Windows-specific libraries, or that ship only Direct3D shaders, won't. IL2CPP games are compiled to Windows machine code, so they need [Sikarugir, WineCX or CrossOver](/maclauncher/games/windows/).
 
 **Example games:** Hollow Knight, Cuphead.
 

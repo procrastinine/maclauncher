@@ -78,7 +78,7 @@ Guide: [Infinity Engine](https://github.com/procrastinine/maclauncher/blob/maste
 
 [Half-Life](https://store.steampowered.com/app/70/HalfLife/) runs on [Xash3D FWGS](https://github.com/FWGS/xash3d-fwgs), an open-source engine compatible with GoldSrc, the engine Valve built for the original game. Xash3D FWGS plays the data from your own copy as a native Mac program, on Apple Silicon or Intel, without WINE. Import your Half-Life folder, such as the Steam installation, and press **Play**: the engine and Half-Life's game code are downloaded the first time.
 
-Mods that run on Half-Life's own game code, such as map packs, work the same way when you import the mod's folder from inside the Half-Life folder. Mods that bring their own Windows game code, Opposing Force and Blue Shift among them, can't load into a Mac engine, so they run through [Sikarugir or CrossOver](/maclauncher/games/windows/) from the Half-Life entry instead.
+Mods that run on Half-Life's own game code, such as map packs, work the same way when you import the mod's folder from inside the Half-Life folder. Mods that bring their own Windows game code, Opposing Force and Blue Shift among them, can't load into a Mac engine, so they run through [Sikarugir, WineCX or CrossOver](/maclauncher/games/windows/) from the Half-Life entry instead.
 
 Saves and settings stay in MacLauncher's data, and the game folder itself is never changed.
 
@@ -94,7 +94,7 @@ Guide: [MUGEN / Ikemen GO](https://github.com/procrastinine/maclauncher/blob/mas
 
 [Haxe](https://haxe.org/) games compiled for the [HashLink](https://hashlink.haxe.org/) virtual machine run on HashLink, using its Intel VM through Rosetta on Apple Silicon.
 
-Haxe games compiled to native Windows code instead are a separate game type, Haxe native build. They have no Mac runtime, so MacLauncher identifies and inspects them and plays them through Sikarugir or CrossOver.
+Haxe games compiled to native Windows code instead are a separate game type, Haxe native build. They have no Mac runtime, so MacLauncher identifies and inspects them and plays them through Sikarugir, WineCX or CrossOver.
 
 **Example games:** Dead Cells and Northgard (HashLink).
 
