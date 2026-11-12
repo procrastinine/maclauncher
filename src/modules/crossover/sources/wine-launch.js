@@ -314,7 +314,10 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const { bridge: steamBridge, launch: bridgeLaunch } = steam;({ environment, executablePath } = steam);
   Object.assign(environment, await Steps.adapterDescription(environment, { translatorPlan, host, signal: context.signal }));
   const registryEnvironment = existingEnvironment;
-  await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(executablePath),
+  await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings }, { executable: path.basename(executablePath), ngxCore: vulkanDLSS.enabled === true,
+    // A stopped private prefix is read directly, so unchanged values start no Wine.
+    readCurrentRegistry: !registryEnvironment ? async () =>
+      (await require("../../shared/runtime/wine-processes").runningState(prefixPath)).running ? null : Environments.registryValues(prefixPath) : undefined,
     assertWritable: registryEnvironment ? () => Environments.assertWritableRegistry(registryEnvironment) : undefined }, args => {
     // The registry tool runs from the engine's own loader, outside the game
     // bundle, like the session that it starts.

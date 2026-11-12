@@ -76,3 +76,14 @@ test('virtual NVIDIA device and architecture consistently identify Turing',()=>{
  assert.match(env.DXVK_CONFIG,/(?:^|; )dxgi\.customDeviceId = 1e07(?:;|$)/);
  assert.match(env.DXVK_CONFIG,/(?:^|; )dxgi\.customVendorId = 10de(?:;|$)/);
 });
+test('the forwarding route names its staged NGX core in the prefix registry once',async()=>{
+ const Wine=require('../src/modules/shared/runtime/wine-settings'),Registry=require('../src/modules/shared/runtime/wine-environment');
+ const key='HKLM\\Software\\NVIDIA Corporation\\Global\\NGXCore';
+ assert.equal(Wine.registry({}).length,0);
+ assert.deepEqual(Wine.registry({},{ngxCore:true}),[['reg.exe','add',key,'/v','FullPath','/t','REG_SZ','/d','C:\\Windows\\System32','/f']]);
+ const apply=async system=>{const writes=[];await Wine.applyRegistry({},{ngxCore:true,readCurrentRegistry:async()=>({'system.reg':Registry.readRegistry(system)})},args=>writes.push(args));return writes;};
+ assert.equal((await apply('')).length,1,'a prefix without the value gets it');
+ // D3DMetal writes the same value under another spelling of the key.
+ assert.equal((await apply('[Software\\\\Nvidia Corporation\\\\Global\\\\NGXCore] 1794059483\n"FullPath"="C:\\\\Windows\\\\System32"\n')).length,0);
+ assert.equal((await apply('[Software\\\\Nvidia Corporation\\\\Global\\\\NGXCore]\n"FullPath"="D:\\\\Other"\n')).length,1);
+});

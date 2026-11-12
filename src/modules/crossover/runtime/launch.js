@@ -250,7 +250,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     await ensureBottle(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, bottlePath)), directory, settings, context, { run, translatorEnvironment });
     Steps.detachProfileAliases(bottlePath);
   }
-  await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings, windowsVersion: "" }, {
+  await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings, windowsVersion: "" }, { ngxCore: vulkanDLSS.enabled === true,
     readCurrentRegistry: !existingEnvironment ? async () =>
       (await require('../../shared/runtime/wine-processes').runningState(bottlePath)).running ? null : Environments.registryValues(bottlePath) : undefined,
     assertWritable: existingEnvironment ? () => Environments.assertWritableRegistry(existingEnvironment) : undefined }, args => {
