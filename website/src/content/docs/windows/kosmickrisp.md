@@ -110,6 +110,8 @@ A Vulkan game hands its driver shaders that have to become Metal code before the
 
 Compute shaders that aren't cached yet also leave pipeline creation quickly. The driver generates their Metal code straight away and compiles the rest in the background at low priority, so a game that creates many compute pipelines at once doesn't stall on them. The first time the game actually uses one, it waits for that compile if it hasn't finished, and the compile gets full priority for the wait. A pipeline the game throws away before using it leaves the queue if its compile hasn't started yet.
 
+Graphics pipelines can also be built in parts. MacLauncher KosmicKrisp offers graphics pipeline libraries, which let a translator compile a game's vertex and fragment shaders as separate pieces before drawing and assemble complete pipelines from them later. For ordinary single-sampled shaders, the assembly reuses the compiled pieces. Metal still finishes each new combination of pieces with a compile of its own.
+
 ## Which build a game loads
 
 A Vulkan driver runs inside the program that uses it, so it has to be built for that program's processor, which isn't always the game's. Windows games run inside WINE, and Sikarugir, WineCX and the usual CrossOver releases run WINE as an Intel program under Rosetta. They need an Intel build of KosmicKrisp, even on an Apple Silicon Mac. The same goes for AnyPS5 and Prosper, which play PlayStation 5 games as Intel programs. Android games, on the other hand, run in an Apple Silicon host and load Apple Silicon builds, and so does a CrossOver whose WINE is itself an ARM64 program.
