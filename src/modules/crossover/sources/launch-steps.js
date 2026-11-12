@@ -98,7 +98,8 @@ function adapterDescription(environment, { translatorPlan, host, signal, existin
 }
 // The drive covers the imported game folder, so paths above the executable's
 // folder resolve. Drive links are allocated in the prefix that runs the game.
-function gamePaths(entry, prefixPath, { originalRoot, gameRoot, executable, executablePath }) {
+function gamePaths(entry, prefixPath, { originalRoot, gameRoot, executable, executablePath, directory }) {
+  if (directory) require("../temporal/game-view").releaseEarlierDrives(prefixPath, directory);
   const workingDirectory = path.dirname(executable), driveRoot = require("../game-drive").gameDriveRoot(entry, originalRoot, executable);
   const paths = require("../../shared/runtime/wine-game-paths").prepareGamePaths(prefixPath,
     { gameRoot: gameRoot === originalRoot ? driveRoot : gameRoot, executablePath, workingRoot: driveRoot, workingDirectory });

@@ -18,10 +18,44 @@ function relative(value) {
     throw Error("The Windows game view contains an invalid file path.");
   return value;
 }
+// Each game has one launch folder per Windows source, at a fixed path. Every
+// Play replaces it, so it keeps one Windows drive letter and never accumulates.
+const LAUNCH_FOLDER = "launch-folder";
+// Earlier versions created a new temporal-camera-<id> folder and a
+// new drive letter on every Play. The next Play removes them.
+const EARLIER_GENERATION = /^temporal-camera-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 function locations(directory, kind, generation) {
   if (kind !== "camera" || !/^[a-f0-9-]{36}$/.test(generation || "")) throw Error("The Windows camera generation is invalid.");
-  const name = "temporal-camera-" + generation;
-  return {root: path.join(directory, name), file: path.join(directory, name + ".json")};
+  return {root: path.join(directory, LAUNCH_FOLDER), file: path.join(directory, LAUNCH_FOLDER + ".json")};
+}
+// Removes the previous launch folder and the per-Play folders of earlier
+// versions. Their links point at the original game files and are removed as
+// links; nothing outside this runtime directory is read or changed.
+function retire(directory) {
+  if (!stat(directory)) return;
+  Writable.assertOwnDirectory(directory, directory, {create: false});
+  const names = fs.readdirSync(directory).filter(name => name === LAUNCH_FOLDER || EARLIER_GENERATION.test(name));
+  for (const name of names) {
+    const root = path.join(directory, name), info = stat(root);
+    if (info?.isDirectory() && !info.isSymbolicLink()) fs.rmSync(root, {recursive: true, force: true});
+    else if (info) fs.unlinkSync(root);
+    const file = root + ".json";if (stat(file)?.isFile()) fs.unlinkSync(file);
+  }
+}
+// Frees the Windows drive letters that earlier versions gave each per-Play
+// folder of this runtime directory. Other drive mappings are left unchanged.
+function releaseEarlierDrives(prefixPath, directory) {
+  const dosdevices = path.join(prefixPath, "dosdevices"), owner = stat(directory) && fs.realpathSync(directory);
+  if (!owner || !stat(dosdevices)) return;
+  Writable.assertOwnDirectory(prefixPath, dosdevices, {create: false});
+  const real = fs.realpathSync(dosdevices);
+  for (const letter of fs.readdirSync(dosdevices)) {
+    if (!/^[a-z]:$/.test(letter)) continue;
+    const mapping = path.join(dosdevices, letter);
+    if (!stat(mapping)?.isSymbolicLink()) continue;
+    const target = path.resolve(real, fs.readlinkSync(mapping));
+    if (path.dirname(target) === owner && EARLIER_GENERATION.test(path.basename(target))) fs.unlinkSync(mapping);
+  }
 }
 function read(file) {
   const info = stat(file);
@@ -114,8 +148,7 @@ function prepared(view, plan) {
       recordSha256: digest(value.record), proxyIdentity: identity(value.target), backupIdentity: identity(value.original), recordIdentity: identity(value.record)};
   });save(view.directory, view.file, view.record);
 }
-// Retain the small unselected/completed receipt even if setup failed. A library
-// write interrupted before publication may still refer to the older generation.
+// An unused or failed launch folder stays until the next Play replaces it.
 function discard(_view) {}
 function remember(entry, context, runtimeId, view) {
   if (view.binding && !view.record.selected) {view.record.selected = true;save(view.directory, view.file, view.record);}
@@ -132,6 +165,7 @@ async function prepareLaunchFolder(entry, context, { runtimeId, label, directory
   let view = null;
   try {
     const program = require("../runtime/steam-bridge-launch").declaredProgram(executable, originalRoot, executableArchitecture);
+    retire(directory);
     view = await camera(directory, originalRoot, executable, { libraries: plans.flatMap(item => item.plan.libraries), programs: program ? [program] : [] }, null, context.signal);
     const ready = new Set(), libraries = [];
     for (const item of plans) {
@@ -174,7 +208,7 @@ function watch(entry, context, directory, runtimeId, view) {
         delete entry.runtimeData[runtimeId].cameraViewRecoveryFailure;
       } catch (error) {
         entry.runtimeData[runtimeId].cameraViewRecoveryFailure = String(error.message || error);
-        warn(context.logger, "Windows game changes remain in their private launch view and will be preserved in that retained generation.", error.message);
+        warn(context.logger, "Files the game wrote beside its adapted executable remain in its launch folder until the next Play replaces it.", error.message);
       }
       try {context.onEntryChange?.(entry)?.catch?.(() => {});} catch {}
     };
@@ -187,4 +221,4 @@ function watch(entry, context, directory, runtimeId, view) {
   context[watcher] = {originalOnSpawn, originalSpawn, onSpawn, spawn};context.onProcessSpawn = onSpawn;
   if (spawn) context.spawnDetachedChecked = spawn;
 }
-module.exports = {reconcile, camera, prepared, discard, remember, clearWatch, watch, prepareLaunchFolder};
+module.exports = {reconcile, camera, prepared, discard, remember, clearWatch, watch, prepareLaunchFolder, retire, releaseEarlierDrives};

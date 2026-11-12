@@ -312,7 +312,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   Object.assign(environment,vulkanEnvironment);Object.assign(overrides,vulkanEnvironment);
   const adapterDescription = await Steps.adapterDescription(environment, { translatorPlan, host, signal: context.signal, existingEnvironment });
   Object.assign(environment, adapterDescription); Object.assign(overrides, adapterDescription);
-  const { workingDirectory, windowsExecutablePath, windowsWorkingDirectory } = Steps.gamePaths(entry, bottlePath, { originalRoot, gameRoot, executable, executablePath });
+  const { workingDirectory, windowsExecutablePath, windowsWorkingDirectory } = Steps.gamePaths(entry, bottlePath, { originalRoot, gameRoot, executable, executablePath, directory });
   Steps.runtimeDataPath(bottlePath, selected.install);
   const shaderCache = Steps.shaderCache(directory, bottlePath);
   Object.assign(environment, shaderCache); Object.assign(overrides, shaderCache);

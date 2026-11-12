@@ -373,7 +373,7 @@ for (const layout of ["Frameworks", "SharedSupport"]) test(`DXMT camera support 
   assert.equal(files["wine/x86_64-unix/winemetal.so"], sha("native base"), "the recorded renderer bytes are what the camera adapter compares");
 });
 
-test("an explicit original-source camera view copies only code and retains old and new private bytes", async t => {
+test("an explicit original-source camera view copies only code and the next Play replaces it at the same path", async t => {
   const f = fixture(t), GameView = require("../src/modules/crossover/temporal/game-view");
   assert.equal(GameView.baseline, undefined, "released baseline recovery is absent from the current adapter");
   const base = path.join(fs.realpathSync(f.root), "original"), directory = path.join(f.root, "runtime");
@@ -401,9 +401,35 @@ test("an explicit original-source camera view copies only code and retains old a
   assert.equal(fs.readFileSync(path.join(directory, "temporal-camera.json"), "utf8"), "old receipt must stay untouched");
   GameView.discard(view);
   assert.equal(fs.readFileSync(path.join(view.gameRoot, "SaveNew.dat"), "utf8"), "new private save");
+  GameView.retire(directory);
   const next = await GameView.camera(directory, base, path.join(base, "Game.exe"), plan, recovery);
-  assert.notEqual(next.gameRoot, view.gameRoot);
-  assert.equal(fs.readFileSync(path.join(view.gameRoot, "SaveNew.dat"), "utf8"), "new private save");
+  assert.equal(next.gameRoot, view.gameRoot, "every Play uses the same launch folder, so it keeps one drive letter");
+  assert.equal(fs.existsSync(path.join(next.gameRoot, "SaveNew.dat")), false, "the previous launch folder is replaced, not kept beside the new one");
+  assert.deepEqual(fs.readdirSync(directory).sort(), ["launch-folder", "launch-folder.json", "temporal-camera", "temporal-camera.json"]);
+  assert.equal(fs.readFileSync(path.join(base, "settings.ini"), "utf8"), "game writes to original settings", "removing links never touches the originals");
+  assert.equal(fs.readFileSync(path.join(old, "SaveOld.dat"), "utf8"), "old private save");
+});
+
+test("Play removes the per-Play camera folders and drive letters that earlier versions left", t => {
+  const f = fixture(t), GameView = require("../src/modules/crossover/temporal/game-view"), root = fs.realpathSync(f.root);
+  const base = path.join(root, "original"), directory = path.join(root, "runtime"), prefix = path.join(directory, "bottles/game"), dosdevices = path.join(prefix, "dosdevices");
+  fs.mkdirSync(path.join(base, "Data"), {recursive: true});fs.writeFileSync(path.join(base, "Data/save.dat"), "original save");
+  fs.mkdirSync(dosdevices, {recursive: true});fs.mkdirSync(path.join(prefix, "drive_c"));
+  const ids = ["1b394b5a-3697-4184-8f06-3f524a7a3a70", "ec1d79fd-61fb-4e48-9cc6-4ecd4ff0263d"];
+  ids.forEach((id, index) => {
+    const generation = path.join(directory, "temporal-camera-" + id);fs.mkdirSync(generation);
+    fs.symlinkSync(path.join(base, "Data"), path.join(generation, "Data"), "dir");fs.writeFileSync(generation + ".json", "{}");
+    fs.symlinkSync(path.relative(dosdevices, generation), path.join(dosdevices, "de"[index] + ":"), "dir");
+  });
+  fs.mkdirSync(path.join(directory, "temporal-camera"));fs.mkdirSync(path.join(directory, "cache"));
+  fs.symlinkSync("../drive_c", path.join(dosdevices, "c:"), "dir");
+  fs.symlinkSync(path.relative(dosdevices, base), path.join(dosdevices, "g:"), "dir");
+  fs.symlinkSync(path.relative(dosdevices, directory), path.join(dosdevices, "h:"), "dir");
+  fs.symlinkSync("/Volumes/Unplugged Disk", path.join(dosdevices, "i:"), "dir");
+  GameView.releaseEarlierDrives(prefix, directory);GameView.retire(directory);
+  assert.deepEqual(fs.readdirSync(dosdevices).sort(), ["c:", "g:", "h:", "i:"], "only the earlier per-Play folders lose their drive letters");
+  assert.deepEqual(fs.readdirSync(directory).sort(), ["bottles", "cache", "temporal-camera"], "earlier per-Play folders are removed; other launcher data stays");
+  assert.equal(fs.readFileSync(path.join(base, "Data/save.dat"), "utf8"), "original save", "links into the original game are removed as links");
 });
 
 test("never-used camera Off performs no projection filesystem work or process wrapping", async t => {

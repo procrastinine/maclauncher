@@ -335,7 +335,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
       (await require("../../shared/runtime/wine-processes").runningState(prefixPath)).running ? null : Environments.registryValues(prefixPath) : undefined,
     assertWritable: registryEnvironment ? () => Environments.assertWritableRegistry(registryEnvironment) : undefined }, runRegistryTool);
   const { workingDirectory, windowsExecutablePath, windowsWorkingDirectory } = Steps.gamePaths(entry, prefixPath,
-    { originalRoot, gameRoot, executable: match.windowsExecutablePath, executablePath });
+    { originalRoot, gameRoot, executable: match.windowsExecutablePath, executablePath, directory });
   Steps.runtimeDataPath(prefixPath, selected.install);
   Object.assign(environment, Steps.shaderCache(directory, prefixPath));
   let applicationArguments = [...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")), ...(context.gameArguments || [])];

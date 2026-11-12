@@ -33,6 +33,7 @@ test('a camera view copies the bootstrap program so the bridge can start it insi
   const recovery = { overrides: {}, omitted: new Set(), libraries: [] };
   const linked = await GameView.camera(directory, base, outer, { libraries: [] }, recovery);
   assert.throws(() => Launch.resolve(linked.executablePath, 'x86_64'), /compatible PE/, 'a linked program cannot be checked inside the view');
+  GameView.retire(directory);
   const view = await GameView.camera(directory, base, outer, { libraries: [], programs: [Launch.declaredProgram(outer, base, 'x86_64')] }, recovery);
   const copied = Object.entries(view.record.entries).filter(([, row]) => row.kind === 'file').map(([name]) => name).sort();
   assert.deepEqual(copied, ['Game.exe', 'Project/Binaries/Win64/Game-Shipping.exe']);
