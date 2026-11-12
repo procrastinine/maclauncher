@@ -61,7 +61,18 @@ function registry(settings, { executable = '', ngxCore = false } = {}) {
     if (!Object.hasOwn(WINDOWS_VERSIONS, settings.windowsVersion)) throw new Error('Unsupported Wine Windows version.');
     if (executable) add(`HKCU\\Software\\Wine\\AppDefaults\\${text(executable)}`, 'Version', settings.windowsVersion);
   }
-  if (ngxCore) add(...NGX_CORE);
+  if (ngxCore) {
+    add(...NGX_CORE);
+    // NVIDIA's NGX SDK checks both the driver service path and the NGX
+    // registration marker before loading a core. Match the owned core's
+    // upstream registration, including prefixes never prepared by D3DMetal.
+    const global = 'HKLM\\Software\\NVIDIA Corporation\\Global';
+    const service = 'HKLM\\System\\ControlSet001\\Services\\nvlddmkm';
+    const marker = '{41FCC608-8496-4DEF-B43E-7D9BD675A6FF}';
+    add(service + '\\NGXCore', 'NGXPath', NGX_CORE[2]);
+    add(global, marker, 1, 'REG_DWORD');
+    add(service, marker, 1, 'REG_DWORD');
+  }
   return commands;
 }
 async function applyRegistry(settings, options, run) {

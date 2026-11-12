@@ -250,16 +250,22 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     await ensureBottle(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, bottlePath)), directory, settings, context, { run, translatorEnvironment });
     Steps.detachProfileAliases(bottlePath);
   }
-  await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings, windowsVersion: "" }, { ngxCore: vulkanDLSS.enabled === true,
-    readCurrentRegistry: !existingEnvironment ? async () =>
-      (await require('../../shared/runtime/wine-processes').runningState(bottlePath)).running ? null : Environments.registryValues(bottlePath) : undefined,
-    assertWritable: existingEnvironment ? () => Environments.assertWritableRegistry(existingEnvironment) : undefined }, args => {
+  const runRegistryTool = args => {
     const options = { cwd: directory, env: environment, signal: context.signal, timeout: 30000 };
     const commandArgs = ["--bottle", bottlePath, "--no-update", "--", ...args];
     return run ? run(selected.install.executablePath, commandArgs, options) : existingEnvironment
       ? require("../../shared/runtime/wine-processes").runTool(selected.install.executablePath, commandArgs, options)
       : runSupervised(selected.install.executablePath, selected.install.serverPath, commandArgs, options);
+  };
+  await require('../temporal/ngx-trust').apply(vulkanDLSS.trust, {
+    assertWritable: () => existingEnvironment ? Environments.assertWritableRegistry(existingEnvironment)
+      : Environments.assertPrivateEnvironment(Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, bottlePath)), directory),
+    run: runRegistryTool,
   });
+  await WineSettings.applyRegistry({ ...context.runtimeSettings, ...settings, windowsVersion: "" }, { ngxCore: vulkanDLSS.enabled === true,
+    readCurrentRegistry: !existingEnvironment ? async () =>
+      (await require('../../shared/runtime/wine-processes').runningState(bottlePath)).running ? null : Environments.registryValues(bottlePath) : undefined,
+    assertWritable: existingEnvironment ? () => Environments.assertWritableRegistry(existingEnvironment) : undefined }, runRegistryTool);
   timing('bottle-settings');
   // The vendor wrapper restores these trusted game-only values after its
   // protected shell/Perl launch; bottle setup stays on the stock runtime.

@@ -80,10 +80,19 @@ test('the forwarding route names its staged NGX core in the prefix registry once
  const Wine=require('../src/modules/shared/runtime/wine-settings'),Registry=require('../src/modules/shared/runtime/wine-environment');
  const key='HKLM\\Software\\NVIDIA Corporation\\Global\\NGXCore';
  assert.equal(Wine.registry({}).length,0);
- assert.deepEqual(Wine.registry({},{ngxCore:true}),[['reg.exe','add',key,'/v','FullPath','/t','REG_SZ','/d','C:\\Windows\\System32','/f']]);
+ const commands=Wine.registry({},{ngxCore:true});
+ assert.equal(commands.length,4);
+ assert.deepEqual(commands[0],['reg.exe','add',key,'/v','FullPath','/t','REG_SZ','/d','C:\\Windows\\System32','/f']);
+ assert.deepEqual(commands[1],['reg.exe','add','HKLM\\System\\ControlSet001\\Services\\nvlddmkm\\NGXCore','/v','NGXPath','/t','REG_SZ','/d','C:\\Windows\\System32','/f']);
+ for (const row of commands.slice(2)) {assert.equal(row[4],'{41FCC608-8496-4DEF-B43E-7D9BD675A6FF}');assert.equal(row[6],'REG_DWORD');assert.equal(row[8],'1');}
  const apply=async system=>{const writes=[];await Wine.applyRegistry({},{ngxCore:true,readCurrentRegistry:async()=>({'system.reg':Registry.readRegistry(system)})},args=>writes.push(args));return writes;};
- assert.equal((await apply('')).length,1,'a prefix without the value gets it');
+ assert.equal((await apply('')).length,4,'a prefix without NGX gets the complete registration');
  // D3DMetal writes the same value under another spelling of the key.
- assert.equal((await apply('[Software\\\\Nvidia Corporation\\\\Global\\\\NGXCore] 1794059483\n"FullPath"="C:\\\\Windows\\\\System32"\n')).length,0);
- assert.equal((await apply('[Software\\\\Nvidia Corporation\\\\Global\\\\NGXCore]\n"FullPath"="D:\\\\Other"\n')).length,1);
+ assert.equal((await apply('[Software\\\\Nvidia Corporation\\\\Global\\\\NGXCore] 1794059483\n"FullPath"="C:\\\\Windows\\\\System32"\n')).length,3);
+ assert.equal((await apply('[Software\\\\Nvidia Corporation\\\\Global\\\\NGXCore]\n"FullPath"="D:\\\\Other"\n')).length,4);
+ const complete='[Software\\\\NVIDIA Corporation\\\\Global\\\\NGXCore]\n"FullPath"="C:\\\\Windows\\\\System32"\n'+
+   '[System\\\\ControlSet001\\\\Services\\\\nvlddmkm\\\\NGXCore]\n"NGXPath"="C:\\\\Windows\\\\System32"\n'+
+   '[Software\\\\NVIDIA Corporation\\\\Global]\n"{41FCC608-8496-4DEF-B43E-7D9BD675A6FF}"=dword:00000001\n'+
+   '[System\\\\ControlSet001\\\\Services\\\\nvlddmkm]\n"{41FCC608-8496-4DEF-B43E-7D9BD675A6FF}"=dword:00000001\n';
+ assert.equal((await apply(complete)).length,0,'unchanged complete registration starts no Wine tool');
 });

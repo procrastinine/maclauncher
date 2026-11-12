@@ -118,7 +118,7 @@ async function prepare(entry, context, settings, plan, architecture, view, { run
     ...[[nvapi, 'nvapi64.dll'], [core, 'nvngx.dll'], [core, '_nvngx.dll']].map(([source, name]) => ({ source, name, machine: 0x8664 }))];
   for (const item of selected) await context.useRuntime?.({ managerId: item.manager.id, version: item.value.version, sourcePath: item.value.install.root || item.value.install.installDir });
   const identity = require('node:crypto').createHash('sha256').update(JSON.stringify([view?.identity, native.map(file => [file.source, fileDigest(file.source).sha256])])).digest('hex');
-  return { enabled: true, driver: carrierDriver(plan, hasCarrier).engine, view: { ...view, identity, native,
+  return { enabled: true, trust: require('./ngx-trust').prepare(selected[1].value.install, inspect), driver: carrierDriver(plan, hasCarrier).engine, view: { ...view, identity, native,
     dllOverrides: [...(view?.dllOverrides || []), 'nvapi64,nvngx,_nvngx=n,b'] } };
 }
 function environment(enabled, values = {}) {
