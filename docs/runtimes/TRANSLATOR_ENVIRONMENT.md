@@ -270,8 +270,9 @@ Applies to games whose Vulkan driver is a KosmicKrisp build. Its global values a
 | `KK_EMULATION` | Emulated features, comma-separated and applied left to right. Unset or `performance`: the fast set for this Mac's Apple GPU generation, which the driver detects automatically. `conformance`: every emulated feature (Direct3D 12 feature level 12_2, shader model 6.9). `apple7` through `apple11` or `mode=7` through `mode=11`: also turn on the features that generation runs natively. `+name` or `-name`: one feature on or off. `-VK_extension_name` hides an extension. See [Performance and conformance](KOSMICKRISP.md#performance-and-conformance) and the [switch table](KOSMICKRISP.md#switch-table) for the names. |  |
 | `MESA_KK_EXPERIMENTAL` | Experimental features: custom_border, image_view_min_lod, optimize_e5b9g9r9 or all. The driver's default is custom_border,image_view_min_lod. |  |
 | `MESA_KK_DISABLE_WORKAROUNDS` | Workaround numbers to turn off, separated by commas, or all. |  |
-| `MESA_KK_GPU_CAPTURE` | true records a Metal GPU capture. |  |
-| `MESA_KK_GPU_CAPTURE_DIRECTORY` | Folder that receives Metal GPU captures. |  |
+| `MESA_KK_GPU_CAPTURE` | true enables Metal capture control through debug markers. |  |
+| `MESA_KK_GPU_CAPTURE_IMMEDIATELY` | true starts capture at device creation when capture is enabled. |  |
+| `MESA_KK_GPU_CAPTURE_DIRECTORY` | Folder that receives Metal GPU captures. Capture is declined while timestamp counter heaps are live; creating a heap ends capture, preserving real timestamp queries. |  |
 | `MESA_SHADER_CACHE_DIR` | Folder for Mesa's shader cache. |  |
 | `MESA_SHADER_CACHE_DISABLE` | true turns off Mesa's shader cache. |  |
 | `MESA_SHADER_CACHE_MAX_SIZE` | Largest shader cache size, such as 1G or 512M. |  |

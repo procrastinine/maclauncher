@@ -108,9 +108,13 @@ A chip preset like `apple10` is handy for checking how a game behaves with the f
 
 A Vulkan game hands its driver shaders that have to become Metal code before the GPU can run them, and compiling them takes time, which a game often spends at a loading screen or, worse, in the middle of play. MacLauncher KosmicKrisp keeps the work it has already done. It caches the Metal Shading Language it generates from each shader and the Metal libraries compiled from it, so a shader seen before isn't processed again. For WINE games, that cache sits in the game's own MacLauncher folder, apart from the bottle, with room for 4 GB unless you set `MESA_SHADER_CACHE_MAX_SIZE` yourself.
 
-Compute shaders that aren't cached yet also leave pipeline creation quickly. The driver generates their Metal code straight away and compiles the rest in the background at low priority, so a game that creates many compute pipelines at once doesn't stall on them. The first time the game actually uses one, it waits for that compile if it hasn't finished, and the compile gets full priority for the wait. A pipeline the game throws away before using it leaves the queue if its compile hasn't started yet.
+Compute shaders that aren't cached yet also leave pipeline creation quickly. The driver keeps their compiler input and generates and compiles their Metal code in the background at low priority, so a game that creates many compute pipelines at once doesn't stall on them. The first time the game actually uses one, it waits for that compile if it hasn't finished, and the compile gets full priority for the wait. A pipeline the game throws away before using it leaves the queue if its compile hasn't started yet.
 
 Graphics pipelines can also be built in parts. MacLauncher KosmicKrisp offers graphics pipeline libraries, which let a translator compile a game's vertex and fragment shaders as separate pieces before drawing and assemble complete pipelines from them later. For ordinary single-sampled shaders, the assembly reuses the compiled pieces. Metal still finishes each new combination of pieces with a compile of its own.
+
+Sparse resources let a game bind only the memory it needs. Streamed compressed 2D images keep their mip data in shared block pages, and creating a sparse buffer preserves the counters used by tessellation and geometry shaders. Ordinary buffer bindings keep their ordinary access path.
+
+On M6 and later Macs with macOS 27, image-view minimum LOD and more three-component read-only texel-buffer formats use native Metal features. Older GPUs keep the supported shader emulations.
 
 ## Which build a game loads
 
