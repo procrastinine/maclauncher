@@ -326,9 +326,11 @@ test('resolved vkd3d-proton replaces stock DXGI in the actual private loader inp
     return { id, translatorEngine: engine, getState: () => ({ installed: [installed] }), resolveSelection: () => ({ ready: true, install: installed }) };
   };
   const dxvk = manager('paired-dxvk', 'dxvk', 'paired-dxvk'), proton = manager('paired-proton', 'vkd3d-proton', 'proton');
+  // vkd3d-proton runs only on KosmicKrisp, so this host can run KosmicKrisp.
+  const host = { ...f.host, physicalAppleGPU: true };
   for (const runtime of ['crossover', 'sikarugir']) {
     const context = { ...f.context({ environmentReference: 'private', translatorD3D12: 'paired-proton:1' }), runtimeId: runtime };
-    const plan = await Translators.resolve(f.install, runtime, context, { host: f.host, executableArchitecture: 'x86_64', managers: [dxvk, proton] });
+    const plan = await Translators.resolve(f.install, runtime, context, { host, executableArchitecture: 'x86_64', managers: [dxvk, proton] });
     assert.equal(plan.components.d3d12.used.engine, 'vkd3d-proton');
     assert.equal(plan.dxgiBinding.description.id, 'paired-dxvk:1');
     assert.equal(Translators.requirement(plan, context, { managers: [dxvk, proton] }), null);
@@ -338,7 +340,7 @@ test('resolved vkd3d-proton replaces stock DXGI in the actual private loader inp
     assert.equal(view.native.find(file => file.name === 'd3d12.dll').source, path.join(f.root, 'proton/d3d12.dll'));
     assert.equal(view.native.some(file => file.name === 'libvkd3d-1.dll'), false);
     assert.equal(Object.keys(view.links).some(file => /\/(?:dxgi|d3d12)\.dll$/.test(file)), false);
-    const missing = await Translators.resolve(f.install, runtime, { ...context }, { host: f.host, executableArchitecture: 'x86_64', managers: [proton] });
+    const missing = await Translators.resolve(f.install, runtime, { ...context }, { host, executableArchitecture: 'x86_64', managers: [proton] });
     assert.deepEqual(missing.requiredTranslators, ['dxvk']);
   }
 });

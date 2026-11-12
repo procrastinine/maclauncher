@@ -318,6 +318,16 @@ async function kosmicKrispHost(host = {}, context = {}) {
 }
 // MacLauncher's own DXVK and vkd3d-proton builds, as opposed to a runtime's.
 const ownVulkanTranslator = item => !item.included && !item.reference && Boolean(item.managerId) && ['dxvk', 'vkd3d-proton'].includes(item.engine);
+// DXVK 2.0 and later need geometry shaders and robustness2 null descriptors,
+// and vkd3d-proton also needs transform feedback; MoltenVK and its scene build
+// have none of these. DXVK 1.x, such as DXVK-macOS, creates its device there.
+function needsKosmicKrisp(item) {
+  if (item.engine === 'vkd3d-proton') return true;
+  const major = /(\d+)\.\d+/.exec(String(item.runtimeVersion || item.version || ''))?.[1];
+  return item.engine === 'dxvk' && major !== undefined && Number(major) >= 2;
+}
+// A declined MacLauncher KosmicKrisp download for this Play (runtime-preparation `declines`).
+const KOSMICKRISP_DECLINED = 'kosmickrisp-pairing';
 // The downloads of the current plan's paired Vulkan driver (resolve): the
 // MacLauncher KosmicKrisp build, and MacLauncher's MoltenVK scene build where
 // KosmicKrisp cannot run or, for DXVK alone, when its download is declined.
@@ -339,6 +349,13 @@ async function driverRequirements(context, { host = {} } = {}) {
   if (pending.vkd3d) {
     const { optional, cancelLabel, ...required } = offer;
     return [{ ...required, detail: 'MacLauncher\'s vkd3d-proton runs on KosmicKrisp, which also forwards DLSS frames.' }];
+  }
+  // DXVK 2.0 and later do not start on MoltenVK: skipping keeps the runtime's
+  // own automatic Direct3D choice and Vulkan driver for this Play.
+  if (pending.moltenVK === false) {
+    const automatic = Plan.sourceLabels(context.runtimeId || context.translatorPlan?.runtime).automatic;
+    return [{ ...offer, cancelLabel: 'Use ' + automatic.replace(/\b(automatic|choice)\b/g, word => word[0].toUpperCase() + word.slice(1)),
+      declines: [KOSMICKRISP_DECLINED], detail: `MacLauncher's DXVK runs on KosmicKrisp, which also forwards DLSS frames. Skipping uses ${automatic} instead of MacLauncher's DXVK.` }];
   }
   return [{ ...offer, detail: 'MacLauncher\'s DXVK runs on KosmicKrisp, which also forwards DLSS frames. Skipping uses MacLauncher\'s MoltenVK build.',
     ...(carrier ? { fallback: carrier } : {}) }];
@@ -378,6 +395,26 @@ async function resolve(install, runtime, context, { executableArchitecture, host
       return [item.id, Binary.compatibility({ ...item, files, requiredPaths }, record,
         { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() })];
     }))])) : {};
+  // MacLauncher's DXVK 2.x/3.x and vkd3d-proton cannot run on MoltenVK. With the
+  // Vulkan driver on its automatic choice and no MacLauncher KosmicKrisp (a Mac
+  // that cannot run it, or a download declined in this Play), each keeps the
+  // runtime's own automatic choice for its Direct3D versions instead.
+  const preliminary = Plan.resolvePlan({ ...input, compatibility }).components['vulkan-driver'];
+  const kosmicKrispOnly = !preliminary.inherited && (preliminary.value === Plan.AUTOMATIC || preliminary.fallback && !preliminary.used)
+    ? input.choices.filter(item => ownVulkanTranslator(item) && needsKosmicKrisp(item)) : [];
+  if (kosmicKrispOnly.length) {
+    const capable = await kosmicKrispHost(host, context);
+    const installed = capable && managedDriver(input, compatibility, context, require('../vulkan/managed').projectId);
+    if (!capable || !installed && context.declinedChoices?.has(KOSMICKRISP_DECLINED)) {
+      for (const item of kosmicKrispOnly) {
+        const reason = `${item.engine === 'vkd3d-proton' ? 'vkd3d-proton' : 'This DXVK version'} needs MacLauncher KosmicKrisp, ${capable
+          ? 'which is not installed' : 'which needs Metal 4 and a physical Apple GPU'}.`;
+        const fallback = value => ({ ...value, compatible: false, automaticFallback: true, reason });
+        compatibility[item.id] = fallback(compatibility[item.id]);
+        for (const role of Object.values(apiCompatibility)) if (role[item.id]) role[item.id] = fallback(role[item.id]);
+      }
+    }
+  }
   const plan = { ...Plan.resolvePlan({ ...input, compatibility }), layout: input.layout, compatibility, record,
     vulkanLibrarySelector: Boolean(sourceFor(runtime).vulkanLibrarySelector(install)) };
   const vulkan = plan.components['vulkan-driver'];
@@ -450,16 +487,18 @@ async function resolve(install, runtime, context, { executableArchitecture, host
     const names = `MacLauncher's ${[...new Set(own.map(item => item.engine === 'vkd3d-proton' ? 'vkd3d-proton' : 'DXVK'))].join(' and ')}`;
     const capable = await kosmicKrispHost(host, context);
     const kosmicKrisp = capable && managedDriver(input, compatibility, context, Managed.projectId);
-    const scene = !kosmicKrisp && managedDriver(input, compatibility, context, Managed.sceneProjectId);
+    // Only translators that run on MoltenVK use MacLauncher's MoltenVK build.
+    const moltenVK = !own.some(needsKosmicKrisp);
+    const scene = !kosmicKrisp && moltenVK && managedDriver(input, compatibility, context, Managed.sceneProjectId);
     const uses = own.some(item => item.engine !== 'vkd3d-proton') && vkd3d ? 'use' : 'uses';
     let reason;
     if (kosmicKrisp) { vulkan.used = actualFiles(kosmicKrisp); reason = `${names} ${uses} MacLauncher KosmicKrisp.`; }
     else {
       if (scene) vulkan.used = actualFiles(scene);
       reason = capable ? `${names} ${uses} MacLauncher KosmicKrisp, which Play installs after consent.`
-        : `KosmicKrisp needs Metal 4 and a physical Apple GPU, so ${names} ${uses} MacLauncher's MoltenVK build.${vkd3d ? ' vkd3d-proton needs MacLauncher KosmicKrisp.' : ''}`;
+        : `KosmicKrisp needs Metal 4 and a physical Apple GPU, so ${names} ${uses} MacLauncher's MoltenVK build.`;
       if (capable || !scene) plan.vulkanPending = { architecture: Architecture.targetArchitecture(input.layout?.architecture) || 'x64',
-        kosmicKrisp: Boolean(capable), vkd3d: Boolean(capable) && vkd3d, carrier: !scene };
+        kosmicKrisp: Boolean(capable), vkd3d: Boolean(capable) && vkd3d, carrier: moltenVK && !scene, moltenVK };
     }
     if (!vulkan.fallback) Object.assign(vulkan, { reasonCode: 'vulkan-pairing', reason });
   } else if (vulkan.selected && !vulkan.inherited && !vulkan.fallback && require('../../crossover/temporal/vulkan-dlss').routeForwards(plan, executableArchitecture) &&

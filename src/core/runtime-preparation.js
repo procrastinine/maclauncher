@@ -188,6 +188,11 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
   function grant(plan) {
     for (const name of Array.isArray(plan.grants) ? plan.grants : []) if (typeof name === "string") (context.grants ||= new Set()).add(name);
   }
+  // Declining a plan can likewise name a choice that later steps of this Play
+  // read from `context.declinedChoices`, such as a translator's driver pairing.
+  function decline(plan) {
+    for (const name of Array.isArray(plan.declines) ? plan.declines : []) if (typeof name === "string") (context.declinedChoices ||= new Set()).add(name);
+  }
   function useFallback(plan, error) {
     if (!plan.optional || (!plan.fallback && !plan.silentFallback) || context.signal?.aborted) return false;
     declined.add(consentKey(plan));
@@ -247,6 +252,7 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
           if (!plan.optional) return false;
           declined.add(key);
           skipped(plan);
+          decline(plan);
           fallbackRequired ||= Boolean(plan.fallback);
           continue;
         }
