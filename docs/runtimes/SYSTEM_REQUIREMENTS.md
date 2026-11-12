@@ -48,13 +48,13 @@ The graphics package included with MacLauncher, together with its native depende
 <!-- selected-graphics-requirements:start -->
 | Included component | Package version | Processor | Effective minimum macOS |
 | --- | --- | --- | --- |
-| Shared graphics effects | 0.3.9 | Apple Silicon and Intel | 13 |
-| libplacebo filters and shader compilation | 0.3.9 | Apple Silicon and Intel | 13 |
-| ISF shaders | 0.3.9 | Apple Silicon and Intel | 13 |
-| Video export | 0.3.9 | Apple Silicon and Intel | 14 |
-| Window graphics | 0.3.9 | Apple Silicon and Intel | 15.2 |
-| MLX neural processing | 0.3.9 | Apple Silicon | 14 |
-| Neural video decoding and encoding | 0.3.9 | Apple Silicon | 26 |
+| Shared graphics effects | 0.3.11 | Apple Silicon and Intel | 13 |
+| libplacebo filters and shader compilation | 0.3.11 | Apple Silicon and Intel | 13 |
+| ISF shaders | 0.3.11 | Apple Silicon and Intel | 13 |
+| Video export | 0.3.11 | Apple Silicon and Intel | 14 |
+| Window graphics | 0.3.11 | Apple Silicon and Intel | 15.2 |
+| MLX neural processing | 0.3.11 | Apple Silicon | 14 |
+| Neural video decoding and encoding | 0.3.11 | Apple Silicon | 26 |
 <!-- selected-graphics-requirements:end -->
 
 Shaders are prepared with the selected compiler, so preparation follows the requirements of that compiler's dependencies, including the compiler's minimum for each processor. Once prepared, MagpieFX effects execute on Metal from macOS 13. Shader collections and model weights contain data, and the provider that executes them determines their processor, macOS and GPU requirements. For Intel game processes on Apple Silicon, MLX uses an ARM64 service.

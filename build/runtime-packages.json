@@ -292,7 +292,7 @@
     {
       "schemaVersion": 2,
       "id": "reshade",
-      "version": "0.3.9",
+      "version": "0.3.11",
       "arch": "universal",
       "launcherArchitectures": [
         "arm64",
@@ -300,19 +300,19 @@
       ],
       "minimumMacOS": "13.0",
       "manifestRelative": "runtime.json",
-      "manifestSha256": "fbbf1ed9dd095b5f4646b53bf603691564c4f42b9d939d490e8690dc05f96bcb",
-      "sourceSha256": "88837ab468686706feef9521dc3b0016ed58e45d89a1a375dd7b9d9872dfb990",
+      "manifestSha256": "05f4f693b9de40f011b1892a8da42d8e10383df72fa675f542d2f36a8bea279e",
+      "sourceSha256": "d3e2cd1b13e1cdbbbad7bad78bce7cac46398a505e45d32146ac1a1588f9edfb",
       "updatePolicy": "manual",
-      "tag": "reshade/v0.3.9/universal",
+      "tag": "reshade/v0.3.11/universal",
       "asset": {
-        "filename": "reshade-0.3.9-universal.tar.gz",
-        "sha256": "7b6d903f8c1234d3eaf141a2311541790ad64dec01c07adb7dcfa1fb39ef5516",
-        "bytes": 60758507,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/reshade%2Fv0.3.9%2Funiversal/reshade-0.3.9-universal.tar.gz"
+        "filename": "reshade-0.3.11-universal.tar.gz",
+        "sha256": "b8deeb1f9c0481660419647d7955a65df439ea568a22cfc335e28f38d6a697a0",
+        "bytes": 60787614,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/reshade%2Fv0.3.11%2Funiversal/reshade-0.3.11-universal.tar.gz"
       },
       "source": {
         "repository": "procrastinine/maclauncher-builds",
-        "revision": "ba61a60a7b379f71659284e6b40dfcb01e564df0"
+        "revision": "a6cbc5bed2beb8a3b3c1ae2d778d68a9dcaab321"
       }
     },
     {
