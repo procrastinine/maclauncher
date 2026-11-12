@@ -272,7 +272,7 @@ Applies to games whose Vulkan driver is a KosmicKrisp build. Its global values a
 | `MESA_KK_DISABLE_WORKAROUNDS` | Workaround numbers to turn off, separated by commas, or all. |  |
 | `MESA_KK_GPU_CAPTURE` | true enables Metal capture control through debug markers. |  |
 | `MESA_KK_GPU_CAPTURE_IMMEDIATELY` | true starts capture at device creation when capture is enabled. |  |
-| `MESA_KK_GPU_CAPTURE_DIRECTORY` | Folder that receives Metal GPU captures. Capture is declined while timestamp counter heaps are live; creating a heap ends capture, preserving real timestamp queries. |  |
+| `MESA_KK_GPU_CAPTURE_DIRECTORY` | Folder that receives Metal GPU captures. Capture is declined while timestamp counter heaps are live; creating a heap ends a driver-controlled capture, preserving real timestamp queries. Ordinary device and heap lifetimes leave capture control inactive. |  |
 | `MESA_SHADER_CACHE_DIR` | Folder for Mesa's shader cache. |  |
 | `MESA_SHADER_CACHE_DISABLE` | true turns off Mesa's shader cache. |  |
 | `MESA_SHADER_CACHE_MAX_SIZE` | Largest shader cache size, such as 1G or 512M. |  |
