@@ -32,7 +32,10 @@ function environment(settings, { needsRosetta = false, engines = {} } = {}) {
   for (const [key, spec] of Object.entries(ENGINE_SETTINGS)) if ([].concat(engines[spec.component] || []).includes(spec.engine)) set(key, spec.variable, spec.toggle ? toggle : text);
   return env;
 }
-function registry(settings, { executable = '' } = {}) {
+// Where NVIDIA's NGX SDK looks for its core, as Proton's wine.inf and D3DMetal
+// set it. The Vulkan DLSS route stages that core in system32.
+const NGX_CORE = ['HKLM\\Software\\NVIDIA Corporation\\Global\\NGXCore', 'FullPath', 'C:\\Windows\\System32'];
+function registry(settings, { executable = '', ngxCore = false } = {}) {
   const commands = [], mac = 'HKCU\\Software\\Wine\\Mac Driver';
   const add = (key, name, value, type = 'REG_SZ') => commands.push(['reg.exe', 'add', key, '/v', name, '/t', type, '/d', text(value), '/f']);
   const bool = (setting, names) => { if (!inherit(settings[setting])) for (const name of names) add(mac, name, toggle(settings[setting]) === '1' ? 'Y' : 'N'); };
@@ -58,6 +61,7 @@ function registry(settings, { executable = '' } = {}) {
     if (!Object.hasOwn(WINDOWS_VERSIONS, settings.windowsVersion)) throw new Error('Unsupported Wine Windows version.');
     if (executable) add(`HKCU\\Software\\Wine\\AppDefaults\\${text(executable)}`, 'Version', settings.windowsVersion);
   }
+  if (ngxCore) add(...NGX_CORE);
   return commands;
 }
 async function applyRegistry(settings, options, run) {
@@ -67,9 +71,11 @@ async function applyRegistry(settings, options, run) {
   const current = commands.length && await options?.readCurrentRegistry?.();
   if (current) commands = commands.filter(args => {
     const file = args[2].startsWith('HKCU\\') ? 'user.reg' : 'system.reg';
-    const key = args[2].replace(/^HK(?:CU|LM)\\/, ''), name = args[args.indexOf('/v') + 1];
+    const key = args[2].replace(/^HK(?:CU|LM)\\/, '').toLowerCase(), name = args[args.indexOf('/v') + 1];
     const type = args[args.indexOf('/t') + 1], value = args[args.indexOf('/d') + 1];
-    return current[file]?.[key]?.[name] !== (type === 'REG_DWORD' ? Number(value) : value);
+    // Registry key names are case-insensitive, as other writers spell them.
+    const values = Object.entries(current[file] || {}).find(([stored]) => stored.toLowerCase() === key)?.[1];
+    return values?.[name] !== (type === 'REG_DWORD' ? Number(value) : value);
   });
   if (commands.length) await options?.assertWritable?.();
   for (const args of commands) await run(args);
