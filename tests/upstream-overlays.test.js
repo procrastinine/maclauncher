@@ -414,6 +414,32 @@ test("full immutable commits and explicit network arguments are required", () =>
   assert.equal(Check.normalizedOrigin("git@github.com:owner/repo.git"), "https://github.com/owner/repo");
 });
 
+test("a committed copy beside Gitlinks traces each file to its pin or an owned adaptation", async t => {
+  const current = fixture(t), port = "src/external/fixture-port";
+  write(current.root, port + "/engine.c", "reviewed source\n"); write(current.root, port + "/port.c", "owned port\n");
+  git(current.root, "add", port);
+  let report = await Check.checkInventory(current);
+  assert.deepEqual(report.errors, [{ code: "untraced-supplier-copy", path: port }]);
+  current.inventory.recipes.push({ id: "fixture-port", project: "fixture", kind: "runtime-shim", derivedDirectory: port, ownedFiles: [],
+    buildEntries: [current.applyFile], tests: ["tests/focused.test.js"], operations: [] });
+  report = await Check.checkInventory(current);
+  assert.deepEqual(report.errors, [{ code: "derived-file-differs", recipe: "fixture-port", path: port + "/port.c" }]);
+  current.inventory.recipes.at(-1).ownedFiles.push({ path: port + "/port.c" });
+  report = await Check.checkInventory(current);
+  assert.equal(report.passed, true, JSON.stringify(report.errors));
+  write(current.root, port + "/engine.c", "changed copy\n"); git(current.root, "add", port + "/engine.c");
+  assert.deepEqual((await Check.checkInventory(current)).errors, [{ code: "derived-file-differs", recipe: "fixture-port", path: port + "/engine.c" }]);
+});
+
+test("every committed copy beside the app's Gitlinks traces to its pin", async () => {
+  const entries = git(Check.ROOT, "ls-files", "--stage", "-z").split("\0").filter(Boolean).map(row => {
+    const [meta, file] = row.split("\t"), [mode, object] = meta.split(" "); return { mode, object, path: file };
+  });
+  assert.deepEqual(Check.untracedSupplierCopies(entries, require("../scripts/upstream-overlays.json")), []);
+  const report = await Check.checkInventory();
+  assert.deepEqual(report.errors.filter(issue => /^(untraced-supplier-copy|derived-)/.test(issue.code)), []);
+});
+
 test("checked-in inventory validates retained source records and explicit recipes", async () => {
   const inventory = require("../scripts/upstream-overlays.json");
   Check.validateInventory(inventory);

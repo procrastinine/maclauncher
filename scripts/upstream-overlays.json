@@ -38,6 +38,12 @@
       "usage": "runtime-shim"
     },
     {
+      "id": "unrpyc-legacy",
+      "repository": "https://github.com/CensoredUsername/unrpyc",
+      "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy",
+      "usage": "runtime-shim"
+    },
+    {
       "id": "maclauncher-android",
       "repository": "https://github.com/procrastinine/maclauncher-android.git",
       "path": "src/external/maclauncher-android",
@@ -218,6 +224,77 @@
         },
         {
           "path": "src/modules/renpy/resources/unren/patches/rpa.py"
+        }
+      ],
+      "operations": []
+    },
+    {
+      "id": "unrpyc-legacy-py3",
+      "project": "unrpyc-legacy",
+      "kind": "runtime-shim",
+      "buildEntries": [
+        "src/modules/renpy/resources/unren/vendor.py",
+        "src/modules/renpy/resources/unren/cli.py"
+      ],
+      "tests": [
+        "tests/renpy-tools-extract.test.js",
+        "tests/renpy-extract.test.js"
+      ],
+      "sourceEvidence": [
+        "src/modules/renpy/resources/unren/README.md"
+      ],
+      "derivedDirectory": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3",
+      "ownedFiles": [
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/__init__.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/decompiler/__init__.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/decompiler/astdump.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/decompiler/atldecompiler.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/decompiler/codegen.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/decompiler/magic.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/decompiler/renpycompat.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/decompiler/screendecompiler.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/decompiler/sl2decompiler.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/decompiler/testcasedecompiler.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/decompiler/translate.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/decompiler/util.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/deobfuscate.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/setup.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/un.rpyc/compile.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/un.rpyc/unrpyc-compile.py"
+        },
+        {
+          "path": "src/modules/renpy/resources/unren/third_party/unrpyc-legacy-py3/unrpyc.py"
         }
       ],
       "operations": []

@@ -94,6 +94,36 @@ async function treeLinks(directory, revision) {
     return matched ? [[matched[2], matched[1]]] : [];
   }));
 }
+async function treeBlobs(directory, revision) {
+  return new Map((await git(directory, ["ls-tree", "-rz", revision])).split("\0").filter(Boolean).flatMap(row => {
+    const matched = /^\d+ blob ([a-f0-9]{40})\t(.+)$/.exec(row);
+    return matched ? [[matched[2], matched[1]]] : [];
+  }));
+}
+// A directory whose entries are only Gitlinks and subdirectories holds suppliers. Each subdirectory
+// there that is not a Gitlink is a committed copy and must be a recipe's derivedDirectory.
+function untracedSupplierCopies(entries, inventory) {
+  const children = new Map(), add = (directory, name, kind) => {
+    if (!children.has(directory)) children.set(directory, new Map());
+    const known = children.get(directory).get(name);
+    children.get(directory).set(name, known && known !== kind ? "directory" : kind);
+  };
+  for (const entry of entries) {
+    const parts = entry.path.split("/");
+    for (let depth = 1; depth < parts.length; depth++) add(parts.slice(0, depth - 1).join("/"), parts[depth - 1], "directory");
+    add(parts.slice(0, -1).join("/"), parts.at(-1), entry.mode === "160000" ? "gitlink" : "file");
+  }
+  const derived = new Set(inventory.recipes.map(recipe => recipe.derivedDirectory).filter(Boolean)), untraced = [];
+  for (const [directory, names] of children) {
+    const kinds = [...names.values()];
+    if (!kinds.includes("gitlink") || kinds.includes("file")) continue;
+    for (const [name, kind] of names) {
+      const location = directory ? directory + "/" + name : name;
+      if (kind === "directory" && !derived.has(location)) untraced.push(location);
+    }
+  }
+  return untraced.sort();
+}
 function sourceRef(root, ref) {
   const file = path.join(root, relativePath(ref.path));
   if (!fs.statSync(file).isFile()) throw Error(`Missing pin evidence: ${ref.path}.`);
@@ -163,6 +193,8 @@ function validateInventory(inventory) {
     }
     for (const file of recipe.ownedFiles || []) relativePath(file.path);
     for (const directory of recipe.ownedDirectories || []) relativePath(directory);
+    if (recipe.derivedDirectory !== undefined && (ownedHelper || relativePath(recipe.derivedDirectory) === undefined))
+      throw Error("A derived copy must name its directory and the pinned project it comes from.");
     for (const file of [...recipe.tests || [], ...recipe.buildEntries || []]) relativePath(file);
     for (const operation of recipe.operations || []) {
       if (!["call", "copy"].includes(operation.kind)) throw Error("Unknown owned source adaptation operation.");
@@ -300,6 +332,27 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
       catch { errors.push({ code: "apply-entry-missing", recipe: recipe.id, path: operation.module, export: operation.export }); }
     }
   }
+  // A committed copy derived from a pinned project: each file is the project's file at its pin,
+  // byte for byte, or an owned adaptation listed in ownedFiles.
+  const committed = (await git(root, ["ls-files", "--stage", "-z"])).split("\0").filter(Boolean).map(row => {
+    const [meta, file] = row.split("\t"), [mode, object] = meta.split(" ");
+    return { mode, object, path: file };
+  });
+  for (const recipe of inventory.recipes.filter(item => item.derivedDirectory)) {
+    const project = projects.get(recipe.project), prefix = recipe.derivedDirectory + "/";
+    const copy = committed.filter(entry => entry.path.startsWith(prefix) && entry.mode !== "160000");
+    if (!copy.length) { errors.push({ code: "derived-copy-missing", recipe: recipe.id, path: recipe.derivedDirectory }); continue; }
+    if (!project?.path || !fs.existsSync(path.join(root, project.path, ".git"))) {
+      warnings.push({ code: "derived-copy-unverified", recipe: recipe.id, path: recipe.derivedDirectory }); continue;
+    }
+    const owned = new Set((recipe.ownedFiles || []).map(file => file.path));
+    let upstream;
+    try { upstream = await treeBlobs(path.join(root, project.path), project.revision); }
+    catch { errors.push({ code: "derived-copy-source-unavailable", recipe: recipe.id, path: project.path }); continue; }
+    for (const entry of copy) if (!owned.has(entry.path) && upstream.get(entry.path.slice(prefix.length)) !== entry.object)
+      errors.push({ code: "derived-file-differs", recipe: recipe.id, path: entry.path });
+  }
+  for (const directory of untracedSupplierCopies(committed, inventory)) errors.push({ code: "untraced-supplier-copy", path: directory });
   for (const input of inventory.archiveInputs || []) {
     for (const file of input.evidence || []) if (!fs.existsSync(path.join(root, relativePath(file)))) errors.push({ code: "archive-evidence-missing", id: input.id, path: file });
     if (!/^[a-f0-9]{64}$/.test(input.sha256 || "")) errors.push({ code: "archive-pin-invalid", id: input.id });
@@ -582,5 +635,5 @@ if (require.main === module) {
     process.exitCode = report.passed ? 0 : 1;
   }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }
-module.exports = { ROOT, LIMITS, relativePath, normalizedOrigin, configRows, submodules, indexLinks, treeLinks,
+module.exports = { ROOT, LIMITS, relativePath, normalizedOrigin, configRows, submodules, indexLinks, treeLinks, untracedSupplierCopies,
   sourceRef, validateInventory, sourceGuardBlob, checkInventory, ensureOwnedWork, materializeGitTree, snapshot, substitute, checkCandidate, options };
