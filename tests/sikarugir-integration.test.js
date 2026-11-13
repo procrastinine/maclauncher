@@ -468,8 +468,10 @@ test("Stop ends only the selected private prefix and keeps independently spawned
     }
     const [first, second] = runs, firstPrefix = first.entry.runtimeData.sikarugir.prefixPath, secondPrefix = second.entry.runtimeData.sikarugir.prefixPath;
     assert.notEqual(firstPrefix, secondPrefix);
+    // Exercise the production shutdown grace while the Node-based Wine server
+    // completes its native-process handoff under the parallel suite.
     const firstClosed = close(first.child);
-    assert.equal(stopProcessTree(first.child.pid, { graceMs: 1000 }), true);
+    assert.equal(stopProcessTree(first.child.pid), true);
     await firstClosed;
     await new Promise(resolve => setImmediate(resolve)); // ownership retires after process-stop settlement
     assert.equal(fs.readFileSync(path.join(firstPrefix, "windows-closed"), "utf8"), "yes");
@@ -478,7 +480,7 @@ test("Stop ends only the selected private prefix and keeps independently spawned
     assert.equal(fs.existsSync(path.join(secondPrefix, "stop-requested")), false);
     assert.doesNotThrow(() => process.kill(windowsPids[1], 0));
     const secondClosed = close(second.child);
-    assert.equal(stopProcessTree(second.child.pid, { graceMs: 1000 }), true);
+    assert.equal(stopProcessTree(second.child.pid), true);
     await secondClosed;
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(fs.readFileSync(path.join(secondPrefix, "windows-closed"), "utf8"), "yes");
