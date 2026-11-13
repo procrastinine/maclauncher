@@ -12,9 +12,5 @@
   "testSubmodules": [
     "src/external/maclauncher-android",
     "src/modules/renpy/resources/unren/third_party/unrpyc-legacy"
-  ],
-  "recursiveSubmodules": [
-    "src/external/maclauncher-android",
-    "src/external/maclauncher-kosmickrisp"
   ]
 }
