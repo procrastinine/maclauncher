@@ -88,7 +88,7 @@ async function runtimeStatus(entry, _payload, context) {
   const details = rows.map(row => ({ label: row.label, value: row.used,
     detail: row.selected !== row.used && row.reason ? 'Selected ' + row.selected + '. ' + row.reason : '' }));
   const cameraNotice = entry.runtimeData?.[runtime]?.cameraAdapterNotice;
-  if (cameraNotice) details.push({ label: 'Camera adapter', value: 'Unavailable', detail: cameraNotice });
+  if (cameraNotice) details.push({ label: 'DXMT temporal adapter', value: 'Unavailable', detail: cameraNotice });
   const steamBridge = require('./runtime/steam-bridge').inspectorDetail(entry.runtimeData?.[runtime], context.userDataDir);
   if (steamBridge) details.push(steamBridge);
   const { install: _install, ...displaySelection } = selected;

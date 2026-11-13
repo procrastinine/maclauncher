@@ -43,7 +43,7 @@ Which DXVK fits depends on the Vulkan driver. The releases from the DXVK project
 
 ### Direct3D 10 and 11
 
-DXMT is the usual first choice. It goes straight from Direct3D to Metal, it's Sikarugir's automatic choice, and several MacLauncher features need it: DLSS to MetalFX on macOS 14 or later, the FSR camera adapters and XeSS. D3DMetal is the alternative on Apple Silicon for 64-bit games, and it also turns DLSS into MetalFX, from macOS 26.
+DXMT is the usual first choice. It goes straight from Direct3D to Metal, it's Sikarugir's automatic choice, and several MacLauncher features need it: DLSS to MetalFX on macOS 14 or later and XeSS. D3DMetal is the alternative on Apple Silicon for 64-bit games, and it also turns DLSS into MetalFX, from macOS 26.
 
 DXVK on MacLauncher KosmicKrisp is worth a try when both Metal translators struggle with a game. WineD3D is the fallback that every Mac has, and it draws through OpenGL instead of Metal.
 

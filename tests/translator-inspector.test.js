@@ -74,7 +74,7 @@ test('actual provider status rows render selected to used for every API, Vulkan 
     const status = await composed.actions.runtimeStatus(props.g, {}, { runtimeId: runtime, runtimeSettings: {}, settings: {}, userDataDir: '/private/tmp/unused-translator-inspector-profile' });
     assert.deepEqual(status.translatorRows, rows);
     props.runtimeStatusEntry = { runtimeId: runtime, status: { ...status, details: [...status.details,
-      { label: 'Camera adapter', value: 'Unavailable', detail: 'Camera fixture notice.' }] } };
+      { label: 'DXMT temporal adapter', value: 'Unavailable', detail: 'Camera fixture notice.' }] } };
     const rendered = renderRows(t, props);
     for (const row of rows) {
       const labelRows = rendered.rows.filter(node => elements(node).some(child => child.props.className === 'detailLabel' && child.props.children === row.label));

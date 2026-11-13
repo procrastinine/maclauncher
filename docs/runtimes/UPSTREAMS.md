@@ -46,7 +46,7 @@ Some temporal upscalers, such as MacLauncher's FSR 2 and FSR 3, need the camera 
 
 - The native [camera API](../../src/modules/shared/reshade/temporal/README.md) binds projection metadata to the Metal textures or command buffer of the same frame.
 - In Godot games, the metadata comes from eligible native Metal views through the [Godot adapter](../../src/modules/godot/graphics/README.md).
-- The [Streamline adapter](../../src/modules/crossover/temporal/streamline/README.md) keeps the game's original interposer and passes its camera constants through the [DXMT adapter](../../src/modules/crossover/temporal/dxmt/README.md).
+- On the DXVK and vkd3d-proton DLSS route, the NGX core takes Streamline camera constants from the game's own interposer, as the [Streamline camera](../../src/modules/crossover/temporal/streamline/README.md) notes describe.
 
 DXMT is a Direct3D renderer that runs Windows games on Metal. The adapted DXMT components include their LGPL notice and corresponding source, whereas compatible original DXMT support libraries are installed separately from the selected Wine runtime.
 

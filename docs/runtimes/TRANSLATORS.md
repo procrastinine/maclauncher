@@ -126,7 +126,7 @@ CrossOver's automatic renderer uses its global graphics selector until a specifi
 
 A game saved by an earlier MacLauncher version keeps its earlier **Graphics** and **DXMT support** selections, and on Sikarugir its earlier Vulkan driver, until a Direct3D engine or Vulkan driver is chosen in the new controls. The new choice then takes their place; the earlier controls are no longer shown.
 
-Temporal integration uses the resolved translator engine family and matching libraries, independently of its catalog source or setting identifier. The DXMT version actually used for Direct3D 11 also supplies camera support. Because the camera adapter still requires its own matching libraries, a DXMT version that does not match it stays active as the renderer, and the inspector reports that camera support is unavailable. Engine settings apply to every engine that the game actually uses for its Direct3D APIs.
+Temporal integration uses the resolved translator engine family and matching libraries, independently of its catalog source or setting identifier. The DXMT version actually used for Direct3D 11 also supplies temporal integration. Because MacLauncher's adapted DXMT libraries require a matching native library and Windows thunk, a DXMT version that does not match them stays active as the renderer, and the inspector reports that temporal integration is unavailable. Engine settings apply to every engine that the game actually uses for its Direct3D APIs.
 
 ## Loading
 

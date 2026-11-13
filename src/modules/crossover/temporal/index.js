@@ -125,7 +125,7 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       baseRoot = require("../../shared/runtime/wine-layout").wineRoot(translator.root);
       const dxmt = payload(root, baseRoot, { verify, macOSVersion: host.macOSVersion });
       if (!dxmt) {
-        context.cameraAdapterNotice = `The camera adapter does not match the selected ${require("../../shared/runtime/translator-description").label(translator)}.`;
+        context.cameraAdapterNotice = `MacLauncher's DXMT temporal libraries do not match the selected ${require("../../shared/runtime/translator-description").label(translator)}.`;
         warnGraphics(context.logger, `[translators] ${context.cameraAdapterNotice}`);
         return null;
       }

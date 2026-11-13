@@ -1,75 +1,64 @@
-# Streamline camera adapter
+# Streamline camera
 
 MacLauncher's FSR 2 and FSR 3 upscalers need the game's camera data. A game
-that calls DLSS through NVIDIA Streamline already passes this data to
-Streamline, so this adapter hands it on. The adapter is a 64-bit Windows library
-that preserves Streamline's complete interposer export interface and forwards
-calls to a private copy of the game's original library. That original stays in
-the same directory, so relative plugin lookup keeps working, and import files
-are unchanged. Disabling game temporal integration restores the private
-original, while a game whose export interface is incompatible keeps its existing
-library.
+that calls DLSS through NVIDIA Streamline passes this data to Streamline in
+`slSetConstants`; Streamline's DLSS plugin gives NGX no camera.
 
-The adapter copies validated perspective camera constants from `slSetConstants`
-and selects them by the exact frame token and viewport passed to
-`slEvaluateFeature(sl::kFeatureDLSS)`. Streamline's DLSS feature identifier is 0,
-whereas NGX uses a separate feature numbering scheme. Orthographic, oblique and
-shifted projections are not submitted. For other projections, the near and far
-distances and the vertical field of view must agree with the game's unjittered
-projection matrix, and an unspecified far plane is accepted only when the matrix
-describes an infinite perspective plane.
+MacLauncher never replaces a game's Streamline interposer
+(`sl.interposer.dll`). A game can check the interposer's NVIDIA signature with
+`sl::security::verifyEmbeddedSignature` before loading it, and a game whose
+check fails turns Streamline off, including DLSS and Reflex.
+
+## DXVK and vkd3d-proton DLSS route
 
 On the Vulkan DLSS route (`../vulkan-dlss.js`), with DXVK or vkd3d-proton on a
-carrier driver, the selected constants go to MacLauncher's NGX core instead.
-The adapter finds the core's `MacLauncherSetTemporalCamera` and
-`MacLauncherClearTemporalCamera` exports under the name the game's NGX loaded,
-`nvngx.dll` or `_nvngx.dll`, and the core adds the camera to that evaluation's
-temporal frame. That route forwards without a setting, so the launch folder
-receives the adapter whenever the route forwards and the interposer's export
-interface is compatible. No DXMT library is involved.
+carrier driver, the camera is captured inside the game process by MacLauncher's
+NGX core, which the game's own Streamline DLSS plugin loads. When the core
+initializes, it installs in-memory detours on the game's interposer, the loaded
+module that exports Streamline's application API (`slInit`,
+`slGetNewFrameToken`, `slSetConstants` and `slEvaluateFeature`). The file on
+disk stays unchanged.
 
-On the DXMT route, the selected constants travel to DXMT as one camera packet. The adapted
-DXMT library's `MacLauncherSetTemporalCamera` and
-`MacLauncherClearTemporalCamera` exports limit the packet to one NGX evaluation,
-and nested evaluations restore their caller's camera. When constants fail
-validation, are missing or do not match, the packet is cleared, but the original
-Streamline call and its return value are kept. Camera capture adds no rendering
-passes or GPU waits.
+- `slSetConstants` copies validated perspective camera constants for its exact
+  frame token and viewport.
+- `slEvaluateFeature(sl::kFeatureDLSS)` selects the copy of its frame token and
+  viewport as the camera of the NGX evaluations it makes on its thread, calls
+  the original function and restores the previous camera, so nested evaluations
+  keep their caller's camera. Streamline's DLSS feature identifier is 0,
+  whereas NGX uses a separate feature numbering scheme.
+- Both detours return the original result unchanged. Capture adds one 64-byte
+  copy per call under a short reader-writer lock, no rendering pass and no GPU
+  wait.
 
-The launcher detects compatible interposers beside the selected executable or
-in the supported Streamline plugin directories. On the DXMT route, camera data
-for FSR2/3 also requires a matching installed DXMT native library and Windows
-thunk, a 64-bit
-Windows executable, Apple Silicon and macOS 14 or later. Game temporal
-integration prepares these components before launch, including when Game
-default is selected for temporal scaling. A live setting change, however, does
-not add camera support to a launch that uses a different renderer or was not
-prepared this way.
+The core adds the selected camera to that evaluation's temporal frame. The
+detours, the validation and the pinned MinHook library that installs them are
+part of the core's source in MacLauncher Builds
+(`producers/vkd3d-proton/ngx_streamline.cpp` and `streamline_camera.hpp`).
 
-CrossOver and Sikarugir keep their selected Wine engine and use matching graphics
-libraries in a private view. The native library and thunk can come from existing
-Sikarugir support libraries. Otherwise, after consent, the shared runtime
-download flow acquires the selected compatible Template support archive and
-keeps only the required DXMT libraries and notices. Throughout play, a runtime
-use lease marks this dependency as in use and protects it. No source compilation
-or second Wine engine is required.
+Orthographic, oblique and shifted projections are not submitted. For other
+projections, the near and far distances and the vertical field of view must
+agree with the game's unjittered projection matrix, and an unspecified far
+plane is accepted only when the matrix describes an infinite perspective plane.
+Constants that fail validation, are missing or do not match the evaluation's
+frame and viewport leave that evaluation without a camera.
 
-Each engine has a DXMT support runtime section with an independent version
-default and a per-game override. `../catalog.js` records the compatible
-versions, archive identities and exact native/thunk hashes. A new row must
-preserve the complete adapter command, parameter, export and portable shader
-ABI, because an equal function-table length alone does not establish
-compatibility.
+`index.js` `interposer()` identifies the game's interposer by its application
+API exports, beside the selected executable or in the supported Streamline
+plugin directories. `../index.js` `resolveVulkanCameraPlan` then declares camera
+projection whenever the route forwards, without a setting, and the game starts
+from its own folder.
 
-The proxy is built from the official MIT-licensed Streamline 2.9.0 headers at
-commit `b998246a3d499c08765c5681b229c9e6b4513348`. `build.mjs` accepts
-`--source`, `--compiler`, `--reference` and `--out`, where the reference is the
-official 64-bit `sl.interposer.dll`. The build generates forwarding entry points
-for every reference export, including Direct3D, DXGI and Vulkan functions, and
-retains the export ordinals. Only the three typed Streamline hooks alter call
-handling. The source checkout remains unchanged, and the build output includes
-the proxy, `provider.json` with source and binary identities, and
-`Streamline-LICENSE.txt`.
+## DXMT and D3DMetal
 
-`camera-test.cpp` checks perspective projection validation with the same
-Streamline headers.
+On DXMT and D3DMetal, DLSS through Streamline runs without a camera. DXMT's
+adapted NGX and D3DMetal's own NGX receive the game's DLSS evaluations, so
+MetalFX Temporal is available through game temporal integration, and FSR 2 and
+FSR 3 are not.
+
+## Interposer proxy sources
+
+`proxy.cpp`, `camera.hpp`, `resources.hpp`, `snapshots.hpp`,
+`snapshot-budget.hpp` and `camera-test.cpp` are the sources of the interposer
+proxy that graphics packages up to 0.3.13 include. No launch route places the
+proxy. It is built from the official MIT-licensed Streamline 2.9.0 headers at
+commit `b998246a3d499c08765c5681b229c9e6b4513348`.

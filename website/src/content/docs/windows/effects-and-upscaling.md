@@ -41,15 +41,15 @@ The selected upscaler takes over only when the game's frame carries everything i
 
 ### When an upscaler needs camera data
 
-FSR 2 and FSR 3 need the game's camera parameters as well as depth and motion. Games that call DLSS through NVIDIA's Streamline library can supply those parameters, and MacLauncher's adapters pass them on through DXMT, the Vulkan temporal-frame routes or D3DMetal. A DLSS call without Streamline constants supplies no camera, so it cannot provide the inputs for a method that needs one.
+FSR 2 and FSR 3 need the game's camera parameters as well as depth and motion. Games that call DLSS through NVIDIA's Streamline library supply those parameters to Streamline. MacLauncher never swaps out the game's Streamline library, because games can check its NVIDIA signature and switch Streamline off if it changed. A DLSS call without Streamline constants supplies no camera, so it cannot provide the inputs for a method that needs one.
 
-Camera support follows the translator that actually runs. DXMT needs an adapter matched to its native library and Windows component; if they do not match, the game keeps its chosen DXMT renderer and the inspector reports camera support as unavailable. On the DXVK and vkd3d-proton route, the Streamline adapter goes in whenever the route forwards, with no setting, and hands each DLSS call's camera to the forwarding library, which adds it to that call's frame. For D3DMetal, a camera is handed to the next native scaler once and is cleared at presentation, so it cannot carry over to a later frame. Full input requirements are listed in the [temporal upscaler reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md#scene-temporal-upscaling).
+Camera support follows the translator that actually runs. On the DXVK and vkd3d-proton route, the forwarding library picks up the camera inside the game's own Streamline library whenever the route forwards, with no setting, and adds it to that DLSS call's frame. On DXMT and D3DMetal, Streamline games get MetalFX Temporal without a camera, so FSR 2 and FSR 3 are not offered for them. Full input requirements are listed in the [temporal upscaler reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md#scene-temporal-upscaling).
 
 These integrations supply Super Resolution inputs. They do not expose NVIDIA DLSS Frame Generation or Ray Reconstruction. MacLauncher's own [frame generation](/maclauncher/graphics/frame-generation/) is a separate choice with its own input and presentation requirements.
 
 ### XeSS games
 
-Games that use Intel's XeSS through its Direct3D 11 library can have their XeSS requests run through MetalFX. MacLauncher's XeSS adapter does this automatically, under the same DXMT conditions as the camera adapters.
+Games that use Intel's XeSS through its Direct3D 11 library can have their XeSS requests run through MetalFX. MacLauncher's XeSS adapter does this automatically when DXMT renders the game with MacLauncher's matching DXMT libraries.
 
 ### FidelityFX games
 
