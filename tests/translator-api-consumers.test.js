@@ -63,7 +63,7 @@ test('graphics API binding retains actual placements and canonical null without 
 });
 
 test('per-API camera consumes used D3D11 DXMT and keeps its existing pair requirement independent', t => {
-  const Temporal = require('../src/modules/crossover/temporal'), StreamlinePE = require('../src/modules/crossover/temporal/streamline/pe-exports');
+  const Temporal = require('../src/modules/crossover/temporal');
   const crypto = require('node:crypto'), root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'api-camera-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const put = (relative, bytes) => { const file = path.join(root, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file; };
@@ -78,8 +78,8 @@ test('per-API camera consumes used D3D11 DXMT and keeps its existing pair requir
   names.forEach((name, index) => { exported.writeUInt32LE(0x2800 + index, pe.raw + 0x40 + index * 4);
     exported.writeUInt32LE(0x2000 + cursor, pe.raw + 0x50 + index * 4); exported.writeUInt16LE(index, pe.raw + 0x60 + index * 2);
     exported.write(name + '\0', pe.raw + cursor); cursor += name.length + 1; exported[pe.raw + 0x800 + index] = 0xc3; });
-  const supplied = put('game/sl.interposer.dll', exported), provider = put('graphics/temporal/streamline/sl.interposer.dll', exported);
-  put('graphics/temporal/streamline/provider.json', JSON.stringify({ schema: 1, library: 'sl.interposer.dll', sha256: hash(exported), exports: StreamlinePE.inspect(provider) }));
+  // The game's Streamline interposer stays in place; the direct NGX route needs no camera library.
+  const supplied = put('game/sl.interposer.dll', exported);
   const native = image({ cpu: X64 }), thunk = pe.bytes, files = {};
   for (const file of Temporal.FILES) { const bytes = file.endsWith('.so') ? native : thunk; put('graphics/temporal/dxmt/' + file, bytes); files[file] = hash(bytes); }
   put('graphics/temporal/dxmt/camera-bridge.json', JSON.stringify({ schema: 1, id: 'dxmt-camera1', architecture: 'x86_64', tableCount: 146,
@@ -92,11 +92,11 @@ test('per-API camera consumes used D3D11 DXMT and keeps its existing pair requir
   const used = Description.describeTranslator(path.join(root, 'component'), { engine: 'dxmt', id: 'used-dxmt' });
   const translatorPlan = { apiMode: true, components: { 'd3d-renderer': { used: { engine: 'dxvk' } }, d3d11: { used }, d3d12: { used: null } } };
   const options = { install: { engineRoot: path.join(root, 'engine'), templateRoot: path.join(root, 'component') }, runtimeId: 'sikarugir',
-    root: path.join(root, 'graphics'), translatorPlan, settings: { graphicsBackend: 'wined3d' }, host: { platform: 'darwin', hardwareArch: 'arm64', macOSVersion: '26.0' } };
+    root: path.join(root, 'graphics'), translatorPlan, settings: { graphicsBackend: 'wined3d', dlss: true }, host: { platform: 'darwin', hardwareArch: 'arm64', macOSVersion: '26.0' } };
   assert.equal(Temporal.resolvePlan(entry, {}, options).baseRoot, path.join(root, 'component/wine'));
   assert.equal(Temporal.resolvePlan(entry, {}, { ...options, translatorPlan: { ...translatorPlan, components: { ...translatorPlan.components, d3d11: { used: null } } } }), null);
   const context = {}; fs.appendFileSync(binary, 'changed pairing');
-  assert.equal(Temporal.resolvePlan(entry, context, options), null); assert.match(context.cameraAdapterNotice, /does not match/);
+  assert.equal(Temporal.resolvePlan(entry, context, options), null); assert.match(context.cameraAdapterNotice, /DXMT temporal libraries do not match/);
   assert.equal(translatorPlan.components.d3d11.used, used, 'camera failure never changes the actual used translator');
   assert.deepEqual(fs.readFileSync(supplied), exported);
 });
