@@ -27,13 +27,13 @@ import denoised from "../../../assets/graphics/neural-denoised.webp";
 import blurry from "../../../assets/graphics/neural-blurry.webp";
 import deblurred from "../../../assets/graphics/neural-deblurred.webp";
 
-Neural upscaling and restoration use trained models to enlarge or repair a game's image on your Mac. Ordinary upscalers fill in new pixels by fixed rules. A neural model, by contrast, is trained on many images and learns what images tend to look like, such as how a line in an anime drawing continues, what grass looks like up close, or which fine patterns are noise rather than detail. Given a small or damaged image, the model redraws it from what it learned.
+Neural upscaling and restoration use trained models to enlarge or repair a game's image on your Mac. Where ordinary upscalers fill in new pixels by fixed rules, a neural model has been trained on many images and has learned what images tend to look like: how a line in an anime drawing continues, what grass looks like up close, which fine patterns are noise rather than detail. Given a small or damaged image, the model redraws it from what it learned.
 
-MacLauncher runs these models on your Mac's GPU through [MLX](https://github.com/ml-explore/mlx) and [Metal](https://developer.apple.com/metal/), inside the same graphics chain as every other effect. They need an Apple Silicon Mac with macOS 14 or later. Intel games running translated under [Rosetta](https://support.apple.com/en-us/102527) or [CrossOver](https://www.codeweavers.com/crossover/) can use them as well, because a small Apple Silicon helper runs the model on their behalf.
+MacLauncher runs these models on your Mac's GPU through [MLX](https://github.com/ml-explore/mlx), Apple's machine-learning framework, and [Metal](https://developer.apple.com/metal/), inside the same [graphics chain](/maclauncher/graphics/composing-effects/) as every other effect. They need an Apple Silicon Mac with macOS 14 or later. Intel games can use them as well when they run translated under [Rosetta](https://support.apple.com/en-us/102527), Apple's translator for Intel apps, or under [CrossOver](https://www.codeweavers.com/crossover/), CodeWeavers' app for running Windows software, because a small Apple Silicon helper runs the model on their behalf.
 
 ## Upscaling drawn art
 
-Neural upscalers do especially well on visual novels and anime-style games. This scene from [CLANNAD](https://store.steampowered.com/app/324160/CLANNAD/) was reduced to 640×480 and then doubled:
+Neural upscalers do especially well on visual novels and anime-style games, where line work and flat color dominate. This scene from [CLANNAD](https://store.steampowered.com/app/324160/CLANNAD/) was reduced to 640×480 and then doubled:
 
 <Compare
   before={vnBilinear}
@@ -77,7 +77,7 @@ At 4× the differences grow. This is the same scene, starting from only 320×240
 
 ## Upscaling everything else
 
-[Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN)'s **General** model handles 3D games and other rendered or photographic images rather than line art:
+For 3D games and other rendered or photographic images, [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) has a **General** model:
 
 <Compare
   before={geraltBilinear}
@@ -101,7 +101,7 @@ On pixel art, the same model behaves very differently. It treats the pixels as d
 
 ## Cleaning up an image
 
-Not every model changes the size. [NAFNet](https://github.com/megvii-research/NAFNet) restores an image at its original resolution, with one model for noise and another for blur:
+Some models leave the size alone. [NAFNet](https://github.com/megvii-research/NAFNet) restores an image at its original resolution, with one model for noise and another for blur:
 
 <Compare
   before={noisy}
@@ -127,8 +127,8 @@ Not every model changes the size. [NAFNet](https://github.com/megvii-research/NA
 | --- | --- | --- |
 | <span id="real-esrgan"></span>Real-ESRGAN | Anime and General upscalers. General has a paired denoising model, and when both are installed, the **Denoising** control blends between them. | 4× |
 | <span id="real-cugan"></span>[Real-CUGAN](https://github.com/bilibili/ailab/tree/main/Real-CUGAN) | Upscaler trained on anime, in Conservative, No denoising and Denoise variants. | 2×, 3× or 4× |
-| <span id="rtx-video-super-resolution"></span>RTX Video Super Resolution | NVIDIA's video upscaler, through [MLX-DLSS](https://github.com/iamwavecut/MLX-DLSS). | 2× |
-| <span id="dlss-neural-rendering"></span>DLSS neural rendering | The DLSS 5 neural rendering model through MLX-DLSS. It redraws the image toward a photoreal look, blended in with **Intensity**, and can keep image history with **Temporal reconstruction**. | Same size |
+| <span id="rtx-video-super-resolution"></span>RTX Video Super Resolution | NVIDIA's video upscaler, through [MLX-DLSS](https://github.com/iamwavecut/MLX-DLSS), a port of NVIDIA's models to MLX. | 2× |
+| <span id="dlss-neural-rendering"></span>DLSS neural rendering | The neural rendering model from NVIDIA's DLSS 5, through MLX-DLSS. It redraws the image toward a photoreal look, blended in with **Intensity**, and can keep image history with **Temporal reconstruction**. | Same size |
 | <span id="dlss-sr-image"></span>DLSS SR (image) | DLSS super resolution working from a sequence of finished images. | 2× |
 | <span id="nafnet"></span>NAFNet | SIDD (denoising) and GoPro (deblurring) restoration models. | Same size |
 
@@ -138,13 +138,13 @@ For Real-ESRGAN and NAFNet, MacLauncher builds on the existing [Real-ESRGAN MLX]
 
 ## Getting models
 
-MacLauncher doesn't include model files. Instead, **Runtimes → Effects → Neural models** lists the supported downloads: **Install** downloads one, and **Import model…** adds a model you already have. Installed models work offline and are shared by every game.
+Model files aren't included with MacLauncher. **Runtimes → Effects → Neural models** lists the supported downloads instead: **Install** downloads one, and **Import model…** adds a model you already have. Once installed, models work offline and are shared by every game.
 
-Each neural row in the chain has a **Model** menu. Its **Automatic** choice picks an installed model for that row's operation, starting with the default you set for the operation in **Neural models**, or you can pick a specific model for one row instead. If a row's model is missing, the row shows **Model needed** and the rest of the chain keeps running.
+Each neural row in the chain has a **Model** menu. Its **Automatic** choice picks an installed model for whatever the row does (upscaling, denoising and so on), starting with the default you set for that task in **Neural models**. You can also pick a specific model for one row. If a row's model is missing, the row shows **Model needed** and the rest of the chain keeps running.
 
 ## Keeping it fast
 
-A neural model's cost grows with the number of pixels it processes, so the usual approach is to give it a smaller image. Put a **Downsample** row before the model, or lower the **Game resolution**, and fill the window afterward with a fast upscaler such as [MetalFX](https://developer.apple.com/documentation/metalfx). [Building a chain](/maclauncher/graphics/composing-effects/) shows a complete example. If the model still can't keep up with the game, frame generation can fill in the missing frames.
+A neural model's cost grows with the number of pixels it processes, so the usual approach is to give it a smaller image. Put a **Downsample** row before the model, or lower the **Game resolution**, and fill the window afterward with a fast upscaler such as [MetalFX](https://developer.apple.com/documentation/metalfx), Apple's built-in upscaler. [Building a chain](/maclauncher/graphics/composing-effects/) shows a complete example. If the model still can't keep up with the game, frame generation can fill in the missing frames.
 
 The graphics guide's [neural models section](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#neural-models) lists every download and setting, and [Neural models and packages](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/NEURAL_RESTORATION.md) describes the model architectures and import formats.
 

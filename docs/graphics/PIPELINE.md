@@ -1,6 +1,6 @@
 # Graphics pipeline
 
-MacLauncher has one shared graphics layer. Once a runtime hands over a compatible image, the same pipeline runs its image effects, resizing, restoration and frame processing. Native apps, processes translated by Rosetta, browser hosts, Java, Wine, Android and emulator runtimes all connect through frame adapters, so no effect needs a separate integration for each runtime.
+MacLauncher has one shared graphics layer. Once a runtime hands over a compatible image, the same pipeline runs its image effects, resizing, restoration and frame processing. Native apps, processes translated by Rosetta, browser hosts, Java, Wine, Android and emulator runtimes all connect through *frame adapters*, the code that hands each finished frame to the shared processor, so no effect needs a separate integration for each runtime.
 
 Two things do depend on the runtime. Scene temporal algorithms need actual matching inputs from the renderer, and changing the size the game renders at needs a cooperating renderer or the shared virtual window. Processing an image the game has already rendered depends on neither.
 
@@ -12,7 +12,7 @@ The [graphics guide](README.md) covers the editor and everyday use. This page ex
 | --- | --- |
 | How specific runtimes supply depth, motion and render-size control | [Renderer integrations](SHARED_PROCESSING.md) |
 | Image sources, capture, runtime attachment and scene producers | [Inputs and adapters](INPUTS_AND_ADAPTERS.md) |
-| Algorithms, models, input and output contracts and provider requirements | [Providers](PROVIDERS.md) |
+| Algorithms, models, inputs and outputs, and provider requirements | [Providers](PROVIDERS.md) |
 | Neural model architectures, packages and imports | [Neural models and packages](NEURAL_RESTORATION.md) |
 | Frame APIs, GPU lifetime, color and timing, source sizing and virtual windows | [Frame and presentation APIs](FRAME_API.md) |
 | Saved graph, presets, Simple and Advanced, and launcher methods | [Effects plans](EFFECT_PLANS.md) |
@@ -46,7 +46,7 @@ In this diagram and on the reference pages, the *producer* is whatever renders t
 
 Frames reach the processor on the GPU wherever the source allows it. Metal images, shared surfaces and decoded textures are handed over on the GPU, OpenGL uses shared texture and surface interop, and libplacebo uses MoltenVK on the same Metal device. A completed software image, such as a Quartz bitmap, needs one initial upload. Intermediate textures and model resources stay retained until their GPU work completes, and unchanged settings reuse compiled resources. When every effect is off, the processor can still be attached in a dormant state, without loading shaders or model weights, so effects can be turned on later during play.
 
-The editor has two views of the same graph: Simple supplies convenient defaults and a default order, while Advanced exposes the graph for explicit ordering. The executor follows that graph and each operation's input and output contract. The diagram, by contrast, shows how data moves between components; the order of effects comes only from the graph.
+The editor has two views of the same graph: Simple supplies convenient defaults and a default order, while Advanced exposes the graph for explicit ordering. The executor follows that graph and the inputs and outputs that each operation declares. The diagram above shows how data moves between components, but the order of effects comes only from the graph.
 
 ## Graphics types and feature placement
 
@@ -79,13 +79,13 @@ A requested-size shader that declares both directions is listed under Image filt
 
 ### Reconstruction, generation and presentation
 
-In this pipeline, scene reconstruction means temporal upscaling guided by the renderer. Image-only restoration and super resolution, by contrast, keep their separate image contracts. Frame generation adds images in time and keeps the size of the images it receives.
+In this pipeline, scene reconstruction means temporal upscaling guided by the renderer. Image-only restoration and super resolution, by contrast, work on images alone and keep their own inputs and outputs. Frame generation adds images in time and keeps the size of the images it receives.
 
 Several settings sit outside the effect rows. Motion clarity, final pacing, the performance overlay, display sync and the drawable count belong to presentation. Game resolution, on the other hand, belongs to source allocation, and the frame-rate cap belongs to the frame adapters that pace the game's own rendering. None of these settings changes what an effect row's output size means.
 
 ## Frame sources and scene inputs
 
-A frame route is a reusable way of attaching to a runtime:
+Each kind of frame source is a reusable way of attaching to a runtime:
 
 - Metal and hardware OpenGL adapters receive renderer images directly.
 - Layer and completed-bitmap adapters receive their declared full images.
@@ -93,13 +93,13 @@ A frame route is a reusable way of attaching to a runtime:
 - For [window graphics](INPUTS_AND_ADAPTERS.md#picked-windows-and-displays), a separate capture service captures a window or display that the user picks, and the processed image is shown in an overlay window over it.
 - Runtimes that use the frame API, and the decoded-video host, submit their own textures and timing.
 
-A runtime's name does not say which route is active. Rosetta, for example, changes the process instruction set, and a Direct3D translator changes the renderer's API; both can still feed the ordinary Metal or OpenGL adapters.
+A runtime's name does not say which of these sources is active. Rosetta, for example, changes the process instruction set, and a Direct3D translator changes the renderer's API; both can still feed the ordinary Metal or OpenGL adapters.
 
-Attaching to a window does not mean capturing it. Only two routes use ScreenCaptureKit: the completed browser-window stream and picked windows and displays. Direct Metal and OpenGL handoff and explicit textures use their producer's own synchronization. The [source table](INPUTS_AND_ADAPTERS.md#frame-sources-and-scene-inputs) maps each route to its code and the inputs it supplies.
+Attaching to a window does not mean capturing it. Only two sources use ScreenCaptureKit: the completed browser-window stream and picked windows and displays. Direct Metal and OpenGL handoff and explicit textures rely on the synchronization of whatever renders the frames. The [source table](INPUTS_AND_ADAPTERS.md#frame-sources-and-scene-inputs) maps each source to its code and the inputs it supplies.
 
 ### Composition boundaries
 
-A few boundaries limit how operations compose. Each one follows from the data involved and the component that owns it:
+A few boundaries limit how operations compose. Each one follows from the data involved and the component that holds it:
 
 | Boundary | Effect on the pipeline |
 | --- | --- |
@@ -107,7 +107,7 @@ A few boundaries limit how operations compose. Each one follows from the data in
 | Original decoder planes or metadata | Belong to the native decoder phase. Luma and chroma derived from RGB are a separate GPU computation. |
 | Input history and presentation timing | Image-pair generation needs chronological images and a compatible presentation timeline. Generated frames do not gain renderer guides. |
 | Known geometry | The shared guide transform carries the guides through supported crops and resizes. An unknown coordinate change cannot supply a correspondence. |
-| Game render size | The game's render size changes through a source adapter or an eligible virtual window. A Downsample row changes processing work, independently of the game's rendering cost. |
+| Game render size | The game's render size changes through a source adapter, the part of a runtime integration that controls the render size, or through an eligible virtual window. A Downsample row changes processing work, independently of the game's rendering cost. |
 | Provider resources and device requirements | The selected algorithm keeps its own model, texture, framework, OS and GPU requirements. |
 
 Engine adapters, such as the one for Godot, supply scene resources through the shared scene API. Such an adapter has no separate effects pipeline and no exclusive claim on temporal inputs.
@@ -118,9 +118,9 @@ Each module declares how it attaches and which inputs it supplies, through the r
 
 ## Frame inputs and presentation
 
-A runtime can hand frames to the processor in two ways. The borrowed frame APIs encode processing into the caller's Metal command buffer, and the caller submits that buffer and keeps its resources alive until the GPU completes. When the processor instead presents the output itself, it also handles output scheduling, interpolation and display callbacks. [Frame APIs](FRAME_API.md#borrowed-frames-and-owned-presentation) describe exactly which side owns what.
+A runtime can hand frames to the processor in two ways. The borrowed frame APIs encode processing into the caller's Metal command buffer, and the caller submits that buffer and keeps its resources alive until the GPU completes. When the processor instead presents the output itself, it also handles output scheduling, interpolation and display callbacks. [Frame APIs](FRAME_API.md#borrowed-frames-and-owned-presentation) describe exactly which side is responsible for each resource and step.
 
-In both cases, each image carries its color encoding, alpha convention, origin, frame identity and time through the pipeline. Resource preparation, GPU completion and physical display are separate events.
+In both cases, each image carries its color encoding, alpha convention, origin, frame ID and time through the pipeline. Resource preparation, GPU completion and physical display are separate events.
 
 ## Saved effects and launcher API
 
@@ -152,7 +152,7 @@ To show what the running game is doing, the [status API](STATUS_AND_DELIVERY.md#
 
 | Responsibility | Main locations |
 | --- | --- |
-| UI and editing | [EffectsControls](../../src/renderer/src/ui/components/EffectsControls.tsx), [editor state](../../src/renderer/src/ui/useEffectsEditor.ts), [edit operations](../../src/modules/shared/effects/edit-operations.mjs), [catalog demand](../../src/renderer/src/ui/useGraphicsCatalog.ts) and its [main-process owner](../../src/main/graphics-catalog.js) |
+| UI and editing | [EffectsControls](../../src/renderer/src/ui/components/EffectsControls.tsx), [editor state](../../src/renderer/src/ui/useEffectsEditor.ts), [edit operations](../../src/modules/shared/effects/edit-operations.mjs), [catalog demand](../../src/renderer/src/ui/useGraphicsCatalog.ts) and its [main-process module](../../src/main/graphics-catalog.js) |
 | Data types and shared catalog | [Contracts](../../src/modules/shared/effects/contracts.mjs), [operation contracts](../../src/modules/shared/effects/operation-contracts.mjs), [plan model](../../src/modules/shared/effects/plan.mjs), [native settings/catalog](../../src/modules/shared/effects/plan.js) |
 | Preparation and publication | [Effects runtime](../../src/modules/shared/effects/runtime.js), [ReShade integration](../../src/modules/shared/reshade/index.js), [launch binding](../../src/modules/shared/reshade/launch-binding.js), [saved plan reader](../../src/modules/shared/effects/stored-plan.js), [output options](../../src/modules/shared/effects/output-options.js), [prepared live rows](../../src/modules/shared/effects/prepared-rows.js), [graphics status](../../src/main/graphics-status.js), [per-item results](../../src/modules/shared/item-results.js), [retry schedule](../../src/modules/shared/bounded-retry.js) |
 | Native graph and resources | [Plan parser](../../src/modules/shared/reshade/native/effects-plan.mm), [executor](../../src/modules/shared/reshade/native/effects-execution.mm), [scene guides](../../src/modules/shared/reshade/native/scene-guides.mm) |

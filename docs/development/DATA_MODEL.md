@@ -1,6 +1,6 @@
 # Data model
 
-MacLauncher stores its state in Electron's `userData` directory. This page describes the directory layout, the global `settings.json` file, the per-game `game.json` record and its normalization, the runtime settings layers and how stored documents are written and recovered.
+MacLauncher stores its settings, game records, runtime installations and other state in Electron's `userData` directory. This page describes the directory layout, the global `settings.json` file, the per-game `game.json` record and its normalization, the layers of runtime settings, and how stored documents are written and recovered.
 
 ## Storage locations
 
@@ -12,7 +12,7 @@ Each game's record and launcher data live under `games/<gameId>/`. Android appli
 | --- | --- |
 | `settings.json` | Launcher, module and runtime-manager settings, without the game list; see [settings.json](#settingsjson) |
 | `games/<gameId>/` | Per-game data; see [per-game directory](#per-game-directory) |
-| `android/apps/<gameId>/providers/<runtimeId>/` | Provider-specific Android packages, files, caches and launch configuration, kept apart from existing application storage |
+| `android/apps/<gameId>/providers/<runtimeId>/` | Android packages, files, caches and launch configuration for one runtime, kept apart from existing application storage |
 | `modules/<moduleId>/` | Module assets shared by all games |
 | `runtimes/<managerId>/` | Shared runtime installations |
 | `runtimes/<runtimeId>/settings.json` | Global runtime defaults |
@@ -50,15 +50,15 @@ MacLauncher links each game's Electron partition to `games/<gameId>/partition/`,
 | `logs/` | Tool and host logs |
 | `effects/reshade/` | Prepared effects, the ordered runtime plan, launch bindings, window selection state and the effect log |
 | `effects/reshade/reshade.log`, `effects/reshade/reshade.log.previous` | The current and previous launch's native graphics logs, each limited to 512 KiB |
-| `effects/app-copy/` | A [private copy](../graphics/INPUTS_AND_ADAPTERS.md#private-copies-of-restricted-apps) of a Mac app whose code signature refuses the graphics processor, with its ownership record. Files and folders that the game creates in the copy's real directories, and links that it replaces, survive refreshes and keep the copy from being removed automatically |
+| `effects/app-copy/` | A [private copy](../graphics/INPUTS_AND_ADAPTERS.md#private-copies-of-restricted-apps) of a Mac app whose code signature refuses the graphics processor, with the record that marks the copy as MacLauncher's. Files and folders that the game creates in the copy's real directories, and links that it replaces, survive refreshes and keep the copy from being removed automatically |
 | `effects/app-copy/recovered/<snapshot-id>/` | Copied executables or `Info.plist` files that had changed when the copy was refreshed, under `files/` at their relative paths, with `record.json`. These snapshots are never launched, rewritten or removed automatically |
 | `modules/<moduleId>/` | Module-specific data |
-| `runtimes/<runtimeId>/` | Runtime-specific data, such as wrappers, profiles and staging |
+| `runtimes/<runtimeId>/` | Runtime-specific data, such as wrappers, profiles and prepared files |
 | `partition/` | Target of the game's Electron storage partition link |
 
 To tell whether a game file has changed since its cached facts were recorded, MacLauncher keeps file-change records. Each record holds the file's size, modification time and inode. The device number is left out, so unchanged game files on a reconnected volume still match, and records from earlier MacLauncher versions that list the device number are compared without it. Metadata and archive hashes from earlier versions also stay usable while they match. A hash that does not match leads to one ordinary refresh, which then records the file's size, modification time and inode instead; existing archive folders stay in place.
 
-Cached game metadata is checked more closely. While metadata is read, MacLauncher observes the files involved, and each of these observations also records the file's change time. When a change time has only whole-second precision, the observation also needs a content hash of each regular file up to 16 MB and a list of each directory's entries with their types. A single observation or validation pass reads at most 32 MB of file contents and 8,192 directory entries. Inputs beyond those limits, and inputs with coarse timestamps that cannot be read, are never reused from the cache. Observations from earlier versions that recorded only file status are refreshed once, while original game files and extracted archive folders stay in place.
+Cached game metadata is checked more closely. While metadata is read, MacLauncher observes the files involved, and each observation also records the file's change time. When a change time has only whole-second precision, the observation also needs a content hash of each regular file up to 16 MB and a list of each directory's entries with their types. A single observation or validation pass reads at most 32 MB of file contents and 8,192 directory entries. Inputs beyond those limits, and inputs with coarse timestamps that cannot be read, are never reused from the cache. Observations from earlier versions that recorded only file status are refreshed once, while original game files and extracted archive folders stay in place.
 
 ### Per-game module data
 
@@ -103,7 +103,7 @@ Runtimes keep theirs under `games/<gameId>/runtimes/<runtimeId>/`, for example:
 
 | Path | Contents |
 | --- | --- |
-| `modules/rgss/assets/generations/<source-hash>-<generation>/` | Immutable shared RTP, Kawariki and SF2 trees. Each launch keeps the exact generation paths in its configuration. Staging again keeps earlier generations, and concurrent first launches reuse identical content. Explicit removal is refused while an MKXP-Z game uses the assets. |
+| `modules/rgss/assets/generations/<source-hash>-<generation>/` | Immutable shared RTP, Kawariki and SF2 trees. Each launch keeps the exact generation paths in its configuration. Preparing the assets again keeps earlier generations, and concurrent first launches reuse identical content. Explicit removal is refused while an MKXP-Z game uses the assets. |
 | `modules/rgss/cheats/` | The shared RGSS cheat runtime, `maclauncher-cheats.rb` |
 | `modules/nscripter/assets/` | The shared fallback font |
 | `modules/godot/gdre-user/` | The GDRE Tools user environment |
@@ -138,7 +138,7 @@ Local CrossOver applications also stay where they are. `runtimes/crossover/regis
 
 ### Removing a game
 
-Forgetting a game removes it from the library and deletes all of its launcher data. That data is the game's `games/<gameId>/` directory, including any assets unpacked or prepared outside the original game directory, and any module-owned application storage, such as `android/apps/<gameId>/`. The original game files stay unchanged. If module or runtime cleanup fails, however, the library entry stays available so that removal can be retried.
+Forgetting a game removes it from the library and deletes all of its launcher data. That data is the game's `games/<gameId>/` directory, including any assets unpacked or prepared outside the original game directory, and any application storage that a module keeps for the game, such as `android/apps/<gameId>/`. The original game files stay unchanged. If module or runtime cleanup fails, however, the library entry stays available so that removal can be retried.
 
 ### Derived data upkeep
 
@@ -257,7 +257,9 @@ Some library state is never saved. Bulk selection and missing-path results exist
 
 Two batch requests remove games. `launcher:forgetGames` removes the selected library entries and their userData, whereas `launcher:deleteGames` asks once in a native dialog and moves the games to the Trash. Both check the paths against the saved library, remove duplicates and return the successful removals together with any failures for each path.
 
-Relocating a game with **Locate…** points its library entry at the new location of its files. The request behind it, `launcher:locateGame`, takes one game path and resolves to the game's new path, or to `null` when the chooser is canceled. The backend asks for the new location through the host's chooser, runs import detection there and accepts the result only when its module is the entry's `moduleId`. The record in `games/<gameId>/game.json` then receives the new `gamePath`. When MacLauncher keeps the playable copy and the imported file is the game's root, such as an installer that MacLauncher unpacked, the record receives the new `importPath` instead. Absolute paths stored inside the old root, in any field except `name` and `notes`, move to the same place under the new root. In addition, a forced metadata refresh replaces the detected data, and the metadata cache is written for the new location. The `gameId`, the settings and everything stored under `games/<gameId>/` stay as they were. The main process moves its notices for the old path, refreshes availability and pushes the state, and the renderer keeps the inspector on the same `gameId`. A refusal, such as a different detected module (`GAME_TYPE_MISMATCH`) or a location already used by another entry (`GAME_LOCATION_IN_USE`), rejects with a one-sentence reason and leaves the record unchanged.
+Relocating a game with **Locate…** points its library entry at the new location of its files. The request behind it, `launcher:locateGame`, takes one game path and resolves to the game's new path, or to `null` when the chooser is canceled. The backend asks for the new location through the host's chooser, runs import detection there and accepts the result only when its module is the entry's `moduleId`. The record in `games/<gameId>/game.json` then receives the new `gamePath`. When MacLauncher keeps the playable copy and the imported file is the game's root, such as an installer that MacLauncher unpacked, the record receives the new `importPath` instead. Absolute paths stored inside the old root, in any field except `name` and `notes`, move to the same place under the new root.
+
+In addition, a forced metadata refresh replaces the detected data, and the metadata cache is written for the new location. The `gameId`, the settings and everything stored under `games/<gameId>/` stay as they were. The main process moves its notices for the old path, refreshes availability and pushes the state, and the renderer keeps the inspector on the same `gameId`. A refusal, such as a different detected module (`GAME_TYPE_MISMATCH`) or a location already used by another entry (`GAME_LOCATION_IN_USE`), rejects with a one-sentence reason and leaves the record unchanged.
 
 Besides the game record, relocation rewrites the launcher's own JSON records under `games/<gameId>/`, such as the records of completed extractions and maps keyed by paths. Every absolute path inside the old root, whether a value or a key, moves to the same place under the new root. A path that only shares the old root's prefix, such as `/Games/Foobar` for `/Games/Foo`, is not inside it. Symbolic links whose targets lie inside the old root are replaced by links to the same place under the new root; no link is followed, and other links stay.
 
@@ -332,7 +334,7 @@ A game ID is a random hexadecimal identifier. Because it is not derived from `ga
 
 Every entry is normalized by `normalizeGameEntry` in `src/main/main.js`. The main fields fall into these groups:
 
-Identity and paths:
+IDs and paths:
 
 - `gameId`: the unique game ID and directory name.
 - `gamePath`: the absolute path to the game root.
@@ -421,13 +423,13 @@ Java:
 LÖVE:
 
 - `sourceKind`: the source type, such as `archive`, `source`, `app`, `windows-fused`, `linux-fused`, `linux-dir` or `appimage`.
-- `packagedPath`: the original packaged input, when the launch uses a staged target.
+- `packagedPath`: the original packaged input, when the launch uses a prepared target.
 - `launchTargetPath`: the resolved path passed to the LÖVE runtime.
 - `embeddedLovePath`: the embedded `.love` path inside a fused bundle, when available.
 - `detectedVersion`, `detectedVersionNormalized`, `detectedVersionSource`: version metadata from app bundles, archives or packaged libraries.
 - `saveIdentity`: `t.identity` from `conf.lua`, when detected.
 - `appImageExtractRoot`, `appImageLaunchRelativePath`, `appImageReady`, `appImageExtractedAt`: the state of the extracted AppImage cache.
-- `resolvedChannel`: the effective manager section, `stable` or `nightly`, used for UI routing.
+- `resolvedChannel`: the effective manager section, `stable` or `nightly`, which the UI uses to select the section.
 - `runtimePromptSuppressedFor`: the game's suppression key for declined runtime install prompts.
 - `extractedReady`: whether extracted output exists.
 - `extractedAt`: when extraction last ran.
@@ -441,7 +443,7 @@ RGSS:
 - `rgssVersion`: the detected version, `RGSS1`, `RGSS2` or `RGSS3`.
 - `rtpId`: the detected RTP, `Standard`, `RPGVX` or `RPGVXAce`.
 - `execName`: the detected base name of the Windows executable.
-- `assetsStaged`: whether the bundled assets are staged.
+- `assetsStaged`: whether the bundled assets have been prepared for the game.
 - `runtimeSource`: the source of the installed runtime, such as `MacLauncher Builds` or `GitHub Actions`.
 - `archivePath`: the detected RGSS archive used for extraction.
 - `decryptedRoot`: the extraction output folder in userData.
@@ -556,4 +558,4 @@ A document that cannot be read at all is not replaced either, and each kind of c
 
 A Windows game normally runs in a private CrossOver bottle or Wine prefix in launcher data, but its runtime settings can refer to an existing environment instead. The per-game CrossOver and Sikarugir runtime settings store this choice as `environmentReference`, which is either `private` or a JSON-encoded record with `kind`, an absolute `path`, and optional `name` and `bottleId`. WineCX has no external environment kind, so its runtime settings have no such field. The contents of an existing environment remain at that path, and runtime metadata keeps the external reference alongside the resolved bottle or prefix path.
 
-External environments cannot be initialized, recreated or removed by MacLauncher. Initializing a private environment requires an ownership capability, which only launcher-owned game or compute data can issue. In addition, removal and profile adoption refuse directories that contain a referenced external environment.
+External environments cannot be initialized, recreated or removed by MacLauncher. Initializing a private environment requires a capability that can be issued only for the launcher's own game or compute data. In addition, removal and profile adoption refuse directories that contain a referenced external environment.

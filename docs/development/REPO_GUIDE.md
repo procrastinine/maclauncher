@@ -1,6 +1,6 @@
 # Repository guide
 
-MacLauncher is a macOS-first Electron launcher for games made with many different engines. Support for each game type comes from a module under `src/modules/`, and the module registry discovers the modules at runtime, so the launcher code has no per-engine branches.
+MacLauncher is a macOS-first Electron launcher for games made with many different engines. Support for each game type comes from a module under `src/modules/`, and because the module registry discovers the modules at runtime, the launcher code has no per-engine branches.
 
 This page is the starting point for contributors. It describes what the repository contains, how its parts fit together and which page documents each part. The [MacLauncher guide](../README.md) describes the app itself: adding games, inspector actions, tools and storage.
 
@@ -8,15 +8,15 @@ This page is the starting point for contributors. It describes what the reposito
 
 - The launcher follows macOS conventions for windows, menus and shortcuts.
 - The app uses the network only after an explicit user action, as [downloads and offline use](../runtimes/README.md#downloads-and-offline-use) describes. The one exception is the [update check](../UPDATES.md) at launch, which runs only when **Check for updates at launch** is turned on; it is off by default.
-- Engine-specific behavior lives in modules. The launcher reads module metadata and calls module hooks through the shared backend contract.
-- The launcher stays separate from the game runtimes, and module code makes any changes a runtime needs.
-- Upstream checkouts under `src/external/` are read-only. MacLauncher's changes to upstream code are kept as overlays in the module that needs them.
+- Engine-specific behavior lives in modules. The launcher reads module metadata and calls module hooks through the interface that the shared backend defines for every module.
+- The launcher stays separate from the game runtimes, and any change a runtime needs is made by module code.
+- Upstream checkouts under `src/external/` are read-only. MacLauncher's changes to upstream code are kept in the module that needs them, as overlay files applied on top of the upstream source.
 
 ## How the parts fit together
 
 ### Modules and the registry
 
-A module handles detection, metadata, actions and launch preparation for one game type; the [module system](MODULES.md) defines the contract. The registry in `src/modules/registry.js`:
+A module handles detection, metadata, actions and launch preparation for one game type, and the [module system](MODULES.md) defines what every module provides. The registry in `src/modules/registry.js`:
 
 - discovers modules under `src/modules/<id>/` and treats `src/modules/shared/` as a special namespace whose subdirectories it records for internal wiring;
 - loads the runtime managers that modules export, as well as those under `src/modules/shared/*/runtime/`;
@@ -28,13 +28,13 @@ A module handles detection, metadata, actions and launch preparation for one gam
 
 ### Shared backend
 
-`src/core/launcher.js` resolves, prepares and launches games and runs module actions in plain Node, without Electron. The Electron app calls it through isolated backend workers, and the `pnpm launch` command line calls it directly. [Backend and command line](BACKEND.md) describes the service, its workers and the CLI.
+Games are resolved, prepared and launched by `src/core/launcher.js`, which also runs module actions. It runs in plain Node, without Electron, so the Electron app can call it through isolated backend workers and the `pnpm launch` command line can call it directly. [Backend and command line](BACKEND.md) describes the service, its workers and the CLI.
 
 ### Main process
 
 `src/main/main.js` runs the Electron launcher:
 
-- it owns `settings.json` and the per-game records under `userData/games/`, and normalizes entries with module metadata and schema defaults;
+- it reads and writes `settings.json` and the per-game records under `userData/games/`, and normalizes entries with module metadata and schema defaults;
 - it delegates runtime selection, launch dispatch and runtime settings to `src/core/launcher.js`;
 - it injects Electron shell, dialog and icon services into module contexts, so that importing a module in Node does not load Electron;
 - it exposes the IPC endpoints that the renderer uses.
@@ -49,7 +49,7 @@ MacLauncher has two preload scripts. The launcher preload, `src/modules/shared/w
 
 ### Renderer
 
-The launcher's interface is a React app in `src/renderer/`, starting at `src/renderer/src/ui/App.tsx`. It renders the library, inspector, Settings and Runtimes views from module manifests and state. Current module presentation metadata also applies to cached runtime state; grouping and labels keep the original manager, section and version IDs. The [UI guide](UI_GUIDE.md) describes every window and control, and [UI styles](UI_STYLES.md) maps styles and components to their source files.
+The launcher's interface is a React app in `src/renderer/`, starting at `src/renderer/src/ui/App.tsx`. It renders the library, inspector, Settings and Runtimes views from module manifests and state. Cached runtime state is also shown with the current modules' presentation metadata, while its grouping and labels stay keyed to the original manager, section and version IDs. The [UI guide](UI_GUIDE.md) describes every window and control, and [UI styles](UI_STYLES.md) maps styles and components to their source files.
 
 ### Launch flow
 
@@ -61,9 +61,9 @@ The launcher's interface is a React app in `src/renderer/`, starting at `src/ren
 
 ### Data and resources
 
-Launcher data lives in Electron's `userData` directory: per-game records and files under `userData/games/<gameId>/`, and shared runtime installations that never contain per-game data. Removing a game removes all of its launcher data, including unpacked or staged assets stored outside the original game directory. The [data model](DATA_MODEL.md) describes the complete layout.
+Launcher data lives in Electron's `userData` directory: per-game records and files under `userData/games/<gameId>/`, and shared runtime installations that never contain per-game data. Removing a game removes all of its launcher data, including assets that were unpacked or prepared for launch outside the original game directory. The [data model](DATA_MODEL.md) describes the complete layout.
 
-App resources stay separate from installed data: packaging takes the declared core graphics components and internal helpers from `src/resources/`, while game runtimes, including MKXP-Z, are downloaded into `userData`.
+App resources are kept separate from installed data. Packaging takes the declared core graphics components and internal helpers from `src/resources/`, while game runtimes, including MKXP-Z, are downloaded into `userData`.
 
 ## Repository layout
 
@@ -77,11 +77,11 @@ App resources stay separate from installed data: packaging takes the declared co
 | `src/modules/shared/` | Code shared by modules: runtime helpers, the cheats base, web runtime support, preloads and utilities |
 | `src/modules/shared/installers/` | Offline installer inspection, extraction and cached import, within fixed limits |
 | `src/external/` | Upstream source checkouts (Git submodules), each at an exact commit |
-| `src/external/maclauncher-android/` | MacLauncher Android at an exact commit: the Android framework, JVM and native implementations and the build tools for the ART runtime. Source-only aliases keep existing build entry paths. The app includes its small metadata helper; the Android runtime packages download separately and need no Git or build tools. |
+| `src/external/maclauncher-android/` | MacLauncher Android at an exact commit: the Android framework, JVM and native implementations and the build tools for the ART runtime. Source-only aliases keep existing build entry paths. The app includes its small metadata helper; the Android runtime packages are downloaded separately and need no Git or build tools. |
 | `src/resources/` | App resources: artwork, the embedded Python runtime, 7-Zip and the included core graphics and internal helpers |
-| `scripts/` | Development, setup, staging, packaging and release scripts, including `run-game.mjs`, the plain Node command-line entry point |
+| `scripts/` | Scripts for development, setup, preparing native and source inputs, packaging and releases, including `run-game.mjs`, the plain Node command-line entry point |
 | `build/` | Packaging inputs: included runtime packages (`runtime-packages.json`), source dependencies for app builds (`source-dependencies.json`), the app icon and entitlements |
-| `tests/` | Node backend and UI contract tests |
+| `tests/` | Node tests of the backend and of the UI's expected behavior |
 | `docs/` | Documentation |
 | `website/` | Project website |
 
@@ -89,9 +89,11 @@ Each module directory is named after its module ID. The [module inventory](MODUL
 
 ## Related repositories
 
-[MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds) provides the binary builds, version history and patches of the downloadable runtimes and tools, built from exact upstream commits, and [MacLauncher Android](https://github.com/procrastinine/maclauncher-android) contains the Android runtime implementation. [Releases](RELEASING.md) describes how the three repositories release.
+[MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds) provides the binary builds, version history and patches of the downloadable runtimes and tools, built from exact upstream commits, and [MacLauncher Android](https://github.com/procrastinine/maclauncher-android) contains the Android runtime implementation. [Releases](RELEASING.md) describes how releases move through the three repositories.
 
-Graphics and Vulkan native source lives in `src/modules/shared/reshade/` and `src/modules/shared/vulkan/native/`. MacLauncher Builds materializes these modules from an exact MacLauncher source commit and supplies the package recipes, manifests and licence inputs. The libplacebo provider build wrapper and dependency recipes live together in MacLauncher Builds under `producers/package-support/src/modules/shared/reshade/`.
+Graphics and Vulkan native source lives in `src/modules/shared/reshade/` and `src/modules/shared/vulkan/native/`. MacLauncher Builds reads these modules at an exact MacLauncher source commit and adds the package recipes, manifests and license inputs. The build wrapper and dependency recipes for the libplacebo provider are kept together in MacLauncher Builds under `producers/package-support/src/modules/shared/reshade/`.
+
+Shared driver headers come from the `src/external/maclauncher-kosmickrisp` checkout at its recorded commit. Android runtime tests and fixtures belong to the Android repository, which is also checked out at a recorded commit.
 
 ## Documentation map
 
@@ -106,12 +108,12 @@ Graphics and Vulkan native source lives in `src/modules/shared/reshade/` and `sr
 - [External libraries](../library/EXTERNAL.md) and [Android downloads](../library/GOOGLE_PLAY.md): discovery of installed games, store accounts, version selection and downloads.
 - [Preparation and storage](../library/GAME_PREPARATION.md): original assets, per-game files and shared runtimes.
 
-### Architecture and contracts
+### Architecture
 
-- [Module system](MODULES.md): the module contract, manifest fields and `main.js` hooks.
+- [Module system](MODULES.md): what a module provides, manifest fields and `main.js` hooks.
 - [Backend and command line](BACKEND.md): the Node service, backend workers, the CLI and module actions.
 - [Data model](DATA_MODEL.md): stored settings, library records and runtime selections.
-- [Detection](../library/DETECTION.md): staged probes, cached facts and version evidence.
+- [Detection](../library/DETECTION.md): checks that run in stages, cached facts and version evidence.
 - [Graphics pipeline](../graphics/PIPELINE.md): the shared graphics architecture, with links to the adapter, provider, frame API, live-update, media and delivery references.
 - [UI guide](UI_GUIDE.md) and [UI styles](UI_STYLES.md): launcher windows and controls, design tokens, components and their source files.
 - [Game icons](../library/GAME_ICONS.md) and [icon assets](ICON_ASSETS.md): artwork extraction, caching and the bundled icons.
@@ -122,5 +124,3 @@ Graphics and Vulkan native source lives in `src/modules/shared/reshade/` and `sr
 - [macOS app builds](CI.md): the app build workflow.
 - [Releases](RELEASING.md): runtime and app versions.
 - [Upstreams](../runtimes/UPSTREAMS.md) and [attributions](../ATTRIBUTIONS.md): exact upstream sources and licenses.
-
-Shared driver headers come from the pinned `src/external/maclauncher-kosmickrisp` source. Android runtime tests and fixtures belong to the pinned Android repository.

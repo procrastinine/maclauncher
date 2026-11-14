@@ -8,20 +8,20 @@ sidebar:
   order: 2.1
 ---
 
-Most games never need a choice. Every translator setting starts at its runtime's automatic choice, MacLauncher checks the result before each launch, and the inspector shows what actually ran. When a game renders wrongly, runs slowly or won't start, though, the right translator depends mostly on two things: the graphics API the game uses, and your Mac. This page goes through the common cases. [Graphics translators](/maclauncher/windows/graphics-translators/) explains what each translator is.
+A Windows game on a Mac needs a *graphics translator* to turn its Direct3D calls into Metal, the Mac's graphics API, and a translator that goes by way of Vulkan also needs a *Vulkan driver* underneath. Most games never need you to choose either one. Every translator setting starts at its runtime's automatic choice, MacLauncher checks the result before each launch, and the inspector shows what actually ran. When a game renders wrongly, runs slowly or won't start, though, the right translator depends mostly on two things: the graphics API the game uses, and your Mac. This page goes through the common cases, and [Graphics translators](/maclauncher/windows/graphics-translators/) explains what each translator is.
 
 ## Start with your Mac
 
 A few translators only exist on some Macs, so your Mac narrows the list before the game does:
 
-- **Apple Silicon with macOS 26 or later.** Everything is available, including KosmicKrisp and MacLauncher KosmicKrisp.
-- **Apple Silicon with an older macOS.** KosmicKrisp needs Metal 4 and therefore macOS 26, so Vulkan runs on MoltenVK. DXMT works from macOS 14, and D3DMetal's minimum depends on its version.
-- **Intel Macs.** Vulkan runs on MoltenVK, and D3DMetal, which needs Apple Silicon, isn't an option. DXMT, on GPUs that support it, and WineD3D remain.
-- **Virtual machines.** KosmicKrisp needs a physical Apple Silicon Mac, so Vulkan runs on MoltenVK here too.
+- On Apple Silicon with macOS 26 or later, everything is available, including the KosmicKrisp Vulkan driver and MacLauncher KosmicKrisp, MacLauncher's own build of it.
+- On Apple Silicon with an older macOS, Vulkan runs on MoltenVK, the older Vulkan driver, because KosmicKrisp needs Metal 4 and therefore macOS 26. DXMT, the open-source translator from Direct3D 10 and 11 to Metal, works from macOS 14, and the minimum for D3DMetal, Apple's translator, depends on its version.
+- On Intel Macs, Vulkan runs on MoltenVK, and D3DMetal isn't an option, because it needs Apple Silicon. DXMT, on GPUs that support it, and WineD3D, WINE's own OpenGL-based translator, remain.
+- In virtual machines, Vulkan runs on MoltenVK too, since KosmicKrisp needs a physical Apple Silicon Mac.
 
 If you're not sure which graphics API a game uses, its system requirements usually name the DirectX version.
 
-All three WINE distributions, CrossOver, Sikarugir and WineCX, can use the translators installed in Runtimes, except that CrossOver accepts DXVK-macOS packages only in their WINE builtin form. They differ in the translator versions they include, which [CrossOver, Sikarugir and WineCX](/maclauncher/windows/crossover-and-sikarugir/#which-one-to-use) compares. WineCX includes no D3DMetal, so a D3DMetal choice there needs a version installed in Runtimes.
+All three WINE distributions (CrossOver, Sikarugir and WineCX) can use the translators installed in Runtimes, except that CrossOver accepts DXVK-macOS packages only in their WINE builtin form, not as plain Windows DLLs. The distributions differ in the translator versions they include, which [CrossOver, Sikarugir and WineCX](/maclauncher/windows/crossover-and-sikarugir/#which-one-to-use) compares. WineCX includes no D3DMetal, so a D3DMetal choice there needs a version installed in Runtimes.
 
 ## By kind of game
 
@@ -33,25 +33,25 @@ All three WINE distributions, CrossOver, Sikarugir and WineCX, can use the trans
 | Vulkan | KosmicKrisp where the Mac can run it | MoltenVK |
 | OpenGL ES, on Android | ANGLE on Metal | ANGLE on Vulkan |
 
-The sections below explain each row.
-
 ### Direct3D 8 and 9
 
-Neither DXMT nor D3DMetal handles Direct3D 9 or earlier, so these games choose between DXVK and WineD3D. On an Apple Silicon Mac with macOS 26, Sikarugir's automatic choice already runs them through D9VK on KosmicKrisp. Elsewhere it falls back to WineD3D, which works on any Mac.
+Neither DXMT nor D3DMetal handles Direct3D 9 or earlier, so these games choose between DXVK, the Direct3D-to-Vulkan translator from Valve's Proton, and WineD3D. On an Apple Silicon Mac with macOS 26, Sikarugir's automatic choice already runs them through D9VK on KosmicKrisp. D9VK is the Direct3D 8 and 9 part of DXVK in Sikarugir's Template, the package of translators that comes with each Sikarugir engine. Elsewhere it falls back to WineD3D, which works on any Mac.
 
-Which DXVK fits depends on the Vulkan driver. The releases from the DXVK project, versions 2 and 3, need features that MoltenVK and LWJGL's KosmicKrisp lack: MoltenVK has no geometry shaders, and LWJGL's KosmicKrisp has no wireframe drawing. MacLauncher KosmicKrisp provides them, and when you pick a DXVK release from Runtimes with the **Vulkan driver** on Automatic, MacLauncher pairs the two. Sikarugir pairs its own KosmicKrisp with the DXVK builds in its Template. For MoltenVK, pick one of Gcenx's DXVK-macOS builds, which are made for it, and choose MoltenVK as the **Vulkan driver**.
+Which DXVK fits depends on the Vulkan driver. The releases from the DXVK project, versions 2 and 3, need features that MoltenVK and LWJGL's KosmicKrisp (Mesa's driver as built by the LWJGL project) lack: MoltenVK has no geometry shaders, and LWJGL's KosmicKrisp has no wireframe drawing. MacLauncher KosmicKrisp provides both, and when you pick a DXVK release from Runtimes with the **Vulkan driver** on Automatic, MacLauncher pairs the two. Sikarugir pairs its own KosmicKrisp with the DXVK builds in its Template. For MoltenVK, pick one of Gcenx's DXVK-macOS builds, which are made for it, and choose MoltenVK as the **Vulkan driver**.
 
 ### Direct3D 10 and 11
 
-DXMT is the usual first choice. It goes straight from Direct3D to Metal, it's Sikarugir's automatic choice, and several MacLauncher features need it: DLSS to MetalFX on macOS 14 or later and XeSS. D3DMetal is the alternative on Apple Silicon for 64-bit games, and it also turns DLSS into MetalFX, from macOS 26.
+DXMT is the usual first choice. It goes straight from Direct3D to Metal, it's Sikarugir's automatic choice, and several MacLauncher features need it: MetalFX upscaling for games that call NVIDIA's DLSS, on macOS 14 or later, and support for Intel's XeSS. D3DMetal is the alternative on Apple Silicon for 64-bit games, and from macOS 26 it also turns DLSS into MetalFX.
 
-DXVK on MacLauncher KosmicKrisp is worth a try when both Metal translators struggle with a game. WineD3D is the fallback that every Mac has, and it draws through OpenGL instead of Metal.
+When both Metal translators struggle with a game, DXVK on MacLauncher KosmicKrisp is worth a try. WineD3D is the fallback that every Mac has, and it draws through OpenGL instead of Metal.
 
 ### Direct3D 12
 
-D3DMetal is the one Direct3D 12 route that doesn't pass through Vulkan, and it hands a game's DLSS calls to MetalFX itself. It needs Apple Silicon and a 64-bit game.
+D3DMetal is the only Direct3D 12 translator that doesn't pass through Vulkan, and it hands a game's DLSS calls to MetalFX itself. It needs Apple Silicon and a 64-bit game.
 
-vkd3d-proton is the open-source alternative. It refuses to start on a driver without transform feedback, robust null descriptors and single-texel buffer alignment, which rules out MoltenVK and LWJGL's KosmicKrisp, while MacLauncher KosmicKrisp provides all three. With the **Vulkan driver** on Automatic, MacLauncher pairs vkd3d-proton with MacLauncher KosmicKrisp, and if you pick another driver, it warns that KosmicKrisp is recommended. On MacLauncher KosmicKrisp, vkd3d-proton reports feature level 12_1 and shader model 6.8 in the default performance mode, and feature level 12_2 and shader model 6.9 in conformance mode, which a game that insists on 12_2 needs. A game's DLSS inputs can reach MacLauncher's upscalers on this route too. [KosmicKrisp](/maclauncher/windows/kosmickrisp/#direct3d-12-games-through-vkd3d-proton) explains what the route needs and what the feature levels mean for a game. WINE's own vkd3d is the third choice, and it comes with WINE itself.
+vkd3d-proton, Proton's Direct3D 12 translator, is the open-source alternative. It refuses to start on a driver without transform feedback, robust null descriptors and single-texel buffer alignment, which rules out MoltenVK and LWJGL's KosmicKrisp, while MacLauncher KosmicKrisp provides all three. With the **Vulkan driver** on Automatic, MacLauncher pairs vkd3d-proton with MacLauncher KosmicKrisp, and if you pick another driver, it warns that KosmicKrisp is recommended.
+
+On MacLauncher KosmicKrisp, vkd3d-proton reports feature level 12_1 and shader model 6.8 in the default performance mode, and feature level 12_2 and shader model 6.9 in conformance mode, which a game that insists on 12_2 needs. A game's DLSS inputs can reach MacLauncher's upscalers in this setup too. [KosmicKrisp](/maclauncher/windows/kosmickrisp/#direct3d-12-games-through-vkd3d-proton) explains what the setup needs and what the feature levels mean for a game. WINE's own vkd3d is the third choice, and it comes with WINE itself.
 
 ### Vulkan games
 
@@ -59,13 +59,13 @@ Games that use Vulkan directly only need a driver. On an Apple Silicon Mac with 
 
 ### Android games
 
-Android games draw with OpenGL ES, which ANGLE provides on Metal by default. ANGLE's Metal renderer offers OpenGL ES 3.0, so for an app that needs a newer version, MacLauncher switches that game to ANGLE's Vulkan renderer by itself, unless you've chosen a backend for it. OpenGL ES 3.2 adds geometry and tessellation shaders, and ANGLE only offers them on a Vulkan driver with transform feedback, which MacLauncher KosmicKrisp has and MoltenVK and LWJGL's KosmicKrisp don't. One exception: apps that run with native Android execution need MoltenVK for their shared graphics buffers.
+Android games draw with OpenGL ES, which ANGLE, Google's OpenGL ES implementation, provides on Metal by default. ANGLE's Metal renderer offers OpenGL ES 3.0, so for an app that needs a newer version, MacLauncher switches that game to ANGLE's Vulkan renderer by itself, unless you've chosen a backend for it. OpenGL ES 3.2 adds geometry and tessellation shaders, and ANGLE only offers them on a Vulkan driver with transform feedback, which MacLauncher KosmicKrisp has and MoltenVK and LWJGL's KosmicKrisp don't. Apps that run with native Android execution are the exception, because they need MoltenVK for their shared graphics buffers.
 
 Android apps that render with Vulkan themselves use the same **Vulkan implementation** setting directly.
 
 ### PlayStation 5 games
 
-AnyPS5 and Prosper run as Intel programs and need an Intel driver build. Their automatic choice prefers KosmicKrisp, and on a Mac that can run it, Play offers the Intel build of MacLauncher KosmicKrisp the first time one is needed.
+AnyPS5 and Prosper, the PlayStation 5 runtimes, run as Intel programs and need an Intel driver build. Their automatic choice prefers KosmicKrisp, and on a Mac that can run it, Play offers the Intel build of MacLauncher KosmicKrisp the first time one is needed.
 
 ## Changing a translator
 

@@ -10,7 +10,7 @@ MacLauncher is a Mac app with one main window, the **library**, which holds a li
 
 ## The library
 
-The library opens straight away with the details MacLauncher saved last time, and each game is checked again in the background. A game whose files haven't changed reuses what MacLauncher already knows about it, and a slow game doesn't hold up the list or other imports. Selecting a game moves its checks to the front of the queue, and its last known details stay on screen until the new result arrives. [Library loading](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GAME_PREPARATION.md#library-loading) describes how those updates work.
+MacLauncher opens the library straight away with the details it saved last time, then checks each game again in the background. When a game's files haven't changed, it reuses what it already knows about that game, and a game that is slow to check doesn't hold up the list or other imports. Selecting a game moves its checks to the front of the queue; until the new result arrives, its last known details stay on screen. [Library loading](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GAME_PREPARATION.md#library-loading) describes how those updates work.
 
 ### Adding games
 
@@ -18,7 +18,7 @@ The library opens straight away with the details MacLauncher saved last time, an
 
 Several games dragged in at once import as one batch, with **Adding N of M** and a progress bar. A failed item doesn't stop the rest. Instead, a summary lists each item that didn't import, with the reason, a **Choose game file…** button and **Retry**.
 
-A folder that isn't a game itself, such as a downloads folder or an archive that unpacked into a few levels of subfolders, isn't a dead end. When nothing at its top level is a game, or there are several possible games, MacLauncher looks inside, up to three folders deep, and offers the games it finds, so you can add one or all of them.
+You can also drop a folder that isn't a game itself, such as a downloads folder or an archive that unpacked into a few levels of subfolders. When nothing at its top level is a game, or there are several possible games, MacLauncher looks inside, up to three folders deep, and offers the games it finds, so you can add one or all of them.
 
 The window also accepts dropped shaders (`.fx`, `.glsl`, `.hook`, `.slang`, `.slangp`) and neural models (`.dlssmodel`). These go into the [shader library](/maclauncher/graphics/shaders/#the-shader-library) and the [model library](/maclauncher/graphics/neural-restoration/#getting-models) instead of the game list.
 
@@ -27,7 +27,7 @@ The window also accepts dropped shaders (`.fx`, `.glsl`, `.hook`, `.slang`, `.sl
 A toolbar above the list filters and sorts it:
 
 - **Search** (Cmd+F) matches titles and paths as you type.
-- **Game types** shows or hides whole kinds of game, such as [RPG Maker](https://www.rpgmakerweb.com/) MV, [Ren'Py](https://www.renpy.org/) or Nintendo Switch. A game is listed under its game type whichever runtime plays it, so Prosper games, for example, appear under PlayStation 5.
+- **Game types** shows or hides whole kinds of game, such as [RPG Maker](https://www.rpgmakerweb.com/) MV, [Ren'Py](https://www.renpy.org/) or Nintendo Switch. A game is listed under its game type whichever runtime (the engine or player that runs it) plays it, so games played with Prosper, one of the PlayStation 5 runtimes, still appear under PlayStation 5.
 - **Show games** picks All games, Favorites or Running.
 - **Sort** orders the list by Default, Last played, Date added, Alphabetical or Game type, with a button to reverse the direction.
 
@@ -51,7 +51,7 @@ Both removals ask for confirmation once, in a macOS dialog.
 
 Every row shows the game's name, game type, last-played time and path. A **runtime** tag appears when the game uses a runtime other than its game type's default, and **Modified** appears when that runtime's settings differ from the defaults. A save label also shows whether the game uses a custom save folder. **Play**/**Stop**, **Shortcut** and **Forget** work directly from the row, without opening the inspector. When a game's files can't be found, its row says **Unavailable** and its icon is dimmed; hover over the label to see why.
 
-Icons arrive with the list itself, even far down a long library, rather than popping in as you scroll. MacLauncher keeps the small previews it made last time, so after a restart every icon whose file hasn't changed is there in the very first paint of the library.
+Icons arrive with the list itself, even far down a long library, so they don't pop in as you scroll. Because MacLauncher keeps the small previews it made last time, every icon whose file hasn't changed is already there when the library first appears after a restart.
 
 To find the icon of a Windows game in a folder, MacLauncher skips installers and crash reporters and tries the game before configuration tools or launchers. A packaged game whose file name looks like an installer's can still supply its own artwork, however.
 
@@ -65,7 +65,7 @@ When the drive comes back at the same location, the game is ready again, with no
 
 MacLauncher also remembers which games were unavailable when it last checked. At the next start, those games show as unavailable as soon as the library appears, and a row changes only if its own check finds the files back.
 
-If a game has moved for good, to another folder or another drive, press **Locate…** beside the **Files unavailable** notice in the game's inspector and choose the new location. MacLauncher checks that the game there is the same kind of game, then points the library entry at it. The game keeps its saves, snapshots, settings, notes, favorite, runtime choices and effects, and shortcuts you saved for it keep opening it. A location without a game of the same kind, or one that another library entry already uses, is refused with the reason, and the entry stays as it was. [Unavailable game files](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GAME_PREPARATION.md#unavailable-game-files) has the full rules, including [what Locate… updates](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GAME_PREPARATION.md#locating-moved-files).
+If a game has moved for good, to another folder or another drive, press **Locate…** beside the **Files unavailable** notice in the game's inspector and choose the new location. MacLauncher checks that the game there is the same kind of game, then points the library entry at it. The game keeps its saves, snapshots, settings, notes, favorite, runtime choices and effects, and shortcuts you saved for it keep opening it. If the new location has no game of that kind, or another library entry already uses it, MacLauncher refuses it and says why, and the entry stays as it was. [Unavailable game files](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GAME_PREPARATION.md#unavailable-game-files) has the full rules, including [what Locate… updates](https://github.com/procrastinine/maclauncher/blob/master/docs/library/GAME_PREPARATION.md#locating-moved-files).
 
 ## The inspector
 
@@ -87,7 +87,7 @@ This section holds the runtime, its version and settings, launch arguments, netw
 
 ### Patches
 
-Some game types support reversible patches to the game's files. For example, RPG Maker MV games can swap in an updated graphics library, and games with in-game cheat tools can have those tools injected. Each patch shows its status (Not patched, Patched or Partial) with **Patch** and **Unpatch** buttons, and asks before changing anything. [Patching games](/maclauncher/tools/patching-games/) walks through each one.
+Some game types support reversible patches to the game's files. For example, RPG Maker MV games can swap in an updated graphics library, and games with in-game cheat tools can have those tools added. Each patch shows its status (Not patched, Patched or Partial) with **Patch** and **Unpatch** buttons, and asks before changing anything. [Patching games](/maclauncher/tools/patching-games/) walks through each one.
 
 ### Tools
 
@@ -104,7 +104,7 @@ Notes are plain text of your own, kept with the game in the library. They're sav
 ## Windows and menus
 
 - **Settings** (Cmd+,) holds preferences: appearance, defaults and each game type's runtime settings. See [Settings](/maclauncher/tools/versions-and-settings/#settings).
-- **Runtimes** installs and manages versions of every runtime, tool and graphics component. See [Runtimes](/maclauncher/tools/versions-and-settings/#the-runtimes-window).
+- **Runtimes** installs, updates and removes versions of every runtime, tool and graphics component, and sets which version is the default. See [Runtimes](/maclauncher/tools/versions-and-settings/#the-runtimes-window).
 - **External** finds games installed from stores and downloads ones you own. See [Stores and downloads](/maclauncher/tools/stores-and-downloads/).
 - **Credits** lists every project MacLauncher builds on, with links. See [Credits](/maclauncher/about/credits/).
 

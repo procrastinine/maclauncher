@@ -12,15 +12,17 @@ MacLauncher's app mark is an open doorway with a warm launch arrow on a teal til
 | `src/resources/maclauncher.png` | Dock artwork |
 | `build/icon.icns` | macOS app icon, with the standard 16, 32, 128, 256 and 512 point sizes at 1x and 2x resolution |
 
-[UI styles](UI_STYLES.md#app-identity) lists the commands that regenerate the PNG and ICNS files.
+[UI styles](UI_STYLES.md#app-icon) lists the commands that regenerate the PNG and ICNS files.
 
 ## Icons in the launcher
 
-Wherever a game's icon appears, in the library or in the inspector, the launcher draws it with the same `GameIcon` component. This component prefers the artwork extracted from the game, executable or app. When there is none, or when it cannot be decoded, the main process supplies the game's bundled engine icon instead, and a game of an unknown type shows a gamepad symbol. Images keep their aspect ratio, and the renderer never fetches artwork from the network. Every library row's image loads with the list rather than when it scrolls into view, so rows show their icons as soon as they appear. Bundled engine artwork is drawn directly on the launcher surface, without an extra background tile or inset, and monochrome engine logos use a light foreground for the dark interface. The Steam and External views draw local artwork the same way, with each row as it first paints; artwork from a connected account or a store's servers loads as its row nears the view.
+Wherever a game's icon appears, in the library or in the inspector, the launcher draws it with the same `GameIcon` component. This component prefers the artwork extracted from the game, executable or app. When there is none, or when it cannot be decoded, the main process supplies the game's bundled engine icon instead, and a game of an unknown type shows a gamepad symbol. Images keep their aspect ratio, and the renderer never fetches artwork from the network.
+
+Every library row's image loads together with the list, so a row already shows its icon when it scrolls into view. Bundled engine artwork is drawn directly on the launcher background, without an extra tile or inset, and monochrome engine logos use a light foreground for the dark interface. The Steam and External views also draw local artwork as each row first paints, while artwork from a connected account or a store's servers is loaded as its row nears the view.
 
 ## Engine icons
 
-Each module supplies the default icon for its engine. Every registered module declares this icon in its manifest, with `icon.path` and `icon.kind`, and stores the image at `resources/icon.png`. Because the location is the same in every module, the backend's default-icon lookup also uses these images for normalized game records. Whenever a game has no usable artwork of its own, the main process reads the module's file, so each module image ships once and the renderer bundle holds no copies. Beside each image, `resources/icon.json` records the artwork's source, license, modifications and exact SHA-256. Upstream artwork is copied into the module resources, and the app reads these included resources to display icons.
+Each module supplies the default icon for its engine. Every registered module declares this icon in its manifest, with `icon.path` and `icon.kind`, and stores the image at `resources/icon.png`. Because the location is the same in every module, the backend's default-icon lookup can use these images for normalized game records too. Whenever a game has no usable artwork of its own, the main process reads the module's file, so each module image ships once and the renderer bundle holds no copies. Beside each image, `resources/icon.json` records the artwork's source, license, modifications and exact SHA-256. Upstream artwork is copied into the module resources, and the app displays icons from these included copies.
 
 The artwork comes from these sources:
 
@@ -40,12 +42,12 @@ The artwork comes from these sources:
 
 The store logos in the External view come from [Simple Icons](https://github.com/simple-icons/simple-icons) 13.21.0, CC0, each drawn in a single color: the `steam` glyph in the Steam tab, and the `epicgames`, `gogdotcom` and `itchdotio` glyphs in the sign-in intros of the Epic, GOG and itch.io tabs. Their sources are noted beside the paths in `SteamView.tsx` and `StoreMarks.tsx`, with each store's trademark notice.
 
-Licenses and source attribution are stored next to the assets. The names and marks identify the underlying engine or runtime and imply no endorsement, and runtime version selection in the backend does not depend on icon artwork.
+Licenses and source attribution are stored next to the assets. The names and marks only identify the underlying engine or runtime and imply no endorsement. Icon artwork also plays no part in the backend's choice of runtime version.
 
-MacLauncher's own SVG assets are rendered to the PNG files checked into the repository with this command:
+MacLauncher's own SVG assets are rendered with this command into the PNG files that are checked into the repository:
 
 ```sh
 rsvg-convert --width 256 --height 256 --keep-aspect-ratio --output icon.png icon.svg
 ```
 
-The launcher itself needs no icon conversion tool.
+The launcher itself does not need an icon conversion tool.

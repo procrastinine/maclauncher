@@ -14,11 +14,11 @@ Many games can run in more than one way, though, and sometimes the second choice
 
 ## Game types and runtimes
 
-MacLauncher sorts every game it imports into a **game type**: the engine or platform the game was made for, such as Ren'Py, RPG Maker MV, Unity, Android or PlayStation 5. The game type decides how MacLauncher reads the game's files, which settings apply and which tools appear in the inspector.
+MacLauncher sorts every game it imports into a *game type*: the engine or platform the game was made for, such as Ren'Py, RPG Maker MV, Unity, Android or PlayStation 5. The game type decides how MacLauncher reads the game's files, which settings apply and which tools appear in the inspector.
 
-A **runtime** is one way to play a game type: an engine, a player or a compatibility layer. Every game type has a default runtime, and many have several. The PlayStation 5 game type, for example, can run on AnyPS5 or on Prosper. Ren'Py games can run in the Ren'Py SDK, through Ren'Py Patch, or as the game's own Mac app. Some runtimes serve many game types: Electron and NW.js play all the web-based game types, and Sikarugir, WineCX and CrossOver can play the Windows executable of almost any game.
+A *runtime* is one way to play a game type, whether that's an engine, a player or a compatibility layer. Every game type has a default runtime, and many have several. The PlayStation 5 game type, for example, can run on AnyPS5 or on Prosper. Ren'Py games can run in the Ren'Py SDK, through Ren'Py Patch, or as the game's own Mac app. Some runtimes serve many game types. Electron and NW.js play all the web-based game types, for example, and Sikarugir, WineCX and CrossOver, which run Windows programs through the WINE compatibility layer, can play the Windows executable of almost any game.
 
-Tools belong to the game type, not the runtime. A Unity game keeps its Unity decompiler and asset tools when you switch it to CrossOver, because the tools read the game's own data.
+Tools come with the game type and stay when you switch runtimes. A Unity game keeps its Unity decompiler and asset tools when you switch it to CrossOver, because the tools read the game's own data.
 
 MacLauncher also picks the right processor build of each runtime for you. Some engines need a newer macOS than MacLauncher itself, or run on only one kind of processor; the [requirements table](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SYSTEM_REQUIREMENTS.md) lists them, and [Processor builds](/maclauncher/tools/versions-and-settings/#processor-builds) explains how Intel and Apple Silicon builds work together.
 
@@ -28,7 +28,7 @@ Select a game in your library to open its **inspector**. Its runtime selector li
 
 ## Windows games
 
-A game made with an engine MacLauncher recognizes keeps that engine's game type, even when you import its Windows `.exe`. If the game includes a compatible Windows executable, its runtime list has two kinds of choices: the engine's native runtime, which is the default, and the three WINE runtimes, Sikarugir, CrossOver and WineCX. That works for every game type, however you imported the game; [Games made with other engines](/maclauncher/games/windows/#games-made-with-other-engines) covers the details, including the one exception, a game that lives inside a Mac `.app`. A Windows executable whose engine isn't recognized becomes a *Windows Game*, a game type whose only runtimes are Sikarugir, CrossOver and WineCX.
+A game made with an engine MacLauncher recognizes keeps that engine's game type, even when you import its Windows `.exe`. If the game includes a compatible Windows executable, its runtime list has two kinds of choices: the engine's native runtime, which is the default, and the three WINE runtimes (Sikarugir, CrossOver and WineCX). That works for every game type, however you imported the game; [Games made with other engines](/maclauncher/games/windows/#games-made-with-other-engines) covers the details, including the one exception, a game that lives inside a Mac `.app`. A Windows executable whose engine isn't recognized becomes a *Windows Game*, a game type whose only runtimes are Sikarugir, CrossOver and WineCX.
 
 ### Native runtimes
 
@@ -38,7 +38,7 @@ How well it works depends on the engine. Engines whose games are mostly data, su
 
 ### Sikarugir
 
-[Sikarugir](https://github.com/Sikarugir-App/Sikarugir) is a free distribution of [WINE](https://www.winehq.org/). MacLauncher downloads its engines on request, keeps several versions side by side, and sets up a private Windows environment for each game automatically. Sikarugir is the default runtime for Windows Game entries, and it's offered as an alternative for recognized engines too. Its requirements are on the [Windows games](/maclauncher/windows/crossover-and-sikarugir/#sikarugir) page.
+[Sikarugir](https://github.com/Sikarugir-App/Sikarugir) is a free distribution of [WINE](https://www.winehq.org/), the compatibility layer that runs Windows programs on macOS. MacLauncher downloads its engines on request, keeps several versions side by side, and sets up a private Windows environment for each game automatically. Sikarugir is the default runtime for Windows Game entries, and it's offered as an alternative for recognized engines too. Its requirements are on the [Windows games](/maclauncher/windows/crossover-and-sikarugir/#sikarugir) page.
 
 Try it when:
 
@@ -48,11 +48,11 @@ Try it when:
 
 ### CrossOver
 
-[CrossOver](https://www.codeweavers.com/crossover/) is CodeWeavers' commercial WINE. If it's installed, MacLauncher finds it and offers it as another runtime. You can register several copies of CrossOver, such as a preview build, and pick a different one for each game. CodeWeavers keeps CrossOver current with fixes for newer games, so if you own it, it's usually the better WINE to use. Sikarugir stays the default, though, because it's free and always available. To use CrossOver, pick it in a game's inspector, or make it the default runtime for Windows Game in **Settings**.
+[CrossOver](https://www.codeweavers.com/crossover/) is CodeWeavers' commercial WINE distribution, a paid app. If it's installed, MacLauncher finds it and offers it as another runtime. You can register several copies of CrossOver, such as a preview build, and pick a different one for each game. CodeWeavers keeps CrossOver current with fixes for newer games, so if you own it, it's usually the better WINE to use. Sikarugir stays the default, though, because it's free and always available. To use CrossOver, pick it in a game's inspector, or make it the default runtime for Windows Game in **Settings**.
 
 ### WineCX
 
-[WineCX](https://github.com/dappermint/winecx-gptk) is a free WINE runtime built from CodeWeavers' CrossOver changes on a current WINE release. Like Sikarugir, it's downloaded and managed for you, with a private Windows environment for each game. Unlike Sikarugir, its WINE is the kind Apple's D3DMetal loads into in CrossOver, and D3DMetal comes from a version you install in Runtimes. Current releases need macOS 26 or later. Try it when you don't have CrossOver and a game does better on a newer, CrossOver-style WINE. Its requirements and included translators are on the [Windows games](/maclauncher/windows/crossover-and-sikarugir/#winecx) page.
+[WineCX](https://github.com/dappermint/winecx-gptk) is dappermint's free WINE runtime, built from CodeWeavers' CrossOver changes on a current WINE release. Like Sikarugir, it's downloaded and set up for you, with a private Windows environment for each game. Unlike Sikarugir, its WINE follows CrossOver's internals, so Apple's D3DMetal, a translator from Direct3D to Metal, can load into it as it does in CrossOver; the D3DMetal itself comes from a version you install in Runtimes. Current releases need macOS 26 or later. Try it when you don't have CrossOver and a game does better on a newer, CrossOver-style WINE. Its requirements and included translators are on the [Windows games](/maclauncher/windows/crossover-and-sikarugir/#winecx) page.
 
 A few game types have tools but no Mac player: BGI / Ethornell, CatSystem2 and Haxe native builds. These games play their Windows executable through a registered CrossOver application when there is one, and through Sikarugir otherwise, and WineCX can be chosen for them as well.
 
@@ -83,7 +83,7 @@ If a game crashes or misbehaves in one mode, try the other.
 
 ### AIM
 
-[AIM](https://github.com/hahnlee/aim) runs apps with Android's original ART runtime and Android services, still without a Linux kernel or a VM. MacLauncher manages an adapted build and the matching Android system image. AIM requires macOS 26 or later and runs apps offline, without Google account integration. Try it when you want the behavior closest to stock Android and the game doesn't need online services.
+[AIM](https://github.com/hahnlee/aim) runs apps with Android's original ART runtime and Android services, still without a Linux kernel or a VM. MacLauncher downloads and installs an adapted build and the matching Android system image. AIM requires macOS 26 or later and runs apps offline, without Google account integration. Try it when you want the behavior closest to stock Android and the game doesn't need online services.
 
 | | MacLauncher Android | Mac.apk | AIM |
 | --- | --- | --- | --- |

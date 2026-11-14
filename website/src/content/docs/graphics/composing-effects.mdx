@@ -19,34 +19,34 @@ import doomLow from "../../../assets/graphics/doom-dlss-540.webp";
 import doomOriginalDetail from "../../../assets/graphics/doom-original-detail.webp";
 import doomLowDetail from "../../../assets/graphics/doom-dlss-540-detail.webp";
 
-In MacLauncher, the graphics effects for a game on macOS are combined in an effect chain, a list of up to 32 rows in which effects can go in any order and any combination. This page explains how rows interact and how sizes work, and gives a few example chains to start from.
+MacLauncher combines a game's graphics effects in an effect chain: a list of up to 32 rows that can hold effects in any order and combination. This page explains how rows interact and how sizes work, with a few example chains to start from.
 
 ## Top to bottom
 
 The image enters at the top of the chain and passes through each enabled row in turn. Each row receives the output of the row above it, so the order changes the result:
 
-- Sharpening before an upscaler sharpens the small image, and the upscaler then enlarges the sharpened edges; sharpening after the upscaler works on the final pixels. Both are valid choices with different results.
+- Sharpening before an upscaler sharpens the small image, and the upscaler then enlarges the sharpened edges. Sharpening after the upscaler works on the final pixels instead, which gives a different but equally valid result.
 - A CRT effect belongs after the image has been enlarged, so it has enough screen pixels to draw scanlines with.
 - Color grading before a CRT grades the game, while a grade after the CRT also tints the simulated glass and glow.
-- An expensive model costs least early in the chain, at a small size, before anything enlarges the image.
+- An expensive model costs least early in the chain, at a small size, before anything has enlarged the image.
 
-Rows come in five kinds. **Image filters** keep the size, **Downsample** and **Upscale** change it, and **Temporal upscaling** and **Frame generation** work across frames. When you add a shader, MacLauncher places it by the output size it declares, so a shader that always doubles its input appears as an Upscale.
+Each row is one of five kinds. **Image filters** keep the size, **Downsample** and **Upscale** change it, and **Temporal upscaling** and **Frame generation** work across several frames. A shader you add is sorted into a kind by the output size it declares, so a shader that always doubles its input appears as an Upscale.
 
 ## Editing rows
 
-Rows are edited in the **Advanced** view, which shows the full chain in order. There, **Add effect…** adds a row of any kind, and dropping a shader file on a row replaces that row's effect. You can drag a row or move it with Option-Up and Option-Down, switch it off to set it aside with its settings intact, or remove it. Each row also has **Options**, which holds its parameters and size, and **Details**, which shows what the row is doing while the game runs. A row that can't run as saved, for instance because its shader file is missing, stays off and shows **Needs attention** with the reason, and the rest of the chain keeps running.
+Rows are edited in the **Advanced** view, which shows the full chain in order. There, **Add effect…** adds a row of any kind, and dropping a shader file on a row replaces that row's effect. You can drag a row or move it with Option-Up and Option-Down, switch it off to set it aside with its settings intact, or remove it. Each row also has **Options**, which holds its parameters and size, and **Details**, which shows what the row is doing while the game runs. When a row can't run as saved, for instance because its shader file is missing, it stays off and shows **Needs attention** with the reason, while the rest of the chain keeps running.
 
 ## Sizes
 
 Downsample and Upscale rows can each set their size in three ways:
 
 - a scale of the previous image, such as 0.5× or 2×
-- a fraction of the window or fullscreen surface, such as 100%
+- a fraction of the window, or of the screen in fullscreen, such as 100%
 - a fixed resolution, such as 540p or 1920×1080
 
-By default, a Downsample halves its input and an Upscale fills the window. Models and shaders with a fixed scale keep it (a 4× model always outputs 4×), and a later Upscale or Downsample row can then fit their result to the window. To check what a row actually receives and produces, its **Options** and **Details** show the input and output size it sees. Whatever happens inside the chain, the window keeps the size you gave it, and the last image is fitted to it.
+By default, a Downsample halves its input and an Upscale fills the window. Models and shaders with a fixed scale keep it (a 4× model always outputs 4×), and a later Upscale or Downsample row can then fit their result to the window. A row's **Options** and **Details** show the input and output size it actually sees. Whatever happens inside the chain, the window keeps the size you gave it, and the last image is fitted to it.
 
-<span id="adaptive-quality"></span>A **Downsample** row can also use **Adaptive quality**, which adjusts its working size within bounds you set to stay inside a GPU time budget.
+<span id="adaptive-quality"></span>A **Downsample** row can also use **Adaptive quality**, which keeps the row inside a GPU time budget by adjusting the size it produces within limits you set.
 
 ## Recipes
 
@@ -63,7 +63,7 @@ The [overview page](/maclauncher/graphics/) shows this chain on Sonic the Hedgeh
 ### A sharper visual novel
 
 <Steps>
-1. **Upscale**: [Real-CUGAN](https://github.com/bilibili/ailab/tree/main/Real-CUGAN) 2×, or [Anime4K](https://github.com/bloc97/Anime4K), which costs far less.
+1. **Upscale**: [Real-CUGAN](https://github.com/bilibili/ailab/tree/main/Real-CUGAN) 2×, a neural upscaler trained on anime, or the shader upscaler [Anime4K](https://github.com/bloc97/Anime4K), which costs far less.
 2. **Upscale**: [MetalFX](https://developer.apple.com/documentation/metalfx) or Bilinear, to fit the result to the window.
 3. **CAS Sharpen** at a low strength.
 </Steps>
@@ -79,7 +79,7 @@ The [overview page](/maclauncher/graphics/) shows this chain on Sonic the Hedgeh
 
 ### DLSS neural rendering at a playable frame rate
 
-[DLSS neural rendering](/maclauncher/graphics/neural-restoration/#dlss-neural-rendering) redraws every frame with a neural model. On a game like DOOM 3 the result can look close to a photograph, with weathered skin, woven cloth and softer, more natural light. It is also the most demanding effect on this page, because the model processes every pixel of every frame. The tabs show the same frame three ways:
+[DLSS neural rendering](/maclauncher/graphics/neural-restoration/#dlss-neural-rendering) runs the neural rendering model from NVIDIA's DLSS 5, which redraws every frame. On a game like DOOM 3 the result can look close to a photograph, with weathered skin, woven cloth and softer, more natural light. Because the model processes every pixel of every frame, it is also the most demanding effect on this page. The tabs show the same frame three ways:
 
 <Tabs>
   <TabItem label="Original">
@@ -111,15 +111,15 @@ The complete chain:
 4. **Frame generation** with [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) at 4×, which fills in the frames DLSS can't produce in time. See [Frame generation](/maclauncher/graphics/frame-generation/).
 </Steps>
 
-At 540p, the model redraws a sixteenth of a 4K frame's pixels, which makes DLSS fast enough to run in real time and keeps the game far more responsive than at full resolution. MetalFX then restores the sharpness. On an M2-generation MacBook, DLSS delivers about 15 frames per second at this size, and 4× frame generation turns them into 60 frames per second on screen. Input follows the frame rate after step 3, plus the small delay that generated frames add. The same chain is also available as the **DLSS · 540p + LSFG 4×** preset, which sets it up in one step, and a new DLSS row starts from a 540-pixel input height as well.
+At 540p, the model redraws a sixteenth of a 4K frame's pixels. That makes DLSS fast enough to run in real time and keeps the game far more responsive than at full resolution, and MetalFX then restores the sharpness. On an M2-generation MacBook, DLSS delivers about 15 frames per second at this size, which 4× frame generation turns into 60 frames per second on screen. Input follows the frame rate after step 3, plus the small delay that generated frames add. The **DLSS · 540p + LSFG 4×** preset sets up the same chain in one step, and a new DLSS row starts from a 540-pixel input height as well.
 
 ### Frame generation alone
 
-A single **Frame generation** row at 2× is often all a 30 fps game needs. As its generator, [**Automatic**](/maclauncher/graphics/frame-generation/#automatic) works without any downloads, while [RIFE](https://github.com/hzwer/Practical-RIFE) and Lossless Scaling use a downloaded model or your own Lossless Scaling files. See [Frame generation](/maclauncher/graphics/frame-generation/).
+A single **Frame generation** row at 2× is often all a 30 fps game needs. For its generator, [**Automatic**](/maclauncher/graphics/frame-generation/#automatic) works without any downloads, while the neural interpolator [RIFE](https://github.com/hzwer/Practical-RIFE) needs a downloaded model and Lossless Scaling needs your own Lossless Scaling files. See [Frame generation](/maclauncher/graphics/frame-generation/).
 
 ## Presets
 
-Presets let you reuse a chain on other games. To make one, choose **Save as preset…** in the **⋯** menu beside the **Graphics** heading, which saves the current chain under a name, with every row, size and parameter. Applying a preset to another game copies it into that game, so later edits to the preset don't change games it was already applied to. A preset refers to the shaders and models it uses, which stay in the shared libraries. **Manage presets…** opens the saved presets in **Settings → Graphics → Presets**.
+Presets let you reuse a chain on other games. To make one, choose **Save as preset…** in the **⋯** menu beside the **Graphics** heading, which saves the current chain under a name with every row, size and parameter. Applying a preset to another game copies it into that game, so later edits to the preset don't change games it was already applied to. The shaders and models a preset uses stay in the shared libraries, and the preset only refers to them. **Manage presets…** opens the saved presets in **Settings → Graphics → Presets**.
 
 ## Seeing what changed
 
@@ -127,27 +127,27 @@ To see what the chain changes, **Output → Compare** switches between the proce
 
 ## Performance and presentation
 
-Besides **Compare**, the **Output** section has settings that leave the picture itself alone. Each one appears when the game's graphics support it, and changes to a supported setting apply while the game runs. A saved choice that cannot run stays visible as well, with the reason shown, and it applies once support is available.
+Besides **Compare**, the **Output** section has settings that leave the picture itself alone. Each one appears when the game's graphics support it, and changes to it apply while the game runs. A saved choice that can't run stays visible too, with the reason shown, and takes effect once support is available.
 
 - <span id="performance-overlay"></span>**Performance overlay** makes the cost of an effect, and whether frame generation keeps up, easy to see. It draws a small panel at the top left of the game with the captured, displayed and generated frame rates, GPU time, latency and how evenly frames are paced. The **Compact** layout shows three lines, while **Detailed** adds memory use, the parts that make up the latency, and running counts of captured, presented, generated, passed-through and dropped frames. The detailed layout also lists the GPU time of each row in your chain. Rows that the GPU processes in one batch share a measurement, and the overlay marks them.
-- <span id="frame-rate-cap"></span>**Frame-rate cap** limits how often the game itself renders, from 10 to 1000 fps. A steady, lower frame rate can look smoother than one that swings up and down, and it also leaves GPU time for the effects. When graphics are applied to [another app's window](/maclauncher/graphics/window-graphics/), the cap limits how often MacLauncher takes frames from that window instead. Without a cap, MacLauncher never limits the game.
+- <span id="frame-rate-cap"></span>**Frame-rate cap** limits how often the game itself renders, from 10 to 1000 fps. A steady, lower frame rate can look smoother than one that swings up and down, and it leaves GPU time for the effects. When graphics are applied to [another app's window](/maclauncher/graphics/window-graphics/), the cap limits how often MacLauncher captures frames from that window instead. Without a cap, MacLauncher never limits the game.
 - <span id="display-sync-and-drawables"></span>**Display sync** and **Drawables** control how processed images reach the screen. Turning display sync off can lower latency in fullscreen, although it can cause tearing; in a window, macOS shows each image at the display's refresh either way. The **Drawables** setting decides how many output images can be in use at once, whether they are being drawn, waiting for the display or on screen. Two gives lower latency, while three keeps presentation smoother when GPU time varies.
 
 ## Shortcuts and screenshots
 
-MacLauncher also has keyboard shortcuts for graphics, which are set in **Settings → Launcher**. The first two work from any app while a game runs:
+MacLauncher has four keyboard shortcuts for graphics, set in **Settings → Launcher**. The first two work from any app while a game runs:
 
-- **Bypass graphics effects** turns the game's graphics off, or back on, just like its **Graphics** checkbox. Pressing it twice gives a quick before-and-after comparison.
+- **Bypass graphics effects** turns the game's graphics off, or back on, just like its **Graphics** checkbox. Pressing it twice in a row gives a quick before-and-after comparison.
 - **Save processed screenshot** saves the game's image as you see it, with every effect applied, as a PNG file. The file is named after the game and the time, the way macOS names its own screenshots, and the performance overlay is left out. Screenshots go to a MacLauncher folder in your Pictures folder unless you pick another **Screenshot folder**. With the game's graphics off, or with no effect chosen, the screenshot is the game's own picture. An HDR game's screenshot stays HDR, as a 16-bit PNG.
 
 With one game running, both shortcuts act on that game. With several, they act on the one in front, or on the most recently started one if none of them is in front.
 
 The other two shortcuts are for [window graphics](/maclauncher/graphics/window-graphics/), which apply a chain to another app's window. **Toggle graphics for front app** works whether or not a game runs: it starts window graphics for the app in front, with a new row of its own, or takes them off again when that app already has them. **Toggle pointer in window graphics** hides or shows the pointer that MacLauncher draws on an enlarged window of the app in front.
 
-To set a shortcut, click **Record shortcut** and press the keys. A shortcut combines Control with at least two of Option, Shift and Command, such as ⌃⌥⌘B. Combinations like these are left free by macOS and most apps, and Settings turns down the few that macOS does use, such as ⌃⇧⌘3 for screenshots. Once active, a graphics shortcut takes precedence over the same keys in the app in front.
+To set a shortcut, click **Record shortcut** and press the keys. A shortcut combines Control with at least two of Option, Shift and Command, such as ⌃⌥⌘B, because macOS and most apps leave combinations like these free. Settings turns down the few that macOS does use, such as ⌃⇧⌘3 for screenshots. Once active, a graphics shortcut takes precedence over the same keys in the app in front.
 
 ## Videos too
 
-Videos opened in MacLauncher play through the same chain. **Export video…** can also render a video file with the saved chain applied, including neural models and image-pair frame generation. The sample images on this site were made that way.
+Videos opened in MacLauncher play through the same chain, and **Export video…** can render a video file with the saved chain applied, including neural models and image-pair frame generation. The sample images on this site were made that way.
 
 MacLauncher's graphics guide describes [the graphics chain](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#the-graphics-chain), [processing sizes](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#processing-sizes), [presets](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#presets), the [Output section's performance and presentation settings](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#performance-overlay-frame-rate-cap-and-presentation) and the [shortcuts](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#shortcuts-and-screenshots) in full, and the [Video page](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/VIDEO.md#preview-and-export) covers export.

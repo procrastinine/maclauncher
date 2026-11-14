@@ -25,7 +25,7 @@ import kuwahara from "../../../assets/graphics/color-hd-kuwahara.webp";
 import kuwaharaDetail from "../../../assets/graphics/color-hd-kuwahara-detail.webp";
 import depthFog from "../../../assets/graphics/color-hd-depth-fog.webp";
 
-The color, sharpening, lighting and anti-aliasing effects on this page change how a game looks on your Mac without changing its resolution. Many games look better with slightly stronger color or crisper edges, and some of these effects give a game a different mood altogether. They work on the finished image, so they're available for every game, and most are cheap enough to leave on all the time.
+The color, sharpening, lighting and anti-aliasing effects on this page change how a game looks on your Mac without changing its resolution. Many games look better with slightly stronger color or crisper edges, and some of these effects give a game a different mood altogether. Because they work on the finished image, they're available for every game, and most are cheap enough to leave on all the time.
 
 <Compare
   before={source}
@@ -47,18 +47,18 @@ The color, sharpening, lighting and anti-aliasing effects on this page change ho
 
 ## The built-in effects
 
-Five effects are part of MacLauncher itself:
+Five effects are built into MacLauncher itself:
 
 - <span id="colour"></span>**Colour** adjusts saturation. Its default of 1.2 is a little above neutral; 1 leaves color unchanged.
-- <span id="sharpen"></span>**Sharpen** is classic sharpening. **CAS Sharpen** is AMD's Contrast Adaptive Sharpening, which sharpens soft areas more than areas that are already crisp, and it works well as a finishing pass after an upscaler.
+- <span id="sharpen"></span>**Sharpen** is classic sharpening. **CAS Sharpen** is AMD's Contrast Adaptive Sharpening, which sharpens soft areas more than areas that are already crisp; that makes it a good finishing pass after an upscaler.
 - <span id="grayscale"></span>**Grayscale** removes all color.
 - **CRT** simulates a CRT screen and is covered in [CRT and retro](/maclauncher/graphics/crt-and-retro/).
 
-<span id="combine-effects"></span>**Combine effects…** runs two to four of these together, as a single row of the effect chain.
+<span id="combine-effects"></span>**Combine effects…** runs two to four of these together as a single row of the [effect chain](/maclauncher/graphics/composing-effects/).
 
 ## Other included effects
 
-Besides these five, MacLauncher includes effects from widely used [ReShade](https://reshade.me/) and video-processing projects, along with native [Metal](https://developer.apple.com/metal/) ports of graphics research:
+MacLauncher also includes effects from widely used video-processing projects and from [ReShade](https://reshade.me/), the post-processing tool for PC games, along with [Metal](https://developer.apple.com/metal/) ports of effects from graphics research papers:
 
 <Tabs>
   <TabItem label="CAS Sharpen">
@@ -81,19 +81,19 @@ Besides these five, MacLauncher includes effects from widely used [ReShade](http
 
 - <span id="color-and-tone"></span>Color and tone effects include [SweetFX](https://github.com/CeeJayDK/SweetFX) Tonemap, Vibrance and Curves, color balance, [Halide](https://github.com/halide/Halide)'s **Local Laplacian** filter for detail and contrast, and **Histogram exposure**, which sets exposure automatically from the image's own histogram.
 - <span id="light-and-lens"></span>Light and lens effects are soft bloom, plus AMD [FidelityFX](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) **Lens** (grain, chromatic aberration and vignette) and **Blur**.
-- <span id="clean-up"></span>Clean-up effects deal with banding and jagged edges: threshold debanding restores smooth gradients, and [SMAA](https://github.com/iryoku/smaa), [CMAA2](https://github.com/GameTechDev/CMAA2) and FXAA anti-aliasing fix jagged edges in games that don't smooth them themselves. FXAA, the version of NVIDIA's fast approximate anti-aliasing that comes with SweetFX, is quick, although it softens fine detail a little more than the other two.
+- <span id="clean-up"></span>Clean-up effects deal with banding and jagged edges. Threshold debanding restores smooth gradients, while [SMAA](https://github.com/iryoku/smaa), [CMAA2](https://github.com/GameTechDev/CMAA2) and FXAA anti-aliasing fix jagged edges in games that don't smooth them themselves. FXAA, the version of NVIDIA's fast approximate anti-aliasing that comes with SweetFX, is quick, although it softens fine detail a little more than the other two.
 - <span id="artistic"></span>[Anisotropic Kuwahara](https://github.com/jkyprian/gpuakf) is a painterly filter that smooths the image into brush-stroke-like regions.
 - <span id="accessibility"></span>**Daltonize** is an accessibility filter. It simulates a color-vision deficiency and shifts the color differences that would be lost into ones that stay visible, with adjustable strength.
 
-Shader collections, which you can install on request, add more: [qUINT](https://github.com/martymcmodding/qUINT) for bloom, grading, debanding and sharpening, [prod80](https://github.com/prod80/prod80-ReShade-Repository) for film-style color grading and LUTs, [CShade](https://github.com/papadanku/CShade) for exposure and image-based motion effects, [FXShaders](https://github.com/luluco250/FXShaders) for NeoBloom and ArcaneBloom, [AstrayFX](https://github.com/BlueSkyDefender/AstrayFX) for indirect lighting, ambient occlusion, anti-aliasing and sharpening, and [OtisFX](https://github.com/FransBouma/OtisFX) for cinematic depth of field, fog and grading. [Shader collections and imports](/maclauncher/graphics/shaders/) lists them all.
+Optional shader collections, installed from **Runtimes → Effects → Shaders**, add more. [qUINT](https://github.com/martymcmodding/qUINT) has bloom, grading, debanding and sharpening, and [prod80](https://github.com/prod80/prod80-ReShade-Repository) has film-style color grading and LUTs. [CShade](https://github.com/papadanku/CShade) covers exposure and image-based motion effects, [FXShaders](https://github.com/luluco250/FXShaders) brings NeoBloom and ArcaneBloom, and [AstrayFX](https://github.com/BlueSkyDefender/AstrayFX) adds indirect lighting, ambient occlusion, anti-aliasing and sharpening. [OtisFX](https://github.com/FransBouma/OtisFX) is the one for cinematic depth of field, fog and grading. [Shader collections and imports](/maclauncher/graphics/shaders/) lists them all.
 
 ## LUTs
 
-A LUT (lookup table) is a complete color grade stored in a file, the same kind that photo and video editors use. To use one, drop a `.cube` file onto MacLauncher. It joins MacLauncher's shader library as an effect, with controls for strength, trilinear or tetrahedral interpolation, and whether the table expects encoded or linear color. Full-size 65-point 3D tables are supported.
+A LUT (lookup table) is a complete color grade stored in a file, the same kind that photo and video editors use. To use one, drop a `.cube` file onto MacLauncher. The LUT joins MacLauncher's [shader library](/maclauncher/graphics/shaders/#the-shader-library) as an effect, with controls for strength, trilinear or tetrahedral interpolation, and whether the table expects encoded or linear color. Full-size 65-point 3D tables are supported.
 
 ## Depth without a depth buffer
 
-Fog that thickens with distance needs to know how far away things are, and most games don't pass that information to MacLauncher. **Estimated depth fog** works without it: [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2), a small neural network, estimates depth from the finished picture, and the fog follows that estimate. Once the model is installed, it is available for any game on Apple Silicon.
+Fog that thickens with distance needs to know how far away things are, and most games don't pass that information to MacLauncher. **Estimated depth fog** gets by without it. A small neural network, [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2), estimates depth from the finished picture, and the fog follows that estimate. Once the model is installed, the effect is available for any game on Apple Silicon.
 
 <Compare
   before={source}
@@ -106,7 +106,7 @@ Fog that thickens with distance needs to know how far away things are, and most 
 
 ## Effects that use the game's depth
 
-Some lighting effects need the game's real depth buffer, and sometimes its camera, surface normals and materials. For games whose runtime provides them, MacLauncher includes:
+Some lighting effects need the game's real depth buffer, and sometimes its camera, surface normals (which way each surface faces) and materials. For games whose runtime provides them, MacLauncher includes:
 
 - [XeGTAO](https://github.com/GameTechDev/XeGTAO) and AMD [CACAO](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) ambient occlusion, which darkens corners and contact points
 - FidelityFX **depth of field**
@@ -118,9 +118,9 @@ When a game doesn't provide those inputs, these effects stay in the menus under 
 
 ## Final output
 
-HDR and wide-gamut images keep their range through the effect chain, and effects that handle only standard color get a local conversion. The last step to the screen is handled by the **Output** section at the end of the chain. There, **Tone mapping** decides how bright highlights are compressed into the display's range, with the choices Automatic, None, Reinhard and PBR Neutral.
+HDR and wide-gamut images keep their range through the effect chain. An effect that handles only standard color gets the image converted for its own step and nothing else. The last step to the screen belongs to the **Output** section at the end of the chain, where **Tone mapping** decides how bright highlights are compressed into the display's range. Its choices are Automatic, None, Reinhard and PBR Neutral.
 
-MacLauncher's graphics guide lists every [included effect](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#included-effects) and describes [tone mapping](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#tone-mapping) in full, and the [algorithm reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md#shader-formats-and-image-effects) explains the algorithm behind each native effect.
+MacLauncher's graphics guide lists every [included effect](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#included-effects) and describes [tone mapping](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#tone-mapping) in full. The [algorithm reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md#shader-formats-and-image-effects) explains the algorithm behind each native effect.
 
 ## Further reading
 

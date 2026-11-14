@@ -8,7 +8,7 @@ sidebar:
   order: 6
 ---
 
-If you've used CrossOver or Sikarugir before, you may already have a game installed and set up in a CrossOver bottle or a Sikarugir wrapper. MacLauncher can run the game right there, so you get its graphics effects, translator choices and settings without moving anything.
+[CrossOver and Sikarugir](/maclauncher/windows/crossover-and-sikarugir/) are two of the WINE distributions that run Windows games on a Mac, and if you've used either one before, you may already have a game installed and set up in it. In CrossOver it lives in a *bottle*, a Windows environment with its own registry, DLLs and Windows folders. In Sikarugir it lives in a *wrapper*, a Mac app that holds one game together with its own WINE engine and Windows environment. MacLauncher can run the game right there, so you get MacLauncher's graphics effects, translator choices and settings without moving anything.
 
 ## Choosing a bottle or wrapper
 
@@ -23,11 +23,11 @@ WineCX has no bottle or wrapper format of its own, so its games always run in a 
 
 ## What MacLauncher does with it
 
-MacLauncher stores only a reference to the bottle or wrapper and uses it where it is. It never copies, adopts, recreates, moves, replaces or deletes it. If the bottle has gone missing or is incomplete, the game reports an error instead of creating a new one, and removing the game from your library leaves the bottle as it was.
+MacLauncher stores only a reference to the bottle or wrapper and uses it where it is. It never copies, takes over, recreates, moves, replaces or deletes it. If the bottle has gone missing or is incomplete, the game reports an error instead of creating a new one, and removing the game from your library leaves the bottle as it was.
 
 A wrapper is run with its own WINE engine, Windows environment and support files. MacLauncher doesn't run the wrapper's own launcher, custom shell commands or startup scripts, though, so anything those do won't happen.
 
-Each [runtime setting](/maclauncher/windows/settings/) starts at **Bottle setting** or **Wrapper setting** and shows the value currently stored there. Leave it that way and MacLauncher changes nothing. Choose **Custom setting** for a control to override it, and that value is written into the bottle, for example into its Windows registry. The same goes for [graphics translators](/maclauncher/windows/graphics-translators/): a translator you pick explicitly may place its DLLs in the bottle, and any DLL it replaces is set aside and put back when you switch away. Logs stay in MacLauncher's own folder.
+Each [runtime setting](/maclauncher/windows/settings/) starts at **Bottle setting** or **Wrapper setting** and shows the value currently stored there. As long as you leave it that way, MacLauncher changes nothing. When you choose **Custom setting** for a control to override it, that value is written into the bottle, for example into its Windows registry. [Graphics translators](/maclauncher/windows/graphics-translators/), the layers that turn a game's Direct3D calls into Metal, work the same way: a translator you pick explicitly may place its DLLs in the bottle, and any DLL it replaces is set aside and put back when you switch away. Logs stay in MacLauncher's own folder.
 
 **Open Windows files** opens the bottle, and its Windows user folders show up as save locations in the game's save tools.
 
@@ -35,6 +35,6 @@ Each [runtime setting](/maclauncher/windows/settings/) starts at **Bottle settin
 
 A bottle can have other Windows programs running in it, so **Stop** ends only the game's own processes. To close everything, use **Close All Applications**, which asks before it closes the bottle's other programs and forces any that remain to quit. When the game exits on its own, the other programs keep running.
 
-While the bottle's WINE server is running, MacLauncher shows that in the selector and keeps the bottle's current synchronization and High Resolution settings, because those can only change once it stops.
+While the bottle's WINE server (the background process that runs the bottle's programs) is running, MacLauncher shows that in the selector and keeps the bottle's current synchronization and High Resolution settings, because those can only change once the server stops.
 
 Further reading: the [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md#existing-bottles) and [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md#existing-wrappers) references.

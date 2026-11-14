@@ -13,7 +13,7 @@ Import accepts a complete Windows game folder, its executable or the matching of
 
 ## Data formats
 
-ReMinori supports two PAZ profiles, which differ in where the archive keys come from, and the set of PAZ archives is validated before launch. Where a profile uses key tables from the executable, the original Windows executable is also read, but only as data, and it is never run. Its file version is shown separately from the archive format and the runtime version.
+ReMinori supports two PAZ profiles, which differ in where the archive keys come from, and the set of PAZ archives is validated before launch. When a profile takes its key tables from the executable, the original Windows executable is read as well, though only as data; it is never run. Its file version is shown separately from the archive format and the runtime version.
 
 | Profile | Key source |
 | --- | --- |
@@ -24,9 +24,9 @@ Each profile also selects its own archive and VM implementation.
 
 ## Saves
 
-ReMinori saves to `userdata/` in the original game directory when that directory is writable, and otherwise falls back to its own `~/Documents/eden/userdata/` location. For the installed ReMinori interpreter to use the original executable's directory rather than its runtime installation directory, import records the supported save-folder setting. If another game in the library already uses the same save location, import gives a game without an explicit save-folder setting its own `~/Documents/eden/games/<gameId>/userdata/` override. Explicit save-folder settings stay unchanged. Save editing and cheats are not available.
+ReMinori saves to `userdata/` in the original game directory when that directory is writable, and otherwise falls back to its own `~/Documents/eden/userdata/` location. So that the installed ReMinori interpreter uses the original executable's directory instead of its runtime installation directory, import records the supported save-folder setting. If another game in the library already uses the same save location, a game without an explicit save-folder setting gets its own `~/Documents/eden/games/<gameId>/userdata/` override, while explicit save-folder settings stay unchanged. Save editing and cheats are not available.
 
-The game reads its original PAZ archives directly and uses the original game directory as its working directory. Interpreter caches, verification records and native logs, on the other hand, remain in launcher data.
+The game reads its original PAZ archives directly and uses the original game directory as its working directory. Interpreter caches, verification records and native logs remain in launcher data instead.
 
 ## Script tools
 
@@ -38,11 +38,11 @@ Scripts are handled by **Extract scripts**, **Reveal scripts** and **Remove scri
 
 As the default runtime, ReMinori supports title and menu interaction, story text and artwork, keyboard input, AppKit game controls, save comments and thumbnails, and saving and loading. Movies and audio are played through a local [FFmpeg](https://ffmpeg.org/) bridge, which uses the codecs and containers enabled in the selected runtime package and makes no network requests.
 
-MacLauncher Builds publishes the native ReMinori packages, and they are listed in **Runtimes → Minori**. Each package records its source revision, dependencies, build options and CPU architectures, and Runtimes lists its architectures and minimum macOS version.
+The native ReMinori packages are published by MacLauncher Builds and listed in **Runtimes → Minori**. Each package records its source revision, dependencies, build options and CPU architectures, and Runtimes lists its architectures and minimum macOS version.
 
 ### CrossOver, Sikarugir and WineCX
 
-Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application, [Sikarugir](../runtimes/SIKARUGIR.md) or [WineCX](../runtimes/WINECX.md). The detected version and the inspector tools stay available with each of these runtimes.
+Compatible x86 and x64 Windows releases can also run their original executable through a registered [CrossOver](../runtimes/CROSSOVER.md) application, [Sikarugir](../runtimes/SIKARUGIR.md) or [WineCX](../runtimes/WINECX.md). Both the detected version and the inspector tools stay available with each of them.
 
 ## Source and licenses
 

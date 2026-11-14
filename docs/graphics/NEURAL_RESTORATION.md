@@ -8,9 +8,9 @@ Neural rendering, restoration, super resolution and interpolation run on the sha
 
 ## How models run
 
-RGB frames enter the provider from retained IOSurfaces. The model operators run on Metal through MLX, and GPU packing writes the result back to the graphics pipeline. An ARM64 helper provides the same operations to translated x86_64 processes. Models are installed separately: installing the provider installs its source notices but no model weights.
+RGB frames reach the provider through retained IOSurfaces. The model's operators run on Metal through MLX, and GPU packing writes the result back to the graphics pipeline. Translated x86_64 processes get the same operations from an ARM64 helper. Models are installed separately: installing the provider adds its source notices but no model weights.
 
-The ordered downsample or upscale row before a model determines its input size. The model's output keeps its intrinsic size until a later explicit fitting or downsample row. The selected model supplies that intrinsic output size consistently in both editor views, native preparation and export, and the provider must declare that exact architecture. Per-operation defaults and explicit selections for one effect are independent of each other.
+A model's input size is set by the ordered downsample or upscale row before it, and its output keeps its intrinsic size until a later explicit fitting or downsample row. That intrinsic output size comes from the selected model and is the same in both editor views, in native preparation and in export, and the provider must declare that exact architecture. The default for each operation and an explicit selection for one effect are independent of each other.
 
 The image models below need no depth or motion from the game engine. RIFE reads a chronological pair of images, and the shared presenter sets the timestamps of the images it generates and schedules their display.
 
@@ -27,11 +27,11 @@ Each architecture is implemented and validated separately. RRDB models are a dif
 
 ### Real-ESRGAN
 
-SRVGG reconstructs subpixel channels in `(channel, row offset, column offset)` order and adds a nearest-neighbor residual of the input. The general SRVGG-32 model can load its matching WDN checkpoint. `denoiseStrength` then blends the parameters of the two models when the model loads, before inference: 0 selects weak denoising and 1 selects the strong general checkpoint. The control is available only with a compatible paired package and is separate from neural-rendering intensity and output opacity.
+SRVGG reconstructs subpixel channels in `(channel, row offset, column offset)` order and adds a nearest-neighbor residual of the input. The general SRVGG-32 model can load its matching WDN checkpoint, and `denoiseStrength` then blends the parameters of the two models when the model loads, before inference: 0 selects weak denoising and 1 selects the strong general checkpoint. This control is available only with a compatible paired package and is separate from neural-rendering intensity and output opacity.
 
 ### Real-CUGAN and NAFNet
 
-Real-CUGAN computes its attention statistics over complete feature images. NAFNet keeps its trained block counts, channel normalization, residual scales and image padding. NAFNet GoPro uses local pooling kernels derived from the original training resolution, and its spatial reductions accumulate in float32. Independent image tiles cannot replace these attention and pooling domains.
+Real-CUGAN computes its attention statistics over complete feature images. NAFNet keeps its trained block counts, channel normalization, residual scales and image padding, and NAFNet GoPro uses local pooling kernels derived from the original training resolution, with its spatial reductions accumulated in float32. Independent image tiles cannot replace these attention and pooling domains.
 
 ## Model packages
 
@@ -39,7 +39,7 @@ Local `.dlssmodel` packages for neural rendering and `.restorationmodel` package
 
 A `.restorationmodel` package contains `manifest.json` and compatible safetensors. The manifest identifies the architecture, the RGB input and output format, and the exact tensor names, shapes, dtypes and checksums.
 
-Import validates a model's manifest together with its actual tensor names, dimensions, data types and operation. A display name or a renamed weights file cannot turn one architecture into another. Compatible raw restoration safetensors are recognized by their actual tensor names and shapes and can also be imported. A general SRVGG weights file can be accompanied by the matching `realesr-general-wdn-x4v3.safetensors` or `model-wdn.safetensors` companion in the same folder.
+Import validates a model's manifest together with its actual tensor names, dimensions, data types and operation, so a display name or a renamed weights file cannot turn one architecture into another. Compatible raw restoration safetensors are recognized by their actual tensor names and shapes and can be imported as well. A general SRVGG weights file can be accompanied by the matching `realesr-general-wdn-x4v3.safetensors` or `model-wdn.safetensors` companion in the same folder.
 
 ## Importing original checkpoints and libraries
 
@@ -51,11 +51,11 @@ A selected RIFE v4.6 folder that contains the original `flownet.param` and float
 
 ### Real-CUGAN and NAFNet checkpoints
 
-Original Real-CUGAN UpCunet2x, 3x and 4x checkpoints and the supported NAFNet width64 `.pth` checkpoints import into the same model library. A size-limited data reader accepts legacy and ZIP tensor storage, converts tensor names and convolution and transposed-convolution layouts, and preserves the original floating-point values. Checkpoint globals are read as plain data. Import does not execute Python or checkpoint code and does not require Python to be installed.
+Original Real-CUGAN UpCunet2x, 3x and 4x checkpoints and the supported NAFNet width64 `.pth` checkpoints import into the same model library. A data reader with size limits accepts legacy and ZIP tensor storage, converts tensor names and convolution and transposed-convolution layouts, and preserves the original floating-point values. Checkpoint globals are read as plain data. Import does not execute Python or checkpoint code and does not require Python to be installed.
 
 ### NVIDIA neural-rendering libraries
 
-Original NR libraries that contain `WEIGHTS_HT` or `WEIGHTS_CC_SMALL_FP8` can be imported directly. Import decodes their PE resource data into complete logical NR tensors without loading or executing the DLL. A library that contains both networks supplies two models, HT71 and Small31. Logical NR safetensors can also be imported. Their complete tensor layout, precision and 16-feature to four-channel model structure decide whether they are accepted.
+Original NVIDIA neural-rendering (NR) libraries that contain `WEIGHTS_HT` or `WEIGHTS_CC_SMALL_FP8` can be imported directly. Import decodes their PE resource data into complete logical NR tensors without loading or executing the DLL. A library that contains both networks supplies two models, HT71 and Small31. Logical NR safetensors can also be imported, and whether they are accepted depends on their complete tensor layout, precision and 16-feature to four-channel model structure.
 
 ### NVIDIA frame-generation and RTX VSR libraries
 
@@ -63,10 +63,10 @@ The supported original NVIDIA 310.9.16 frame-generation DLL and the Linux RTX VS
 
 ### DLSS SR captures
 
-DLSS SR uses a prepared preset-K LDR 2× package that contains its reconstruction filter and exact postprocessing shader. Import builds it from a local capture folder containing `libnvidia-ngx-dlss.so.310.7.0`, `L0001_params.bin` and `L0012_params.bin`, and their corresponding `L0001_buf<address>.bin` and `L0012_buf<address>.bin` files. Selecting either the library file or its capture folder starts the same import. The converter verifies the digests of the exact original library, the trained weights and the reconstruction filter, translates the library's reconstruction PTX into a Metal kernel, and then produces the SR package. Import reads these files as data and runs no CUDA or Python code. An NR package cannot supply these resources.
+DLSS SR uses a prepared preset-K LDR 2× package that contains its reconstruction filter and exact postprocessing shader. Import builds this package from a local capture folder containing `libnvidia-ngx-dlss.so.310.7.0`, `L0001_params.bin` and `L0012_params.bin`, and their corresponding `L0001_buf<address>.bin` and `L0012_buf<address>.bin` files. Selecting either the library file or its capture folder starts the same import. The converter verifies the digests of the exact original library, the trained weights and the reconstruction filter, translates the library's reconstruction PTX into a Metal kernel, and then produces the SR package. Import reads these files as data and runs no CUDA or Python code. An NR package cannot supply these resources.
 
 ## Sources and licenses
 
-MacLauncher's model downloads include the standard Real-CUGAN scale and noise variants and NAFNet SIDD and GoPro width64. Variants that share an author archive reuse one verified download. An archive published as a GitHub release asset is checked against the size and SHA-256 digest that GitHub currently lists for it, so an archive that the author replaces is still accepted. When the release list cannot be read or no longer lists the archive, it downloads from its address and its SHA-256 is recorded. Only the declared checkpoint is taken from the archive, and it must match its own recorded size and checksum before import. Files addressed by an exact repository commit, and entries read in parts from a published package, are checked against their recorded size and checksum. A file that differs installs nothing, and the error names the file.
+MacLauncher's model downloads include the standard Real-CUGAN scale and noise variants and NAFNet SIDD and GoPro width64. Variants that share an author archive reuse one verified download. An archive published as a GitHub release asset is checked against the size and SHA-256 digest that GitHub currently lists for it, so an archive that the author replaces is still accepted. When the release list cannot be read or no longer lists the archive, the archive is downloaded from its address and its SHA-256 is recorded. Only the declared checkpoint is taken from the archive, and it must match its own recorded size and checksum before import. Files addressed by an exact repository commit, and entries read in parts from a published package, are checked against their recorded size and checksum. A file that differs installs nothing, and the error names the file.
 
 The `graph` entries in [model-source.json](../../src/modules/shared/reshade/neural/model-source.json) list the exact graph sources, revisions and license notices. Model weights and their terms are separate from the provider's source licenses.

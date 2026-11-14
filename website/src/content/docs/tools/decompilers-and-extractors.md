@@ -8,9 +8,9 @@ sidebar:
   order: 3
 ---
 
-To translate a game, mod it, rescue its music or read its script, you first need to see inside it. MacLauncher's decompilers and extractors let you do that on your Mac, and most game types come with them in the inspector.
+To translate a game, mod it, rescue its music or read its script, you first need to see inside it. Extractors unpack a game's archives and encrypted assets, and decompilers turn its compiled scripts or code back into something readable. Most game types in MacLauncher come with both in the inspector.
 
-The tools belong to the game type, so they read the game's original data whichever runtime plays it, and they all work the same way. When you press an action that needs a tool that isn't installed yet, MacLauncher downloads the tool and then continues where it left off. Results go into a separate export folder, so the game's files stay as they are. The one exception is Near Infinity, an external editor for Infinity Engine games: edits you save in it can change the game's resources.
+Because the tools belong to the game type, they read the game's original data whichever runtime plays it, and they all work the same way. When you press an action that needs a tool that isn't installed yet, MacLauncher downloads the tool and then continues where it left off. Results go into a separate export folder, so the game's files stay as they are. The one exception is Near Infinity, an external editor for Infinity Engine games, where edits you save can change the game's resources.
 
 ## By game type
 
@@ -78,7 +78,7 @@ Many games don't arrive as a plain folder. MacLauncher opens the common wrappers
 
 ### Installers
 
-[GOG](https://www.gog.com/)'s offline Windows installers, like many others, are built with [Inno Setup](https://jrsoftware.org/isinfo.php): a `setup_….exe`, often with numbered `.bin` parts beside it. MacLauncher reads the installer as data with [innoextract](https://github.com/dscharrer/innoextract), without running it, then detects the game type inside like any other folder. A GOG Windows installer of a Ren'Py, GameMaker or RPG Maker game can therefore end up on a native runtime, with no Windows or [WINE](https://www.winehq.org/) at any step. Those installers, older versions included, can be downloaded from inside MacLauncher, as [Stores and downloads](/maclauncher/tools/stores-and-downloads/) describes. Encrypted installers, however, aren't supported.
+[GOG](https://www.gog.com/)'s offline Windows installers, like many others, are built with [Inno Setup](https://jrsoftware.org/isinfo.php): a `setup_….exe`, often with numbered `.bin` parts beside it. MacLauncher reads the installer as data with [innoextract](https://github.com/dscharrer/innoextract), without running it, then detects the game type inside like any other folder. A GOG Windows installer of a Ren'Py, GameMaker or RPG Maker game can therefore end up on a native Mac runtime, with no Windows or [WINE](https://www.winehq.org/) (the compatibility layer for Windows programs) at any step. Those installers, older versions included, can be downloaded from inside MacLauncher, as [Stores and downloads](/maclauncher/tools/stores-and-downloads/) describes. Encrypted installers aren't supported.
 
 ### Packed games
 
@@ -89,10 +89,10 @@ Some games ship entirely inside one `.exe`, and MacLauncher reads it in place:
 - RPG Maker XP/VX/VX Ace and NScripter games inside self-extracting archives (ZIP, RAR, 7z, NSIS, Inno Setup or CAB), opened with [7-Zip](https://www.7-zip.org/);
 - RPG Maker XP/VX/VX Ace, NScripter and Tyrano games packed with Enigma Virtual Box, unpacked with [evbunpack](https://github.com/mos9527/evbunpack).
 
-The unpacked copy lives in MacLauncher's own game data, and importing the same installer again reuses it. innoextract downloads the first time it's needed; 7-Zip and evbunpack are included.
+The unpacked copy is kept in MacLauncher's own game data, and importing the same installer again reuses it. innoextract is downloaded the first time it's needed, while 7-Zip and evbunpack are included.
 
 Guide: [Installer reader](https://github.com/procrastinine/maclauncher/blob/master/docs/tools/INSTALLERS.md)
 
 ## What you get back
 
-[Decompiled](https://en.wikipedia.org/wiki/Decompiler) output is a faithful reading of what the game shipped, which is different from the developer's original project. Games on script engines such as Ren'Py, RPG Maker and KiriKiri come back very readable, and compiled code (C#, Java) usually decompiles well. Machine code from native programs, however, comes back as pseudocode, which is good for understanding a program and useless for rebuilding it.
+[Decompiled](https://en.wikipedia.org/wiki/Decompiler) output is a faithful reading of what the game shipped, which isn't the same as the developer's original project. Games on script engines such as Ren'Py, RPG Maker and KiriKiri come back very readable, and compiled code in languages like C# and Java usually decompiles well. Machine code from native programs comes back as pseudocode, which is good for understanding a program but useless for rebuilding it.

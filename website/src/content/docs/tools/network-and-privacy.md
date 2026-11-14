@@ -12,36 +12,36 @@ A game launcher sits between you, your games and the Internet, so it's fair to a
 
 ## When MacLauncher goes online
 
-Every network request MacLauncher makes follows something you did. Nothing happens in the background, and simply opening a window or a tab doesn't go online either, because lists you've loaded before come from a local cache. The actions that do reach the network are these:
+Every network request MacLauncher makes follows something you did. Nothing happens in the background, and simply opening a window or a tab doesn't go online either, because lists you've loaded before come from a local cache. These are the actions that do reach the network:
 
 - In **Runtimes**, **Load versions** or **Reload versions** fetches a version list, and **Install** downloads the version you selected. Shader collections and neural models under **Runtimes → Effects** work the same way.
-- **Play** for a game whose runtime, translator or tool isn't installed yet first shows a dialog naming what it will download, and only downloads after you agree. Preparation and the launch then carry on by themselves. An inspector tool or a patch that needs a download asks the same way, and a missing video plugin is offered with a **Skip** button.
+- When a game's runtime, translator or tool isn't installed yet, **Play** first shows a dialog naming what it will download, and only downloads after you agree. Preparation and the launch then carry on by themselves. An inspector tool or a patch that needs a download asks the same way, and a missing video plugin is offered with a **Skip** button.
 - In the **External** window, connecting to a store, reloading a list, refreshing a game's versions and downloading a game use the network. So does **Fetch previous versions**, which asks [SteamDB](https://steamdb.info/) for a Steam game's older builds.
 - **Check for Updates…**, in the MacLauncher menu and in **Settings → Launcher**, asks GitHub for a newer release.
 
-There's one setting that goes online on its own once you turn it on: **Check for updates at launch** in **Settings → Launcher** looks for a new release each time MacLauncher starts. It's off by default.
+One setting goes online on its own once you turn it on. **Check for updates at launch** in **Settings → Launcher** looks for a new release each time MacLauncher starts, and it's off by default.
 
-Some actions start other software that has its own network use. When a Steam game asks for the Steam client, for example, MacLauncher can start the Steam app for Mac, which then signs in. That's why the **Steam client on Play** setting asks first by default, as [Versions and settings](/maclauncher/tools/versions-and-settings/#steam-client-on-play) explains.
+Some actions start other software that uses the network itself. When a Steam game asks for the Steam client, for example, MacLauncher can start the Steam app for Mac, which then signs in. For that reason the **Steam client on Play** setting asks first by default, as [Versions and settings](/maclauncher/tools/versions-and-settings/#steam-client-on-play) explains.
 
 ## Working offline
 
-An installed runtime, translator, model or tool needs no connection to use, and neither does anything else MacLauncher does with games already on your Mac: importing them, detecting their engines, preparing them, applying graphics effects and running the tools. Version lists stay cached after a refresh, so you can still pick from them offline, and installed versions remain usable even after their publisher stops offering them.
+An installed runtime, translator, model or tool needs no connection to use. Neither does anything else MacLauncher does with games already on your Mac: importing them, detecting their engines, preparing them, applying graphics effects and running the tools. Version lists stay cached after a refresh, so you can still pick from them offline, and installed versions remain usable even after their publisher stops offering them.
 
 ## Network access for each game
 
-Games can go online too, and MacLauncher controls that separately for each game. The **Network access** checkbox in a game's inspector cuts the game off from the Internet and your local network while it's unchecked, and for newly imported games it starts unchecked. A few games need it, such as web games that load their content from a website or games with online features, and for those you tick the checkbox. **Settings → Launcher** has the same checkbox for the starting value of newly imported games, and a change applies from the game's next launch.
+Games can go online too, and MacLauncher controls that separately for each game. While the **Network access** checkbox in a game's inspector is unchecked, the game is cut off from the Internet and your local network, and newly imported games start with it unchecked. A few games need access, such as web games that load their content from a website or games with online features, and for those you tick the checkbox. **Settings → Launcher** has the same checkbox for the starting value of newly imported games. A change applies from the game's next launch.
 
-The block applies to the game and everything it starts, including native libraries and helper programs, and works the same way in every runtime. If MacLauncher can't put it in place, the game doesn't start. It covers only the game's own processes, though: it isn't a firewall for your whole Mac, and it doesn't affect the Steam client, a browser or downloads that MacLauncher makes before the game starts. The [network isolation reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/NETWORK_ISOLATION.md) describes what stays reachable, such as WINE's own local communication.
+The block applies to the game and everything it starts, including native libraries and helper programs, and works the same way in every runtime. If MacLauncher can't put it in place, the game doesn't start. It covers only the game's own processes, though. It isn't a firewall for your whole Mac, and it doesn't affect the Steam client, a browser or downloads that MacLauncher makes before the game starts. The [network isolation reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/NETWORK_ISOLATION.md) describes what stays reachable, such as the local communication inside [WINE](https://www.winehq.org/), the layer that runs Windows games.
 
-Since macOS 15, the system has a Local Network permission of its own and asks for it the first time an app looks for devices nearby. Sikarugir and WineCX games run from an app bundle that MacLauncher prepares for each of those runtimes, so macOS asks about them once per runtime, as [Game Mode and local network access](/maclauncher/windows/crossover-and-sikarugir/#game-mode-and-local-network-access) explains. That answer and the **Network access** checkbox both apply: with the checkbox off, the game stays off your local network whatever you answered.
+Since macOS 15, the system has a Local Network permission of its own and asks for it the first time an app looks for devices nearby. Games in Sikarugir and WineCX, the two free WINE distributions MacLauncher downloads, run from an app bundle that MacLauncher prepares for each of those runtimes, so macOS asks about them once per runtime, as [Game Mode and local network access](/maclauncher/windows/crossover-and-sikarugir/#game-mode-and-local-network-access) explains. That answer and the **Network access** checkbox both apply: with the checkbox off, the game stays off your local network whatever you answered.
 
 ## No telemetry
 
-MacLauncher has no telemetry, analytics or crash reporting. It doesn't send usage data anywhere, and there's no account to create for MacLauncher itself.
+MacLauncher has no telemetry, analytics or crash reporting. It doesn't send usage data anywhere, and MacLauncher itself has no account to create.
 
 ## Logs stay on your Mac
 
-When something goes wrong, the details are in log files on your Mac, and nothing sends them anywhere. **Help → Show Log in Finder** opens the folder with MacLauncher's own log, `main.log`. Each game also keeps the logs of its runtime and tools in its own folder, `games/<game ID>/logs/`, inside MacLauncher's data folder `~/Library/Application Support/maclauncher/`. If you report a problem, you decide what to share from them.
+When something goes wrong, the details are written to log files on your Mac, and nothing sends them anywhere. **Help → Show Log in Finder** opens the folder with MacLauncher's own log, `main.log`. Each game also keeps the logs of its runtime and tools in its own folder, `games/<game ID>/logs/`, inside MacLauncher's data folder `~/Library/Application Support/maclauncher/`. If you report a problem, you decide what to share from them.
 
 ## Your files and accounts
 
@@ -51,6 +51,6 @@ Store sign-ins stay on your Mac as well. Remembered sign-ins are stored encrypte
 
 ## Checking it yourself
 
-None of this has to be taken on trust. MacLauncher is open source, so its [source on GitHub](https://github.com/procrastinine/maclauncher) shows every request it can make. Its releases are also built by GitHub Actions in a way you can verify, so you can confirm that the app you downloaded came from that exact source, as [How can I trust MacLauncher binaries?](/maclauncher/help/faq/#how-can-i-trust-maclauncher-binaries) explains.
+None of this has to be taken on trust. MacLauncher is open source, so its [source on GitHub](https://github.com/procrastinine/maclauncher) shows every request it can make. Its releases are also built by GitHub Actions, GitHub's build service, in a way you can verify, which lets you confirm that the app you downloaded came from that exact source, as [How can I trust MacLauncher binaries?](/maclauncher/help/faq/#how-can-i-trust-maclauncher-binaries) explains.
 
 Further reading: [Network isolation](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/NETWORK_ISOLATION.md), [Downloads and offline use](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/README.md#downloads-and-offline-use) and [App updates](https://github.com/procrastinine/maclauncher/blob/master/docs/UPDATES.md) in the reference documentation.

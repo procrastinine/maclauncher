@@ -1,10 +1,12 @@
 # Runtime settings and inspector actions
 
-This reference lists, for each game type, its playback backends, every runtime setting and every inspector action, while the runtime guides describe the behavior behind each setting and action. Runtime settings appear in two places: in **Settings** as module defaults and in a game's **Runtime Settings** as per-game overrides. Settings marked *per game* are the exception, because they exist only in the inspector. When a backend also has common settings, those marked *(Advanced)* follow the others inside a collapsed **Advanced** group.
+This reference lists every game type's playback backends, runtime settings and inspector actions; the runtime guides describe the behavior behind them. Most runtime settings appear in two places: in **Settings** as defaults for the whole game type, and in a game's **Runtime Settings** as overrides for that game. Settings marked *per game* exist only in the inspector. When a backend also has common settings, those marked *(Advanced)* follow the others inside a collapsed **Advanced** group.
 
-Backends with a translator choice, namely CrossOver, Sikarugir, WineCX, MacLauncher Android, Mac.apk, AnyPS5 and Prosper, also have an **Environment variables** section in a game's Runtime Settings. Its global values are in **Settings → Environment variables**, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes.
+Backends with a translator choice (CrossOver, Sikarugir, WineCX, MacLauncher Android, Mac.apk, AnyPS5 and Prosper) also have an **Environment variables** section in a game's Runtime Settings. Global values for it are set in **Settings → Environment variables**, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes.
 
-Some backends belong to another game type and are offered wherever they accept the game's input. These provider backends are marked *(provider)*, and their settings are listed under their own game type.
+Some backends belong to another game type but are offered wherever they accept the game's input. These provider backends are marked *(provider)*, and their settings are listed under their own game type.
+
+Under each game type, the line that starts with "Runtimes tabs" names the tabs in **Runtimes** where the versions that the game type uses are downloaded, updated or registered.
 
 | Game type | Default backend | Backends |
 | --- | --- | --- |
@@ -66,7 +68,7 @@ Module `mac32`.
 | --- | --- |
 | 32-bit Mac (default) | 32-bit Intel macOS applications · macOS version stated by each release · Rosetta on Apple Silicon |
 
-Runtimes tabs: 32-bit Mac (managed).
+Runtimes tabs: 32-bit Mac.
 
 ### 32-bit Mac settings
 
@@ -86,7 +88,7 @@ Module `ai5`.
 
 Backends: AI5-SDL2 (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: AI5WIN (managed).
+Runtimes tabs: AI5WIN.
 
 ### AI5-SDL2 settings
 
@@ -108,7 +110,7 @@ Module `alicesoft`.
 
 Backends: System 1–3 (default), System 3.5–3.9, System 4, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: AliceSoft → Alice tools (managed); AliceSoft → System 1–3 (managed); AliceSoft → System 3.5–3.9 (managed); AliceSoft → System 4 (managed); AliceSoft → System1–3 source (managed); AliceSoft → System3.x source (managed).
+Runtimes tabs: AliceSoft → Alice tools; AliceSoft → System 1–3; AliceSoft → System 3.5–3.9; AliceSoft → System 4; AliceSoft → System1–3 source; AliceSoft → System3.x source.
 
 ### System 1–3 settings
 
@@ -155,7 +157,7 @@ Module `android`.
 | Mac.apk | ARM64 Android runtime with optional Google sign-in. · Apple Silicon · macOS version stated by each release |
 | AIM | Original Android 16 with a Pixel Tablet display: 2560 × 1600 at 320 dpi. · Apple Silicon · macOS 26.0 or later · 1.95 GB system image |
 
-Runtimes tabs: Tools → Apktool (managed); Tools → JADX (managed); MacLauncher Android → JVM (managed); MacLauncher Android → ART (managed); Mac.apk (managed); AIM (managed).
+Runtimes tabs: Tools → Apktool; Tools → JADX; MacLauncher Android → JVM; MacLauncher Android → ART; Mac.apk; AIM.
 
 ### MacLauncher Android settings
 
@@ -165,7 +167,7 @@ Runtimes tabs: Tools → Apktool (managed); Tools → JADX (managed); MacLaunche
 | Initial width | Number 64–8192 | `1280` |  |
 | Initial height | Number 64–8192 | `800` |  |
 | OpenGL ES backend | Metal; Vulkan; installed or detected options | Metal | Select ANGLE's graphics backend for the next launch. Vulkan uses the selected Vulkan implementation. |
-| Vulkan implementation | Text | `auto` | Select an installed Vulkan implementation for Vulkan apps and ANGLE's Vulkan backend. Graphics → MoltenVK and KosmicKrisp in Runtimes manage downloads. |
+| Vulkan implementation | Text | `auto` | Select an installed Vulkan implementation for Vulkan apps and ANGLE's Vulkan backend. Downloads are handled in Runtimes under Graphics → MoltenVK and KosmicKrisp. |
 | Manual tilt *(per game)* | Off; Keyboard; Controller | Off | Provide virtual motion sensors. Keyboard uses Q/E to tilt left/right and R to recenter; Option + arrow keys and Option + 0 are also available. Controller uses the right stick. No physical motion or location is collected. |
 | Keyboard touch joystick *(per game)* | Off; WASD; Arrow keys; WASD and arrow keys | WASD | WASD controls a virtual touch joystick by default while the mouse operates a second touch, such as a boost button. Joystick mapping pauses during text editing; Command shortcuts retain normal keyboard input. Applies on the next launch. |
 | Joystick center X (%) *(per game)* | Number 0–100 | `18` | Horizontal center, measured from the left of the Android display. |
@@ -199,7 +201,7 @@ Module `bgi`.
 
 Backends: Program tools (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: Tools → msg-tool (managed).
+Runtimes tabs: Tools → msg-tool.
 
 Inspector details: Archive format, Original executable version, Declared compatibility, Native support.
 
@@ -213,7 +215,7 @@ Module `raze`.
 
 Backends: Raze (default).
 
-Runtimes tabs: Raze (managed).
+Runtimes tabs: Raze.
 
 Raze has no runtime settings or inspector actions.
 
@@ -270,7 +272,7 @@ Module `dosbox`.
 
 Backends: DOSBox Staging (default), UZDoom *(provider)*, Raze *(provider)*, DREAMM *(provider)*, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: DOSBox (managed).
+Runtimes tabs: DOSBox.
 
 ### DOSBox Staging settings
 
@@ -292,7 +294,7 @@ Module `uzdoom`.
 
 Backends: UZDoom (default).
 
-Runtimes tabs: UZDoom (managed).
+Runtimes tabs: UZDoom.
 
 UZDoom has no runtime settings or inspector actions.
 
@@ -304,7 +306,7 @@ Module `fvp`.
 
 Backends: RFVP (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: RFVP (managed); Tools → msg-tool (managed).
+Runtimes tabs: RFVP; Tools → msg-tool.
 
 ### RFVP settings
 
@@ -327,7 +329,7 @@ Module `flash`.
 
 Backends: Adobe Flash Player (default), Ruffle.
 
-Runtimes tabs: Flash → Flash Player (managed); Flash → Ruffle (managed); Flash → JPEXS FFDec (managed).
+Runtimes tabs: Flash → Flash Player; Flash → Ruffle; Flash → JPEXS FFDec.
 
 | Action group | Actions |
 | --- | --- |
@@ -339,7 +341,7 @@ Module `fna`.
 
 Backends: FNA (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: FNA (managed).
+Runtimes tabs: FNA.
 
 ### FNA settings
 
@@ -364,14 +366,14 @@ Module `gamemaker`.
 
 Backends: OpenGMK, Butterscotch (default), Official GameMaker, Game's macOS app, Inspect only, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: GameMaker → Official (managed); GameMaker → Butterscotch (managed); GameMaker → Classic (OpenGMK) (managed); GameMaker → GM8Decompiler (managed); GameMaker → UMT (managed); GameMaker → Graphics helper (managed).
+Runtimes tabs: GameMaker → Official; GameMaker → Butterscotch; GameMaker → Classic (OpenGMK); GameMaker → GM8Decompiler; GameMaker → UMT; GameMaker → Graphics helper.
 
 ### Official GameMaker settings
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
 | Graphics fallback | Automatic; Enabled; Disabled | Automatic | Uses software rendering when hardware OpenGL is unavailable. |
-| Graphics helper | Use Runtimes selection; v5; v4; v3; v2; v1 |  | Uses the managed graphics helper selection. Existing local profiles remain available. |
+| Graphics helper | Use Runtimes selection; v5; v4; v3; v2; v1 |  | Uses the graphics helper version selected in Runtimes. Existing local profiles remain available. |
 
 Inspector details: GameMaker family, Execution format, Header version (GMS2 may be stale), Detected engine format version, Version confidence, WAD version, Compatibility evidence, Extension declarations, Classic external definitions, Windows extensions requiring native support, Runtime compatibility, Last runtime build, Registered official Studio build, Official compatibility, Latest export.
 
@@ -406,7 +408,7 @@ Module `godot`.
 
 Backends: Godot (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: Godot (managed).
+Runtimes tabs: Godot.
 
 ### Godot settings
 
@@ -425,7 +427,7 @@ Module `xash3d`.
 
 Backends: Xash3D FWGS (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: Xash3D FWGS (managed).
+Runtimes tabs: Xash3D FWGS.
 
 Xash3D FWGS has no runtime settings or inspector actions.
 
@@ -437,7 +439,7 @@ Module `hashlink`.
 
 Backends: HashLink (Intel Mac; Rosetta on Apple Silicon) (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: HashLink (managed); HashLink → hlbc (managed).
+Runtimes tabs: HashLink; HashLink → hlbc.
 
 ### HashLink (Intel Mac; Rosetta on Apple Silicon) settings
 
@@ -470,7 +472,7 @@ Module `gemrb`.
 
 Backends: GemRB (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: GemRB (managed); GemRB → Near Infinity (managed).
+Runtimes tabs: GemRB; GemRB → Near Infinity.
 
 ### GemRB settings
 
@@ -500,7 +502,7 @@ Module `ios`.
 
 Backends: PlayCover (default).
 
-Runtimes tabs: PlayCover (managed).
+Runtimes tabs: PlayCover.
 
 ### PlayCover settings
 
@@ -513,7 +515,7 @@ Runtimes tabs: PlayCover (managed).
 | Window mode | Application default; Fixed size; Resizable | Resizable | Resizable lets PlayTools follow the Mac window size. Fixed uses the selected dimensions. Application default keeps the app's display configuration. |
 | Window width | Number | `1920` | 320–7680; default 1920. Changes apply on the next launch. |
 | Window height | Number | `1080` | 240–4320; default 1080. |
-| iOS device model | iPad Pro 12.9-inch (M1); iPad Pro 12.9-inch (3rd generation); iPad Pro 12.9-inch (M2); iPhone 13 Pro Max | iPad Pro 12.9-inch (M1) | Device identity reported by PlayTools. Application support varies. |
+| iOS device model | iPad Pro 12.9-inch (M1); iPad Pro 12.9-inch (3rd generation); iPad Pro 12.9-inch (M2); iPhone 13 Pro Max | iPad Pro 12.9-inch (M1) | The device model that PlayTools reports to the app. Application support varies. |
 | Game arguments | List |  |  |
 
 Inspector details: Application identifier, Version, Architecture, Compatibility.
@@ -529,7 +531,7 @@ Module `java`.
 
 Backends: Java (default).
 
-Runtimes tabs: Java (Temurin) (managed).
+Runtimes tabs: Java (Temurin).
 
 ### Java settings
 
@@ -549,7 +551,7 @@ Module `kirikiri`.
 
 Backends: KiriKiri SDL2 (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: Tools → msg-tool (managed); KiriKiri (managed).
+Runtimes tabs: Tools → msg-tool; KiriKiri.
 
 ### KiriKiri SDL2 settings
 
@@ -570,7 +572,7 @@ Module `love`.
 
 Backends: LÖVE (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: LÖVE → LJD (managed); LÖVE → unluac (managed); LÖVE (managed).
+Runtimes tabs: LÖVE → LJD; LÖVE → unluac; LÖVE.
 
 Inspector details: LÖVE version, AppImage extracted, AppImage extracted at, AppImage cache.
 
@@ -597,7 +599,7 @@ Module `dreamm`.
 
 Backends: DREAMM (default).
 
-Runtimes tabs: DREAMM (managed).
+Runtimes tabs: DREAMM.
 
 DREAMM has no runtime settings or inspector actions.
 
@@ -609,7 +611,7 @@ Module `mages`.
 
 Backends: Impacto Windows HD (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: MAGES. → sc3tools (managed); MAGES. (managed).
+Runtimes tabs: MAGES. → sc3tools; MAGES..
 
 Inspector details: Data edition, Archive format, Script format, Original executable version, Original product version, Version source, Native support, Native runtime, Native runtime macOS minimum.
 
@@ -623,7 +625,7 @@ Module `minori`.
 
 Backends: ReMinori (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: Minori (managed).
+Runtimes tabs: Minori.
 
 Inspector details: Data format, Original executable version.
 
@@ -638,7 +640,7 @@ Module `ikemen`.
 
 Backends: Ikemen GO (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: Ikemen GO (managed); Ikemen GO → SFF Tools (managed).
+Runtimes tabs: Ikemen GO; Ikemen GO → SFF Tools.
 
 ### Ikemen GO settings
 
@@ -659,7 +661,7 @@ Module `nxnative`.
 
 Backends: Switch / Switch 2 (nxnative) (default), Inspect only.
 
-Runtimes tabs: Switch / Switch 2 (nxnative) (managed); Switch / Switch 2 (nxnative) → Native tools (managed).
+Runtimes tabs: Switch / Switch 2 (nxnative); Switch / Switch 2 (nxnative) → Native tools.
 
 ### Switch / Switch 2 (nxnative) settings
 
@@ -682,7 +684,7 @@ Module `nitroplus`.
 
 Backends: Nitroplus (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: Nitroplus (managed).
+Runtimes tabs: Nitroplus.
 
 Inspector details: Script format, Authored script version, Script version source, Game product version, Original file version, Original version source, Native compatibility.
 
@@ -696,7 +698,7 @@ Module `nscripter`.
 
 Backends: ONScripter-Yuri (default), ONScripter-EN, ONScripter-Yuri Web, External runtime, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: NScripter → ONScripter-Yuri (managed); NScripter → ONScripter-EN (managed).
+Runtimes tabs: NScripter → ONScripter-Yuri; NScripter → ONScripter-EN.
 
 ### ONScripter-Yuri settings
 
@@ -732,7 +734,7 @@ Module `anyps5`.
 | Inspect only |  |
 | Prosper *(provider)* |  |
 
-Runtimes tabs: PS5 (AnyPS5) (managed).
+Runtimes tabs: PS5 (AnyPS5).
 
 ### PS5 (AnyPS5) settings
 
@@ -787,7 +789,7 @@ Module `prosper`.
 | --- | --- |
 | Prosper (default) | macOS 26 · Rosetta on Apple Silicon · Vulkan 1.4 |
 
-Runtimes tabs: Prosper (managed).
+Runtimes tabs: Prosper.
 
 ### Prosper settings
 
@@ -802,7 +804,7 @@ Module `renpy`.
 
 Backends: Ren'Py Patch, Ren'Py SDK (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: Ren'Py (managed).
+Runtimes tabs: Ren'Py.
 
 Inspector details: Runtime version.
 
@@ -821,7 +823,7 @@ Module `easyrpg`.
 
 Backends: EasyRPG Player (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: EasyRPG Player (managed).
+Runtimes tabs: EasyRPG Player.
 
 ### EasyRPG Player settings
 
@@ -851,7 +853,7 @@ Module `mv`.
 
 Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: NW.js (managed).
+Runtimes tabs: NW.js.
 
 ### Electron settings
 
@@ -921,7 +923,7 @@ Module `rgss`.
 
 Backends: MKXP-Z (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: MKXP-Z (managed).
+Runtimes tabs: MKXP-Z.
 
 ### MKXP-Z settings
 
@@ -1008,7 +1010,7 @@ Module `scummvm`.
 
 Backends: ScummVM (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: ScummVM → ScummVM player (managed); ScummVM → ScummVM Tools (managed).
+Runtimes tabs: ScummVM → ScummVM player; ScummVM → ScummVM Tools.
 
 ### ScummVM settings
 
@@ -1038,7 +1040,7 @@ Module `siglus`.
 
 Backends: Siglus (default), RealLive (RLVM), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: Siglus → Siglus SceneScript Utility (managed); RealLive (RLVM) → RLdev (managed); Siglus (managed); RealLive (RLVM) (managed); RealLive (RLVM) → MacLauncher adapter (managed).
+Runtimes tabs: Siglus → Siglus SceneScript Utility; RealLive (RLVM) → RLdev; Siglus; RealLive (RLVM); RealLive (RLVM) → MacLauncher adapter.
 
 ### Siglus settings
 
@@ -1092,7 +1094,7 @@ Module `unity`.
 
 Backends: Unity Mono player (default), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: Unity (managed); Unity → AssetRipper (managed); Unity → Cpp2IL (managed).
+Runtimes tabs: Unity; Unity → AssetRipper; Unity → Cpp2IL.
 
 ### Unity Mono player settings
 
@@ -1115,7 +1117,7 @@ Module `video`.
 
 Backends: mpv player (default).
 
-Runtimes tabs: mpv player → Player (managed); mpv player → Plugins (managed).
+Runtimes tabs: mpv player → Player; mpv player → Plugins.
 
 ### mpv player settings
 
@@ -1125,7 +1127,7 @@ Runtimes tabs: mpv player → Player (managed); mpv player → Plugins (managed)
 | Timeline previews | On/Off | On | Generate thumbnail previews while hovering over the timeline with thumbfast. When the plugin is missing, Play offers it as an optional download, and Skip continues playback without previews. Requires uosc or another thumbfast-compatible interface. |
 | Configuration folder | Path (with picker) |  | Optional mpv configuration folder containing mpv.conf, input.conf, scripts, script-opts, fonts and other mpv resources. The selected folder is read directly. |
 | Additional configuration files | List |  | Absolute paths, one per line. Files load in order after the configuration folder. mpv include entries can reference further configuration and resources. |
-| Additional scripts | List |  | Absolute paths to Lua or JavaScript scripts, or mpv script folders, one per line. The original files stay in place and load as they are, and each video can list its own. Runtimes → mpv player → Plugins keeps managed copies with updates instead. |
+| Additional scripts | List |  | Absolute paths to Lua or JavaScript scripts, or mpv script folders, one per line. The original files stay in place and load as they are, and each video can list its own. Plugins from Runtimes → mpv player → Plugins, by contrast, are copies that MacLauncher downloads and updates. |
 | Input configuration | Path (with picker) |  | Optional input.conf file for custom keyboard and mouse bindings. Playback configuration changes apply on the next Play. |
 
 Inspector details: Container.
@@ -1141,7 +1143,7 @@ Module `vnds`.
 
 Backends: VNDS-LOVE (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: VNDS → VNDS-LOVE (managed).
+Runtimes tabs: VNDS → VNDS-LOVE.
 
 ### VNDS-LOVE settings
 
@@ -1199,7 +1201,7 @@ Module `crossover`.
 
 Backends: Sikarugir (default), CrossOver, WineCX.
 
-Runtimes tabs: CrossOver (managed); Sikarugir (managed); WineCX (managed); Graphics → DirectX → Vulkan, DirectX → Metal, Vulkan drivers and Video codecs (managed).
+Runtimes tabs: CrossOver; Sikarugir; WineCX; Graphics → DirectX → Vulkan, DirectX → Metal, Vulkan drivers and Video codecs.
 
 ### Sikarugir settings
 
@@ -1209,8 +1211,8 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); WineCX (managed); Graph
 | Direct3D 8 / 9 / 10 / 11 | Installed implementations of that API, Automatic, or the wrapper's own setting | Default Direct3D engine | Without a choice of its own, the API uses the default Direct3D engine. The list marks this on its automatic entry, or as **Default Direct3D engine** when that default names a specific engine. Choices that share DXGI or native modules change together. A missing or incompatible choice falls back to a consistent set of components, and the inspector shows the selected and used components with the reason. |
 | Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
-| Video codecs | Runtime default or installed codec component | Runtime default | Plugin-only search paths use a shared dependency view and the runtime's established core; optional unusable plugins are reported separately. |
-| Game temporal integration | On/Off | Off | Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver build with a temporal carrier, a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, independent of this setting; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
+| Video codecs | Runtime default or installed codec component | Runtime default | Only the selected plugin folders join the plugin search path, with their dependencies taken from a shared prepared folder, and the runtime keeps its own GStreamer core. Optional plugins that cannot be used are reported separately. |
+| Game temporal integration | On/Off | Off | Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver that accepts forwarded DLSS frames (MacLauncher KosmicKrisp or MoltenVK scene support), a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, whatever this setting says; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
 | DirectDraw compatibility | On/Off | Off | Use CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate. |
 | Synchronization | Automatic; MSync; Off | Automatic | Availability depends on the selected Wine version. |
 | Language locale | Text |  | Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. Empty uses the language of macOS. |
@@ -1229,8 +1231,8 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); WineCX (managed); Graph
 | Direct3D 8 / 9 / 10 / 11 | Installed implementations of that API, Automatic, or the bottle's own setting | Default Direct3D engine | Without a choice of its own, the API uses the default Direct3D engine. The list marks this on its automatic entry, or as **Default Direct3D engine** when that default names a specific engine. Choices that share DLLs change together. While CrossOver's automatic choice is unresolved, it applies to every API. |
 | Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
-| Video codecs | Runtime default or installed codec component | Runtime default | Plugin-only search paths use a shared dependency view and the runtime's established core; optional unusable plugins are reported separately. |
-| Game temporal integration | On/Off | Off | Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver build with a temporal carrier, a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, independent of this setting; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
+| Video codecs | Runtime default or installed codec component | Runtime default | Only the selected plugin folders join the plugin search path, with their dependencies taken from a shared prepared folder, and the runtime keeps its own GStreamer core. Optional plugins that cannot be used are reported separately. |
+| Game temporal integration | On/Off | Off | Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver that accepts forwarded DLSS frames (MacLauncher KosmicKrisp or MoltenVK scene support), a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, whatever this setting says; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
 | Synchronization | Automatic; MSync; ESync (older CrossOver versions); Off | Automatic |  |
 | Language locale | Text |  | Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. Empty uses the language of macOS. |
 | Windows environment | Windows 10 (64-bit); Windows 11 (64-bit); Windows 7 (64-bit); Windows XP (64-bit) | Windows 10 (64-bit) | Changing this option uses a separate Windows environment. Existing saves remain in the previous environment. |
@@ -1248,8 +1250,8 @@ Runtimes tabs: CrossOver (managed); Sikarugir (managed); WineCX (managed); Graph
 | Direct3D 8 / 9 / 10 / 11 | Installed implementations of that API or Automatic | Default Direct3D engine | Without a choice of its own, the API uses the default Direct3D engine. The list marks this on its automatic entry, or as **Default Direct3D engine** when that default names a specific engine. Choices that share DXGI or native modules change together. A missing or incompatible choice falls back to a consistent set of components, and the inspector shows the selected and used components with the reason. |
 | Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
-| Video codecs | Runtime default or installed codec component | Runtime default | Plugin-only search paths use a shared dependency view and the runtime's established core; optional unusable plugins are reported separately. |
-| Game temporal integration | On/Off | Off | Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later with a Wine version that supports its game integration, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver build with a temporal carrier, a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, independent of this setting; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
+| Video codecs | Runtime default or installed codec component | Runtime default | Only the selected plugin folders join the plugin search path, with their dependencies taken from a shared prepared folder, and the runtime keeps its own GStreamer core. Optional plugins that cannot be used are reported separately. |
+| Game temporal integration | On/Off | Off | Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later with a Wine version that supports its game integration, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver that accepts forwarded DLSS frames (MacLauncher KosmicKrisp or MoltenVK scene support), a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, whatever this setting says; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
 | Synchronization | Automatic; MSync; Off | Automatic | Availability depends on the selected Wine version. |
 | Language locale | Text |  | Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. Empty uses the language of macOS. |
 | Windows version | Windows 10; Windows 11; Windows 7; Windows XP | Windows 10 |  |
@@ -1272,7 +1274,7 @@ Module `wolfrpg`.
 
 Backends: Browser Woditor (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: WOLF RPG → WolfTL (managed); WOLF RPG → UberWolf (managed); WOLF RPG → Browser Woditor (managed).
+Runtimes tabs: WOLF RPG → WolfTL; WOLF RPG → UberWolf; WOLF RPG → Browser Woditor.
 
 ### Browser Woditor settings
 

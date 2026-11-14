@@ -5,13 +5,13 @@ description: Common questions about MacLauncher, including which Macs it runs on
 
 import VerifyCommand from "../../../components/VerifyCommand.astro";
 
-This page answers common questions about MacLauncher, starting with general ones, then trust and verification, then what to try when a game misbehaves.
+General questions come first, then how MacLauncher's builds can be trusted and checked, then what to try when a game misbehaves.
 
 ## General
 
 ### Is MacLauncher free?
 
-Yes. It's open source under the [MIT license](https://github.com/procrastinine/maclauncher/blob/master/LICENSE). The runtimes it downloads are open-source projects or official free releases, each under its own license, and the [attributions](https://github.com/procrastinine/maclauncher/blob/master/docs/ATTRIBUTIONS.md) list them all. A few optional extras use software you bring yourself, such as [CrossOver](https://www.codeweavers.com/crossover/) or a purchased copy of [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/).
+Yes. It's open source under the [MIT license](https://github.com/procrastinine/maclauncher/blob/master/LICENSE). The runtimes it downloads (the engines and players that actually run the games) are open-source projects or official free releases, each under its own license, and the [attributions](https://github.com/procrastinine/maclauncher/blob/master/docs/ATTRIBUTIONS.md) list them all. A few optional extras use software you bring yourself, such as [CrossOver](https://www.codeweavers.com/crossover/), a paid app from CodeWeavers that runs Windows programs on the Mac, or a purchased copy of [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/), a Windows upscaling and frame-generation tool.
 
 ### What Mac do I need?
 
@@ -21,7 +21,7 @@ Most of MacLauncher works the same on every supported Mac. Android, iPhone and i
 
 ### Does MacLauncher pick Apple Silicon or Intel runtimes by itself?
 
-Yes. Each app downloads runtime builds made for its own processor, uses a universal build where one exists, and falls back to an Intel build through Rosetta on Apple Silicon when a runtime offers nothing else. The choice can be overridden: the **Build** menu in **Runtimes** lists the other processor's builds, and **Set default** on one makes it that runtime's default. [How MacLauncher picks a build](/maclauncher/macs-and-macos/#how-maclauncher-picks-a-build) explains the details.
+Yes. Each app downloads runtime builds made for its own processor and uses a universal build where one exists. When a runtime offers nothing else, the Apple Silicon app falls back to an Intel build, which runs through Rosetta, Apple's translator for Intel code. You can override the choice: the **Build** menu in **Runtimes** lists the other processor's builds, and **Set default** on one makes it that runtime's default. [How MacLauncher picks a build](/maclauncher/macs-and-macos/#how-maclauncher-picks-a-build) explains the details.
 
 ### Which version of a runtime do I get?
 
@@ -29,7 +29,7 @@ The one the game asks for, when its files name a version, and otherwise the defa
 
 ### Does it change my game files?
 
-Not on its own. MacLauncher plays your games from where they are, and anything it generates (converted files, caches, the private Windows environments of [WINE](https://www.winehq.org/) games and the launch folders of their DLL adapters, and exports) goes into its own storage under `~/Library/Application Support/maclauncher/`. **Forget** removes that data for a game, and the original files stay put.
+Not on its own. MacLauncher plays your games from where they are and keeps everything it generates in its own storage under `~/Library/Application Support/maclauncher/`. That includes converted files, caches and exports. It also includes the private Windows environment of each game that runs through [WINE](https://www.winehq.org/), the compatibility layer for Windows programs on macOS, and the small launch folders that hold copies of a Windows game's executable and replaced DLLs when an add-on needs them. **Forget** removes that data for a game, and the original files stay put.
 
 Two things can still write to a game folder. The game's engine saves and stores its settings where it always does, which for some engines is the game folder, so a save made in MacLauncher is there when you play the game some other way. A few tools, such as RPG Maker's in-game Tools overlay or Ren'Py's cheat add-ons, also need files in the game folder; MacLauncher tracks those files, shows whether a patch is in place and removes it again with one click. [Patch and tinker tools](/maclauncher/tools/#unchanged-source) explains the principle behind this.
 
@@ -39,7 +39,7 @@ Yes. When the drive is unplugged, its games stay in the library marked **Unavail
 
 ### Do I still need CrossOver or WINE?
 
-Only for games that have no native runtime. When a Windows game does need WINE, MacLauncher downloads and manages [Sikarugir](https://github.com/Sikarugir-App/Sikarugir), a free WINE distribution, and [WineCX](https://github.com/dappermint/winecx-gptk), a free WINE built from CrossOver's changes for macOS 26. It can also use an installed copy of CrossOver instead, which is usually the better choice for those who own it. All three are also offered for games of every other type that include a compatible Windows executable, next to their native runtime. See [Windows games through WINE](/maclauncher/games/windows/).
+Only for games that have no native runtime. When a Windows game does need WINE, MacLauncher can download, install and update two free versions of it: [Sikarugir](https://github.com/Sikarugir-App/Sikarugir), a free WINE package for the Mac, and [WineCX](https://github.com/dappermint/winecx-gptk), a WINE built with CrossOver's changes that needs macOS 26. It can also use an installed copy of CrossOver instead, which is usually the better choice if you own it. All three are also offered for games of every other type that include a compatible Windows executable, next to their native runtime. See [Windows games through WINE](/maclauncher/games/windows/).
 
 ### How do Android games run?
 
@@ -55,13 +55,13 @@ Mostly not. Most runtimes run the game's own engine natively on macOS, or run th
 
 ### Why is it built on Electron?
 
-Browser-based games are a big share of all games, and they run on the included [Electron](https://www.electronjs.org/) without any download. The codebase can also move to other platforms later, and the launcher's own weight hardly matters once a game is running. To skip the library window entirely, save a `.command` launcher for a game and double-click that.
+Browser-based games are a big share of all games, and they run without any download on [Electron](https://www.electronjs.org/), the browser engine MacLauncher itself is built on. The codebase can also move to other platforms later, and the launcher's own weight hardly matters once a game is running. To skip the library window entirely, save a `.command` launcher for a game and double-click that.
 
 ## Trust and verification
 
 ### Does MacLauncher collect any data?
 
-No. MacLauncher sends no telemetry. The diagnostics it records go only into its log file on the Mac, which **Help → Show Log in Finder** opens, where they help trace a problem when troubleshooting, and nothing sends that log anywhere. Anyone can read MacLauncher's source on [GitHub](https://github.com/procrastinine/maclauncher) to confirm this.
+No. MacLauncher sends no telemetry. The diagnostics it records go only into a log file on the Mac, where they help trace a problem when troubleshooting; **Help → Show Log in Finder** opens it, and nothing sends that log anywhere. Anyone can read MacLauncher's source on [GitHub](https://github.com/procrastinine/maclauncher) to confirm this.
 
 ### Does it connect to the Internet?
 
@@ -75,7 +75,7 @@ Sometimes MacLauncher can't replace itself: macOS may be running it from a tempo
 
 ### How can I trust MacLauncher binaries?
 
-The app and the compiled packages from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds), the companion project that compiles game engines and helpers for macOS, are built on GitHub's own machines from public source code and public recipes. A recipe is the set of instructions and patches that turns a project's source into a Mac package. For every file such a build produces, GitHub signs a build record that names the exact source code, recipe and build run behind it. A few older package versions were built before this setup and have no GitHub build record; the verification table lists them separately as built locally.
+The app and the compiled packages from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds), the companion project that compiles game engines and helpers for macOS, are built on GitHub's own machines from public source code and public recipes. A recipe is the set of instructions and patches that turns a project's source into a Mac package. For every file such a build produces, GitHub signs a build record that names the exact source code, recipe and build run behind it. A few older package versions were built before this setup and have no GitHub build record, so they are listed separately as built locally.
 
 Anyone can read that source and those recipes, [check a download against its build record](#how-do-i-check-a-download-myself) with GitHub's command-line tool, and rebuild it to compare. [Verifying MacLauncher](https://github.com/procrastinine/maclauncher/blob/master/docs/development/VERIFYING.md) walks through the checks for the app, and the [package verification table](https://procrastinine.github.io/maclauncher-builds/verification.html) lists build records, recipes and supplied-file checks for MacLauncher Builds packages.
 
@@ -95,7 +95,7 @@ A rebuild is a second, independent check. A rebuilt MacLauncher Builds package i
 
 ### What about software that MacLauncher doesn't build?
 
-Some components come unchanged from their publishers, such as [Python](https://www.python.org/), [7-Zip](https://www.7-zip.org/), [Electron](https://www.electronjs.org/), Valve's SteamCMD, and Adobe's Flash Player projector, which MacLauncher Builds hosts exactly as Adobe released it. MacLauncher checks those in other ways: against the checksums that publishers list, against code signatures from Apple's Developer ID program that name the publisher, or against a checksum recorded when the file was first downloaded. [Files from other publishers](https://github.com/procrastinine/maclauncher/blob/master/docs/development/VERIFYING.md#files-from-other-publishers) lists how each one is checked. Closed-source components can't be rebuilt from source, so their trust rests on their publisher.
+Some components come unchanged from their publishers, such as [Python](https://www.python.org/), [7-Zip](https://www.7-zip.org/), [Electron](https://www.electronjs.org/), Valve's SteamCMD, and Adobe's Flash Player projector, which MacLauncher Builds hosts exactly as Adobe released it. MacLauncher checks those in other ways: against the checksums that publishers list, against code signatures from Apple's Developer ID program that name the publisher, or against a checksum recorded when the file was first downloaded. [Files from other publishers](https://github.com/procrastinine/maclauncher/blob/master/docs/development/VERIFYING.md#files-from-other-publishers) lists how each one is checked. Closed-source components can't be rebuilt from source, so trusting them means trusting their publisher.
 
 ## Troubleshooting
 
@@ -125,7 +125,7 @@ Work through these, roughly in order:
 
 1. Try another version of the same runtime in the inspector. Engines such as [Godot](https://github.com/godotengine/godot), [Unity](https://unity.com/) and [GameMaker](https://gamemaker.io/) are picky about versions.
 2. Try another runtime. A game with a compatible Windows executable also offers Sikarugir, CrossOver and WineCX, and Android games have three runtimes, with JVM and ART modes in MacLauncher Android.
-3. Check the Runtime Settings. For WINE games, switching the graphics backend fixes many rendering problems, and Japanese games may need the `ja_JP.UTF-8` locale.
+3. Check the Runtime Settings. For WINE games, switching the graphics backend (the translator that handles the game's Direct3D graphics) fixes many rendering problems, and Japanese games may need the `ja_JP.UTF-8` locale.
 4. Turn off graphics effects to rule them out, then add them back one at a time.
 5. Look at the log: **Help → Show Log in Finder** reveals MacLauncher's log file.
 

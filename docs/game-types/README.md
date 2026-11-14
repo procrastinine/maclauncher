@@ -1,12 +1,12 @@
 # Game types
 
-A game type is a game format that MacLauncher recognizes, such as Ren'Py or RPG Maker MV. Detection assigns each imported game one game type, which decides the runtimes that can play it, the settings that apply and the tools in its inspector. A runtime is one way to play a game type. Some runtimes serve a single game type, and others, such as Electron or Sikarugir, serve several.
+A game type is a game format that MacLauncher recognizes, such as Ren'Py or RPG Maker MV. Detection assigns each imported game one game type, which decides the runtimes that can play it, the settings that apply and the tools in its inspector. A runtime is one way to play a game type: some runtimes serve a single game type, and others, such as Electron or Sikarugir, serve several.
 
-Each page below covers one game type: accepted inputs, detection and version evidence, preparation and storage, saves, settings and inspector tools. Its **Runtimes** section has a subsection for each runtime that can play the game type, starting with the default. The [runtime system](../runtimes/README.md) describes runtime selection, versions and managers, and the [settings reference](../runtimes/SETTINGS_REFERENCE.md) lists every runtime setting and inspector action by game type.
+Each page below covers one game type: its accepted inputs, detection and version evidence, preparation and storage, saves, settings and inspector tools. The page's **Runtimes** section then has a subsection for each runtime that can play the game type, starting with the default. Runtime selection, versions and managers are described under the [runtime system](../runtimes/README.md), and the [settings reference](../runtimes/SETTINGS_REFERENCE.md) lists every runtime setting and inspector action by game type.
 
 ## Game types and their runtimes
 
-The table lists game types by the name the app shows. In it, *Windows runtimes* means the [Wine runtimes](../runtimes/WINE.md) [Sikarugir](../runtimes/SIKARUGIR.md), [CrossOver](../runtimes/CROSSOVER.md) and [WineCX](../runtimes/WINECX.md), which a game type offers when the game includes a compatible Windows executable.
+The table lists game types by the name the app shows. In it, *Windows runtimes* stands for the three [Wine runtimes](../runtimes/WINE.md), which a game type offers when the game includes a compatible Windows executable: [Sikarugir](../runtimes/SIKARUGIR.md), [CrossOver](../runtimes/CROSSOVER.md) and [WineCX](../runtimes/WINECX.md).
 
 | Game type | Default runtime | Other runtimes |
 | --- | --- | --- |
@@ -60,21 +60,21 @@ The table lists game types by the name the app shows. In it, *Windows runtimes* 
 
 Window entries are not imported. MacLauncher creates one for each window graphics session, which applies graphics to another app's window or to a display, and the entry exists only while that session runs.
 
-RPG Maker MV and MZ are two versions of one engine with the same runtimes, so they share a page. Prosper and 32-bit Mac are listed separately in the settings reference, but they are runtimes: Prosper belongs to [PlayStation 5](PS5.md#prosper) and 32-bit Mac to [macOS Game](MACOS.md#32-bit-mac).
+RPG Maker MV and MZ are two versions of one engine with the same runtimes, so they share a page. Prosper and 32-bit Mac have their own sections in the settings reference, although both are runtimes: Prosper belongs to [PlayStation 5](PS5.md#prosper) and 32-bit Mac to [macOS Game](MACOS.md#32-bit-mac).
 
 ## Runtimes shared by several game types
 
 ### Web runtimes
 
-Construct, GameMaker HTML5, RPG Maker MV and MZ, Tyrano and Web games run in [Electron or NW.js](../runtimes/WEB_RUNTIMES.md). Electron is included with MacLauncher, whereas NW.js versions are downloaded separately. A third choice, **NW.js (Patched)**, adds the game type's optional compatibility settings, although GameMaker HTML5 does not offer it.
+Construct, GameMaker HTML5, RPG Maker MV and MZ, Tyrano and Web games run in [Electron or NW.js](../runtimes/WEB_RUNTIMES.md). Electron is included with MacLauncher, whereas NW.js versions are downloaded separately. Every one of these game types except GameMaker HTML5 also offers a third choice, **NW.js (Patched)**, which adds the game type's optional compatibility settings.
 
 ### The game's own Mac build
 
-When a game includes a compatible macOS build of its engine, its game type offers that build as the **Game's macOS app** runtime. The table above lists the game types that do. Mac apps without a recognized engine become [macOS Game](MACOS.md) entries instead, and those whose executable is i386 only use [32-bit Mac](MACOS.md#32-bit-mac).
+When a game includes a compatible macOS build of its engine, its game type offers that build as the **Game's macOS app** runtime, and the table above lists the game types that do. Mac apps without a recognized engine become [macOS Game](MACOS.md) entries instead, and those whose executable is i386 only use [32-bit Mac](MACOS.md#32-bit-mac).
 
 ### Windows runtimes
 
-Sikarugir, CrossOver and WineCX play the [Windows Game](WINDOWS.md) type. They are also offered for other game types whose files include a compatible x86 or x64 Windows executable, and offering them does not change the detected engine and version, the engine's tools or its default runtime. For BGI / Ethornell, CatSystem2 and Haxe native builds, which have no runtime that plays them on macOS, Play runs the Windows executable through one of these three, a registered CrossOver application when one is available and Sikarugir otherwise. [Windows executables in other game types](WINDOWS.md#windows-executables-in-other-game-types) describes the rules.
+Sikarugir, CrossOver and WineCX play the [Windows Game](WINDOWS.md) type. They are also offered for other game types whose files include a compatible x86 or x64 Windows executable, without changing the detected engine and version, the engine's tools or its default runtime. BGI / Ethornell, CatSystem2 and Haxe native builds have no runtime that plays them on macOS, so Play runs their Windows executable through one of these three: a registered CrossOver application when one is available, and Sikarugir otherwise. [Windows executables in other game types](WINDOWS.md#windows-executables-in-other-game-types) describes the rules.
 
 ### Inspection-only runtimes
 

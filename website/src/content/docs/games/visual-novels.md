@@ -8,7 +8,7 @@ sidebar:
   order: 2
 ---
 
-[Visual novels](https://en.wikipedia.org/wiki/Visual_novel) that were only ever released for Windows can often run natively on a Mac, with proper fonts, audio and fullscreen. This is possible because most visual-novel engines are interpreters: the game is a set of script and asset archives, and the engine reads them. Fan and preservation communities have written open-source interpreters for many of these engines, and MacLauncher builds and manages them for macOS.
+[Visual novels](https://en.wikipedia.org/wiki/Visual_novel) that were only ever released for Windows can often run natively on a Mac, with proper fonts, audio and fullscreen. This is possible because most visual-novel engines are interpreters: the game is a set of script and asset archives, and the engine reads them. Fan and preservation communities have written open-source interpreters for many of these engines, and MacLauncher builds them for macOS and installs them for you.
 
 [Ren'Py](/maclauncher/games/desktop-engines/#renpy), the most popular modern engine, is covered on the desktop engines page, and Tyrano runs with the other [web games](/maclauncher/games/desktop-engines/#web-games) there.
 
@@ -31,7 +31,7 @@ Each engine below is its own game type, linked to its guide.
 | [BGI / Ethornell](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/BGI.md) | No native interpreter; see [below](#engines-without-a-native-interpreter) |
 | [CatSystem2](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/CATSYSTEM2.md) | No native interpreter; see [below](#engines-without-a-native-interpreter) |
 
-When a game includes a compatible Windows executable, its game type also offers the [WINE runtimes](/maclauncher/games/windows/), Sikarugir, CrossOver and WineCX, as runtimes.
+When a game includes a compatible Windows executable, its game type also offers the three [WINE runtimes](/maclauncher/games/windows/), Sikarugir, CrossOver and WineCX, which run the Windows version through the WINE compatibility layer instead.
 
 Support depends on the engine and its format, and the same game can use different engines or formats across platforms and re-releases. To find out which engine a release uses, check [VNDB](https://vndb.org/), the visual novel database, which lists the engine on many release pages. Each interpreter supports the formats its own project supports, and some engines changed formats over the years, so the guides list exactly which variants work.
 
@@ -43,7 +43,7 @@ Interpreters such as siglus_rs and RFVP keep their own save files, separate from
 
 ### Fonts and languages
 
-Many visual novels are Japanese and expect Japanese system fonts. The native interpreters, however, handle text shaping and fonts themselves, and fan translations and patches that the engine supports also keep working.
+Many visual novels are Japanese and expect Japanese system fonts, but the native interpreters handle text shaping and fonts themselves. Fan translations and patches also keep working, as long as the engine supports them.
 
 ### Script tools
 

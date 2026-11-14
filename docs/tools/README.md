@@ -1,23 +1,23 @@
 # Inspector tools
 
-Each game type has inspector tools that read, extract or decompile its data. They appear as actions in the **Tools** section of the game's inspector. Tools belong to the game type and read the game's original data, whichever runtime plays it. Each game-type page describes its tools in full.
+Each game type has inspector tools that read, extract or decompile its data, and they appear as actions in the **Tools** section of the game's inspector. Because the tools belong to the game type, they read the game's original data whichever runtime plays it. This page lists them by game type and describes how they are downloaded and where their output goes; each game-type page describes its own tools in full.
 
 The tools produce four kinds of output:
 
 - An inspection report describes the original data.
 - An extraction copies stored resources or scripts unchanged.
-- A decompilation reconstructs readable code from compiled data. Names, comments and control structure can be lost.
-- Native C pseudocode describes machine code. It does not reconstruct an original C++, C#, Haxe, Swift or Objective-C project.
+- A decompilation reconstructs readable code from compiled data, although names, comments and control structure can be lost.
+- Native C pseudocode describes machine code and does not reconstruct an original C++, C#, Haxe, Swift or Objective-C project.
 
 None of these outputs changes which runtime can play a game.
 
 Some tools apply to many game types and have their own pages: [native binary inspection](NATIVE_INSPECTION.md), the [installer reader](INSTALLERS.md), [save snapshots](SAVE_SNAPSHOTS.md) and [cheats](CHEATS.md).
 
-Patches, plugins and add-ons that write into a game's folder are described with their game types: [Ren'Py Patch](../game-types/RENPY.md#renpy-patch), the [Ren'Py console](../game-types/RENPY.md#renpy-console) and [cheat add-ons](CHEATS.md#renpy-cheat-add-ons), the RPG Maker MV [library patches and MV and MZ plugins](../game-types/RPGMAKER_MV_MZ.md#plugins-and-extraction), and the [NW.js Tools patch](CHEATS.md#nwjs-patching). Each can be removed from the same place. Runtime-level changes leave the game's files unchanged: [NW.js (Patched)](../runtimes/WEB_RUNTIMES.md#nwjs-patched), mac32 [game compatibility patches](../game-types/MACOS.md#settings) and the Windows upscaling adapters ([CrossOver](../runtimes/CROSSOVER.md#temporal-upscaling), [Sikarugir](../runtimes/SIKARUGIR.md#game-temporal-integration)).
+Patches, plugins and add-ons that write into a game's folder are described with their game types, and each can be removed from the same place that adds it: [Ren'Py Patch](../game-types/RENPY.md#renpy-patch), the [Ren'Py console](../game-types/RENPY.md#renpy-console) and [cheat add-ons](CHEATS.md#renpy-cheat-add-ons), the RPG Maker MV [library patches and MV and MZ plugins](../game-types/RPGMAKER_MV_MZ.md#plugins-and-extraction), and the [NW.js Tools patch](CHEATS.md#nwjs-patching). Changes made at the runtime level leave the game's files unchanged instead. These are [NW.js (Patched)](../runtimes/WEB_RUNTIMES.md#nwjs-patched), the mac32 [game compatibility patches](../game-types/MACOS.md#settings) and the Windows upscaling adapters ([CrossOver](../runtimes/CROSSOVER.md#temporal-upscaling), [Sikarugir](../runtimes/SIKARUGIR.md#game-temporal-integration)).
 
 ## Tools by game type
 
-Actions separated by a semicolon are in different action groups of the inspector.
+In the table, a semicolon separates actions that sit in different action groups of the inspector.
 
 | Game type | Inspector actions | Tools and output |
 | --- | --- | --- |
@@ -49,7 +49,7 @@ Actions separated by a semicolon are in different action groups of the inspector
 | [Nitroplus](../game-types/NITROPLUS.md#inspector-tools) | **Inspect archives**; under **More…**, **Extract scripts**, **Check script compiler** and **Log** | The included NPA and NSS reader reports archive metadata and extracts NSS source. The selected libnpengine compiler checks scripts. |
 | [NScripter](../game-types/NSCRIPTER.md#tools) | **Export script**, **Reveal source** | The included script decoder exports plaintext and encoded scripts. |
 | [PlayStation 5](../game-types/PS5.md#inspector-tools) | **Inspect package**, **Inspect program**, **Decompile**, **Show export** | An included reader reports PKG headers. The selected AnyPS5 runtime extracts decrypted SELF input, and Rizin / Ghidra exports C pseudocode. |
-| [Ren'Py](../game-types/RENPY.md#tools) | **Extract**; **Inspect save metadata** | rpatool, unrpyc and the UnRen compatibility routes export archive members and reconstructed `.rpy` scripts. An included reader reports save metadata. |
+| [Ren'Py](../game-types/RENPY.md#tools) | **Extract**; **Inspect save metadata** | rpatool, unrpyc and the module's UnRen compatibility tools export archive members and reconstructed `.rpy` scripts. An included reader reports save metadata. |
 | [RPG Maker 2000/2003](../game-types/RPGMAKER_2000_2003.md#tools) | **Export project JSON**, **Export game text**, **Reveal export**; **Inspect project** | The included rpgrt LCF readers export project data as JSON and translatable text. |
 | [RPG Maker MV and MZ](../game-types/RPGMAKER_MV_MZ.md#plugins-and-extraction) | **Extract**; [save editor](../game-types/RPGMAKER_MV_MZ.md#structured-save-editing) | RPGMakerDecrypter decrypts assets into a readable project tree. JavaScript, plugins and JSON are readable directly. |
 | [RPG Maker XP/VX/VX Ace](../game-types/RPGMAKER_XP_VX.md#ruby-scripts) | **Export Ruby scripts**, **Reveal scripts**, **Repack edited scripts**; **Find portable saves**, **Inspect save or database**; **Extract** | Included Ruby Marshal and script-table readers export scripts and inspect saves and databases. RPGMakerDecrypter extracts RGSS archives. |
@@ -67,32 +67,32 @@ Actions separated by a semicolon are in different action groups of the inspector
 
 Tools, and the Java or .NET hosts that some of them need, are downloaded and installed like runtimes, as described in [Downloads and offline use](../runtimes/README.md#downloads-and-offline-use).
 
-Each tool's version list comes from its publisher's release metadata, such as GitHub releases, ILSpy's NuGet history and the PyPI files of Siglus SceneScript Utility, which installs from the release's pure-Python wheel. A download is recognized by the tool's name, its platform and a supported archive type, so a release stays listed when the publisher renames a file, adds a file for another platform or changes the archive format. When several files match, the file with the tool's usual name is preferred. The publisher's SHA-256 or SHA-512 digest is verified when one is published; otherwise the SHA-256 of the downloaded file is recorded at installation. Executables, JAR files and their companion files are found at their usual location in the package or, when a release moves them, through a limited search of its folders.
+Each tool's version list comes from its publisher's release metadata, such as GitHub releases, ILSpy's NuGet history and the PyPI files of Siglus SceneScript Utility, which installs from the release's pure-Python wheel. Within a release, the download is recognized by the tool's name, its platform and a supported archive type, so the release stays listed when the publisher renames a file, adds a file for another platform or changes the archive format. If several files match, the one with the tool's usual name is preferred. When the publisher provides a SHA-256 or SHA-512 digest, that digest is verified; otherwise the SHA-256 of the downloaded file is recorded at installation. Executables, JAR files and their companion files are found at their usual location in the package or, when a release moves them, through a limited search of its folders.
 
-msg-tool always receives the `LICENSE` file from its repository at the release's commit, and any Windows tool whose package has no license file receives the repository's license notice in the same way. A tool whose repository has no notice installs without one.
+msg-tool always receives the `LICENSE` file from its repository at the release's commit. Any Windows tool whose package has no license file receives the repository's license notice in the same way, and a tool whose repository has no notice installs without one.
 
-When a saved tool version is neither listed nor installed, the newest listed version takes its place. A Java tool whose saved Java version is no longer listed installs the newest listed version of that Java line, and the .NET host matches the framework that the selected ILSpy package declares.
+If a saved tool version is neither listed nor installed, the newest listed version takes its place. Likewise, a Java tool whose saved Java version is no longer listed installs the newest listed version of that Java line, and the .NET host follows the framework that the selected ILSpy package declares.
 
-Exports go to the game's launcher data folder. Near Infinity is the exception: it is an external editor, and edits saved in it can change the game's original resources.
+Exports go to the game's launcher data folder. Near Infinity is the exception, because it is an external editor and edits saved in it can change the game's original resources.
 
-Each tool's command log rotates when it reaches 8 MiB, keeping one previous log.
+Each tool's command log rotates when it reaches 8 MiB, and one previous log is kept.
 
 ## Tools and runtimes
 
-Choosing a different runtime for a game keeps the tools of its detected game type.
+A game keeps the tools of its detected game type when a different runtime is chosen for it.
 
 - A game detected as another engine can also run through the Windows runtimes, Sikarugir, CrossOver and WineCX. Unity, GameMaker, visual novel and other engine tools keep reading the detected data, while a game imported as Windows Game gets native binary inspection. [Windows Game](../game-types/WINDOWS.md#windows-executables-in-other-game-types) describes when the Windows runtimes are offered.
 - Windows-only tools such as alice-tools, RLdev, sc3tools, WolfTL, UberWolf and hlbc run in their own private Sikarugir or CrossOver tool environments, separate from gameplay.
-- Some game types offer an inspection-only backend, such as BGI's **Program tools**, CatSystem2's **Archive and script tools**, **Native build inspection** for Haxe and GameMaker's **Inspect only**, which provides the tools without an interpreter. When none of a game type's own runtimes can launch a game, a compatible Windows executable plays through a registered CrossOver application or, otherwise, Sikarugir, and the tools stay available.
-- [mac32](../game-types/MACOS.md#32-bit-mac) runs eligible 32-bit Intel Mac applications. An app detected as an engine keeps that engine's tools. mac32 does not run Windows or ARM binaries, convert scripts or engine source, add missing managed IL or restore source from stripped machine code.
-- Java games choose a Temurin LTS line (8, 11, 17, 21 or 25) or a feature release from the **Other** section. The game's bytecode version and the CPU requirements of its JNI libraries limit the choice. Vineflower, JADX, Apktool, FFDec, Near Infinity and unluac each choose their own compatible Java host, so changing a tool's host does not change a game's Java line.
-- Android games use the same package inspection and decompilation actions with every runtime. **MacLauncher Android** groups the JVM and ART execution packages, which share each game's application data and keep separate generated-code caches. Mac.apk and AIM are separate providers and do not replace JADX or Apktool. Inspecting or exporting an APK does not show that the app can run on any of them.
-- The Electron and NW.js runtimes leave the shipped JavaScript inspectable, and no runtime recovers authoring sources the game does not ship. NW.js debugging facilities depend on the selected package, and **NW.js (Patched)** applies the module's compatibility preparation to the same game format. **Game's macOS app** runs a supplied macOS application; it adds no debugging interface, source recovery or portable engine.
-- Player compatibility and tool compatibility are separate. A working export does not mean the game plays, and a playable game can contain a script or asset version that a tool does not support.
+- Some game types offer an inspection-only backend that provides the tools without an interpreter, such as BGI's **Program tools**, CatSystem2's **Archive and script tools**, **Native build inspection** for Haxe and GameMaker's **Inspect only**. When none of a game type's own runtimes can launch a game, a compatible Windows executable plays through a registered CrossOver application or, failing that, Sikarugir, and the tools stay available.
+- [mac32](../game-types/MACOS.md#32-bit-mac) runs eligible 32-bit Intel Mac applications, and an app detected as an engine keeps that engine's tools. mac32 does not run Windows or ARM binaries, convert scripts or engine source, add missing managed IL or restore source from stripped machine code.
+- Java games choose a Temurin LTS line (8, 11, 17, 21 or 25) or a feature release from the **Other** section, within the limits set by the game's bytecode version and the CPU requirements of its JNI libraries. Vineflower, JADX, Apktool, FFDec, Near Infinity and unluac each choose their own compatible Java host, so changing a tool's host does not change a game's Java line.
+- Android games have the same package inspection and decompilation actions with every runtime. **MacLauncher Android** groups the JVM and ART execution packages, which share each game's application data and keep separate generated-code caches. Mac.apk and AIM are separate Android runtimes and do not replace JADX or Apktool. Inspecting or exporting an APK does not show that the app can run on any of them.
+- The Electron and NW.js runtimes leave the shipped JavaScript inspectable, but no runtime recovers authoring sources that the game does not ship. NW.js debugging facilities depend on the selected package, and **NW.js (Patched)** applies the module's compatibility preparation to the same game format. **Game's macOS app** runs a supplied macOS application and adds no debugging interface, source recovery or portable engine.
+- Whether a game plays and whether a tool can read it are separate questions. A working export does not mean the game plays, and a playable game can contain a script or asset version that a tool does not support.
 
 ## Where tools appear in Runtimes
 
-These tools are installed in **Runtimes**, where each keeps its own versions apart from game data and runtime installations. A tool that serves one game type is a subtab of that game type's Runtimes entry, and the **Tools** entry holds tools that several game types share.
+The tools are installed in **Runtimes**, where each keeps its own versions apart from game data and runtime installations. A tool used by one game type is a subtab of that game type's Runtimes entry, while the **Tools** entry holds the tools that several game types share.
 
 | Location in Runtimes | Tool | Use | Host |
 | --- | --- | --- | --- |
@@ -106,7 +106,7 @@ These tools are installed in **Runtimes**, where each keeps its own versions apa
 | Tools → Apktool | [Apktool](https://github.com/iBotPeaches/Apktool) | Decodes APK smali and resources with the standalone upstream JAR. | Shared Temurin |
 | Flash → JPEXS FFDec | [JPEXS FFDec](https://github.com/jindrapetrik/jpexs-decompiler) | Exports Flash scripts and resources. | Shared Temurin |
 | GemRB → Near Infinity | [Near Infinity](https://github.com/Argent77/NearInfinity) | Browses and edits Infinity Engine resources. | Shared Temurin |
-| LÖVE → LJD | [LJD](https://github.com/dol/luajit-decompiler) | Recovers LuaJIT 2.0 and 2.1 bytecode. Refresh discovers upstream commit snapshots. | Included Python |
+| LÖVE → LJD | [LJD](https://github.com/dol/luajit-decompiler) | Recovers LuaJIT 2.0 and 2.1 bytecode. Refresh lists upstream commit snapshots. | Included Python |
 | LÖVE → unluac | [unluac](https://sourceforge.net/projects/unluac/) | Recovers standard Lua 5.0–5.4 bytecode with the official SourceForge JAR. | Shared Temurin |
 | Siglus → Siglus SceneScript Utility | [Siglus SceneScript Utility](https://github.com/Jirehlov/SiglusSceneScriptUtility) | Recovers and disassembles Siglus scripts with the universal Python package. | Included Python |
 | RealLive (RLVM) → RLdev | [RLdev Go edition](https://github.com/yoremi-trad-fr/rldev2026-go-edition) | Recovers RealLive scenarios with the portable Windows tool and its matching KFN definitions. | Private Windows environment |
@@ -120,20 +120,20 @@ These tools are installed in **Runtimes**, where each keeps its own versions apa
 | HashLink → hlbc | [hlbc](https://github.com/Gui-Yom/hlbc) | Exports HashLink bytecode, opcodes and hlbc's decompiler pseudocode. | Private Windows environment |
 | Godot → GDRE Tools | [GDRE Tools](https://github.com/GDRETools/gdsdecomp) | Recovers Godot projects, scripts and resources. | Native |
 | GameMaker → GM8Decompiler, UMT | [GM8Decompiler](https://github.com/OpenGMK/OpenGMK), [UndertaleModTool](https://github.com/UnderminersTeam/UndertaleModTool) | Decompile Classic and Studio VM data. UMT also exports embedded texture pages and normal raster sprite frames. | Native |
-| Java (Temurin) → Vineflower | [Vineflower](https://github.com/Vineflower/vineflower) | Decompiles Java classes. The Temurin LTS sections (8, 11, 17, 21 and 25) and the **Other** section manage the Java installations of games and tools. | Compatible Temurin |
+| Java (Temurin) → Vineflower | [Vineflower](https://github.com/Vineflower/vineflower) | Decompiles Java classes. The Temurin LTS sections (8, 11, 17, 21 and 25) and the **Other** section hold the Java installations used by games and tools. | Compatible Temurin |
 | ScummVM → ScummVM Tools | [ScummVM Tools](https://github.com/scummvm/scummvm-tools) | Extracts archives with the published Intel Mac tools. | Native; Rosetta on Apple Silicon |
 | mpv player | [mpv](https://mpv.io/) | The player also reads stream and container metadata without opening a window or playing audio. | Native |
 
 ## Included readers
 
-MacLauncher includes the readers below, so they need no separate decompiler download. An extraction or compilation that relies on a runtime can still require the selected engine package.
+The readers below are included with MacLauncher and need no separate decompiler download. An extraction or compilation that relies on a runtime can still require the selected engine package.
 
 | Reader | Game types and output | Scope |
 | --- | --- | --- |
 | Package and archive readers | Construct, Tyrano, Ren'Py, RPG Maker XP/VX/VX Ace, LÖVE and supported HTML and application layouts read stored members through their inspector actions. | Extraction keeps the stored bytes and does not reconstruct source from bytecode. Safe paths, format limits and supported encryption decide what is readable. |
-| Ren'Py archive, configuration and save-metadata readers | Ren'Py: RPA and RPI metadata, literal configuration from source or compiled scripts, and save facts from ZIP and JSON. | Compiled configuration is read as inert records, without running pickle reducers or game Python. Save inspection does not deserialize the game's objects. unrpyc and UnRen reconstruct source from RPYC files separately. |
+| Ren'Py archive, configuration and save-metadata readers | Ren'Py: RPA and RPI metadata, literal configuration from source or compiled scripts, and save facts from ZIP and JSON. | Compiled configuration is read as plain records, without running pickle reducers or game Python. Save inspection does not deserialize the game's objects. unrpyc and UnRen reconstruct source from RPYC files separately. |
 | Ruby Marshal and script-table readers | RPG Maker XP/VX/VX Ace: scripts, database and save records, and explicit repacking of edited scripts. | Supported Marshal types are read as data. Ruby classes and code are never run to recover unknown behavior. |
-| LCF database and map readers | RPG Maker 2000/2003: project JSON, text and event records. | RPG Maker 2000/2003 records are engine data, not general-purpose source code. |
+| LCF database and map readers | RPG Maker 2000/2003: project JSON, text and event records. | RPG Maker 2000/2003 records are engine data and contain no general-purpose source code. |
 | WOLF archive reader | WOLF RPG Editor: member lists and supported asset extraction. | Pro and key variants need UberWolf. The reader does not guess unknown keys. |
 | KIF cipher and CatScene, CSTL, FES and HG-3 readers | CatSystem2: decrypted archive members, typed script and transcript data, and supported lossless images. | The universal cipher helper is included. Only recognized key resources and layouts are decoded, and scripts are inspected, never run. |
 | BGI, XP3, NScripter, MPK/SC3, NPA/NSS, HCB and AI5 metadata readers | BGI / Ethornell, KiriKiri, NScripter, MAGES., Nitroplus, FAVORITE / FVP and AI5WIN: archive and program metadata, and the script exports listed above. | Supported versions, encodings and encryption differ by engine. Message extraction, constant pools and original bytecode exports are kept separate from reconstructed source. |

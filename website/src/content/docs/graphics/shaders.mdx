@@ -8,7 +8,7 @@ sidebar:
   order: 7
 ---
 
-Shaders are small GPU programs that transform an image. The communities around [ReShade](https://reshade.me/), [RetroArch](https://www.retroarch.com/), [mpv](https://mpv.io/), [Magpie](https://github.com/Blinue/Magpie) and other projects have written thousands of them, from CRT simulations and anime upscalers to film grades, bloom and ambient occlusion. MacLauncher runs shaders from all of these projects on macOS, side by side in the same chain, so shaders you already use elsewhere can often be used here too.
+Shaders are small GPU programs that transform an image. Thousands of them have been written for post-processing and display tools: [ReShade](https://reshade.me/), which adds effects to PC games; [RetroArch](https://www.retroarch.com/), the multi-system emulator front end; the [mpv](https://mpv.io/) video player; [Magpie](https://github.com/Blinue/Magpie), a window upscaler for Windows; and others. They range from CRT simulations and anime upscalers to film grades, bloom and ambient occlusion. MacLauncher runs shaders from all of these projects on macOS, side by side in the same [chain](/maclauncher/graphics/composing-effects/), so a shader you already use elsewhere can often be used here too.
 
 ## Formats
 
@@ -17,7 +17,7 @@ MacLauncher accepts shaders in these formats:
 | Format | Files | Where it comes from |
 | --- | --- | --- |
 | ReShade FX | `.fx` | ReShade's large library of post-processing effects for PC games. Techniques, includes, lookup textures and parameters all work. |
-| [RetroArch Slang](https://github.com/libretro/slang-shaders) | `.slangp`, `.slang` | RetroArch's shader presets, run through [librashader](https://github.com/SnowflakePowered/librashader) on [Metal](https://developer.apple.com/metal/). Multi-pass presets keep their scaling and textures. |
+| [RetroArch Slang](https://github.com/libretro/slang-shaders) | `.slangp`, `.slang` | RetroArch's shader presets, run on [Metal](https://developer.apple.com/metal/) by [librashader](https://github.com/SnowflakePowered/librashader), a library that runs RetroArch shaders outside RetroArch. Multi-pass presets keep their scaling and textures. |
 | mpv / [libplacebo](https://libplacebo.org/) | `.glsl`, `.hook` | Video-player shaders: upscalers like [Anime4K](https://github.com/bloc97/Anime4K) and FSRCNNX, chroma reconstruction, debanding, grain. |
 | LUT | `.cube` | Color grades from photo and video editors, as 1D, 3D or combined tables. |
 | [ISF](https://isf.video/) | `.fs`, `.isf` | Interactive Shader Format effects from the VJ and video world. |
@@ -25,21 +25,21 @@ MacLauncher accepts shaders in these formats:
 
 ## The shader library
 
-All shaders live in one shared library: the effects included with MacLauncher, the ones from installed collections, and the files you import. You can open it with **Manage filters…** in the inspector, which shows the library in **Settings → Graphics → Shaders**.
+Every shader MacLauncher knows about sits in one shared library, whether it was included with MacLauncher, came from an installed collection or was imported by you. **Manage filters…** in the inspector opens that library in **Settings → Graphics → Shaders**.
 
-To add your own shader, use **Import filter…**, drop the file onto MacLauncher, or open it from Finder. The library records where the file lives and never copies or changes it. Includes, preset passes and textures are also read from their places next to the shader, so a shader folder works as it is. Imported shaders appear in the matching menus immediately, and an entry can be renamed for display without changing which file it uses.
+To add your own shader, use **Import filter…**, drop the file onto MacLauncher, or open it from Finder. The library only records where the file lives; it never copies or changes it. Includes, preset passes and textures are read from where they sit next to the shader, so a shader folder works as it is. An imported shader shows up in the matching menus right away, and you can rename its entry for display without changing which file it uses.
 
 For one-off use, **Custom shader…** on a chain row points that row directly at a file.
 
 ## Parameters
 
-Most shaders expose settings, which **Shader parameters…** on a row lists with their original names, defaults and ranges. Changes apply live, and changing a compile-time setting recompiles the shader in the background while the game keeps running. Because each row keeps its own values, the same shader can appear twice with different settings.
+Most shaders have settings of their own. **Shader parameters…** on a row lists them with their original names, defaults and ranges, and changes apply live. A compile-time setting needs the shader to be recompiled, which happens in the background while the game keeps running. Each row keeps its own values, so the same shader can appear twice with different settings.
 
-Shaders that read the game's depth also get **Depth input** settings, for games that store depth reversed, logarithmically or with an unusual far plane. These settings are shared by all of a game's depth shaders.
+Shaders that read the game's depth (how far away each pixel is) also get **Depth input** settings, because some games store depth reversed, logarithmically or with an unusual far plane. These settings are shared by all of a game's depth shaders.
 
 ## Collections
 
-Collections are curated sets of shaders from upstream projects. They are managed in **Runtimes → Effects → Shaders**, where **Refresh** lists a collection's versions and **Install** downloads one from the original source. Each installed collection records its exact source version and keeps its license notices.
+Collections are curated sets of shaders that MacLauncher downloads from the projects that publish them. You install them in **Runtimes → Effects → Shaders**, where **Refresh** lists a collection's versions and **Install** downloads one from its original source. Each installed collection records the exact version it came from and keeps its license notices.
 
 | Collection | What's inside |
 | --- | --- |
@@ -62,6 +62,6 @@ Collections are curated sets of shaders from upstream projects. They are managed
 | [AstrayFX](https://github.com/BlueSkyDefender/AstrayFX) | RadiantGI indirect lighting, GloomAO ambient occlusion, anti-aliasing, Smart Sharp and Clarity sharpening, bloom, lens flare and image trails. Several effects use game depth. Its author permits only unmodified copies, so MacLauncher installs it exactly as published. |
 | [OtisFX](https://github.com/FransBouma/OtisFX) | Cinematic depth of field, adaptive and height fog, depth haze, MultiLUT and PandaFX grading, and golden-ratio composition guides. |
 
-Whether a shader comes from a collection or from your own files, MacLauncher places it in the chain by what it declares about its output size and inputs, whatever its name. A shader that always doubles its input is an Upscale, one that keeps the size is an Image filter, and one that needs depth is marked as such and runs only in games that provide depth.
+Whether a shader comes from a collection or from your own files, MacLauncher decides where it belongs in the chain from what the shader declares about its output size and inputs, regardless of its name. A shader that always doubles its input is an Upscale, and one that keeps the size is an Image filter. A shader that needs depth is marked as such and runs only in games that provide depth.
 
-The [shader library section](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#shader-library) of MacLauncher's graphics guide has the complete details for each format and [collection](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#collections), and the [shader integration reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/SHADERS_AND_MEDIA.md) describes how shaders are sized and which inputs they receive.
+The [shader library section](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#shader-library) of MacLauncher's graphics guide has the complete details for each format and [collection](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#collections). The [shader integration reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/SHADERS_AND_MEDIA.md) describes how shaders are sized and which inputs they receive.
