@@ -217,6 +217,38 @@ test("ordinary Wine uses original files without staging or reconciling earlier v
   assert.equal(dependencies.calls.length, 2, "warm Play does not initialize its prefix again");
 });
 
+test("Wine preparation restores a selected builtin after a later preparation failure", async t => {
+  const directory=fixture(t), entry=game(directory), install=installation(directory), dependencies=adapters(install);
+  const events=[], original=new Error("game environment rejected"), conflict=new Error("later prefix owner retained"), warnings=[];
+  const prepare=dependencies.prepareGraphicsView;
+  dependencies.prepareGraphicsView=async options=>({ ...await prepare(options),
+    applyPrefix:async()=>{assert.ok(fs.existsSync(path.join(options.prefixPath,"system.reg")));events.push("apply");},
+    restore:async()=>{events.push("restore");throw conflict;} });
+  await assert.rejects(Launch.prepareLaunch(entry,{userDataDir:path.join(directory,"data"),settings:{},runtimeSettings:{},
+    logger:{warn:(...values)=>warnings.push(values)},applyGameEnvironment:async()=>{events.push("environment");throw original;}},dependencies),error=>error===original);
+  assert.deepEqual(events,["apply","environment","restore"]);
+  assert.ok(warnings.some(values=>values.join(" ").includes(conflict.message)));
+});
+
+test("WineVulkan selection follows the selected Vulkan driver without HUD or DLSS demand", async t => {
+  const directory=fixture(t), entry=game(directory), install=installation(directory), dependencies=adapters(install), originalResolve=dependencies.resolveTranslators;
+  const selected={inputs:[]}, calls=[];
+  t.mock.method(require("../src/modules/crossover/sources/wine-graphics"),"wineVulkanSelection",(root,actual)=>{calls.push({root,actual});return selected;});
+  dependencies.graphicsRoot=path.join(directory,"included-graphics");
+  dependencies.resolveTranslators=async(...args)=>{
+    const plan=await originalResolve(...args);
+    plan.components["vulkan-driver"]={used:{id:"fixture-vulkan",engine:"moltenvk",root:install.wineRoot,files:[],included:true}};
+    return plan;
+  };
+  const context={userDataDir:path.join(directory,"data"),settings:{},runtimeSettings:{}};
+  await Launch.prepareLaunch(entry,context,dependencies);
+  assert.deepEqual(calls,[{root:dependencies.graphicsRoot,actual:install}]);
+  assert.equal(dependencies.graphicsCalls[0].vulkanSelection,selected);
+  const without=adapters(install);without.graphicsRoot=dependencies.graphicsRoot;
+  await Launch.prepareLaunch(entry,context,without);
+  assert.equal(calls.length,1,"no selected Vulkan driver retains the publisher route");
+});
+
 test("ordinary Wine preparation configures its private prefix silently and preserves source files and saves", async t => {
   const directory = fixture(t), entry = game(directory), install = installation(directory), dependencies = adapters(install);
   fs.writeFileSync(path.join(entry.gamePath, "settings.ini"), "original");

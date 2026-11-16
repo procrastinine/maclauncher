@@ -270,9 +270,13 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   let { view: cameraView, gameRoot, executablePath } = folder;cameraBridge = folder.cameraBridge;
   const GraphicsInputs = require("../graphics-inputs");
   context.graphicsInputs = GraphicsInputs.inputs(selected.install, GraphicsInputs.merge(cameraBridge?.inputs, vulkanCamera?.inputs, plans.sceneInputs), { fallback: "x86_64" });
+  const vulkanSelection = translatorPlan.components["vulkan-driver"]?.used
+    ? require("./wine-graphics").wineVulkanSelection(dependencies.graphicsRoot || require("../../shared/reshade").runtimeRoot(context.app), selected.install,
+      { layout: translatorPlan.layout, signal: context.signal }) : null;
   const nativeInputs = [selected.install.executablePath, selected.install.serverPath,
     ...(translatorPlan.layout.unixRoot ? ["ntdll.so", "wine"].map(name => path.join(translatorPlan.layout.unixRoot, name)).filter(file => fs.existsSync(file)) : [])]
     .map(file => ({ path: file, sha256: require("../../shared/runtime/verified-identity").fileDigest(file).sha256 }));
+  nativeInputs.push(...(vulkanSelection?.inputs || []));
   const identity = crypto.createHash("sha256").update(JSON.stringify(nativeInputs)).digest("hex").slice(0, 20);
   const windowsVersion = settings.windowsVersion || "win10";
   if (!WINDOWS_VERSIONS.has(windowsVersion)) throw new Error("Unsupported Wine Windows version.");
@@ -288,7 +292,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const viewRoot = path.join(views, `${identity}-${variant}-${translatorView.identity}`);
   Writable.assertOwnDirectory(views, viewRoot);
   const graphics = await prepareGraphicsView({ source, install: selected.install, settings, prefixPath, viewRoot, host,
-    environment: existingEnvironment, cameraBridge, vulkanDLSS, translatorPlan, translatorView, signal: context.signal, logger: context.logger, onProgress: context.onProgress, executableArchitecture: match.executableArchitecture });
+    environment: existingEnvironment, cameraBridge, vulkanDLSS, vulkanSelection, translatorPlan, translatorView, signal: context.signal, logger: context.logger, onProgress: context.onProgress, executableArchitecture: match.executableArchitecture });
+  try {
   Writable.atomicWrite(path.join(viewRoot, "prepared.json"), JSON.stringify({ inputs: [...nativeInputs, { path: path.join(translatorView.root, "prepared.json"), sha256: require("../../shared/runtime/verified-identity").fileDigest(path.join(translatorView.root, "prepared.json")).sha256 }] }) + "\n", { root: viewRoot });
   if (!existingEnvironment) {
     await ensurePrefix(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, prefixPath)), directory, { ...settings, windowsVersion: environmentVersion }, graphics, context,
@@ -358,6 +363,11 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     // The game runs from a loader whose signature refuses the graphics layer.
     ...(graphics.inProcessGraphics ? { graphicsInProcess: true } : existingEnvironment || require("./wine-graphics").graphicsLayerAttachable(selected.install) ? {} :
       { graphicsUnavailable: "The Wine loader that runs the game is signed with the hardened runtime, which ignores DYLD graphics libraries." }) };
+  } catch (error) {
+    try { await graphics.restore?.(); }
+    catch (failure) { warnGraphics(context.logger, "[runtime] Wine graphics restoration failed", failure.message); }
+    throw error;
+  }
 }
 
 // The launch functions of one Wine source.
