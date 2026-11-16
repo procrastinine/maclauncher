@@ -145,6 +145,18 @@
     "url": "https://github.com/dscharrer/innoextract"
   },
   {
+    "label": "FreeArc 0.67 (GPL-2.0)",
+    "url": "https://github.com/M-Gonzalo/FreeArc"
+  },
+  {
+    "label": "mac-game-porter FreeArc helpers (MIT)",
+    "url": "https://github.com/KarmSakha/mac-game-porter"
+  },
+  {
+    "label": "Cellar FreeArc container reader (MIT)",
+    "url": "https://github.com/joemunene-by/cellar"
+  },
+  {
     "label": "Boost (BSL-1.0)",
     "url": "https://www.boost.org/"
   },
