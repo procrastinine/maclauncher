@@ -254,8 +254,12 @@ function publisherLoader(file) {
 }
 // Whether the Wine runs from a publisher-signed loader; its view keeps links
 // where other views keep copies, so it has its own view folder.
-const publisherSigned = install => Boolean(publisherLoader(install.executablePath || path.join(engineRoot(install), "bin", "wine")) ||
-  publisherLoader(path.join(engineRoot(install), "lib", "wine", wineLayout(install).unixName, "wine")));
+// A Wine without a separate Unix loader directory has only its launcher to check.
+const publisherSigned = install => {
+  const unixName = wineLayout(install).unixName;
+  return Boolean(publisherLoader(install.executablePath || path.join(engineRoot(install), "bin", "wine")) ||
+    (unixName && publisherLoader(path.join(engineRoot(install), "lib", "wine", unixName, "wine"))));
+};
 async function prepareLoaderView(engine, viewRoot, install, signal, source) {
   const wineRoot = path.join(viewRoot, "wine"), dllRoot = path.join(wineRoot, "lib", "wine");
   const layout = wineLayout(install), bin = path.join(wineRoot, "bin"), unix = path.join(dllRoot, layout.unixName);
