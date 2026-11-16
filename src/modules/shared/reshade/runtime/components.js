@@ -86,7 +86,7 @@ function getComponents({ root = require("../index").runtimeRoot(), platform = pr
     status: anrStatus === "Included" ? anrModels ? "Models installed" : "Models required" : anrStatus,
     available: nativeAvailable(anrIncluded) && hostSupports(anrFloor, anrHost) && Boolean(anrModels),
     description: "Neural scene frame generation from 2× to 5× at 1920×1080, 2560×1440 or 3840×2160 output. The models come from Apex's macOS kit, which is downloaded or imported separately.",
-    requirements: `macOS ${anrFloor} or later on Apple Silicon. Requires renderer-provided depth, motion vectors, jitter and camera near and far planes.`
+    requirements: `macOS ${anrFloor} or later on Apple Silicon. Requires renderer-provided depth, motion vectors, jitter, the camera near plane and a finite far plane or declared infinite depth.`
   }, {
     id: "lossless", label: "Lossless Scaling", status: installed.length ? `${installed.length} ${installed.length === 1 ? "model file imported" : "model files imported"}` : "Models required",
     available: installed.length > 0,
