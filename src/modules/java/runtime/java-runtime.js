@@ -678,6 +678,20 @@ function isRosettaAvailable({ force = false } = {}) {
   return Rosetta.isAvailable({ force });
 }
 
+// Unknown CPU or format stays unknown; malformed structures and filesystem
+// failures still propagate. Both readers use the shared binary header parser.
+function readInstallArchitectures(file) {
+  try { return Native.readMachOArchitectures(file); }
+  catch (error) {
+    if (!["Runtime must be a 64-bit macOS Mach-O executable.", "Runtime uses an unsupported macOS CPU architecture."].includes(error.message)) throw error;
+    try { return require("../../../core/binary-arch").inspectBinary(file).architectures || []; }
+    catch (inspectionError) {
+      if (/^Invalid binary: unsupported Mach-O (?:header|CPU [0-9]+)$/.test(inspectionError.message)) return [];
+      throw inspectionError;
+    }
+  }
+}
+
 async function installVersion({
   userDataDir,
   line,
@@ -735,9 +749,9 @@ async function installVersion({
       throw new Error("Installed Java archive did not include a java executable.");
     }
 
-    const architectures = Native.readMachOArchitectures(extractedJavaPath);
+    const architectures = readInstallArchitectures(extractedJavaPath);
     const expectedCPU = runtimeVariant === "x64" ? "x86_64" : runtimeVariant;
-    if (!architectures.includes(expectedCPU))
+    if (architectures.length && !architectures.includes(expectedCPU))
       throw new Error(`Java architecture mismatch: intended ${expectedCPU}; measured ${architectures.join(", ")}.`);
 
     const sourceRoot = path.dirname(path.dirname(extractedJavaPath));
