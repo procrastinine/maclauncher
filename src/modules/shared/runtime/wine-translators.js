@@ -262,6 +262,11 @@ async function describedManaged(context, runtime, managers, architecture) {
 }
 async function inventoryFacts(install, runtime, context, dependencies) {
   const { managers } = dependencies;
+  if(dependencies.readOnly){
+    const describe=(root,selection)=>Description.cachedTranslator(root,{...selection,userDataDir:context.userDataDir});
+    const includedInventory=install?includedTranslators(install,runtime,{describe}):{included:[],warnings:[],layout:null};
+    return {includedInventory,choices:dependencies.choices||managedTranslators(context,runtime,managers,includedInventory.layout?.architecture||dependencies.consumerArchitecture,describe)};
+  }
   if (!dependencies.choices) for (const manager of managers.filter(item => item.translatorEngine || item.translator?.engine))
     if (manager.prepareLocalState) await manager.prepareLocalState({ ...context, settings: context.settings?.runtimes?.[manager.id], runtimeSettings: context.settings?.runtimes });
   const includedInventory = await describedIncluded(install, runtime, context);

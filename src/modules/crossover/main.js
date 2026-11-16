@@ -37,6 +37,16 @@ async function translatorOptions(entry, payload, context, dependencies = {}) {
     { value: 'vulkanBackend', label: plan.components['vulkan-driver'].used?.engine || 'auto' }
   ], translatorEnvironments: Translators.environmentIds(plan, runtime) };
 }
+async function listRuntimeRoles(entry, payload, context, dependencies = {}) {
+  const runtime = context.runtimeId || payload?.runtimeId || entry.runtimeId || manifest.runtime.default;
+  const prepared = Translators.environmentContext({...context,runtimeSettings:{...context.runtimeSettings,...payload?.runtimeSettings}});
+  const runtimeManager = dependencies.runtimeManager || Sources.get(runtime).manager();
+  const selected = runtimeManager.resolveSelection(entry, prepared.settings, prepared.userDataDir, prepared.runtimeSettings);
+  const inventory = await Translators.optionsInventory(selected.install, runtime, prepared, {...dependencies,entry,readOnly:true});
+  const plan = Translators.optionsPlan(inventory, prepared);plan.inventory=inventory;
+  const options=Translators.optionLists(selected.install,runtime,prepared,{...dependencies,inventory,plan,executableArchitecture:Detection.cachedWindowsExecutable(entry)?.executableArchitecture});
+  return require('../../core/runtime-roles').projectRuntimeRoles({plan,settings:prepared.runtimeSettings,optionLists:options,source:Sources.get(runtime),host:require('../shared/runtime/host-capabilities').getHostCapabilities(),wine:selected.install&&{...selected.install,source:runtime,label:Sources.get(runtime).label}});
+}
 // What the last Play recorded applies while the translator settings and the
 // Wine installation are unchanged.
 function recordedLaunch(entry, runtimeId, context, install) {
@@ -95,8 +105,8 @@ async function runtimeStatus(entry, _payload, context) {
   return { ...displaySelection, translatorRows: rows, details, graphicsInputs: await resolveGraphicsInputs(entry, preparedContext, selected, plan),
     versionLabel: selected.versionLabel || selected.install?.versionLabel || selected.install?.upstreamVersion || selected.install?.engineVersion || selected.version };
 }
-const graphicsBridgeActions = { runtimeStatus, listWineSettingInheritance: wineSettingInheritance, listTranslatorOptions: (entry, payload, context) => translatorOptions(entry, payload, context), listGraphicsBridgeVersions: (entry, _payload, context) => graphicsBridgeVersions(context.runtimeId || entry.runtimeId, context) };
-const graphicsBridgeSettingsActions = { listWineSettingInheritance: (payload, context) => wineSettingInheritance({}, payload, context), listTranslatorOptions: (payload, context) => translatorOptions({runtimeId:payload?.runtimeId}, payload, context), listGraphicsBridgeVersions: (payload, context) => graphicsBridgeVersions(payload?.runtimeId, context) };
+const graphicsBridgeActions = { runtimeStatus, listRuntimeRoles, listWineSettingInheritance: wineSettingInheritance, listTranslatorOptions: (entry, payload, context) => translatorOptions(entry, payload, context), listGraphicsBridgeVersions: (entry, _payload, context) => graphicsBridgeVersions(context.runtimeId || entry.runtimeId, context) };
+const graphicsBridgeSettingsActions = { listRuntimeRoles: (payload, context) => listRuntimeRoles({runtimeId:payload?.runtimeId},payload,context), listWineSettingInheritance: (payload, context) => wineSettingInheritance({}, payload, context), listTranslatorOptions: (payload, context) => translatorOptions({runtimeId:payload?.runtimeId}, payload, context), listGraphicsBridgeVersions: (payload, context) => graphicsBridgeVersions(payload?.runtimeId, context) };
 
 function graphicsBackendOptions(entry, context, { runtimeId = context.runtimeId || entry?.runtimeId || manifest.runtime.default, runtimeManager = Sources.get(runtimeId).manager(), host } = {}) {
   const selected = runtimeManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);

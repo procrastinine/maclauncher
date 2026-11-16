@@ -1,52 +1,36 @@
 'use strict';
-const {getKind} = require('../core/component-kinds');
-const FORMATS = Object.freeze({macho:['i386','x86_64','arm','arm64'],pe:['i386','x86_64','arm64','arm64ec','arm64x'],elf:['x86','x86_64','arm','aarch64']});
+const {getKind}=require('../core/component-kinds');
+const FORMATS=Object.freeze({macho:['i386','x86_64','arm','arm64'],pe:['i386','x86_64','arm64','arm64ec','arm64x'],elf:['x86','x86_64','arm','aarch64']});
 const DISCOVERY_TYPES=Object.freeze(['github-releases','builds-catalog','local-app','system']);
+const NAMESPACES=new Set(['api','vulkan','vulkan-ext','cpu','wine','interface','entitlement','gpu','metal','license','host','media','audio','steam','graphics']);
 const idPattern=/^[a-z0-9][a-z0-9-]*$/;
-function invalid(message) { throw new TypeError(`Runtime source: ${message}`); }
-function object(value,field) { if(!value || typeof value!=='object' || Array.isArray(value)) invalid(`${field} must be an object`); }
-function string(value,field) { if(typeof value!=='string'||!value.trim()) invalid(`${field} must be a nonempty string`); }
-function strings(value,field) { if(!Array.isArray(value)||value.some(v=>typeof v!=='string'||!v)) invalid(`${field} must be an array of strings`); }
-function relative(value,field) { string(value,field); if(value.startsWith('/') || value.includes('\\') || value.split('/').some(v=>v==='..') || value.includes('\0')) invalid(`${field} must be relative to the installation`); }
-function regex(value,field) {string(value,field);try{new RegExp(value);}catch{invalid(`${field} is not a regular expression`);} }
-function interfaces(value,field) {if(value===undefined)return;object(value,field);for(const k of ['provides','requires'])if(value[k]!==undefined)strings(value[k],`${field}.${k}`);}
-function declares(value) {object(value,'declares');if(!Object.keys(value).length)invalid('declares must name binary architectures');for(const [format,arches] of Object.entries(value)){if(!FORMATS[format])invalid(`unknown binary format ${format}`);strings(arches,`declares.${format}`);if(!arches.length||arches.some(a=>!FORMATS[format].includes(a)))invalid(`invalid ${format} architecture declaration`);}}
-function validateReach(tuple) {object(tuple,'reach');for(const k of ['guestFormat','guestArch','hostArch','integration'])string(tuple[k],`reach.${k}`);if(!FORMATS[tuple.guestFormat]?.includes(tuple.guestArch))invalid('reach guest format/architecture is invalid');if(!FORMATS.macho.includes(tuple.hostArch))invalid('reach hostArch is invalid');if(tuple.requires!==undefined)strings(tuple.requires,'reach.requires');return tuple;}
-function validateSource(value) {
- object(value,'source');for(const k of ['id','kind','label'])string(value[k],k);
- if(!idPattern.test(value.id)||!getKind(value.kind))invalid('invalid source id or kind');
- object(value.discover,'discover');if(!DISCOVERY_TYPES.includes(value.discover.type))invalid('unknown discovery type');
- if(value.discover.type==='github-releases'){string(value.discover.repo,'discover.repo');if(!/^[\w.-]+\/[\w.-]+$/.test(value.discover.repo))invalid('invalid GitHub repository');if(value.discover.tag)regex(value.discover.tag,'discover.tag');}
- if(value.discover.type==='builds-catalog')string(value.discover.catalog,'discover.catalog');
- for(const key of ['version','tag','digest','sha256','asset'])if(value.discover[key]!==undefined && !(key==='tag'&&value.discover.type==='github-releases'))invalid(`discovery cannot pin ${key}`);
- if(value.assets!==undefined){if(!Array.isArray(value.assets))invalid('assets must be an array');for(const asset of value.assets){object(asset,'asset');regex(asset.match,'asset.match');declares(asset.declares);}}
- if(['github-releases','builds-catalog'].includes(value.discover.type)&&!value.assets?.length)invalid('downloadable sources require asset declarations');
- object(value.layout,'layout');string(value.layout.type,'layout.type');if(value.layout.entry)relative(value.layout.entry,'layout.entry');
- if(value.embeds!==undefined){if(!Array.isArray(value.embeds))invalid('embeds must be an array');for(const embed of value.embeds){if(!getKind(embed.kind))invalid('unknown embedded kind');string(embed.id,'embed.id');relative(embed.path,'embed.path');interfaces(embed.interfaces,'embed.interfaces');if(embed.reach)embed.reach.forEach(validateReach);}}
- interfaces(value.interfaces,'interfaces');if(value.reach){if(!Array.isArray(value.reach))invalid('reach must be an array');value.reach.forEach(validateReach);}
- object(value.verify,'verify');string(value.verify.type,'verify.type');if(value.verify.match)regex(value.verify.match,'verify.match');
- return value;
+const fail=message=>{throw new TypeError('Runtime source: '+message);};
+function obj(v,p){if(!v||typeof v!=='object'||Array.isArray(v))fail(p+' must be an object');}
+function keys(v,allowed,p){obj(v,p);for(const k of Object.keys(v))if(!allowed.includes(k))fail(`unknown ${p} key ${k}`);}
+function str(v,p){if(typeof v!=='string'||!v.trim())fail(p+' must be a nonempty string');}
+function bool(v,p){if(typeof v!=='boolean')fail(p+' must be boolean');}
+function arr(v,p,fn=str){if(!Array.isArray(v))fail(p+' must be an array');v.forEach((x,i)=>fn(x,p+'['+i+']'));}
+function relative(v,p){str(v,p);if(v.startsWith('/')||v.includes('\\')||v.split('/').includes('..')||v.includes('\0'))fail(p+' must be installation relative');}
+function regex(v,p){str(v,p);try{new RegExp(v);}catch{fail(p+' is not a regular expression');}}
+function token(v,p){str(v,p);if(/^macos>=\d+(?:\.\d+){0,2}$/.test(v)||['nvapi','ngx'].includes(v))return;if(!NAMESPACES.has(v.split(':')[0])||!v.includes(':')||!v.slice(v.indexOf(':')+1))fail('unknown capability namespace in '+v);if(v.startsWith('interface:')&&!/^interface:[a-z0-9][a-z0-9.-]*\/[a-z0-9][a-z0-9._-]*$/.test(v))fail('invalid interface token '+v);}
+function interfaces(v,p='interfaces',{declared=false}={}){if(v===undefined)return;keys(v,['provides','requires'],p);for(const k of ['provides','requires'])if(v[k]!==undefined){arr(v[k],p+'.'+k,token);if(declared&&k==='provides'&&v[k].some(t=>t.startsWith('entitlement:')))fail('entitlement provides must be measured');}}
+function validateReach(v){keys(v,['guestFormat','guestArch','guestOS','hostPlatform','hostArch','integration','requires'],'reach');for(const k of ['guestFormat','guestArch','guestOS','hostPlatform','hostArch','integration'])str(v[k],'reach.'+k);if(!FORMATS[v.guestFormat]?.includes(v.guestArch))fail('invalid reach guest architecture');if(!FORMATS.macho.includes(v.hostArch))fail('invalid reach host architecture');if(!['darwin','linux','win32'].includes(v.hostPlatform)||!['windows','linux','darwin'].includes(v.guestOS)||!['process','arm64ec','wow64'].includes(v.integration))fail('invalid reach platform, OS or integration');if(v.requires)arr(v.requires,'reach.requires',token);return v;}
+function reach(v){if(v!==undefined)arr(v,'reach',validateReach);}
+function parts(v){arr(v,'parts',part=>{keys(part,['path','name','optional'],'part');relative(part.path,'part.path');if(part.name!==undefined)str(part.name,'part.name');if(part.optional!==undefined)bool(part.optional,'part.optional');});}
+function declares(v){keys(v,Object.keys(FORMATS),'declares');if(!Object.keys(v).length)fail('empty architecture declaration');for(const [format,arches]of Object.entries(v)){arr(arches,format);if(!arches.length||arches.some(a=>!FORMATS[format].includes(a)))fail('invalid '+format+' declaration');}}
+function layer(v){if(v===undefined)return;keys(v,['capability','inner'],'layer');token(v.capability,'layer.capability');relative(v.inner,'layer.inner');}
+function validateSource(v){
+ keys(v,['id','kind','label','order','manager','discover','assets','verify','layout','embeds','interfaces','labels','selector','automatic','wine','reach','layer','license','credits'],'source');for(const k of ['id','kind','label'])str(v[k],k);if(!idPattern.test(v.id)||!getKind(v.kind))fail('invalid source id or kind');if(v.order!==undefined&&!Number.isFinite(v.order))fail('order must be numeric');
+ if(v.manager){keys(v.manager,['id','sectionId','engine','formerIds','memberOrder','sectionLabel','tabLabel','category'],'manager');str(v.manager.id,'manager.id');for(const k of ['sectionId','engine','sectionLabel','tabLabel','category'])if(v.manager[k]!==undefined)str(v.manager[k],k);if(v.manager.formerIds)arr(v.manager.formerIds,'formerIds');if(v.manager.memberOrder!==undefined&&!Number.isFinite(v.manager.memberOrder))fail('memberOrder must be numeric');}
+ const d=v.discover;keys(d,['type','repo','tag','catalog','paths','includePrereleases','component'],'discover');if(!DISCOVERY_TYPES.includes(d.type))fail('unknown discovery type');if(d.type==='github-releases'){str(d.repo,'discover.repo');if(!/^[\w.-]+\/[\w.-]+$/.test(d.repo))fail('invalid repository');}if(d.tag!==undefined)regex(d.tag,'discover.tag');if(d.catalog!==undefined)str(d.catalog,'discover.catalog');if(d.paths!==undefined)arr(d.paths,'discover.paths');if(d.includePrereleases!==undefined)bool(d.includePrereleases,'includePrereleases');
+ if(v.assets!==undefined)arr(v.assets,'assets',a=>{keys(a,['match','declares','interfaces','reach','parts'],'asset');regex(a.match,'asset.match');declares(a.declares);interfaces(a.interfaces,'asset.interfaces',{declared:true});reach(a.reach);if(a.parts)parts(a.parts);});if(['github-releases','builds-catalog'].includes(d.type)&&!v.assets?.length)fail('downloadable sources require asset declarations');
+ arr(v.verify,'verify',x=>{keys(x,['type','match','path','header'],'verify entry');if(!['github-asset-digest','sums-file','archive-sums','response-header','codesign'].includes(x.type))fail('unknown verification type');if(x.type==='sums-file')regex(x.match,'verify.match');if(x.type==='archive-sums')relative(x.path,'verify.path');if(x.type==='response-header')str(x.header,'verify.header');});
+ const l=v.layout;keys(l,['type','entry','strip','root','keepSigned','paths','links'],'layout');if(!['archive','app-bundle','pkg','local-app'].includes(l.type))fail('unknown layout type');if(l.entry!==undefined)relative(l.entry,'layout.entry');if(l.strip!==undefined&&(!Number.isInteger(l.strip)||l.strip<0))fail('strip must be a nonnegative integer');if(l.root!==undefined)regex(l.root,'layout.root');if(l.strip!==undefined&&l.root!==undefined)fail('strip and root are alternatives');if(l.keepSigned!==undefined)bool(l.keepSigned,'keepSigned');if(l.paths!==undefined)arr(l.paths,'layout.paths');if(l.links)arr(l.links,'layout.links',link=>{keys(link,['path','target'],'link');relative(link.path,'link.path');relative(link.target,'link.target');});
+ if(v.labels){keys(v.labels,['source','automatic','environment','environmentName'],'labels');Object.entries(v.labels).forEach(([k,x])=>str(x,'labels.'+k));}if(v.selector){keys(v.selector,['type','key','automatic'],'selector');if(v.selector.type!=='environment')fail('unknown selector type');str(v.selector.key,'selector.key');str(v.selector.automatic,'selector.automatic');}
+ if(v.automatic){obj(v.automatic,'automatic');for(const [role,entries]of Object.entries(v.automatic)){str(role,'automatic role');arr(entries,'automatic.'+role,e=>{if(typeof e==='string')return str(e,'automatic embed');keys(e,['embed','requires','when'],'automatic entry');str(e.embed,'automatic.embed');if(e.requires)arr(e.requires,'automatic.requires',token);if(e.when){keys(e.when,['setting','not','equals','selected'],'when');if(e.when.setting!==undefined)str(e.when.setting,'when.setting');if(e.when.selected){keys(e.when.selected,['role','engine'],'selected');str(e.when.selected.role,'selected.role');str(e.when.selected.engine,'selected.engine');}}});}}
+ if(v.wine){keys(v.wine,['invocation','environmentKind','prefixModel','downloads','ownComponents','directDraw','graphicsSelector','vulkanLibrarySelector'],'wine');for(const k of ['downloads','ownComponents','directDraw','graphicsSelector','vulkanLibrarySelector'])if(v.wine[k]!==undefined)bool(v.wine[k],k);for(const k of ['invocation','prefixModel'])if(v.wine[k]!==undefined)str(v.wine[k],k);if(v.wine.environmentKind!==undefined&&v.wine.environmentKind!==null)str(v.wine.environmentKind,'environmentKind');}
+ if(v.embeds)arr(v.embeds,'embeds',e=>{keys(e,['id','kind','label','engine','parts','interfaces','reach','layer'],'embed');str(e.id,'embed.id');if(!getKind(e.kind))fail('unknown embedded kind');parts(e.parts);interfaces(e.interfaces,'embed.interfaces',{declared:true});reach(e.reach);layer(e.layer);});interfaces(v.interfaces,'interfaces',{declared:true});reach(v.reach);layer(v.layer);return v;
 }
-function validateDeclared(declared,binaries) {
- declares(declared);const measured={};
- for(const binary of binaries){if(!FORMATS[binary.format])invalid('unknown measured binary format');const arches=binary.format==='macho'?binary.architectures:[binary.machine];for(const arch of arches||[])(measured[binary.format] ||= new Set()).add(arch);}
- for(const [format,arches] of Object.entries(declared))for(const arch of arches)if(!measured[format]?.has(arch))throw new Error(`Runtime architecture mismatch: declared ${JSON.stringify(declared)}; measured ${JSON.stringify(Object.fromEntries(Object.entries(measured).map(([f,a])=>[f,[...a]])))}`);
- return true;
-}
-function validateBuild(value) {
- object(value,'build');for(const key of ['id','source','kind','version'])string(value[key],key);
- if(!getKind(value.kind))invalid('unknown build kind');
- if(typeof value.installed!=='boolean')invalid('build.installed must be boolean');
- if(!Array.isArray(value.binaries))invalid('build.binaries must be measured binary facts');
- for(const binary of value.binaries){
-  object(binary,'binary');if(!FORMATS[binary.format])invalid('unknown binary format');
-  if(binary.path!==undefined)relative(binary.path,'binary.path');
-  if(binary.format==='macho'){strings(binary.architectures,'binary.architectures');if(!binary.architectures.length||binary.architectures.some(a=>!FORMATS.macho.includes(a)))invalid('invalid Mach-O facts');}
-  else if(!FORMATS[binary.format].includes(binary.machine))invalid('invalid measured machine');
- }
- interfaces(value.interfaces,'build.interfaces');if(value.reach){if(!Array.isArray(value.reach))invalid('reach must be an array');value.reach.forEach(validateReach);}
- if(value.available===false)string(value.unavailableReason,'build.unavailableReason');
- if(value.parent!==undefined)string(value.parent,'build.parent');
- return value;
-}
-module.exports={FORMATS,DISCOVERY_TYPES,validateSource,validateReach,validateDeclared,validateBuild};
+function validateDeclared(declared,binaries){declares(declared);const measured={};for(const b of binaries)for(const a of b.format==='macho'?b.architectures||[]:[b.machine])(measured[b.format]||=new Set()).add(a);for(const [f,arches]of Object.entries(declared))for(const a of arches)if(!measured[f]?.has(a))throw Error(`Runtime architecture mismatch: declared ${JSON.stringify(declared)}; measured ${JSON.stringify(Object.fromEntries(Object.entries(measured).map(([f,a])=>[f,[...a]])))}`);return true;}
+function validateBuild(v){keys(v,['id','source','kind','version','installed','measured','binaries','parts','interfaces','reach','parent','available','unavailableReason','provenance','root','label','engine','order','role','layer','prerelease','bytes','apiVersion','minimumMacOS','selector','automatic','labels','aliases','legacy'],'build');for(const k of ['id','source','kind','version'])str(v[k],k);if(!getKind(v.kind))fail('unknown build kind');bool(v.installed,'installed');if(v.measured!==undefined)bool(v.measured,'measured');arr(v.binaries,'binaries',b=>{obj(b,'binary');if(!FORMATS[b.format])fail('unknown binary format');if(b.format==='macho'){arr(b.architectures,'architectures');if(b.architectures.some(a=>!FORMATS.macho.includes(a)))fail('unknown Mach-O architecture');}else if(!FORMATS[b.format].includes(b.machine))fail('invalid measured machine');});interfaces(v.interfaces,'build.interfaces');reach(v.reach);if(v.available===false)str(v.unavailableReason,'unavailableReason');if(v.parent!==undefined)str(v.parent,'parent');return v;}
+module.exports={FORMATS,DISCOVERY_TYPES,validateSource,validateReach,validateDeclared,validateBuild,validateToken:token,NAMESPACES};
