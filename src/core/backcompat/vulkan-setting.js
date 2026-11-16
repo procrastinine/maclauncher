@@ -4,11 +4,34 @@
 // documents and game records. Remove with support for that settings layout.
 const fs = require('node:fs');
 const path = require('node:path');
-const { readJsonDocument, writeJsonAtomic } = require('../json-files');
+const { readJsonObjectForUpdate, preserveUnreadable, writeJsonAtomic } = require('../json-files');
 const { mergeSettingsChanges } = require('../settings-merge');
+const GameData = require('../../modules/shared/game-data');
 const { VULKAN_SETTING_MIGRATION: MIGRATION } = require('../data-migration-ids');
 const record = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const unchangedProfiles = new Set();
+
+function directories(root) {
+  try {
+    const stat = fs.lstatSync(root);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Saved settings directory is not a regular directory.');
+    return fs.readdirSync(root, { withFileTypes: true });
+  }
+  catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+}
+
+function readForConversion(file) {
+  let stat;
+  try { stat = fs.lstatSync(file); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024)
+    throw new Error('Saved settings are not a bounded regular document.');
+  try { return readJsonObjectForUpdate(file); }
+  catch (error) {
+    if (error instanceof SyntaxError) preserveUnreadable(file);
+    throw error;
+  }
+}
 
 // The current key wins even when its value is empty or null, as with other
 // renamed settings. Choice identities remain literal; this does not select a
@@ -57,27 +80,25 @@ function migrateSettings(raw, { userDataDir, commitSettings } = {}) {
   // let a consumer silently use a default in place of a saved choice.
   if (userDataDir) {
     const root = path.join(userDataDir, 'runtimes');
-    let entries;
-    try { entries = fs.readdirSync(root, { withFileTypes: true }); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; entries = []; }
-    for (const entry of entries) {
+    for (const entry of directories(root)) {
+      if (entry.isSymbolicLink()) throw new Error('A runtime settings directory is a symbolic link.');
       if (!entry.isDirectory()) continue;
       const file = path.join(root, entry.name, 'settings.json');
-      let stat;
-      try { stat = fs.lstatSync(file); }
-      catch (error) { if (error.code === 'ENOENT') continue; throw error; }
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024)
-        throw new Error('Runtime settings are not a bounded regular document.');
-      const previous = readJsonDocument(file), converted = convertChoiceKey(previous);
+      const previous = readForConversion(file), converted = convertChoiceKey(previous);
       if (converted !== previous) { writeJsonAtomic(file, converted); changed = true; }
     }
     const GameStore = require('../game-store');
-    for (const id of GameStore.listGameIds(userDataDir)) {
-      const entry = GameStore.readGameRecord(userDataDir, id), converted = migrateGameEntry(entry);
+    for (const directory of directories(GameData.resolveGamesRoot(userDataDir))) {
+      const id = directory.name;
+      if (!/^[0-9A-Za-z_-]+$/.test(id)) continue;
+      if (directory.isSymbolicLink()) throw new Error('A game record directory is a symbolic link.');
+      if (!directory.isDirectory()) continue;
+      const file = GameData.resolveGameDataPath(userDataDir, id);
+      const entry = readForConversion(file), converted = migrateGameEntry(entry);
       if (converted) {
-        const current = GameStore.readGameRecord(userDataDir, id);
+        const current = readForConversion(file);
         if (current) {
-          GameStore.writeGameRecord(userDataDir, mergeSettingsChanges(entry, converted, current));
+          GameStore.writeGameRecord(userDataDir, { ...mergeSettingsChanges(entry, converted, current), gameId: id });
           changed = true;
         }
       }
