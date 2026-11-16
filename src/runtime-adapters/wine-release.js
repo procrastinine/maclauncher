@@ -99,8 +99,11 @@ function findWine(unpacked) {
   (function visit(directory, depth) {
     let entries;
     try { entries = fs.readdirSync(directory, {withFileTypes: true}); } catch { return; }
+    // A tools folder that is only a link to another (an application's bin to
+    // its MacOS) comes after the real one.
+    const linked = name => entries.some(entry => entry.name === name && entry.isSymbolicLink());
     if (entries.some(entry => entry.name === 'lib' && entry.isDirectory()) && fs.existsSync(path.join(directory, 'lib', 'wine')))
-      for (const bin of ['bin', 'MacOS']) for (const name of ['wine', 'wine64']) {
+      for (const bin of ['bin', 'MacOS'].sort((a, b) => linked(a) - linked(b))) for (const name of ['wine', 'wine64']) {
         const file = path.join(directory, bin, name);
         try { fs.lstatSync(file); } catch { continue; }
         if (!found.some(item => item.root === directory)) found.push({root: directory, entry: file,
@@ -132,7 +135,12 @@ function createPayload(source, dependencies = {}) {
     }
     const records = Shared.walk(unpacked, signal, label, external);
     const required = records.some(row => row.relative === tree.entry && row.kind === 'file') ? [tree.entry] : [];
-    const native = Shared.inspectClosure(unpacked, records, signal, {label, required, executableRoot: path.join(unpacked, path.dirname(tree.entry))});
+    // Wine loads native code from its bin and lib folders. Native files a
+    // download keeps under share (an application's own assets) are not Wine's
+    // and do not decide its CPU.
+    const share = path.posix.join(tree.root, 'share') + '/';
+    const native = Shared.inspectClosure(unpacked, records, signal, {label, required, skip: relative => relative.startsWith(share),
+      executableRoot: path.join(unpacked, path.dirname(tree.entry))});
     if (!Host.versionAtLeast((dependencies.systemVersionSync || Host.systemVersionSync)(), native.minimumMacOS)) throw new Error(Shared.requiresMacOS(native.minimumMacOS));
     const wineRoot = path.join(unpacked, tree.root);
     const inventory = await Shared.writeInventory(unpacked, records, signal, label);

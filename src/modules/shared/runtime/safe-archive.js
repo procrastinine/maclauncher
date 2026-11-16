@@ -206,12 +206,20 @@ class PackageArchive:
             if a != b: return False
             position += count
         return True
+# A zip made on macOS keeps each file's extended attributes as an AppleDouble
+# "._name" member beside it, or under __MACOSX. They are metadata, not files;
+# written out, they would also break the seal of a signed application.
+def apple_double(source, info):
+    if info.filename.split("/")[0] == "__MACOSX": return True
+    if info.is_dir() or not posixpath.basename(info.filename).startswith("._"): return False
+    with source.open(info) as data: return data.read(4) == b"\x00\x05\x16\x07"
 # Tar and zip members as (name, kind, size, mode, link, member).
 def members_of(source):
     if isinstance(source, PackageArchive):
         yield from source.members
     elif isinstance(source, zipfile.ZipFile):
         for info in source.infolist():
+            if apple_double(source, info): continue
             mode = info.external_attr >> 16
             kind = "dir" if info.is_dir() else "sym" if stat.S_ISLNK(mode) else "file" if not stat.S_IFMT(mode) or stat.S_ISREG(mode) else "other"
             link = source.read(info).decode("utf-8") if kind == "sym" else None
