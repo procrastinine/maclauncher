@@ -166,5 +166,10 @@ export function adaptLiteSession(original) {
         auto lib=source?[device_ newLibraryWithSource:source options:co error:&e]:nil;`);
   replace('        expectedHash=receipt[@"initializers"][@"initializers-lite-lossy.bin"];',
     '        expectedHash=@"c77c2d1a4d119ed76d94b8c23335490cc38280db3346c72396a1e1acb0523cfc";\n        if(![receipt[@"schema"] isEqual:@"fsr412_lite_lossy_import_v1"] || ![receipt[@"source_dll_sha256"] isEqual:@"d9b0a1f5781c2d633a327272f6f1c8607057df7cafd0233cf38c7395c8f7dbc5"] || ![receipt[@"initializers"][@"initializers-lite-lossy.bin"] isEqual:expectedHash]) {error="Lite Lossy source identity mismatch";return nullptr;}');
+  // The 8K Lite Lossy tier uses the untrained AMD graph without parameter
+  // reuse. Upstream emits its ordinary tiled POST; accept that graph by its
+  // actual data/cache contract, rather than rejecting the profile name.
+  replace('if(!s->preparedColor || lossy || side<8 || side>40)',
+          'if(!s->preparedColor || s->retrainedWeights || s->liteCacheBytesPerPixel || side<8 || side>40)');
   return original;
 }
