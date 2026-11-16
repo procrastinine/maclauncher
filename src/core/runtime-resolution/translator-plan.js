@@ -3,6 +3,7 @@ const AUTOMATIC = 'automatic', INHERIT = 'inherit';
 const UNAVAILABLE_CHOICE_LABEL = 'Saved selection (unavailable)';
 const Roles = require('../../modules/shared/runtime/translator-roles');
 const Pairing = require('./translator-pairing');
+const { compareRuntimeVersions } = require('../../modules/shared/runtime/pinned-native-manager');
 const fs = require('node:fs'), path = require('node:path');
 const { fileDigest } = require('../../modules/shared/runtime/verified-identity');
 // Labels and the graphics selector come from the Wine source's descriptor.
@@ -54,9 +55,13 @@ function selectorBackend(plan, selections, included) {
   return Roles.DIRECT3D_ROLES.every(role => role.id === 'd3d12' || [undefined, '', AUTOMATIC, INHERIT].includes(selections[role.id])) ? backend : null;
 }
 const serves = (description, role) => !description?.apis?.length || description.apis.some(api => role.apis.includes(api));
-const findChoice = (choices, value) => {
+// A source choice is the newest usable version of that source.
+const findChoice = (choices, value, usable = () => true) => {
   const id=String(value||'').replace(/^build:/,'');
-  if(String(value||'').startsWith('source:')){const source=value.slice(7);return choices.find(item=>item.sourceId===source||item.embedId===source||item.managerId===source||item.engine===source||item.source===source||item.source?.id===source||item.source?.kind===source)||null;}
+  if(String(value||'').startsWith('source:')){const source=value.slice(7);
+    const builds=choices.filter(item=>item.sourceId===source||item.embedId===source||item.managerId===source||item.engine===source||item.source===source||item.source?.id===source||item.source?.kind===source)
+      .sort((a,b)=>usable(b)-usable(a)||compareRuntimeVersions(a.version||'',b.version||''));
+    return builds[0]||null;}
   return choices.find(item => item.id === id) || choices.find(item => item.aliases?.includes(id)) || null;
 };
 const identity = description => description && `${description.id}:${description.root || ''}`;
@@ -203,7 +208,7 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
   for (const role of Roles.DIRECT3D_ROLES) {
     const value = selections[role.id]; if (!value) continue;
     const inherited = value === INHERIT;
-    const selected = inherited ? environment?.[role.id] || original[role.id].used : findChoice([...included, ...choices], value);
+    const selected = inherited ? environment?.[role.id] || original[role.id].used : findChoice([...included, ...choices], value, item => serves(item, role) && (apiCompatibility[role.id]?.[item.id] || compatibility[item.id])?.compatible !== false);
     let used = value === AUTOMATIC ? automatic[role.id] || null : selected, reason = null, reasonCode = null;
     if (value !== AUTOMATIC && value !== INHERIT && !selected) { reason = `The saved translator choice is unavailable: ${value}`; reasonCode = 'missing-choice'; }
     if (selected && !serves(selected, role)) { reason = `The selected component has no ${role.label} library.`; reasonCode = 'missing-api'; }
@@ -337,7 +342,7 @@ function resolvePlan({ runtime = 'crossover', selections = {}, choices = [], inc
     const value = selections[component] || (environment ? INHERIT : AUTOMATIC);
     const inherited = value === INHERIT && environment;
     const selected = inherited ? environment.selections?.[component] || null
-      : findChoice([...included, ...choices].filter(item => item.component === component), value);
+      : findChoice([...included, ...choices].filter(item => item.component === component), value, item => compatibility[item.id]?.compatible !== false);
     let used = selected, reason = null, reasonCode = null;
     if (!selected && value !== AUTOMATIC && value !== INHERIT) {
       reason = `The saved translator choice is unavailable: ${value}`;
