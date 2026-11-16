@@ -32,6 +32,12 @@ In the example below, [RIFE](https://github.com/hzwer/Practical-RIFE) fills the 
 
 Frame generation changes only what the display shows, so the game still runs at its own speed and handles input at its original rate. The generated frames do add a little latency, because the generator has to wait for the next real frame before it can draw the ones in between. For exploration and story games that trade usually pays off, whereas competitive and rhythm games tend to play better with frame generation off.
 
+A native MetalFX interpolation call can also supply its real frame pair and scene inputs to one compatible 2× Frame generation row. This includes translated Windows games whose classic Metal output reaches the screen through observed copies on the same device and queue. The selected provider writes the output requested by that call, and the game keeps presenting it as before. The shared presenter recognizes the consumed interval and adds no second set of generated images. Missing inputs or an untraceable path to the screen retain the original interpolation.
+
+Some DLSS games also supply full camera transforms and tagged HUD-less/UI images. Compatible Vulkan translators can carry matching inputs to the shared processor, where each provider uses only the data whose meaning and lifetime are declared.
+
+A game API such as DLSS, FidelityFX or XeSS supplies inputs independently of the selected generator. The same generator can serve native and translated games when their scene producers provide the data it needs. A game's own frame-generation plugin can also control presentation, so its generated output is not treated as another real frame. The [input reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/INPUTS_AND_ADAPTERS.md#windows-frame-generation-inputs) describes the Windows API routes and their limits.
+
 ## Two kinds of generators
 
 Frame generators come in two kinds, depending on what they work from. The first kind, image-pair generators, need only the finished images, so they work with every game:

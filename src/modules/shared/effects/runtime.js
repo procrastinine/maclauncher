@@ -1,7 +1,7 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const Plan = require("./plan"), Graphics = require("../reshade/graphics-settings");
 const Providers = require("./providers");
-const {sceneInputNames,sceneInputRequirements,gpuWorkScope}=require("./operation-contracts.mjs");
+const {sceneInputNames,sceneInputRequirements,gpuWorkScope,TEMPORAL,GENERATION}=require("./operation-contracts.mjs");
 const Live = require("../reshade/live-controls"), Writable = require("../writable-input");
 const SourceResolution = require("../reshade/source-resolution"), RuntimeRecord = require("../reshade/runtime-record");
 const {isPresentationFit} = require("./contracts.mjs");
@@ -18,10 +18,19 @@ function file(entry, userDataDir) { return path.join(path.dirname(Live.file(entr
 // and "0" otherwise. Windows upscaler adapters that can return a dispatch to
 // the game's own implementation read it without parsing the plan.
 function activityFile(planFile) { return path.join(path.dirname(planFile), "effect-plan.active"); }
+function sceneDemandFile(planFile) { return path.join(path.dirname(planFile), "effect-plan.scene-demand"); }
+const sceneDemand = document => document.mode === "advanced" && document.nodes.some(node => node.enabled === true &&
+  (node.kind === "frame-generation" && GENERATION[node.method]?.scene === true ||
+   node.kind === "temporal" && TEMPORAL[node.method]?.matrices === true ||
+   [...sceneInputNames(node.requirements), ...sceneInputNames(require("../reshade/shader-scene-bindings").requirements(node.sceneBindings || {}))]
+     .some(name => ["viewMatrix", "projectionMatrix", "hudlessColor", "uiColorAlpha"].includes(name)))) ? "1" : "0";
 const activity = document => document.nodes.some(node => node.enabled === true) || Boolean(document.output) ? "1" : "0";
-// Both files are written by the same publication. The plan stays the last
+// All three files share one publication. The plan stays the last
 // write, its activation, after its selections, controls and this byte.
 function writeDocument(target, document, {root, publication}) {
+  const demandFile = sceneDemandFile(target), demandByte = sceneDemand(document);
+  if (publication) publication.write(demandFile, demandByte, {root, mappedByte: true});
+  else require("../reshade/mapped-demand").write(demandFile, demandByte, {root});
   for (const [name, bytes, activation] of [[activityFile(target), activity(document), false], [target, JSON.stringify(document), true]]) {
     if (publication) publication.write(name, bytes, {root, activation});
     else Writable.atomicWrite(name, bytes, {root});
@@ -919,4 +928,4 @@ function releaseXess(binding, publication) {
   const Broker = require("../runtime/gpu-compute-broker"), before = Broker.demand(binding, false);
   if (before) publication?.onRollback?.(() => Broker.demand(binding, true));
 }
-module.exports = { file, activityFile, supported, info, templates, facts, describe, stageSettings, prepare, publishSimple, emptyDocument, acceptance, outcomes, acceptanceReason, preparation };
+module.exports = { file, activityFile, sceneDemandFile, sceneDemand, supported, info, templates, facts, describe, stageSettings, prepare, publishSimple, emptyDocument, acceptance, outcomes, acceptanceReason, preparation };

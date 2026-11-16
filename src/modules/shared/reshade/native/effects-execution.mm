@@ -1160,6 +1160,7 @@ void EffectPlanExecutor::setPreparationObserver(EffectPreparationObserver observ
     dispatch_async(Impl::notificationQueue(),^{Impl::notify(state);});
 }
 void EffectPlanExecutor::requireCompletePreparation(bool value){impl->completePreparation=value;}
+GraphicsConfig effectRowGraphics(const EffectPlanNode&node){return rowGraphics(node);}
 EffectExecutionSelection EffectPlanExecutor::prepare(const ShaderFrame &frame,bool presentation,const RSTemporalFrame *temporal){return prepareWithColor(frame,presentation,temporal,ImageColorSpace::LegacySDR);}
 EffectExecutionSelection EffectPlanExecutor::prepareWithColor(const ShaderFrame &incoming,bool presentation,const RSTemporalFrame *temporal,ImageColorSpace colorSpace){return prepareWithColorDescription(incoming,presentation,temporal,colorSpace,describeImageColor(colorSpace));}
 EffectExecutionSelection EffectPlanExecutor::prepareWithColorDescription(const ShaderFrame&frame,bool presentation,const RSTemporalFrame*scene,ImageColorSpace space,const ImageColorDescription&color){return prepareSnapshot(frame,presentation,scene,space,color,{},{});}

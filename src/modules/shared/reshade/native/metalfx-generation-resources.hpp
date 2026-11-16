@@ -72,8 +72,9 @@ bool publishMetalFxGenerationDistortion(const RSTemporalFrame&,const MetalFxDist
 bool captureMetalFxGenerationDistortion(const RSTemporalFrame&realFrame,id actualInterpolator,
     std::shared_ptr<const void>resources={});
 // Install only on a classic SDK instance returned by the real public factory.
-// Its encode always forwards original first. Metadata comes from an exact
-// registered REAL input tuple and never from the SDK's midpoint destination.
+// A successfully owned interval replaces the requested output. A declined or
+// deferred copy interval preserves the original encode. Metadata comes from
+// the actual REAL input pair, never from the SDK's midpoint destination.
 void observeMetalFxClassicInterpolator(id);
 // Derived scene association: an ordinary rebind preserves only exact color;
 // copiedFrom additionally authorizes an explicit full-size/format byte blit.

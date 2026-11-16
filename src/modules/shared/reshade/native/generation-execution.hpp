@@ -2,10 +2,25 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "effects-execution.hpp"
 #include "generation-timeline.hpp"
+#include "metal4-scene-ingress.hpp"
 #include "image-pair-analysis.hpp"
 #include "runtime-status.hpp"
 #include <functional>
 namespace macfx {
+struct MetalFxImageInputs;
+struct SceneAovLease;
+void observeCallerIntervalFallback(const RSTemporalFrame&,const ShaderResult&);
+// Shared row/provider processing for an SDK-owned interval. It writes only the
+// SDK output and never creates a presenter, commits or waits for commands.
+class SdkInterpolationProcessor : public std::enable_shared_from_this<SdkInterpolationProcessor> {
+ struct Impl;std::unique_ptr<Impl>impl;
+public:
+ SdkInterpolationProcessor();~SdkInterpolationProcessor();
+ ShaderResult encode(const MetalFxImageInputs&,const std::shared_ptr<const SceneAovLease>&,bool*recorded=nullptr,std::function<ShaderResult()>*completion=nullptr);
+ // Retain the isolated original recording as fallback. Omit it only after
+ // successful shared work and the observed SDK history authorizes omission.
+ ShaderResult encodeMetal4(id logical,const MetalFxImageInputs&,const std::shared_ptr<const SceneAovLease>&,bool*owned=nullptr,Metal4OriginalOperation={},bool*originalEncoded=nullptr);
+};
 struct GenerationSequenceInput {
  id<MTLCommandBuffer>commands=nil;id<MTLTexture>source=nil;
  std::shared_ptr<EffectExecution>execution;

@@ -1,4 +1,5 @@
 #include "generation-execution.hpp"
+#include "caller-copy.hpp"
 #include "presentation.hpp"
 #include "target-policy.hpp"
 #include "completion.hpp"
@@ -105,7 +106,7 @@ struct macfx::FramePresenter::Impl:std::enable_shared_from_this<Impl>{
  mutable std::mutex mutex;std::mutex submission,privateQueueMutex;std::atomic<bool>privateQueueUnavailable{false};PresenterStatus status;RSPresentationTiming timing{};std::vector<std::shared_ptr<Batch>>pool;std::vector<std::weak_ptr<Retirement>>retirements;std::optional<Display>immediate,motionFrame;OutputPolicy outputPolicy;unsigned nextSubframe=0,lastQueuedSubframe=0;double nextSubframeTime=0,lastQueuedTime=0;bool motionRepeated=false;
  std::atomic<bool>gpuFailed{false};std::shared_ptr<const FramePublication>publication,failedPublication;uint64_t publicationGeneration=~uint64_t(0);std::unique_ptr<EffectPlanState>failureReader;std::mutex failureReaderMutex;
  std::atomic<unsigned> displayHz{0};unsigned appliedRefresh=0;uint32_t currentDisplay=0;
- uint64_t appliedControls=~uint64_t(0),presentationEpoch=1;unsigned liveMultiplier=0;bool generationEnabled=true,generationUnavailable=false,displayLimitedDelivery=false;double lastTrace=0;std::string legacyInput;
+ uint64_t appliedControls=~uint64_t(0),presentationEpoch=1;unsigned liveMultiplier=0;bool generationEnabled=true,generationUnavailable=false,displayLimitedDelivery=false,callerOwnedSource=false;double lastTrace=0;std::string legacyInput;
  const bool traceEnabled=nativeConfig().diagnostics.trace;
  uint64_t presentedCallbacks=0,nonpositivePresentations=0,duplicatePresentations=0;
  std::shared_ptr<ImageReservation>generationAdmission;GenerationEncoder*admittedGenerator=nullptr;unsigned admittedGenerationWidth=0,admittedGenerationHeight=0;uint64_t admittedGenerationSequence=0;ImageRetry generationRetry;
@@ -925,17 +926,17 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   if(generationBudgetOwner==generator.get()&&generationBudgetDevice==device&&generationBudgetWidth==w&&generationBudgetHeight==h&&generationBudgetMultiplier==multiplier&&generationBudgetFormat==graphFormat)return;
   generationBudgetOwner=generator.get();generationBudgetDevice=device;generationBudgetWidth=w;generationBudgetHeight=h;generationBudgetMultiplier=multiplier;generationBudgetFormat=graphFormat;generationRetry.reset();
  }
- std::shared_ptr<Batch>acquire(unsigned w,unsigned h,const GenerationDelivery*mode=nullptr){
+ std::shared_ptr<Batch>acquire(unsigned w,unsigned h,const GenerationDelivery*mode=nullptr,bool allowGeneration=true){
   const unsigned gw=planMode&&execution&&generator?execution->generationOutputWidth():w,gh=planMode&&execution&&generator?execution->generationOutputHeight():h;
   const bool displayLimited=mode&&mode->displayLimited;
   std::lock_guard<std::mutex>lock(mutex);const unsigned capacity=mode?mode->sourceCapacity:generator&&generationEnabled?1:std::min(4u,drawables.capacity(layer));if(inFlight>=capacity)return {};
   if(width!=w||height!=h||!pool.empty()&&(pool.front()->real.width!=gw||pool.front()->real.height!=gh)){cancelRetirements();completedReplay.reset();pool.clear();immediate.reset();motionFrame.reset();latest.reset();delivery.reset();accountedDeliveryDrops=0;if(pacing)pacing->reset();historyReady=false;width=w;height=h;}
-  generationBudgetContract(gw,gh);
+  if(allowGeneration)generationBudgetContract(gw,gh);
   std::shared_ptr<Batch>batch;for(auto&candidate:pool)if(candidate.use_count()==1){batch=candidate;break;}
   if(!batch){if(pool.size()>=4)return {};batch=std::make_shared<Batch>();batch->admitted.reserve(4);batch->real=makeTexture(layer.device,gw,gh,graphFormat);batch->outputWidth=w;batch->outputHeight=h;pool.push_back(batch);}
-  batch->epoch=presentationEpoch;batch->inputMapped=false;batch->realMapped=false;batch->generatedMapped.assign(batch->generated.size(),false);batch->contentStamped=false;batch->contentId=0;batch->contentEpoch=0;batch->imageRevision=0;batch->contentPTS=0;batch->contentPeriod=0;batch->contentTimed=false;batch->redraw=false;batch->color=sourceColor;batch->output=outputPolicy;batch->displayImages=1;batch->retirement.reset();batch->generationAdmission.reset();batch->events.clear();batch->generationCompletion={};batch->generationCompletions.clear();batch->requestedGenerated=0;batch->pacingObservation=false;batch->timelineAdmissions.clear();batch->realIssued=false;batch->realAdmitted=false;batch->retired=false;batch->displayLimited=false;
+  batch->epoch=presentationEpoch;batch->inputMapped=false;batch->realMapped=false;batch->generatedMapped.assign(batch->generated.size(),false);batch->contentStamped=false;batch->contentId=0;batch->contentEpoch=0;batch->imageRevision=0;batch->contentPTS=0;batch->contentPeriod=0;batch->contentTimed=false;batch->redraw=false;batch->color=sourceColor;batch->output=outputPolicy;batch->displayImages=1;batch->retirement.reset();batch->generationAdmission.reset();batch->events.clear();batch->generationCompletion={};batch->generationCompletions.clear();batch->requestedGenerated=0;batch->phases=TimelinePhases{};batch->pacingObservation=false;batch->timelineAdmissions.clear();batch->realIssued=false;batch->realAdmitted=false;batch->retired=false;batch->displayLimited=false;
   if(generationRetry.impossible){batch->generated.clear();batch->admitted.clear();}
-  if(generator&&generationEnabled&&!displayLimited&&config.generation&&(!execution||execution->generationStages().size()<2)&&batch->generated.size()<config.generation->multiplier-1&&!generationRetry.impossible&&!generationRetry.pending(CACurrentMediaTime())){
+  if(allowGeneration&&generator&&generationEnabled&&!displayLimited&&config.generation&&(!execution||execution->generationStages().size()<2)&&batch->generated.size()<config.generation->multiplier-1&&!generationRetry.impossible&&!generationRetry.pending(CACurrentMediaTime())){
    try{while(batch->generated.size()<config.generation->multiplier-1)batch->generated.push_back(makeTexture(layer.device,gw,gh,graphFormat));}
    catch(const ImageBudgetExceeded&error){generationRetry.denied(error,CACurrentMediaTime());if(error.structurallyImpossible)batch->generated.clear();}
   }return batch;
@@ -1090,19 +1091,26 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
    if(!revision.empty()){const auto controlsIdentity=presentationControlsDigest();RuntimeStatusEvent event;event.context=reinterpret_cast<uintptr_t>(owner);event.processing=true;event.resourceAccepted=true;event.phase=RuntimeStatusPhase::Prepared;event.planRevision=revision;event.controlsDigest=controlsIdentity;event.reason=planReason;observeRuntimeStatus(event);}}
   observeRuntimeFrameSource(reinterpret_cast<uintptr_t>(owner),frameSource.load(std::memory_order_relaxed),receiptInputs|(effectDepth&&effectDepth->texture?RuntimeInputDepth:0));
   if(planMode&&execution)execution->publishQualityStatus();
-  const bool opaqueRequired=planMode&&execution?std::any_of(execution->generationStages().begin(),execution->generationStages().end(),[](const auto&stage){return stage.encoder->requiresOpaque();}):generator&&generator->requiresOpaque();
+  // Source ownership comes only from the game's current drawable registration.
+  // The caller's real pair has already consumed this publication's generation
+  // row; preserve its original presents and process only real images here.
+  const auto intervalOwner=effectPlanDemands(PlanDemandGeneration)?callerIntervalSource(source):nullptr;
+  const bool callerOwnsSource=intervalOwner&&intervalOwner->blocksPresenter(planMode&&execution?execution->revision():std::string{});
+  observeCallerSourcePresentation(source);
+  if(callerOwnedSource!=callerOwnsSource){std::lock_guard lock(mutex);retireDelivery();historyReady=false;++generationSequence;if(execution)for(const auto&stage:execution->generationStages())++stage.state->sequence;callerOwnedSource=callerOwnsSource;}
+  const bool opaqueRequired=!callerOwnsSource&&(planMode&&execution?std::any_of(execution->generationStages().begin(),execution->generationStages().end(),[](const auto&stage){return stage.encoder->requiresOpaque();}):generator&&generator->requiresOpaque());
   if(!redraw&&!opaque&&generationEnabled&&opaqueRequired){result.reason="The selected frame generator requires an opaque source image";return result;}
   const double targetSubmittedAt=target?CACurrentMediaTime():0;
   if(target){
    std::lock_guard<std::mutex>lock(mutex);++timing.requested;timing.lastRequestedTime=target->hostTime;
    auto decision=targettime::admit(target->hostTime,targetSubmittedAt);
-   if((generator&&generationEnabled&&!content)||decision!=targettime::Admission::Accept){++timing.rejected;result.reason=generator&&generationEnabled&&!content?"Targeted frame generation requires explicit source content timing":decision==targettime::Admission::TooFar?"Presentation target exceeds the one-second holding limit":"Invalid presentation target";return result;}
+   if((!callerOwnsSource&&generator&&generationEnabled&&!content)||decision!=targettime::Admission::Accept){++timing.rejected;result.reason=generator&&generationEnabled&&!content?"Targeted frame generation requires explicit source content timing":decision==targettime::Admission::TooFar?"Presentation target exceeds the one-second holding limit":"Invalid presentation target";return result;}
   }
   {std::lock_guard<std::mutex>lock(mutex);++status.submitted;}
   if(traceEnabled&&sourceTime-lastTrace>2){lastTrace=sourceTime;std::lock_guard<std::mutex>lock(mutex);traceStatus("frame");}
   const auto size=layer.drawableSize;if(!std::isfinite(size.width)||!std::isfinite(size.height)||size.width<1||size.height<1||size.width>16384||size.height>16384){result.reason="Invalid presentation dimensions";return result;}
   if(!content&&planMode&&execution&&execution->canDetachNeural()&&!target&&!observer&&!effectDepth&&execution->commandQueue()==privateCommandsQueue())return submitDetached(commands,source,frameId,sourceTime,sourcePeriod,opaque);
-  const bool imagePair=generator&&generationEnabled&&(!generator->requiresScene()||(execution&&std::any_of(execution->generationStages().begin(),execution->generationStages().end(),[](const auto&stage){return !stage.encoder->requiresScene();})));
+  const bool imagePair=!callerOwnsSource&&generator&&generationEnabled&&(!generator->requiresScene()||(execution&&std::any_of(execution->generationStages().begin(),execution->generationStages().end(),[](const auto&stage){return !stage.encoder->requiresScene();})));
   const bool detached=imagePair&&commands.commandQueue!=privateCommandsQueue();
   const auto retainedContent=content?std::optional<RSPresentationContent>(*content):std::nullopt;
   const auto retainedTarget=target?std::optional<RSPresentationTarget>(*target):std::nullopt;
@@ -1115,11 +1123,11 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   const auto observer=retainedObserver?&*retainedObserver:nullptr;
   FrameResult result;const DepthFrame*depth=copiedDepth.texture?&copiedDepth:nullptr;const DepthFrame*effectDepth=depth;
   const bool windowCapture=frameSource.load(std::memory_order_relaxed)==RuntimeFrameSource::ExternalWindow;
-  const auto deliveryMode=generationDelivery(generator&&generationEnabled,outputPolicy.active(),windowCapture?displayHz.load():0,sourcePeriod,drawables.capacity(layer));
+  const auto deliveryMode=generationDelivery(!callerOwnsSource&&generator&&generationEnabled,outputPolicy.active(),windowCapture?displayHz.load():0,sourcePeriod,drawables.capacity(layer));
   // Retire an older paced interval only when its delivery route changes.
   // A real-only source buffer must not race a previously queued image.
   {std::lock_guard lock(mutex);if(displayLimitedDelivery!=deliveryMode.displayLimited){retireDelivery();displayLimitedDelivery=deliveryMode.displayLimited;}}
-  auto batch=acquire(size.width,size.height,&deliveryMode);if(!batch){std::lock_guard<std::mutex>lock(mutex);++status.dropped;result.busy=true;result.reason="Presentation queue is full";return result;}batch->inputWidth=source.width;batch->inputHeight=source.height;batch->id=frameId;batch->sourceTime=sourceTime;batch->sourcePeriod=sourcePeriod;batch->targeted=target!=nullptr;batch->target=target?target->hostTime:0;batch->execution=planMode?execution:nullptr;batch->scene.reset();batch->sceneCompletion={};batch->planReason=planReason;batch->redraw=redraw;batch->inputMapped=batch->realMapped=sourceMapped;if(content){batch->contentStamped=true;batch->contentId=content->contentId;batch->contentEpoch=content->epoch;batch->imageRevision=content->imageRevision;batch->contentPTS=contentTimeMs/1000;batch->contentPeriod=contentPeriod;batch->contentTimed=contentTimed;}
+  auto batch=acquire(size.width,size.height,&deliveryMode,!callerOwnsSource);if(!batch){std::lock_guard<std::mutex>lock(mutex);++status.dropped;result.busy=true;result.reason="Presentation queue is full";return result;}batch->inputWidth=source.width;batch->inputHeight=source.height;batch->id=frameId;batch->sourceTime=sourceTime;batch->sourcePeriod=sourcePeriod;batch->targeted=target!=nullptr;batch->target=target?target->hostTime:0;batch->execution=planMode?execution:nullptr;batch->scene.reset();batch->sceneCompletion={};batch->planReason=planReason;batch->redraw=redraw;batch->inputMapped=batch->realMapped=sourceMapped;if(content){batch->contentStamped=true;batch->contentId=content->contentId;batch->contentEpoch=content->epoch;batch->imageRevision=content->imageRevision;batch->contentPTS=contentTimeMs/1000;batch->contentPeriod=contentPeriod;batch->contentTimed=contentTimed;}
   if(batch->execution)stamp(batch);else batch->contract={};
   if(heldInputs&&batch->execution&&batch->execution->revision()!=heldInputs->plan->revision){
    result.reason="The encoded plan does not match the held graphics publication";
@@ -1167,7 +1175,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
    }return result;}
   auto retirement=retainedRetirement?retainedRetirement:observer?std::make_shared<Retirement>(*observer,frameId):nullptr;
   if(content&&lastContentId)pendingProducerReset|=content->imageRevision!=lastImageRevision||sourceMapped!=lastContentMapped;
-  bool generatedReady=false;if(!redraw&&generator&&generationEnabled){
+  bool generatedReady=false;if(!callerOwnsSource&&!redraw&&generator&&generationEnabled){
    if(pendingProducerReset){historyReady=false;++generationSequence;if(batch->execution)for(const auto&stage:batch->execution->generationStages())++stage.state->sequence;pendingProducerReset=false;}
    if(batch->execution&&(batch->execution->generationStages().size()>1||(contentTimed&&generator&&generationEnabled&&!batch->execution->generationStages().empty()))){const auto composed=composeGeneration(commands,batch,deliveryMode.displayLimited?1:0);if(!composed.encoded){result.encoded=false;result.busy=composed.busy;result.reason=composed.reason;return result;}producer->generationEncoded.store(true);generatedReady=batch->phases.count>0;}
    else{

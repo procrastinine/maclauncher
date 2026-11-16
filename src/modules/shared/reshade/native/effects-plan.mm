@@ -436,7 +436,7 @@ PlanDemand effectPlanDemand(const EffectPlanSnapshot &plan) noexcept {
         if(method=="metalfx-denoised")result|=RS_SCENE_VIEW_MATRIX|RS_SCENE_PROJECTION_MATRIX;
         return result;
     };
-    bool any=false,neural=false,independent=true;
+    bool any=false,neural=false,independent=true,callerMidpoint=false;unsigned generationRows=0;
     for(const auto &node:plan.nodes){
         if(!node.enabled)continue;any=true;const auto &required=node.requirements;
         const bool sceneGeneration=node.kind=="frame-generation"&&generationRequiresScene(node.method);
@@ -448,7 +448,7 @@ PlanDemand effectPlanDemand(const EffectPlanSnapshot &plan) noexcept {
             !required.viewMatrix&&!required.projectionMatrix&&!required.exposure&&!required.sceneAovs&&!required.noisyColor;
         if(imageDepth)demand.flags|=PlanDemandDepth;
         if(node.kind=="temporal"||sceneGeneration||required.scene())demand.flags|=PlanDemandTemporal;
-        if(node.kind=="frame-generation")demand.flags|=PlanDemandGeneration|PlanDemandPresentationQueue;
+        if(node.kind=="frame-generation"){demand.flags|=PlanDemandGeneration|PlanDemandPresentationQueue;++generationRows;callerMidpoint=node.settings.number("frameMultiplier",2)==2;}
         if(node.kind=="temporal"||node.kind=="frame-generation"||required.scene()||(node.kind=="neural"&&node.settings.boolean("temporal")))independent=false;
         neural|=node.kind=="neural";demand.sceneAovs|=required.sceneAovs;
         auto &scene=demand.sceneFrame;
@@ -462,6 +462,7 @@ PlanDemand effectPlanDemand(const EffectPlanSnapshot &plan) noexcept {
         if(required.projectionMatrix)scene|=RS_SCENE_COLOR|RS_SCENE_PROJECTION_MATRIX;
         if(required.sceneAovs||required.noisyColor)scene|=RS_SCENE_COLOR;
     }
+    if(generationRows==1&&callerMidpoint)demand.flags|=PlanDemandCallerIntervals;
     if(plan.output.active())demand.flags|=PlanDemandPresentationQueue;
     if(plan.output.processing())demand.flags|=PlanDemandOutputPolicy;
     demand.flags|=any||plan.output.processing()?PlanDemandProcessing:PlanDemandPassThrough;

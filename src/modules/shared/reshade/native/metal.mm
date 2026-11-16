@@ -1,4 +1,5 @@
 #include "depth-resample.hpp"
+#include "caller-copy.hpp"
 #include "live-controls.hpp"
 #include "log.hpp"
 #include "native-config.hpp"
@@ -1045,6 +1046,7 @@ id<MTLRenderCommandEncoder> captureRenderPass(id object,SEL selector,MTLRenderPa
     bool promote=demanded&&eligible(originalDepth)&&descriptor.depthAttachment.storeAction==MTLStoreActionDontCare;
     if(promote){descriptor=[descriptor copy];descriptor.depthAttachment.storeAction=MTLStoreActionStore;}
     auto encoder=reinterpret_cast<id<MTLRenderCommandEncoder>(*)(id,SEL,MTLRenderPassDescriptor*)>(original(object,selector))(object,selector,descriptor);
+    if(encoder)macfx::observeCallerUnknownWrite(object);
     if(!encoder||!demanded||!originalDepth||originalDepth.storageMode==MTLStorageModeMemoryless)return encoder;
     const auto attachment=descriptor.depthAttachment;
     const auto depth=stored(attachment);
@@ -1165,6 +1167,7 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
             if(source.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB||source.pixelFormat==MTLPixelFormatRGBA8Unorm_sRGB)
                 source=[source newTextureViewWithPixelFormat:source.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB?MTLPixelFormatBGRA8Unorm:MTLPixelFormatRGBA8Unorm];
             if(!source)throw std::runtime_error("Cannot read the game presentation texture");
+            if(macfx::effectPlanDemands(macfx::PlanDemandGeneration))macfx::copyCallerIntervalSource(metal.texture,source);
             auto result=presentation->submitDisplayFrame(buffer,source,0,sourceTime>0?sourceTime:CACurrentMediaTime(),metal.layer.opaque,captured?&depth:nullptr);
             if(result.encoded){macfx::observeTiming(buffer,timingScope,source.width,source.height);return;}
             if(result.busy)return;
@@ -1220,6 +1223,7 @@ void commit(id object,SEL selector) {
     // command buffer commit passes through here.
     static const bool trace=std::getenv("RESHADE_TRACE")!=nullptr,layerSurface=std::getenv("RESHADE_LAYER_SURFACE")!=nullptr;
     if(trace && calls.fetch_add(1)==0) log("Metal commit: "+std::string(object_getClassName(object)));
+    macfx::finishCallerImageCopies(object);
     encodePendingPresentations(object);
     reinterpret_cast<void(*)(id,SEL)>(original(object,selector))(object,selector);
     if(!encodingEffects && layerSurface && !macfx::ownsPresentationBuffer(object)) {
@@ -1243,6 +1247,7 @@ void registerPresentation(id<MTLCommandBuffer> commands,id<MTLDrawable> drawable
     if(![drawable conformsToProtocol:@protocol(CAMetalDrawable)]||encodingEffects||macfx::ownsPresentationBuffer(commands))return;
     CAMetalLayer *layer=((id<CAMetalDrawable>)drawable).layer;
     if(macfx::ownsPresentation(layer))return;
+    if(macfx::callerCopyObservation())macfx::observeCallerPresentation(commands,((id<CAMetalDrawable>)drawable).texture);
     rsTemporalCameraFrameBoundary();
     if(!layerPresentationDemand(layer)){observeBypassedLayer(layer);return;}
     if(!acceptsNativeLayer(layer)){noteMetalDecision(reinterpret_cast<uintptr_t>((__bridge void*)layer),"present-owner-missing");return;}
