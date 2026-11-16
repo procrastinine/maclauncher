@@ -13,7 +13,7 @@ function interfaces(value,field) {if(value===undefined)return;object(value,field
 function declares(value) {object(value,'declares');if(!Object.keys(value).length)invalid('declares must name binary architectures');for(const [format,arches] of Object.entries(value)){if(!FORMATS[format])invalid(`unknown binary format ${format}`);strings(arches,`declares.${format}`);if(!arches.length||arches.some(a=>!FORMATS[format].includes(a)))invalid(`invalid ${format} architecture declaration`);}}
 function validateReach(tuple) {object(tuple,'reach');for(const k of ['guestFormat','guestArch','hostArch','integration'])string(tuple[k],`reach.${k}`);if(!FORMATS[tuple.guestFormat]?.includes(tuple.guestArch))invalid('reach guest format/architecture is invalid');if(!FORMATS.macho.includes(tuple.hostArch))invalid('reach hostArch is invalid');if(tuple.requires!==undefined)strings(tuple.requires,'reach.requires');return tuple;}
 function validateSource(value) {
- object(value,'source');for(const k of ['id','kind','label','license'])string(value[k],k);
+ object(value,'source');for(const k of ['id','kind','label'])string(value[k],k);
  if(!idPattern.test(value.id)||!getKind(value.kind))invalid('invalid source id or kind');
  object(value.discover,'discover');if(!DISCOVERY_TYPES.includes(value.discover.type))invalid('unknown discovery type');
  if(value.discover.type==='github-releases'){string(value.discover.repo,'discover.repo');if(!/^[\w.-]+\/[\w.-]+$/.test(value.discover.repo))invalid('invalid GitHub repository');if(value.discover.tag)regex(value.discover.tag,'discover.tag');}
@@ -24,7 +24,6 @@ function validateSource(value) {
  object(value.layout,'layout');string(value.layout.type,'layout.type');if(value.layout.entry)relative(value.layout.entry,'layout.entry');
  if(value.embeds!==undefined){if(!Array.isArray(value.embeds))invalid('embeds must be an array');for(const embed of value.embeds){if(!getKind(embed.kind))invalid('unknown embedded kind');string(embed.id,'embed.id');relative(embed.path,'embed.path');interfaces(embed.interfaces,'embed.interfaces');if(embed.reach)embed.reach.forEach(validateReach);}}
  interfaces(value.interfaces,'interfaces');if(value.reach){if(!Array.isArray(value.reach))invalid('reach must be an array');value.reach.forEach(validateReach);}
- object(value.credits,'credits');string(value.credits.url,'credits.url');if(!/^https:\/\//.test(value.credits.url))invalid('credits URL must use HTTPS');
  object(value.verify,'verify');string(value.verify.type,'verify.type');if(value.verify.match)regex(value.verify.match,'verify.match');
  return value;
 }
