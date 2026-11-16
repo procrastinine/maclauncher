@@ -218,7 +218,10 @@ function createBackend({source, dependencies = {}}) {
       async installVersion(options){return install(options,opts=>base.core.installVersion(opts));}}
   };
   async function install(options, perform) {
-    const {version,pin}=await selectedPin(options),existing=base.core.resolveInstalled({userDataDir:options.userDataDir,version});
+    const {version,pin}=await selectedPin(options);
+    if (options.exactVersion === true && (typeof options.version !== 'string' || version !== options.version))
+      throw new Error('The exact Wine version is unavailable.');
+    const existing=base.core.resolveInstalled({userDataDir:options.userDataDir,version});
     const downloads=typeof options.downloads?.runTask==='function'?{runTask:(meta,runner)=>options.downloads.runTask({...meta,detail:pin.versionLabel},task=>runner({...task,onProgress:progress(pin,task.onProgress)}))}:options.downloads;
     const result=resolvePayload(await perform({...options,version,downloads,replace:Boolean(existing&&!resolvePayload(existing,{signal:options.signal}).install),onProgress:progress(pin,options.onProgress)}),{signal:options.signal});
     if(!result.install)throw new Error(result.reason);return result.install;

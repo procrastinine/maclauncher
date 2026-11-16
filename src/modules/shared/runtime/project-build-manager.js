@@ -273,7 +273,13 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
   }
   async function installForArchitecture(options) {
     const selectionOptions = { ...options, version: options.version };
-    let selected = resolveSelection(null, options.settings, options.userDataDir, selectionOptions);
+    const select = () => {
+      const selection = resolveSelection(null, options.settings, options.userDataDir, selectionOptions);
+      if (options.exactVersion === true && (typeof options.version !== "string" || selection.version !== options.version))
+        throw new Error("The exact runtime version is unavailable.");
+      return selection;
+    };
+    let selected = select();
     if (selected.ready) return selected.install;
     const downloadable = () => core.core.listDiscoveredCatalog({ userDataDir: options.userDataDir })
       .find(pin => pin.version === selected.version && pin.asset && compatible(pin));
@@ -281,7 +287,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     // preparation. Status and selection never discover versions themselves.
     if (!downloadable()) {
       await core.refreshCatalog({ ...options, force: true });
-      selected = resolveSelection(null, options.settings, options.userDataDir, selectionOptions);
+      selected = select();
       if (selected.ready) return selected.install;
     }
     if (!selected.version) throw new Error(`No ${label} versions are available to download.`);
