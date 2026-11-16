@@ -134,25 +134,19 @@ async function resolve(install, runtime, context, { executableArchitecture, host
   let automaticRenderer = null, automaticAdditional = [];
   if (!sourceFor(runtime).graphicsSelector) {
     const automatic = row => row.value === Plan.AUTOMATIC || (row.fallback || row.inherited) && !row.used;
-    // Preserve the Template's existing automatic composition in this one plan.
-    const choose = (component, engine, templateComponent) => input.included.find(item => item.component === component && item.engine === engine &&
-      (!templateComponent || item.templateComponent === templateComponent) && compatibility[item.id]?.compatible !== false);
-    let hardware = host;
-    if (automatic(plan.components['vulkan-driver']) && host.physicalAppleGPU == null && choose('vulkan-driver', 'kosmickrisp'))
-      hardware = await require('../../modules/shared/runtime/graphics-hardware').graphicsHardware(host, { signal: context.signal });
-    if (automatic(vulkan)) vulkan.used = hardware.physicalAppleGPU === true ? choose('vulkan-driver', 'kosmickrisp') || choose('vulkan-driver', 'moltenvk') : choose('vulkan-driver', 'moltenvk');
-    const renderer = plan.components['d3d-renderer'];
-    automaticRenderer = choose('d3d-renderer', 'dxmt') || choose('d3d-renderer', 'wined3d');
-    const automaticD9 = context.wineEnvironment?.settings.d9vk !== false && vulkan.used?.engine === 'kosmickrisp' && choose('d3d-renderer', 'dxvk', 'd9vk');
-    automaticAdditional = automaticD9 ? [automaticD9] : [];
-    if (automatic(renderer)) {
-      renderer.used = automaticRenderer;
-      const d9vk = automaticD9;
-      plan.additional = d9vk ? [{ ...d9vk, inherited: renderer.inherited && !renderer.fallback }] : [];
-    }
-    if (!context.runtimeSettings?.translatorRenderer && context.runtimeSettings?.graphicsBackend === 'dxvk') {
-      const selected = choose('d3d-renderer', 'dxvk', vulkan.used?.engine === 'kosmickrisp' ? 'dxvk3' : 'dxvk') || renderer.used;
-      renderer.selected = selected; renderer.used = selected;
+    const data=sourceFor(runtime).source||sourceFor(runtime);
+    const choose=(role,selected={})=>require('./source-automatic').sourceAutomatic({source:data,role,included:input.included,compatibility,host:hardware,settings:context.runtimeSettings||{},environment:context.wineEnvironment?.settings||{},selected});
+    let hardware=host;
+    if(automatic(vulkan)&&host.physicalAppleGPU==null&&(data.automatic?.['vulkan-driver']||[]).some(entry=>{const id=typeof entry==='string'?entry:entry.embed;return data.embeds?.find(embed=>embed.id===id)?.interfaces?.requires?.includes('gpu:apple-physical');}))
+      hardware=await require('../../modules/shared/runtime/graphics-hardware').graphicsHardware(host,{signal:context.signal});
+    if(automatic(vulkan))vulkan.used=choose('vulkan-driver');
+    const renderer=plan.components['d3d-renderer'];
+    automaticRenderer=choose('d3d-renderer');
+    const additional=choose('d3d9',{'vulkan-driver':vulkan.used});
+    automaticAdditional=additional&&additional.id!==automaticRenderer?.id&&additional.apis?.every(api=>['Direct3D 8','Direct3D 9'].includes(api))?[additional]:[];
+    if(automatic(renderer)){renderer.used=automaticRenderer;plan.additional=automaticAdditional.map(item=>({...item,inherited:renderer.inherited&&!renderer.fallback}));}
+    if(!context.runtimeSettings?.translatorRenderer&&context.runtimeSettings?.graphicsBackend==='dxvk'){
+      const selected=choose('legacy.dxvk',{'vulkan-driver':vulkan.used})||renderer.used;renderer.selected=selected;renderer.used=selected;
     }
   }
   // DirectDraw compatibility comes from the runtime's own CNC-DDraw libraries.
@@ -168,9 +162,8 @@ async function resolve(install, runtime, context, { executableArchitecture, host
   };
   for (const row of Object.values(plan.components)) if (row.used) row.used = actualFiles(row.used);
   const automatic = Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id,
-    role.id === 'd3d12' ? null : [...automaticAdditional, ...(automaticRenderer ? [automaticRenderer] : [])].find(item =>
-      !item.apis?.length || item.apis.some(api => role.apis.includes(api))) ||
-      (!sourceFor(runtime).graphicsSelector ? input.included.find(item => item.engine === 'wined3d') : null) || null]));
+    require('./source-automatic').sourceAutomatic({source:sourceFor(runtime),role:role.id,included:input.included,compatibility,host,settings:context.runtimeSettings||{},environment:context.wineEnvironment?.settings||{},selected:{'vulkan-driver':vulkan.used}})||
+    (role.id==='d3d12'?null:[...automaticAdditional,...(automaticRenderer?[automaticRenderer]:[])].find(item=>!item.apis?.length||item.apis.some(api=>role.apis.includes(api)))||null)]));
   Plan.resolveApiRoles(plan, { ...input, compatibility, apiCompatibility, automatic,
     selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])),
     environment: context.wineEnvironment ? Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id,

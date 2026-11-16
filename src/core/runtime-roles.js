@@ -9,7 +9,14 @@ function normalizeChoice(value,{builds=[],sources=[]}={}){
 }
 function badges(build,host={}){return [...new Set((build?.files||build?.binaries||[]).flatMap(binary=>binary.format==='macho'?(binary.cpuSlices||binary.architectures||[]).map(arch=>cpuLabel(arch,{hostArchitecture:host.hardwareArch||host.hostArch})):
  binary.format==='pe'?[cpuLabel(typeof binary.machine==='number'?require('./binary-arch').peArchitecture(binary.machine):binary.machine,{windows:true})]:[]).filter(Boolean))];}
-function execution(build,host={}){if(build?.execution)return build.execution.startsWith('fex')?'fex':build.execution;return (host.hardwareArch||host.hostArch)==='arm64'&&(build?.files||build?.binaries||[]).some(b=>b.format==='macho'&&(b.cpuSlices||b.architectures||[]).includes('x86_64')&&!(b.cpuSlices||b.architectures||[]).includes('arm64'))?'rosetta':'native';}
+function execution(build,host={}){
+ if(build?.execution)return build.execution.startsWith('fex')?'fex':build.execution;
+ const images=(build?.files||build?.binaries||[]).filter(b=>b.format==='macho'&&(b.cpuSlices||b.architectures||[]).length);
+ const hardware=host.hardwareArch||host.hostArch;if(!images.length||!hardware)return undefined;
+ if(images.every(b=>(b.cpuSlices||b.architectures).includes(hardware)))return 'native';
+ if(hardware==='arm64'&&images.every(b=>(b.cpuSlices||b.architectures).includes('x86_64')))return 'rosetta';
+ return undefined;
+}
 function projectRuntimeRoles({plan,settings={},optionLists={},source={},host={},wine}={}){
  const automatic=source.labels?.automatic||'Automatic', environment=source.labels?.environment;
  const rows=plan.roles||Object.entries(plan.components||{}).map(([id,row])=>({...row,id}));
@@ -29,6 +36,6 @@ function projectRuntimeRoles({plan,settings={},optionLists={},source={},host={},
   roles.push({...definition,required:definition.id==='wine'||definition.id.startsWith('cpu.'),value,used:{label,version:String(used?.version||''),badges:badges(used,host),execution:presentedExecution(used)},fallback:row?.fallback?{reason:row.reason||row.fallback.reason,notice:'Saved selection (unavailable)'}:null,layers:row?.layers||[],options});
  }
  const downloads=(plan.downloads||[]).map(item=>typeof item==='string'?{label:item,bytes:0}:{label:item.label||item.build||item.id,bytes:item.bytes||0});
- return {summary:plan.summary||roles.filter(role=>role.used?.label).map(role=>`${role.label}: ${role.used.label}`).join(' · '),provisional:plan.provisional===true,downloads,roleKeys:roles.map(role=>role.settingsKey),...Object.fromEntries(roles.map(role=>[role.settingsKey,role.options])),roles};
+ return {summary:plan.summary||roles.filter(role=>role.used?.label).map(role=>`${role.label}: ${role.used.label}`).join(' · '),provisional:plan.provisional===true||Boolean(wine&&!processExecution),downloads,roleKeys:roles.map(role=>role.settingsKey),...Object.fromEntries(roles.map(role=>[role.settingsKey,role.options])),roles};
 }
 module.exports={ROLES,normalizeChoice,projectRuntimeRoles,badges};
