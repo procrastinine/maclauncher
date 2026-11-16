@@ -63,7 +63,8 @@ function installationRoot(source, install) {
   return root;
 }
 function resolvePart(source, install, part) {
-  if (install.templateRoot && part.path.startsWith('support/')) return path.join(install.templateRoot,part.path.slice('support/'.length));
+  const support=install.templateRoot || install.supportRoot;
+  if (support && part.path.startsWith('support/')) return path.join(support,part.path.slice('support/'.length));
   const wineRelative=path.posix.dirname(path.posix.dirname(source.layout.entry));
   if (install.libraryRoot && part.path.startsWith(wineRelative+'/lib/')) return path.join(install.libraryRoot,part.path.slice((wineRelative+'/lib/').length));
   if (install.librariesRoot && part.path.startsWith(path.posix.dirname(wineRelative)+'/')) return path.join(install.librariesRoot,part.path.slice((path.posix.dirname(wineRelative)+'/').length));

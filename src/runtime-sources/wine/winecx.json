@@ -139,5 +139,10 @@
     "legacy.dxvk": [
       "winecx-dxvk"
     ]
+  },
+  "interfaces": {
+    "provides": [
+      "wine:dllpath-overlay"
+    ]
   }
 }

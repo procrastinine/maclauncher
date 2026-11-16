@@ -11,7 +11,7 @@ module.exports = Adapter.descriptor("crossover", {
   // the camera adapter's base only for an explicit DXMT selection.
   dxmtBase(install, { translator, settings = {} } = {}) {
     if (!path.isAbsolute(install.crossoverRoot || "") || translator?.engine !== "dxmt" && settings.graphicsBackend !== "dxmt") return null;
-    return fs.existsSync(path.join(install.crossoverRoot, "lib/wine/x86_64-unix/wine")) ? path.join(install.crossoverRoot, "lib/dxmt") : null;
+    return fs.existsSync(path.join(install.crossoverRoot, "lib/wine/x86_64-unix/wine")) ? Adapter.embeddedComponent(install, {sourceId: "crossover", engine: "dxmt"}).root : null;
   },
   // CrossOver names the versions of its translators in its changelog.
   includedVersion(engine, layout, Description) {

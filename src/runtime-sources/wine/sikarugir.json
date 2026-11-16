@@ -292,5 +292,10 @@
       },
       "sikarugir-dxvk"
     ]
+  },
+  "interfaces": {
+    "provides": [
+      "wine:dllpath-overlay"
+    ]
   }
 }

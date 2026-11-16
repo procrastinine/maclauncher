@@ -142,5 +142,10 @@
     "type": "environment",
     "key": "CX_GRAPHICS_BACKEND",
     "automatic": "auto"
+  },
+  "interfaces": {
+    "provides": [
+      "wine:dllpath-overlay"
+    ]
   }
 }
