@@ -161,3 +161,47 @@ test("a Wine launch whose game process loads the layer itself starts without the
   await launch({ ...plan, graphicsInProcess: true }, context, dependencies);
   assert.equal(spawned[0].graphicsInProcess, true);
 });
+
+// dyld applies __interpose pairs only for libraries inserted at launch. On the in-process route the layer library
+// applies its graphics libraries' pairs itself, so the Wine Mac driver's CGWarpMouseCursorPosition reaches the
+// virtual window's pointer mapping. The fixture images only take the function's address; nothing moves the pointer.
+test("the in-process layer library rebinds images loaded before and after it to the graphics library's interposed functions", { skip: process.platform !== "darwin" }, t => {
+  const { execFileSync } = require("node:child_process");
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "winemetal-rebind-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const native = path.resolve(__dirname, "../src/modules/shared/reshade/native");
+  const source = (name, text) => { const file = path.join(root, name); fs.writeFileSync(file, text); return file; };
+  const clang = (...args) => execFileSync("/usr/bin/clang", ["-arch", "arm64", "-mmacosx-version-min=13.0", ...args], { stdio: "pipe", timeout: 60000 });
+  const library = (output, input, ...args) => clang("-dynamiclib", "-install_name", "@rpath/" + path.basename(output), input, "-o", path.join(root, output), ...args);
+  library("winemetal-runtime.so", source("runtime.c", "const void *__wine_unix_call_funcs[1], *__wine_unix_call_wow64_funcs[1];\n"),
+    "-install_name", "@loader_path/winemetal-runtime.so");
+  library("winemetal.so", path.join(native, "winemetal-layer.c"), "-Wl,-reexport_library," + path.join(native, "winemetal-runtime.tbd"));
+  library("graphics.dylib", source("graphics.c", `#include <CoreGraphics/CoreGraphics.h>
+CGError fixture_warp(CGPoint point) { (void)point; return kCGErrorSuccess; }
+void *fixture_layer_original(void) { return (void *)&CGWarpMouseCursorPosition; }
+__attribute__((used)) static const struct { const void *replacement, *original; } pairs[] __attribute__((section("__DATA,__interpose"))) =
+  {{(const void *)fixture_warp, (const void *)CGWarpMouseCursorPosition}};
+`), "-framework", "CoreGraphics");
+  const importer = source("importer.c", "#include <CoreGraphics/CoreGraphics.h>\nvoid *fixture_imported_warp(void) { return (void *)&CGWarpMouseCursorPosition; }\n");
+  library("before.dylib", importer, "-framework", "CoreGraphics"); library("after.dylib", importer, "-framework", "CoreGraphics");
+  clang(source("harness.c", `#include <dlfcn.h>
+#include <stdio.h>
+#include <stdlib.h>
+typedef void *(*address)(void);
+static void *open(const char *dir, const char *name, int flags) { char file[4096]; snprintf(file, sizeof file, "%s/%s", dir, name); return dlopen(file, flags); }
+int main(int argc, char **argv) {
+  char graphics[4096]; snprintf(graphics, sizeof graphics, "%s/graphics.dylib", argv[1]); setenv("MACLAUNCHER_GRAPHICS_LIBRARIES", graphics, 1);
+  void *before = open(argv[1], "before.dylib", RTLD_NOW), *shim = open(argv[1], "winemetal.so", RTLD_NOW | RTLD_GLOBAL), *after = open(argv[1], "after.dylib", RTLD_NOW);
+  void *layer = dlopen(graphics, RTLD_NOLOAD | RTLD_NOW);
+  if (!before || !shim || !after || !layer) { fprintf(stderr, "%s\\n", dlerror()); return 2; }
+  void *replacement = dlsym(layer, "fixture_warp"), *real = dlsym(RTLD_DEFAULT, "CGWarpMouseCursorPosition");
+  printf("{\\"tables\\":%d,\\"before\\":%d,\\"after\\":%d,\\"layerKeepsOriginal\\":%d}\\n",
+    dlsym(shim, "__wine_unix_call_funcs") && dlsym(shim, "__wine_unix_call_wow64_funcs"),
+    ((address)dlsym(before, "fixture_imported_warp"))() == replacement, ((address)dlsym(after, "fixture_imported_warp"))() == replacement,
+    ((address)dlsym(layer, "fixture_layer_original"))() == real);
+  return 0;
+}
+`), "-o", path.join(root, "harness"));
+  const result = JSON.parse(execFileSync(path.join(root, "harness"), [root], { encoding: "utf8", timeout: 30000 }));
+  assert.deepEqual(result, { tables: 1, before: 1, after: 1, layerKeepsOriginal: 1 });
+});
