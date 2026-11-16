@@ -12,7 +12,7 @@ function binaryFiles(files, { machine, architecture, requiredPaths = [], integra
   }).map(file=>({...file,...(file.format==='pe'?{machine:peArchitecture(file.machine)}:{architectures:file.cpuSlices})}));
   const result=!architecture&&!machine?{binaries:binaries.filter((file,index,list)=>list.findIndex(other=>other.format===file.format&&path.basename(other.path)===path.basename(file.path))===index),excluded:[]}:require('../../../core/logical-libraries').selectLogicalLibraries({build:{binaries},hostArch:architecture,guestArch:peArchitecture(machine),integration});
   const selected=[...result.binaries.map(file=>originals.get(file.path)),...passthrough];
-  const missing=result.excluded.map(item=>{const file=[...originals.values()].find(file=>require('../../../core/logical-libraries').logicalName(file)===item.logicalName);return {file,reason:item.reason};});
+  const missing=result.excluded.map(item=>{const file=[...originals.values()].find(file=>require('../../../core/logical-libraries').logicalName(file)===item.logicalName);return {file,reason:file?(file.format==='pe'?`No PE machine ${peArchitecture(machine)} for `:`No ${architecture} CPU slice for `)+path.basename(file.path):item.reason};});
   return {files:selected,missing:missing.filter(item=>item.file&&(requiredPaths.includes(item.file.path)||!selected.some(file=>file.format===item.file.format)))};
 }
 

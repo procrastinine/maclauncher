@@ -17,8 +17,9 @@ test("Wine graphics retains explicit source metadata and does not invent pixel c
   assert.equal(Graphics.inputs({}, null), null);
   assert.deepEqual(Graphics.inputs({}, null, {fallback: "x86_64"}), {architecture: "x86_64"});
 });
-test("Sikarugir declares the native architecture verified by its payload resolver", () => {
-  assert.equal(require("../src/modules/crossover/sources/settings").withSources(require("../src/modules/crossover/manifest.json")).runtime.entries.sikarugir.graphicsArchitecture, "x86_64");
+test("no Wine source declares a graphics architecture; the installation's measured CPU supplies it", () => {
+  const entries = require("../src/modules/crossover/sources/settings").withSources(require("../src/modules/crossover/manifest.json")).runtime.entries;
+  for (const id of ["crossover", "sikarugir", "winecx"]) assert.equal(Object.hasOwn(entries[id], "graphicsArchitecture"), false, id);
 });
 test("CrossOver reports loader architecture even without a temporal camera bridge", async t => {
   const Module = require("../src/modules/crossover/main"), Temporal = require("../src/modules/crossover/temporal");

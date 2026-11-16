@@ -290,11 +290,11 @@ test('translator schema follows canonical role order and explains CrossOver glob
   const before = JSON.stringify(original), manifest = Translators.withSettings(original);
   const expected = ['translatorRenderer', ...Roles.ROLES.map(role => role.settingsKey)];
   for (const runtime of ['crossover', 'sikarugir']) {
-    const schema = manifest.runtime.entries[runtime].settings, controls = schema.fields.filter(field => field.optionsAction === 'listTranslatorOptions');
+    const schema = manifest.runtime.entries[runtime].settings, controls = schema.fields.filter(field => field.optionsAction === 'listRuntimeRoles');
     assert.deepEqual(controls.map(field => field.key), expected);
     assert.ok(expected.indexOf('translatorD3D12') < expected.indexOf('translatorVulkan'));
-    assert.equal(schema.visibilityAction, 'listTranslatorOptions');
-    assert.equal(schema.environmentAction, 'listTranslatorOptions');
+    assert.equal(schema.visibilityAction, 'listRuntimeRoles');
+    assert.equal(schema.environmentAction, 'listRuntimeRoles');
     assert.equal(schema.fields.some(field => field.key === 'environment'), false, 'translator environments replace the variable list');
     for (const role of Roles.ROLES) {
       const field = controls.find(field => field.key === role.settingsKey);
