@@ -57,6 +57,12 @@ holds the legacy temporal selection (`RESHADE_TEMPORAL_*`), diagnostics
 (`RESHADE_DIAGNOSTICS`, `RESHADE_TRACE`) and the presentation hold channel
 (`RESHADE_PRESENTATION_*`).
 
+`RESHADE_CAPTURE_FINAL=1` captures only the final presented image, including
+the original image while an optional row is preparing or lacks scene guides.
+Intake observation leaves screenshot requests to the final-image consumer.
+`RESHADE_CAPTURE_INTAKE=1` additionally enables depth and motion dumps when
+diagnostics are active; the launcher sets it only for explicit diagnostic capture.
+
 Some launch variables name files that carry commands while the process runs.
 Live controls and the temporal control file are read at most ten times per
 second per thread, while the presentation hold, browser frame and render-source

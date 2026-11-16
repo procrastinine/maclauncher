@@ -66,6 +66,7 @@ NativeConfig parse(){
     config.capture.prefix=text("RESHADE_CAPTURE_PREFIX").value_or("");config.capture.trigger=text("RESHADE_CAPTURE_TRIGGER");
     if(const auto at=std::getenv("RESHADE_CAPTURE_FRAME"))config.capture.frame=std::strtoull(at,nullptr,10);
     config.capture.finalOnly=text("RESHADE_CAPTURE_FINAL").value_or("")=="1";
+    config.capture.intake=text("RESHADE_CAPTURE_INTAKE").value_or("")=="1";
     auto &diagnostics=config.diagnostics;
     diagnostics.enabled=present("RESHADE_DIAGNOSTICS");diagnostics.path=text("RESHADE_DIAGNOSTICS").value_or("");diagnostics.trace=present("RESHADE_TRACE");
     diagnostics.metalPresentation=present("RESHADE_DIAGNOSTICS_METAL_PRESENTATION");

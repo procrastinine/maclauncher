@@ -293,7 +293,7 @@ function screenshotSupport(root) {
 function captureEnvironment(directory, enabled) {
   if (!enabled) return {};
   return { RESHADE_CAPTURE_PREFIX: path.join(directory, "frame-capture"),
-    RESHADE_CAPTURE_TRIGGER: path.join(directory, "frame-capture.request") };
+    RESHADE_CAPTURE_TRIGGER: path.join(directory, "frame-capture.request"), RESHADE_CAPTURE_INTAKE: "1" };
 }
 // The native log appends and stops at its size limit, so each preparation
 // starts a new log and keeps the previous launch's beside it.

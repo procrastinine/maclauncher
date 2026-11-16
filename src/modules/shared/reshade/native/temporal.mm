@@ -66,7 +66,9 @@ IntakeTrace&intakeTrace(){static IntakeTrace value;return value;}
 std::atomic<unsigned> cameraTraceRemaining{cameraTraceCalls};
 bool intakeFrameTraced(bool&dump){
     dump=false;const auto&config=macfx::nativeConfig();if(!config.diagnostics.enabled)return false;
-    const bool pending=config.capture.configured()&&config.capture.trigger&&macfx::captureTriggerPending();
+    // A screenshot belongs to the process that presents the final image.
+    // Do not start an intake watcher that could consume that shared request.
+    const bool pending=(config.capture.intake||!config.capture.finalOnly)&&config.capture.configured()&&config.capture.trigger&&macfx::captureTriggerPending();
     auto&trace=intakeTrace();std::lock_guard lock(trace.mutex);
     if(pending&&!trace.triggerSeen){trace.triggerSeen=true;trace.remaining=std::max(trace.remaining,intakeTriggerFrames);dump=true;}
     else if(!pending)trace.triggerSeen=false;
@@ -574,7 +576,12 @@ static int processSelectedTemporalFrame(const RSTemporalFrame*f,const RSImageCol
 template<class Selected,class Default,class Report>
 static int temporalFrameWithFallback(const RSTemporalFrame*f,const RSImageColorDescription*color,RSTemporalResult*r,bool originalRetained,Selected selected,Default fallback,Report report){
  const int status=selected(f,color,r,originalRetained);
- if(!f||f->size<sizeof(*f)||f->version!=1||!f->owner||!r||r->size<sizeof(*r)||r->version!=1||originalRetained||f->method<=RS_TEMPORAL_METALFX||f->method>RS_TEMPORAL_METALFX_DENOISED||(status==RS_TEMPORAL_OK&&r->status==RS_TEMPORAL_OK&&r->encoded))return status;
+ if(!f||f->size<sizeof(*f)||f->version!=1||!f->owner||!r||r->size<sizeof(*r)||r->version!=1||originalRetained)return status;
+ // An NGX/native MetalFX producer can select a different provider through
+ // an ordered row. Its incoming method still names MetalFX while that row
+ // warms. Keep encoding the ordinary scene until the row can replace it.
+ const bool preparingRow=f->method==RS_TEMPORAL_METALFX&&status==RS_TEMPORAL_BUSY&&macfx::temporalPlanRequested();
+ if(f->method<RS_TEMPORAL_METALFX||(f->method==RS_TEMPORAL_METALFX&&!preparingRow)||f->method>RS_TEMPORAL_METALFX_DENOISED||(status==RS_TEMPORAL_OK&&r->status==RS_TEMPORAL_OK&&r->encoded))return status;
  auto failed=*r;failed.reason[sizeof(failed.reason)-1]=0;auto actual=*f;actual.method=RS_TEMPORAL_METALFX;actual.reserved=0;
  const int returned=fallback(&actual,color,r);const int code=returned==RS_TEMPORAL_OK&&(r->status!=RS_TEMPORAL_OK||!r->encoded)?(r->status==RS_TEMPORAL_OK?RS_TEMPORAL_FAILED:int(r->status)):returned;if(code!=RS_TEMPORAL_OK){r->status=code;r->encoded=0;}char fallbackReason[sizeof(r->reason)];std::snprintf(fallbackReason,sizeof(fallbackReason),"%s",r->reason);
  if(code==RS_TEMPORAL_OK&&r->encoded)std::snprintf(r->reason,sizeof(r->reason),"Temporal method %u returned %d: %.160s; MetalFX fallback active",f->method,status,failed.reason);

@@ -1125,10 +1125,11 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
         std::lock_guard<std::mutex> guard(mutex());auto &runtime=runtimes()[(__bridge void*)metal.layer];
         if(runtime.automaticFailure.reject(metal.texture))log("Metal effect disabled: "+std::string(error.what()));return;
     }
-    if(requiresDepth&&!captured&&macfx::effectPlanMode()!=1) {
+    const bool sourceOnly=requiresDepth&&!captured&&macfx::effectPlanMode()!=1;
+    if(sourceOnly) {
         std::lock_guard<std::mutex> guard(mutex());auto &runtime=runtimes()[(__bridge void*)metal.layer];
         if(!runtime.depthWarning){runtime.depthWarning=true;log("Effect waiting for a shader-readable depth attachment from the presented color frame");}
-        return;
+        if(!captureFrame)return;
     }
     const macfx::DepthFrame depth{captured?captured->depth:nil,0,macfx::FrameOrigin::TopLeft};
     std::shared_ptr<macfx::framebuffer::Lease> framebuffer;
@@ -1147,7 +1148,18 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
         catch(const std::exception&e){std::lock_guard<std::mutex>guard(mutex());auto &runtime=runtimes()[(__bridge void*)metal.layer];if(runtime.automaticFailure.reject(metal.texture))log("Framebuffer processing disabled: "+std::string(e.what()));return;}}
         @catch(NSException*e){std::lock_guard<std::mutex>guard(mutex());auto &runtime=runtimes()[(__bridge void*)metal.layer];if(runtime.automaticFailure.reject(metal.texture))log("Framebuffer processing disabled: "+std::string(e.reason.UTF8String?:"Capture failed"));return;}
     }
-    if(auto presentation=macfx::metalPresentation(metal.layer);presentation&&!presentation->snapshot().stopped) {
+    const auto capturePresented=[&](bool replayed=false){
+        if(!captureFrame)return;
+        @try {try {
+            auto readback=replayed&&metal.texture.framebufferOnly?macfx::framebuffer::capture(metal.layer,buffer,metal.texture):framebuffer;
+            id<MTLTexture> source=replayed?(readback?readback->raw:metal.texture):(framebuffer?framebuffer->raw:metal.texture);
+            const auto space=macfx::imageColorSpace(metal.layer.colorspace,metal.layer.wantsExtendedDynamicRangeContent);
+            auto description=macfx::describeImageColor(space);description.alpha=metal.layer.opaque?macfx::ColorAlpha::Opaque:macfx::ColorAlpha::Straight;
+            if(auto capture=macfx::FrameCapture::begin(buffer,source,captureFrame,false,&description))capture->finish(buffer,source);
+        }catch(const std::exception &error){log("Metal frame capture failed: "+std::string(error.what()));}}
+        @catch(NSException *error){log("Metal frame capture failed: "+std::string(error.reason.UTF8String?:"Capture failed"));}
+    };
+    if(!sourceOnly)if(auto presentation=macfx::metalPresentation(metal.layer);presentation&&!presentation->snapshot().stopped) {
         @try {try {
             id<MTLTexture> source=framebuffer?framebuffer->raw:metal.texture;
             if(source.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB||source.pixelFormat==MTLPixelFormatRGBA8Unorm_sRGB)
@@ -1160,17 +1172,9 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
         }catch(const std::exception&error){presentation->stop();log("Graphics presentation disabled: "+std::string(error.what()));}}
         @catch(NSException*error){presentation->stop();log("Graphics presentation disabled: "+std::string(error.reason.UTF8String?:"Presentation failed"));}
     }
-    if(!macfx::effectRequested()) {
+    if(sourceOnly||!macfx::effectRequested()) {
         macfx::observeBypassedPlan(reinterpret_cast<uintptr_t>((__bridge void*)metal.layer));
-        if(captureFrame) {
-            id<MTLTexture> source=framebuffer?framebuffer->raw:metal.texture;
-            @try {try {
-                const auto space=macfx::imageColorSpace(metal.layer.colorspace,metal.layer.wantsExtendedDynamicRangeContent);
-                auto description=macfx::describeImageColor(space);description.alpha=metal.layer.opaque?macfx::ColorAlpha::Opaque:macfx::ColorAlpha::Straight;
-                if(auto capture=macfx::FrameCapture::begin(buffer,source,captureFrame,false,&description))capture->finish(buffer,source);
-            }catch(const std::exception &error){log("Metal frame capture failed: "+std::string(error.what()));}}
-            @catch(NSException *error){log("Metal frame capture failed: "+std::string(error.reason.UTF8String?:"Capture failed"));}
-        }
+        capturePresented();
         macfx::observeTiming(buffer,std::strcmp(timingScope,"game-and-effects")==0?"game":timingScope,metal.texture.width,metal.texture.height);
         return;
     }
@@ -1201,7 +1205,7 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
         macfx::observeTiming(buffer,timingScope,target.width,target.height);
     }
         catch(const macfx::borrowed::Busy &) { noteMetalDecision(runtime.statusContext,"frame-resource-busy");replayNativeHistory(history,buffer,metal.texture,reinterpret_cast<uintptr_t>((__bridge void*)metal.layer));return; }
-        catch(const SpatialBusy &) { noteMetalDecision(runtime.statusContext,"frame-processor-busy");replayNativeHistory(history,buffer,metal.texture,reinterpret_cast<uintptr_t>((__bridge void*)metal.layer));return; }
+        catch(const SpatialBusy &) { noteMetalDecision(runtime.statusContext,"frame-processor-busy");replayNativeHistory(history,buffer,metal.texture,reinterpret_cast<uintptr_t>((__bridge void*)metal.layer));capturePresented(true);return; }
         catch(const macfx::ImageBudgetExceeded &) { noteMetalDecision(runtime.statusContext,"frame-image-budget");replayNativeHistory(history,buffer,metal.texture,reinterpret_cast<uintptr_t>((__bridge void*)metal.layer));return; }
         catch(const std::exception &error) {if(runtime.automaticFailure.reject(metal.texture))log("Metal effect disabled: "+std::string(error.what()));} }
     @catch(NSException *error) {if(runtime.automaticFailure.reject(metal.texture))log("Metal effect disabled: "+std::string(error.reason.UTF8String));}

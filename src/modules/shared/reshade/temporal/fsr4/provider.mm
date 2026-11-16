@@ -26,11 +26,11 @@ std::shared_ptr<fsr411::View> newView() {
           }};
 }
 struct RetainedFrame {
+  // Preparation owns image contracts, never a producer's unsubmitted commands.
   RSTemporalFrame value{};
-  id commands;
   std::array<id<MTLTexture>, 8> textures;
   explicit RetainedFrame(const RSTemporalFrame &f)
-      : value(f), commands((__bridge id)f.commandBuffer),
+      : value(f),
         textures{{(__bridge id<MTLTexture>)f.color,
                   (__bridge id<MTLTexture>)f.depth,
                   (__bridge id<MTLTexture>)f.motion,

@@ -31,7 +31,7 @@ struct LegacyGraphicsConfig {
 // image is written. It attaches to the presented frame only while a requested
 // screenshot is pending; without processing that frame is the game's own image.
 struct CaptureConfig {
-    std::string prefix;std::optional<std::string> trigger;uint64_t frame=120;bool finalOnly=false;
+    std::string prefix;std::optional<std::string> trigger;uint64_t frame=120;bool finalOnly=false,intake=false;
     bool configured() const noexcept {return !prefix.empty();}
 };
 // enabled: RESHADE_DIAGNOSTICS is present; path: its value, the prefix of diagnostic files.
