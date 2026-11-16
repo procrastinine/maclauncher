@@ -108,7 +108,7 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
     const summary = `Adds Vulkan external memory, semaphore and fence sharing to CrossOver ${installation.upstreamVersion} (build ${installation.buildVersion}).`;
     return [{ managerId: id, version: pin.version, installOptions: options, optional: true, silentFallback: true, companion: true,
       release: { version: installation.upstreamVersion, build: installation.buildVersion },
-      label: manager.label, ...(pin.asset?.bytes ? { bytes: pin.asset.bytes } : {}), summary, cancelLabel: 'Play Without It',
+      label: manager.label, ...(pin.asset?.bytes ? { bytes: pin.asset.bytes } : {}), cancelLabel: 'Play Without It',
       detail: `${summary}${size} ${entry?.name || 'The game'} also starts without it, with CrossOver's own Mac driver.` }];
   }
   async function select(installation, context) {

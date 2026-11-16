@@ -23,7 +23,7 @@ test('an optional companion is listed with its version and size in the dialog of
   assert.equal(await accepted.run(), true);
   assert.equal(accepted.dialogs.length, 1, 'one dialog');
   assert.equal(accepted.dialogs[0].label, 'Engine');
-  assert.deepEqual(accepted.dialogs[0].companions, [{ label: 'CrossOver graphics integration', versionLabel: '26.3.0-MCLv1', bytes: 244068, summary: 'Adds Vulkan sharing.' }]);
+  assert.deepEqual(accepted.dialogs[0].companions, [{ label: 'CrossOver graphics integration', versionLabel: '26.3.0-MCLv1', bytes: 244068 }]);
   assert.deepEqual(accepted.installs.map(([id]) => id).sort(), ['engine', 'integration']);
   const declined = harness({ plans: [{ managerId: 'engine', version: '2.0', label: 'Engine' }, companion], answers: [false] });
   assert.equal(await declined.run(), false, 'declining the required download cancels Play');

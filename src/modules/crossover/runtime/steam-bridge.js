@@ -135,8 +135,7 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     return [{ managerId: id, version, requiresDownload: true, ...(!pin && !local ? { discoveryRequired: true } : {}), appId: String(game.appId),
       optional: true, companion: true, label: manager.label, ...(bytes ? { bytes } : {}), grants: ['steam-client-start'],
       message: 'Play with Steam?', confirmLabel: 'Play with Steam', cancelLabel: 'Play Without Steam', companionCheckbox: 'Also connect to Steam',
-      detail: `Connects ${name} to the Steam client for Mac. Downloads ${downloads('the Steam client bridge')}${starts}.${replacement}\n\nWithout Steam, ${name} runs without the Steam client ${until}`,
-      companionDetail: `Connecting to Steam also downloads ${downloads(`the Steam client bridge${version ? ` ${version}` : ''}`)}${starts}.${replacement} Without it, ${name} runs without Steam ${until}` }];
+      detail: `Connects ${name} to the Steam client for Mac. Downloads ${downloads('the Steam client bridge')}${starts}.${replacement}\n\nWithout Steam, ${name} runs without the Steam client ${until}` }];
   }
   async function prepare(entry, context, { installation, prefixPath, architecture, environment, integration = 'native' } = {}) {
     const game = identifyGame(entry), native = discoverClient();

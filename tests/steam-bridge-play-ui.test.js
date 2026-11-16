@@ -138,9 +138,7 @@ test('with another Play download, the bridge is one line of that dialog', async 
   const host = { managerId: 'engine', version: '11.0', label: 'Wine engine' };
   const accepted = await play({ bridge, userDataDir, extra: [host] });
   assert.equal(accepted.dialogs.length, 1, 'one dialog');
-  const detail = 'Connecting to Steam also downloads the Steam client bridge 1.0.0 (0.1 MB) and the Windows Steam client files from Valve, then starts Steam. ' +
-    'Without it, Fixture runs without Steam until the bridge is installed in Runtimes.';
-  assert.deepEqual(accepted.dialogs[0].companions, [{ label: 'Steam client bridge', versionLabel: '1.0.0', bytes: item.record.asset.bytes, detail, checkboxLabel: 'Also connect to Steam' }]);
+  assert.deepEqual(accepted.dialogs[0].companions, [{ label: 'Steam client bridge', versionLabel: '1.0.0', bytes: item.record.asset.bytes, checkboxLabel: 'Also connect to Steam' }]);
   assert.deepEqual(accepted.installs.map(([manager]) => manager).sort(), ['engine', id]);
   assert.deepEqual(accepted.grants, ['steam-client-start']);
   const shown = await dialogOptions(accepted.dialogs[0], { name: 'Fixture' }, { response: 0, checkboxChecked: true });
@@ -220,7 +218,7 @@ test('Play sizes use only an earlier complete Valve total without a metadata req
     [{ filename: 'last.zip', totalBytes: 7340032 }, true]]) {
     if (value) fs.writeFileSync(record, JSON.stringify(value));
     const [plan] = await bridge.requirements({ name: 'Fixture' }, { userDataDir });
-    for (const text of [plan.detail, plan.companionDetail]) {
+    for (const text of [plan.detail]) {
       assert.equal(text.includes('the Windows Steam client files from Valve (about 7.0 MB)'), expected);
       assert.doesNotMatch(text, /unknown|previous download/i);
       if (!expected) assert.doesNotMatch(text, /files from Valve \(/);
