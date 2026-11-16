@@ -200,7 +200,7 @@ test("preferred catalog, download and install failures warn and continue with Mo
     const result = await prepareFixture(t, { fail });
     assert.equal(result.resolved.backend, "moltenvk");
     assert.equal(result.offered.filter(plan => plan.managerId === Managed.projectId).length, 1);
-    assert.equal(result.offered.filter(plan => plan.managerId === "vulkan-moltenvk").length, 1);
+    assert.equal(result.offered.filter(plan => plan.managerId === "vulkan-moltenvk").length, 0, "the MoltenVK used instead downloads with the Play's approval");
     assert.equal(result.warnings.length, 1);
     assert.match(result.warnings[0], new RegExp("preferred " + fail + " failed"));
     assert.deepEqual(result.notices, [`KosmicKrisp (Intel) could not be installed. preferred ${fail} failed. Using moltenvk.`],
@@ -212,7 +212,7 @@ test("preferred catalog, download and install failures warn and continue with Mo
 test("a preferred Intel package with no published version tells the Play that MoltenVK is used", async t => {
   const result = await prepareFixture(t, { fail: "empty" });
   assert.deepEqual(result.events, ["consent:" + Managed.projectId, "refresh:" + Managed.projectId,
-    "consent:vulkan-moltenvk", "refresh:vulkan-moltenvk", "install:vulkan-moltenvk", "prepare"]);
+    "refresh:vulkan-moltenvk", "install:vulkan-moltenvk", "prepare"]);
   assert.equal(result.resolved.backend, "moltenvk");
   assert.deepEqual(result.notices, ["No KosmicKrisp (Intel) version is available to download. Using moltenvk."]);
   assert.deepEqual(result.warnings, ["[runtimes] No KosmicKrisp (Intel) version is available to download. Using moltenvk."]);

@@ -129,6 +129,7 @@ async function prepare({context,image,expected,extractor,existingOnly=false},dep
   // prompt. A declined new acquisition still creates no cache directories.
   const candidate=exists(base)?null:await legacyBase({context,image,expected,run,compute,locations:dependencies.legacyLocations||legacyLocations});
   if(!exists(base)&&!candidate)await (dependencies.confirm||confirmToolInstall)(context,{managerId:'android-system-image',version:image.sha256,label:'Android system image',requiresDownload:true,
+    licenseUrl:image.licenseUrl||'https://developer.android.com/studio/terms',
     detail:'Download the Android 16 system image under the Android SDK license: '+(image.licenseUrl||'https://developer.android.com/studio/terms')});
   context.signal?.throwIfAborted();Writable.assertOwnDirectory(userDataDir,parent);
   const release=await lock(path.join(parent,'.'+image.sha256+'.lock'),context.signal,dependencies.acquireLock||acquireCatalogLock);

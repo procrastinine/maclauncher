@@ -63,7 +63,7 @@ Click a game to open its **inspector** on the right, where everything about that
 
 ## 5. Press Play
 
-Click **Play**. If the game's runtime isn't installed yet, and no compatible version you already have can play it, MacLauncher asks before downloading it, installs it, and then prepares and launches the game without further clicks. When a game needs several downloads, such as WINE, a graphics translator, a Vulkan driver or a model for its graphics settings, one question lists them all with their sizes, and they download at the same time. Some games take longer the first time while MacLauncher prepares them, for example by converting files, compiling shaders or setting up a private Windows environment. Later launches reuse that work.
+Click **Play**. If the game's runtime isn't installed yet, and no compatible version you already have can play it, MacLauncher asks before downloading it, installs it, and then prepares and launches the game without further clicks. When a game needs several downloads, such as WINE, a graphics translator, a Vulkan driver or a model for its graphics settings, one question lists them all with their sizes, and they download at the same time. Anything else that Play turns out to need once it has started downloads with that same answer, so there's no second question, unless it comes with a licence to agree to. Some games take longer the first time while MacLauncher prepares them, for example by converting files, compiling shaders or setting up a private Windows environment. Later launches reuse that work.
 
 **Stop** ends the game from the launcher if you need to.
 

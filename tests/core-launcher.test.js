@@ -983,13 +983,13 @@ test("Play preparation actions see the runtime being launched, not the stored on
   assert.deepEqual(seen, ["alternate"]);
 });
 
-test("Play asks once for a planned download; the manager's own check for that plan does not ask again", async t => {
+test("Play asks once for a planned download; the manager's own check for that plan and a further download of that Play do not ask again", async t => {
   const prompts = [];
   const { confirmToolInstall } = require("../src/modules/shared/runtime/tool-install");
   const manager = { id: "test-runtime", label: "Test runtime",
     installRuntime: async context => {
       await confirmToolInstall(context, { managerId: "test-runtime", version: "2.0", requiresDownload: true });
-      await assert.rejects(confirmToolInstall(context, { managerId: "other-tool", version: "1", requiresDownload: true }), /canceled/);
+      await confirmToolInstall(context, { managerId: "other-tool", version: "1", requiresDownload: true });
       return { version: "2.0" };
     } };
   const { launcher, gamePath } = fixture(t, { launcher: { confirmRuntimeInstall: async plan => { prompts.push(plan.managerId); return plan.managerId === "test-runtime"; } }, mod: {
@@ -999,7 +999,7 @@ test("Play asks once for a planned download; the manager's own check for that pl
   } });
   const entry = await launcher.resolveEntry(gamePath);
   await launcher.launchEntry(entry);
-  assert.deepEqual(prompts, ["test-runtime", "other-tool"]);
+  assert.deepEqual(prompts, ["test-runtime"], "the download the install step finds is approved with the Play's question");
 });
 
 test('CLI wait keeps captured output referenced between process exit and pipe closure', t => {

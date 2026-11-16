@@ -178,10 +178,35 @@ async function runtimePlans(entry, mod, info, context, managers) {
   return [...unique.values()];
 }
 
+// One question per Play. Once a download of this Play is approved, a later
+// download that the Play needs, such as graphics data that its launch step finds,
+// is approved with it and named in the log. A download declined earlier in this
+// Play, an optional offer, a question with companions to choose from and a
+// download under a licence (a licence sheet, an agreement or a named licence)
+// are still asked.
+const licensed = plan => plan?.licenseRequired === true || plan?.kind === "licence" || typeof plan?.licenseUrl === "string";
+function askOncePerPlay(context) {
+  const ask = context.confirmRuntimeInstall;
+  if (typeof ask !== "function" || ask.oncePerPlay) return;
+  let approved = false;
+  context.confirmRuntimeInstall = Object.assign(async (plan, ...rest) => {
+    const covered = approved && !licensed(plan) && plan?.optional !== true && !plan?.companions?.length &&
+      !context.declinedChoices?.has(`download:${plan?.managerId}`);
+    if (covered) {
+      context.logger?.info?.(`[runtimes] ${plan.label || plan.managerId} downloads with the approval given for this Play.`);
+      return true;
+    }
+    const answer = await ask(plan, ...rest);
+    if ((answer === true || answer?.approved === true) && !licensed(plan)) approved = true;
+    return answer;
+  }, { oncePerPlay: true });
+}
+
 // `notice` receives a line that stays visible for the rest of this Play, such as
 // the runtime used after an optional download was unavailable.
 async function prepareForLaunch({ entry, mod, info, context, registry, runAction, install, report = () => {},
   notice = line => report({ phase: "prepare", label: line }) }) {
+  askOncePerPlay(context);
   const managers = listRuntimeManagers(registry);
   let plans = await runtimePlans(entry, mod, info, context, managers);
   const approved = new Set(), refreshed = new Set(), declined = new Set();

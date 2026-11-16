@@ -73,7 +73,8 @@ test("nxnative cold Play consents before source discovery, installs native tools
   assert.equal(await prepare({ ...f.context, confirmRuntimeInstall: async () => false }), false);
   assert.deepEqual(f.events, [], "declined Play neither discovers nor installs");
   assert.equal(await prepare(f.context), true);
-  assert.deepEqual(f.events, ["consent:nxnative:discovery", "discover", "download-source", "consent:nxnative-tools:tools-1", "install-tools:tools-1"]);
+  assert.deepEqual(f.events, ["consent:nxnative:discovery", "discover", "download-source", "install-tools:tools-1"],
+    "the native tools that the source needs download with the Play's one approval");
   assert.equal(installed.version, VERSION);assert.equal(installed.sourceInstall.version, VERSION);
   assert.equal(installed.install.version, "tools-1");assert.equal(installed.toolsVersion, "tools-1");
   assert.equal(installed.toolsManagerId, "nxnative-tools");

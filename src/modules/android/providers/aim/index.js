@@ -91,7 +91,7 @@ async function prepareSystem({ context, storage, policy, runtime = resolveRuntim
     };
     if (!fs.existsSync(path.join(directory, "system.dmg"))) {
       await confirmToolInstall(context, { managerId: "android-aim-image", version: imageSource.version,
-        label: "Android system image", requiresDownload: true,
+        label: "Android system image", requiresDownload: true, licenseUrl: imageSource.licenseUrl,
         detail: "Download the Android 16 system image (1.95 GB) under the Android SDK license: " + imageSource.licenseUrl });
       return runDownloadTask(context.downloads || context.downloadManager, { label: "Android system image", managerId: "android-aim-image", sectionId: "default", version: imageSource.version,
         kind: "runtime", dedupeKey: "android-aim-image:" + directory }, async ({ signal: taskSignal, onProgress }) => {

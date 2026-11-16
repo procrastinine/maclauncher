@@ -500,13 +500,13 @@ test("cold LÖVE preparation keeps declared-version evidence through consented r
     install: async (_manager, payload) => { installs.push(payload); installed = { channel: "nightly", buildKey: payload.version,
       appPath: "/ready/love.app", bundleVersionNormalized: "12.0" }; } });
   assert.equal(await prepare(),true);
-  assert.equal(approvals, 2);
+  assert.equal(approvals, 1, "the nightly discovery after the release discovery needs no second question");
   assert.deepEqual(f.calls.map(call => call.sectionId), ["stable", "nightly"]);
   assert.deepEqual(f.calls.map(call => call.latestOnly), [false, true], "Development-family discovery keeps the bounded latest-artifact query");
   assert.deepEqual(installs, [{sectionId:"nightly",version:"declared-development-build"}]);
   entry.runtimeData = { love: { channel: "nightly", version: "declared-development-build" } };
   assert.equal(await prepare(), true); assert.equal(await prepare(), true);
-  assert.equal(approvals, 2);
+  assert.equal(approvals, 1);
   assert.equal(f.calls.length, 2);
   assert.deepEqual(installs, [{ sectionId: "nightly", version: "declared-development-build" }]);
 });

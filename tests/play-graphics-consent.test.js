@@ -109,6 +109,32 @@ test("skipping an optional download that is the only one of a Play installs the 
   assert.deepEqual(installed, ["scene:2.0"]);
 });
 
+test("a download the launch step finds after the Play dialog is approved with it, while a licence, an offer and a declined download still ask", async t => {
+  const f = fixture(t, { graphics: [] });
+  assert.equal(await f.prepare(), true);
+  assert.deepEqual(f.events.filter(event => event.startsWith("consent")), ["consent:Host"]);
+  const ask = plan => f.context.confirmRuntimeInstall({ requiresDownload: true, ...plan });
+  assert.equal(await ask({ managerId: "graphics-xess", label: "XeSS runtime" }), true, "graphics data found at launch needs no second question");
+  assert.equal(await ask({ managerId: "toolchain", label: "Metal toolchain", licenseRequired: true }), true);
+  assert.equal(await ask({ managerId: "importer", label: "Importer licence", kind: "licence" }), true);
+  assert.equal(await ask({ managerId: "android-system-image", label: "System image", licenseUrl: "https://example.invalid/terms" }), true);
+  assert.equal(await ask({ managerId: "graphics-offer", label: "Offer", optional: true }), true);
+  (f.context.declinedChoices ||= new Set()).add("download:graphics-neural-models");
+  assert.equal(await ask({ managerId: "graphics-neural-models", label: "Declined model" }), true);
+  assert.deepEqual(f.events.filter(event => event.startsWith("consent")),
+    ["consent:Host", "consent:Metal toolchain", "consent:Importer licence", "consent:System image", "consent:Offer", "consent:Declined model"]);
+});
+
+test("without a Play dialog, the first download the launch step finds asks and later ones of that Play are approved with it", async t => {
+  const f = fixture(t, { primary: null, graphics: [] });
+  assert.equal(await f.prepare(), true);
+  assert.deepEqual(f.events, [], "nothing to download before the launch step");
+  const ask = plan => f.context.confirmRuntimeInstall({ requiresDownload: true, ...plan });
+  assert.equal(await ask({ managerId: "graphics-shader-library", label: "Shader collection" }), true);
+  assert.equal(await ask({ managerId: "graphics-xess", label: "XeSS runtime" }), true);
+  assert.deepEqual(f.events, ["consent:Shader collection"]);
+});
+
 test("a runtime whose versions are found after the Play dialog downloads without a second dialog", async t => {
   const launchDownloads = Effects.launchDownloads;
   Effects.launchDownloads = async () => [];
