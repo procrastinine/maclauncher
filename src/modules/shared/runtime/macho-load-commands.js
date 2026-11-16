@@ -1,3 +1,4 @@
+const BinaryArch = require('../../../core/binary-arch');
 const fs = require("node:fs");
 const Guards = require("./guards");
 const path = require("node:path");
@@ -5,10 +6,6 @@ const { TextDecoder } = require("node:util");
 
 // Format constants: Apple's mach-o/loader.h and mach-o/fat.h. No executable or
 // developer tool is invoked. Only bounded headers/load commands are read.
-const CPUS = new Map([[0x0100000c, "arm64"], [0x01000007, "x86_64"], [7, "i386"],
-  [12, "arm"], [18, "ppc"], [0x01000012, "ppc64"]]);
-const CPU_NAMES = new Map([...CPUS].map(([cpu, name]) => [name, cpu]));
-CPU_NAMES.set("x64", 0x01000007); CPU_NAMES.set("ia32", 7);
 const LIMITS = Guards.limits({ slices: 32, commands: 8192, commandBytes: 4 * 1024 * 1024,
   readBytes: 16 * 1024 * 1024, pathBytes: 4096, buildTools: 128 });
 const utf8 = new TextDecoder("utf-8", { fatal: true });
@@ -45,32 +42,27 @@ function inspect(readRange, size, { architecture, signal, imports: inspectImport
     return result;
   };
   if (size < 28) fail("Truncated Mach-O header.");
-  const magic = read(0, 8).readUInt32BE(0);
-  const fat64 = magic === 0xcafebabf || magic === 0xbfbafeca;
-  const fat32 = magic === 0xcafebabe || magic === 0xbebafeca;
+  const format = BinaryArch.machoMagic(read(0, 8).readUInt32BE(0));
+  const fat64 = format?.fat && format.wide, fat32 = format?.fat && !format.wide;
   let slices;
   if (fat32 || fat64) {
-    const little = magic === 0xbebafeca || magic === 0xbfbafeca;
-    const count = bound(little ? read(0, 8).readUInt32LE(4) : read(0, 8).readUInt32BE(4), LIMITS.slices, "Universal slice count");
+    const container = BinaryArch.machoFatHeader(read(0, 8));
+    const count = bound(container.count, LIMITS.slices, "Universal slice count");
     if (!count) fail("Empty universal header.");
     const stride = fat64 ? 32 : 20, tableEnd = 8 + count * stride;
     const table = read(8, count * stride);
-    const u32 = offset => little ? table.readUInt32LE(offset) : table.readUInt32BE(offset);
-    const u64 = offset => Number(little ? table.readBigUInt64LE(offset) : table.readBigUInt64BE(offset));
     slices = [];
     for (let i = 0; i < count; i += 1) {
-      const entry = i * stride, cpu = u32(entry), subtype = u32(entry + 4);
-      const offset = fat64 ? u64(entry + 8) : u32(entry + 8), length = fat64 ? u64(entry + 16) : u32(entry + 12);
-      const alignment = u32(entry + (fat64 ? 24 : 16));
+      const entry = BinaryArch.machoFatEntry(table, i, container), { cpu, subtype, offset, alignment } = entry, length = entry.size;
       range(offset, length, size, "universal slice");
-      if (offset < tableEnd || length < 28 || alignment > 52 || offset % (2 ** alignment) !== 0 || fat64 && u32(entry + 28) !== 0)
+      if (offset < tableEnd || length < 28 || alignment > 52 || offset % (2 ** alignment) !== 0 || fat64 && entry.reserved !== 0)
         fail("Invalid universal slice alignment or bounds.");
       if (slices.some(slice => offset < slice.offset + slice.size && slice.offset < offset + length)) fail("Overlapping universal slices.");
       if (slices.some(slice => slice.cpu === cpu && slice.subtype === subtype)) fail("Duplicate universal architecture.", "MACHO_ARCH");
       slices.push({ offset, size: length, cpu, subtype });
     }
   } else slices = [{ offset: 0, size, cpu: null, subtype: null }];
-  const requested = architecture == null ? null : CPU_NAMES.get(architecture);
+  const requested = architecture == null ? null : BinaryArch.machoCpuCode(architecture);
   if (architecture != null && requested == null) fail("Unsupported requested architecture.", "MACHO_ARCH");
   if (requested != null && (fat32 || fat64)) {
     const selected = slices.filter(slice => slice.cpu === requested);
@@ -78,20 +70,19 @@ function inspect(readRange, size, { architecture, signal, imports: inspectImport
     slices = selected;
   }
   const images = slices.map(slice => {
-    const initial = read(slice.offset, 28), marker = initial.readUInt32BE(0);
-    const little = marker === 0xcefaedfe || marker === 0xcffaedfe;
-    const wide = marker === 0xfeedfacf || marker === 0xcffaedfe;
-    if (!little && marker !== 0xfeedface && marker !== 0xfeedfacf) fail("File is not Mach-O.");
+    const initial = read(slice.offset, 28), format = BinaryArch.machoMagic(initial.readUInt32BE(0));
+    if (!format || format.fat) fail("File is not Mach-O.");
+    const facts = BinaryArch.machoHeader(initial), { little, wide } = facts;
     const u32 = (data, offset) => little ? data.readUInt32LE(offset) : data.readUInt32BE(offset);
-    const cpu = u32(initial, 4), subtype = u32(initial, 8), fileType = u32(initial, 12);
-    const flags = u32(initial, 24), twoLevel = Boolean(flags & 0x80) && !(flags & 0x100);
+    const cpu = facts.cpu, subtype = facts.subtype, fileType = facts.fileType;
+    const flags = facts.flags, twoLevel = Boolean(flags & 0x80) && !(flags & 0x100);
     if (slice.cpu != null && (slice.cpu !== cpu || slice.subtype !== subtype) || requested != null && requested !== cpu)
       fail("The Mach-O header does not match its selected architecture.", "MACHO_ARCH");
     if (wide !== !!(cpu & 0x01000000)) fail("CPU and Mach-O word size disagree.", "MACHO_ARCH");
     const headerSize = wide ? 32 : 28;
     range(0, headerSize, slice.size, "Mach-O header");
-    const count = bound(u32(initial, 16), LIMITS.commands, "Load command count");
-    const length = bound(u32(initial, 20), LIMITS.commandBytes, "Load command bytes");
+    const count = bound(facts.commandCount, LIMITS.commands, "Load command count");
+    const length = bound(facts.commandBytes, LIMITS.commandBytes, "Load command bytes");
     range(headerSize, length, slice.size, "load commands");
     if (length < count * 8) fail("Load command count exceeds its byte range.");
     const commands = read(slice.offset + headerSize, length), dependencies = [], runPaths = [], builds = [], dyldEnvironment = [];
@@ -164,7 +155,7 @@ function inspect(readRange, size, { architecture, signal, imports: inspectImport
           weak: Boolean(desc & 0x40) || dependency?.kind === 'weak' });
       }
     }
-    return { architecture: CPUS.get(cpu) || `cpu-${cpu.toString(16)}`, cpuType: cpu, cpuSubtype: subtype,
+    return { architecture: facts.architecture || `cpu-${cpu.toString(16)}`, cpuType: cpu, cpuSubtype: subtype,
       fileType, wordSize: wide ? 64 : 32, endianness: little ? "little" : "big",
       platform: build?.platform ?? null, minimumMacOS: build?.platform === 1 ? build.minimumOS : null,
       minimumOS: build?.minimumOS ?? null, sdkVersion: build?.sdkVersion ?? null,

@@ -1,12 +1,9 @@
+const BinaryArch = require('../../../core/binary-arch');
 const fs = require("node:fs");
 const path = require("node:path");
 const { TextDecoder } = require("node:util");
 
-const ARCHITECTURES = new Map([
-  ["arm64", 0x0100000c], ["x64", 0x01000007], ["x86_64", 0x01000007],
-  // Legacy slices may be inspected; this does not provide a 32-bit runtime.
-  ["ia32", 7], ["i386", 7], ["arm", 12],
-]);
+const SUPPORTED_ARCHITECTURES = new Set(['arm64', 'x64', 'x86_64', 'ia32', 'i386', 'arm']);
 const LIMITS = Object.freeze({
   fatSlices: 32, commands: 8192, commandBytes: 4 * 1024 * 1024,
   trieBytes: 8 * 1024 * 1024, nodes: 65536, visits: 131072, depth: 512,
@@ -62,27 +59,21 @@ function createReader(handle, size) {
 
 async function selectSlice(read, fileSize, cpu) {
   if (fileSize < 28) fail("Truncated Mach-O header.");
-  const magic = (await read(0, 8)).readUInt32BE(0);
-  const fat64 = magic === 0xcafebabf || magic === 0xbfbafeca;
-  const fat32 = magic === 0xcafebabe || magic === 0xbebafeca;
+  const format = BinaryArch.machoMagic((await read(0, 8)).readUInt32BE(0));
+  const fat64 = format?.fat && format.wide, fat32 = format?.fat && !format.wide;
   if (!fat64 && !fat32) return { offset: 0, size: fileSize, cpu };
-  const little = magic === 0xbfbafeca || magic === 0xbebafeca;
   const header = await read(0, 8);
-  const count = bounded(little ? header.readUInt32LE(4) : header.readUInt32BE(4), LIMITS.fatSlices, "Universal slice count");
+  const container = BinaryArch.machoFatHeader(header);
+  const count = bounded(container.count, LIMITS.fatSlices, "Universal slice count");
   if (!count) fail("Empty universal header.");
   const stride = fat64 ? 32 : 20, tableEnd = 8 + count * stride;
   const table = await read(8, count * stride), slices = [];
-  const u32 = offset => little ? table.readUInt32LE(offset) : table.readUInt32BE(offset);
-  const u64 = offset => Number(little ? table.readBigUInt64LE(offset) : table.readBigUInt64BE(offset));
   for (let i = 0; i < count; i += 1) {
-    const entry = i * stride;
-    const offset = fat64 ? u64(entry + 8) : u32(entry + 8);
-    const size = fat64 ? u64(entry + 16) : u32(entry + 12);
-    const alignment = u32(entry + (fat64 ? 24 : 16));
+    const entry = BinaryArch.machoFatEntry(table, i, container), { offset, size, alignment } = entry;
     range(offset, size, fileSize, "universal slice");
     if (offset < tableEnd || size < 28 || alignment > 52 || offset % (2 ** alignment) !== 0) fail("Invalid universal slice alignment or bounds.");
-    if (fat64 && u32(entry + 28) !== 0) fail("Invalid universal slice reserved field.");
-    const slice = { offset, size, cpu: u32(entry) };
+    if (fat64 && entry.reserved !== 0) fail("Invalid universal slice reserved field.");
+    const slice = { offset, size, cpu: entry.cpu };
     if (slices.some(other => offset < other.offset + other.size && other.offset < offset + size)) fail("Overlapping universal slices.");
     slices.push(slice);
   }
@@ -93,17 +84,16 @@ async function selectSlice(read, fileSize, cpu) {
 }
 
 async function readCommands(read, slice, requestedCpu) {
-  const initial = await read(slice.offset, 28), magic = initial.readUInt32BE(0);
-  const little = magic === 0xcefaedfe || magic === 0xcffaedfe;
-  const wide = magic === 0xfeedfacf || magic === 0xcffaedfe;
-  if (!little && magic !== 0xfeedface && magic !== 0xfeedfacf) fail("File is not Mach-O.");
+  const initial = await read(slice.offset, 28), format = BinaryArch.machoMagic(initial.readUInt32BE(0));
+  if (!format || format.fat) fail("File is not Mach-O.");
+  const facts = BinaryArch.machoHeader(initial), { little, wide } = facts;
   const u32 = (data, offset) => little ? data.readUInt32LE(offset) : data.readUInt32BE(offset);
-  if (u32(initial, 4) !== slice.cpu || slice.cpu !== requestedCpu) fail("The Mach-O slice does not match the requested architecture.", "MACHO_ARCH");
+  if (facts.cpu !== slice.cpu || slice.cpu !== requestedCpu) fail("The Mach-O slice does not match the requested architecture.", "MACHO_ARCH");
   if (wide !== !!(requestedCpu & 0x01000000)) fail("CPU and Mach-O word size disagree.");
   const headerSize = wide ? 32 : 28;
   range(0, headerSize, slice.size, "Mach-O header");
-  const count = bounded(u32(initial, 16), LIMITS.commands, "Load command count");
-  const commandBytes = bounded(u32(initial, 20), LIMITS.commandBytes, "Load command bytes");
+  const count = bounded(facts.commandCount, LIMITS.commands, "Load command count");
+  const commandBytes = bounded(facts.commandBytes, LIMITS.commandBytes, "Load command bytes");
   if (count * 8 > commandBytes) fail("Truncated load commands.");
   range(headerSize, commandBytes, slice.size, "load commands");
   const data = await read(slice.offset + headerSize, commandBytes);
@@ -297,7 +287,7 @@ function createMachOExportInspector({ fileSystem = fs.promises, details = false 
   // The default slice belongs to the consuming process; callers can request a different runtime CPU.
   return async function inspectMachOExports(file, { arch = process.arch } = {}) {
     if (typeof file !== "string" || !path.isAbsolute(file) || file.includes("\0")) fail("An absolute local file path is required.", "MACHO_PATH");
-    const cpu = ARCHITECTURES.get(arch);
+    const cpu = SUPPORTED_ARCHITECTURES.has(arch) ? BinaryArch.machoCpuCode(arch) : null;
     if (!cpu) fail("Unsupported requested architecture.", "MACHO_ARCH");
     const real = await fileSystem.realpath(file), stat = await fileSystem.stat(file);
     if (!stat.isFile() || !Number.isSafeInteger(stat.size)) fail("A regular Mach-O file is required.");
