@@ -88,7 +88,10 @@ function buildRecord({ source, install, id = source.id + ':' + install.version, 
     new RegExp(rule.match).test(install.catalogEntry?.asset?.filename || ''));
   const build = measure({ source, root: install.root, files, declares: declaration?.declares,
     id, version, provenance: install.sourceIdentity || {} });
-  return { ...build, root: install.root, measured: true, parts };
+  const floor = install.manifest.minimumMacOS;
+  return { ...build, root: install.root, measured: true, parts,
+    ...(floor ? { minimumMacOS: floor, interfaces: { ...build.interfaces,
+      requires: [...new Set([...(build.interfaces?.requires || []), 'macos>=' + floor])] } } : {}) };
 }
 function listBuilds({ manager, sources, context = {} }) {
   const source = sources[0], result = [], installed = manager.core.listInstalled(context.userDataDir);
@@ -108,7 +111,9 @@ function listBuilds({ manager, sources, context = {} }) {
     if (installed.some(row => row.version === pin.version)) continue;
     const declaration = source.assets.find(rule => new RegExp(rule.match).test(pin.asset?.filename || pin.asset?.name || ''));
     if (declaration) result.push({ id: source.id + ':' + pin.version, source: source.id, kind: source.kind,
-      version: pin.version, installed: false, measured: false, binaries: [], bytes: pin.asset?.bytes, interfaces: source.interfaces,
+      version: pin.version, installed: false, measured: false, binaries: [], bytes: pin.asset?.bytes, interfaces: { ...source.interfaces,
+        requires: [...new Set([...(source.interfaces?.requires || []), ...(pin.minimumMacOS ? ['macos>=' + pin.minimumMacOS] : [])])] },
+      ...(pin.installReason ? { available: false, unavailableReason: pin.installReason } : {}),
       legacy: { catalogEntry: pin, declares: declaration.declares } });
   }
   return result;
