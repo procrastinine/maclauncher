@@ -243,6 +243,19 @@ async function keepBundleLoader(executable, ntdll, temporary) {
     return entry;
   } catch { return null; }
 }
+// A loader that its publisher signed inside an application bundle holding the
+// provisioning profile its entitlements need runs only from that bundle; macOS
+// stops a copy of it anywhere else. The view links such a loader instead.
+function publisherLoader(file) {
+  let real;
+  try { real = fs.realpathSync(file); } catch { return null; }
+  const bundle = /^(.*\.app)\/Contents\/MacOS\/[^/]+$/.exec(real)?.[1];
+  return bundle && fs.existsSync(path.join(bundle, "Contents", "embedded.provisionprofile")) ? real : null;
+}
+// Whether the Wine runs from a publisher-signed loader; its view keeps links
+// where other views keep copies, so it has its own view folder.
+const publisherSigned = install => Boolean(publisherLoader(install.executablePath || path.join(engineRoot(install), "bin", "wine")) ||
+  publisherLoader(path.join(engineRoot(install), "lib", "wine", wineLayout(install).unixName, "wine")));
 async function prepareLoaderView(engine, viewRoot, install, signal, source) {
   const wineRoot = path.join(viewRoot, "wine"), dllRoot = path.join(wineRoot, "lib", "wine");
   const layout = wineLayout(install), bin = path.join(wineRoot, "bin"), unix = path.join(dllRoot, layout.unixName);
@@ -252,7 +265,9 @@ async function prepareLoaderView(engine, viewRoot, install, signal, source) {
   // A separate loader and ntdll copy give selected renderer links priority,
   // while WINEDLLPATH supplies the unchanged shared engine as a fallback.
   const executablePath = path.join(bin, "wine"), serverPath = path.join(bin, "wineserver");
-  await cloneLoaderFile(install.executablePath || path.join(engine, "bin", "wine"), executablePath, signal);
+  const launcher = install.executablePath || path.join(engine, "bin", "wine"), signedLauncher = publisherLoader(launcher);
+  if (signedLauncher) await linkFile(signedLauncher, executablePath, signal);
+  else await cloneLoaderFile(launcher, executablePath, signal);
   await linkFile(install.serverPath || path.join(engine, "bin", "wineserver"), serverPath, signal);
   await linkDirectory(path.join(engine, "share"), path.join(wineRoot, "share"), signal);
   for (const architecture of layout.windows) {
@@ -268,9 +283,12 @@ async function prepareLoaderView(engine, viewRoot, install, signal, source) {
   // Either loader runs the game from the Game Mode bundle.
   const unixLoader = path.join(engine, "lib", "wine", layout.unixName, "wine"), separate = fs.existsSync(unixLoader);
   if (!separate) await cloneLoaderFile(path.join(engine, "lib", "wine", "x86_64-unix", "ntdll.so"), path.join(unix, "ntdll.so"), signal);
-  const gameLoader = await prepareGameBundle({ loader: separate ? unixLoader : executablePath, engine, wineRoot, dllRoot, layout, separate, source, signal });
+  // A publisher-signed loader runs from its own bundle rather than ours.
+  const signedLoader = separate ? publisherLoader(unixLoader) : signedLauncher;
+  const gameLoader = signedLoader ? (separate ? signedLoader : executablePath)
+    : await prepareGameBundle({ loader: separate ? unixLoader : executablePath, engine, wineRoot, dllRoot, layout, separate, source, signal });
   if (separate) {
-    await linkFile(path.join(path.dirname(gameLoader), "ntdll.so"), path.join(unix, "ntdll.so"), signal);
+    await linkFile(signedLoader ? path.join(path.dirname(unixLoader), "ntdll.so") : path.join(path.dirname(gameLoader), "ntdll.so"), path.join(unix, "ntdll.so"), signal);
     await linkFile(gameLoader, path.join(unix, "wine"), signal);
   }
   const libraryOverride = path.join(wineRoot, "loader-libraries");
@@ -435,5 +453,5 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath };
 }
 
-module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, keepBundleLoader, gameBundleInfo, prepareGraphicsView, capabilitiesFor,
-  __test: { capabilitiesFor, ownDirectory, CORE_DLLS } };
+module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, publisherSigned, keepBundleLoader, gameBundleInfo, prepareGraphicsView, capabilitiesFor,
+  __test: { capabilitiesFor, ownDirectory, prepareLoaderView, CORE_DLLS } };

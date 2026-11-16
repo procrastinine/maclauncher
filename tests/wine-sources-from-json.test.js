@@ -127,3 +127,36 @@ test("an application's own native files under share do not decide the CPU of the
   assert.equal(prepared.server, "Sample.app/Contents/MacOS/wineserver");
   assert.deepEqual(prepared.architectures, ["arm64"]);
 });
+
+test("a Wine whose publisher signed its loaders in bundles with a provisioning profile runs them from those bundles", async t => {
+  const Graphics = require("../src/modules/crossover/sources/wine-graphics");
+  const { image, X64 } = require("./fixtures/macho-image"), { peFixture } = require("./helpers/pe-fixture");
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "wine-signed-loader-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const put = (file, bytes = "fixture") => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file; };
+  const builtin = file => { const { bytes, peOffset } = peFixture({ is64: true }); bytes.write("Wine builtin DLL\0", 64); bytes.writeUInt16LE(0x2002, peOffset + 22); return put(file, bytes); };
+  async function view(name, signed) {
+    // The layout of MetalSharp Wine: an application whose Unix loader has a bundle of its own.
+    const contents = path.join(root, name, "Sample.app", "Contents"), unix = path.join(contents, "lib", "wine", "x86_64-unix");
+    put(path.join(contents, "MacOS", "wine"), image({ cpu: X64, fileType: 2 })); put(path.join(contents, "MacOS", "wineserver"), image({ cpu: X64, fileType: 2 }));
+    put(path.join(unix, "ntdll.so"), image({ cpu: X64 })); put(path.join(unix, "wine.app", "Contents", "MacOS", "wine"), image({ cpu: X64, fileType: 2 }));
+    fs.symlinkSync("wine.app/Contents/MacOS/wine", path.join(unix, "wine"));
+    for (const dll of ["ntdll", "apisetschema"]) builtin(path.join(contents, "lib", "wine", "x86_64-windows", dll + ".dll"));
+    put(path.join(contents, "share", "wine", "nls", "c_932.nls"));
+    if (signed) for (const bundle of [contents, path.join(unix, "wine.app", "Contents")]) put(path.join(bundle, "embedded.provisionprofile"));
+    const install = { engineRoot: contents, executablePath: path.join(contents, "MacOS", "wine"), serverPath: path.join(contents, "MacOS", "wineserver"), architecture: "x86_64" };
+    const loader = await Graphics.__test.prepareLoaderView(contents, path.join(root, name, "view"), install, undefined, require("../src/modules/crossover/sources").get("metalsharp-wine"));
+    return { contents, unix, install, loader, viewUnix: path.join(loader.dllRoot, "x86_64-unix") };
+  }
+  const signed = await view("signed", true);
+  assert.equal(fs.realpathSync(signed.loader.executablePath), path.join(signed.contents, "MacOS", "wine"), "the launcher is the publisher's file");
+  assert.equal(fs.realpathSync(path.join(signed.viewUnix, "wine")), path.join(signed.unix, "wine.app", "Contents", "MacOS", "wine"));
+  assert.equal(fs.realpathSync(path.join(signed.viewUnix, "ntdll.so")), path.join(signed.unix, "ntdll.so"));
+  assert.equal(signed.loader.plannedMainExecutablePath, path.join(signed.unix, "wine.app", "Contents", "MacOS", "wine"));
+  assert.equal(fs.existsSync(path.join(signed.loader.wineRoot, "MacLauncher Game.app")), false, "no copy of a signed loader in a bundle of ours");
+  const plain = await view("plain", false);
+  assert.equal(fs.lstatSync(plain.loader.executablePath).isSymbolicLink(), false, "other loaders are copied into the view, as before");
+  assert.ok(plain.loader.plannedMainExecutablePath.includes("MacLauncher Game.app"));
+  // The view folder of a publisher-signed Wine is its own.
+  assert.deepEqual([Graphics.publisherSigned(signed.install), Graphics.publisherSigned(plain.install)], [true, false]);
+});

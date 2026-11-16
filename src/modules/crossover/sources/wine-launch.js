@@ -281,7 +281,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   // Version the loader layout independently of the persistent prefix/saves.
   const variant = crypto.createHash("sha256").update(JSON.stringify([require("./wine-graphics").VIEW_LAYOUT, settings.graphicsBackend || "auto", settings.vulkanBackend || "auto",
     settings.cncDdraw === true, match.executableArchitecture, ...(settings.dlss === true ? ["dlss"] : []),
-    ...(cameraBridge ? [cameraBridge.dxmt.identity, cameraBridge.baseRoot] : [])])).digest("hex").slice(0, 12);
+    ...(cameraBridge ? [cameraBridge.dxmt.identity, cameraBridge.baseRoot] : []),
+    ...(require("./wine-graphics").publisherSigned(selected.install) ? ["publisher-loader"] : [])])).digest("hex").slice(0, 12);
   const views = path.join(context.userDataDir, `graphics/${source.id}-views`);
   Writable.assertOwnDirectory(context.userDataDir, views);
   const viewRoot = path.join(views, `${identity}-${variant}-${translatorView.identity}`);
