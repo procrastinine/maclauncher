@@ -59,6 +59,7 @@ function pe(r) {
   if (wide && directories>10) {
     const address=optional.readUInt32LE(prefix+80), bytes=optional.readUInt32LE(prefix+84);
     if(address && bytes) {
+      if(bytes<4) fail('PE load config outside directory bounds');
       const config=rva(address,bytes), size=config.readUInt32LE(0);
       if(size>bytes) fail('PE load config outside directory bounds');
       if(size>=208) {
@@ -67,7 +68,7 @@ function pe(r) {
           if(pointer<imageBase) fail('CHPE pointer below image base');
           const meta=rva(safe(pointer-imageBase),12), version=meta.readUInt32LE(0), codeMap=meta.readUInt32LE(4), entries=meta.readUInt32LE(8);
           const map=rva(codeMap,entries*8), types=new Set();
-          for(let i=0;i<entries;i++) { const start=map.readUInt32LE(i*8), type=start&3, size=map.readUInt32LE(i*8+4); if(type===3) fail('unknown CHPE code type'); if(size) { rva(start-(start&3),size); types.add(['arm64','arm64ec','x86_64'][type]); } }
+          for(let i=0;i<entries;i++) { const start=map.readUInt32LE(i*8), type=start&3, size=map.readUInt32LE(i*8+4); if(type===3) fail('unknown CHPE code type'); if(size) { const codeStart=start-(start&3), imageSize=optional.readUInt32LE(56); if(codeStart>imageSize || size>imageSize-codeStart) fail('CHPE code range outside image bounds'); types.add(['arm64','arm64ec','x86_64'][type]); } }
           hybrid={ version, codeArchitectures:[...types] };
           if(declared==='arm64' && types.has('arm64ec')) machine='arm64x';
           else if(declared==='x86_64' && types.has('arm64ec')) machine='arm64ec';
