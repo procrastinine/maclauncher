@@ -8,14 +8,18 @@ for (const unpacked of [false, true]) test(`Electron ${unpacked ? "unpacked" : "
 }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "graphics-publication-asar-"));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
-  const source = path.join(root, "source"), shared = "src/modules/shared/";
-  for (const relative of ["reshade/publication.js", "graphics-warning.js", "runtime/included-helpers.js", "runtime/guards.js", "runtime/package-contract.cjs", "runtime/bundled-native.js", "runtime/verified-identity.js", "runtime/host-capabilities.js", "runtime/feature-requirements.js", "effects/operation-contracts.mjs", "reshade/neural/source.json", "reshade/temporal/fsr4/source.json", "runtime/local-native.js", "runtime/pe-exports.js", "runtime/app-bundle.js", "copy-file.js", "file-time.js"]) {
-    const target = path.join(source, shared, relative); fs.mkdirSync(path.dirname(target), {recursive: true});
-    fs.copyFileSync(path.join(__dirname, "..", shared, relative), target);
+  const source = path.join(root, "source"), shared = "src/modules/shared/", repo = path.join(__dirname, "..");
+  // The archive holds the publication module and every file it reaches through a relative require or import.
+  for (const pending = [path.join(repo, shared, "reshade/publication.js")], seen = new Set(); pending.length;) {
+    const file = pending.pop(); if (seen.has(file)) continue; seen.add(file);
+    const target = path.join(source, path.relative(repo, file)); fs.mkdirSync(path.dirname(target), {recursive: true}); fs.copyFileSync(file, target);
+    if (!/\.[cm]?js$/.test(file)) continue;
+    for (const [, request] of fs.readFileSync(file, "utf8").matchAll(/(?:require\(|import\(|from\s+)\s*["'](\.{1,2}\/[^"']+)["']/g)) {
+      const base = path.resolve(path.dirname(file), request);
+      const found = [base, base + ".js", base + ".cjs", base + ".mjs", base + ".json", path.join(base, "index.js")].find(candidate => fs.statSync(candidate, {throwIfNoEntry: false})?.isFile());
+      if (found) pending.push(found);
+    }
   }
-  // The app-bundle helper reads the worker's runtime inventory count.
-  fs.mkdirSync(path.join(source, "src/core"), {recursive: true});
-  fs.copyFileSync(path.join(__dirname, "../src/core/runtime-inventory-revision.js"), path.join(source, "src/core/runtime-inventory-revision.js"));
   const relative = shared + "reshade/distribution-supplementals.json";
   const declaration = [{id: "reshade", version: "first", directoryRelative: "reshade/first/universal", manifestRelative: "runtime.json",
     manifestSha256: "a".repeat(64), files: [{path: "runtime.json", size: 2, sha256: "b".repeat(64)}]}];
