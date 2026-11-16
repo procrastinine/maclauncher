@@ -227,8 +227,10 @@ function kosmicKrispOffer(context, dependencies = {}) {
 }
 function environment(selection, directory) {
   if (!selection) return {};
-  return require('../../../runtime-adapters/vulkan-driver').apply({build:{root:selection.root},parts:selection,
-    parameters:{directory,apiVersion:apiVersion(selection),driverEnvironment:selection.library!==selection.driver,
+  // A selection naming only its library, such as MoltenVK, loads that library as its driver.
+  const driver = selection.driver || selection.library;
+  return require('../../../runtime-adapters/vulkan-driver').apply({build:{root:selection.root},parts:{...selection,driver},
+    parameters:{directory,apiVersion:apiVersion(selection),driverEnvironment:selection.library!==driver,
       environmentBindings:{KL_MVK_DYLIB:'library'}}}).environment;
 }
 // Every route that points the Vulkan loader at a driver writes its manifest
