@@ -64,11 +64,21 @@ function installationRoot(source, install) {
 }
 function resolvePart(source, install, part) {
   const support=install.templateRoot || install.supportRoot;
-  if (support && part.path.startsWith('support/')) return path.join(support,part.path.slice('support/'.length));
+  if (support && part.path.startsWith('support/')) {
+    const relative=part.path.slice('support/'.length);
+    const renderer=/^(?:Frameworks|SharedSupport)\/renderer\/(.*)$/.exec(relative);
+    if (renderer) {
+      const directory=require('../modules/crossover/sikarugir/runtime/template-closure').templateRenderers(support,
+        install.templateVersion || install.catalogEntry?.template?.version);
+      if (directory) return path.join(support,directory,renderer[1]);
+    }
+    return path.join(support,relative);
+  }
   const wineRelative=path.posix.dirname(path.posix.dirname(source.layout.entry));
   if (install.libraryRoot && part.path.startsWith(wineRelative+'/lib/')) return path.join(install.libraryRoot,part.path.slice((wineRelative+'/lib/').length));
   if (install.librariesRoot && part.path.startsWith(path.posix.dirname(wineRelative)+'/')) return path.join(install.librariesRoot,part.path.slice((path.posix.dirname(wineRelative)+'/').length));
-  if (install.crossoverRoot && part.path.startsWith(wineRelative+'/')) return path.join(install.crossoverRoot,part.path.slice((wineRelative+'/').length));
+  const recordedWineRoot=install.crossoverRoot || install.engineRoot || install.wineRoot;
+  if (recordedWineRoot && part.path.startsWith(wineRelative+'/')) return path.join(recordedWineRoot,part.path.slice((wineRelative+'/').length));
   return path.join(installationRoot(source,install),part.path);
 }
 // Canonical parent inventory projection. Callers inspect these paths and take
