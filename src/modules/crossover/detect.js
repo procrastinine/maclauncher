@@ -1,3 +1,4 @@
+const BinaryArch = require('../../core/binary-arch');
 const fs = require("node:fs");
 const path = require("node:path");
 const { executablePriority, executableRole } = require("../shared/executable-candidates");
@@ -38,11 +39,11 @@ function readWindowsExecutable(file, detection) {
     if (offset < 64 || offset > 1024 * 1024) return null;
     const header = read(offset, 24);
     if (!header || header.readUInt32LE(0) !== 0x4550) return null;
-    const machine = header.readUInt16LE(4), sections = header.readUInt16LE(6);
-    const optionalSize = header.readUInt16LE(20), flags = header.readUInt16LE(22);
+    const facts = BinaryArch.peHeaderFacts(header), machine = facts.machineCode, sections = facts.sectionCount;
+    const optionalSize = facts.optionalBytes, flags = facts.characteristics;
     if (!(flags & 2) || flags & 0x2000 || !sections || sections > 96 || optionalSize < 70 || optionalSize > 4096) return null;
     const optional = read(offset + 24, 70);
-    const architecture = new Map([[0x14c, "x86"], [0x8664, "x86_64"], [0xaa64, "arm64"]]).get(machine);
+    const architecture = ["i386", "x86_64", "arm64"].includes(facts.declaredArchitecture) ? (facts.declaredArchitecture === "i386" ? "x86" : facts.declaredArchitecture) : null;
     if (!optional || !architecture || ![0x10b, 0x20b].includes(optional.readUInt16LE(0)) ||
         ![2, 3].includes(optional.readUInt16LE(68)) ||
         optional.readUInt16LE(0) === 0x10b && machine !== 0x14c ||

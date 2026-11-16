@@ -1,6 +1,6 @@
 'use strict';
 const fs = require('node:fs');
-const MACH = new Map([[7, 'i386'], [0x1000007, 'x86_64'], [12, 'arm'], [0x100000c, 'arm64']]);
+const MACH = new Map([[7, 'i386'], [0x1000007, 'x86_64'], [12, 'arm'], [0x100000c, 'arm64'], [18, 'ppc'], [0x1000012, 'ppc64']]);
 const PE = new Map([[0x14c, 'i386'], [0x8664, 'x86_64'], [0xaa64, 'arm64'], [0xa641, 'arm64ec'], [0xa64e, 'arm64x']]);
 const ELF = new Map([[3, 'x86'], [62, 'x86_64'], [183, 'aarch64'], [40, 'arm']]);
 function fail(message) { throw new Error(`Invalid binary: ${message}`); }
@@ -11,6 +11,33 @@ function reader(size, read) {
     if (length > 16 * 1024 * 1024) fail('metadata too large');
     return read(offset, length);
   } };
+}
+// Header facts accept bounded prefixes; container/section/export consumers keep
+// their own size limits, path rules and malformed-input policy.
+function machoMagic(magic) {
+ const thin=new Map([[0xfeedface,['BE',false]],[0xcefaedfe,['LE',false]],[0xfeedfacf,['BE',true]],[0xcffaedfe,['LE',true]]]).get(magic);
+ if(thin)return {fat:false,endian:thin[0],little:thin[0]==='LE',wide:thin[1],headerSize:thin[1]?32:28};
+ const fat=new Map([[0xcafebabe,['BE',false]],[0xbebafeca,['LE',false]],[0xcafebabf,['BE',true]],[0xbfbafeca,['LE',true]]]).get(magic);
+ return fat?{fat:true,endian:fat[0],little:fat[0]==='LE',wide:fat[1],stride:fat[1]?32:20}:null;
+}
+function machoHeader(bytes) {
+ const format=machoMagic(bytes.readUInt32BE(0));if(!format||format.fat)fail('unsupported Mach-O header');
+ const word=offset=>bytes[`readUInt32${format.endian}`](offset),cpu=word(4);
+ return {...format,cpu,subtype:word(8),fileType:word(12),commandCount:word(16),commandBytes:word(20),flags:word(24),architecture:MACH.get(cpu)||null};
+}
+function machoFatHeader(bytes) {
+ const format=machoMagic(bytes.readUInt32BE(0));if(!format?.fat)fail('unsupported universal Mach-O header');
+ return {...format,count:bytes[`readUInt32${format.endian}`](4)};
+}
+function machoFatEntry(table,index,format) {
+ const offset=index*format.stride,word=position=>table[`readUInt32${format.endian}`](offset+position),wide=position=>Number(table[`readBigUInt64${format.endian}`](offset+position));
+ return {cpu:word(0),subtype:word(4),offset:format.wide?wide(8):word(8),size:format.wide?wide(16):word(12),alignment:word(format.wide?24:16),reserved:format.wide?word(28):0};
+}
+function machoArchitecture(cpu){return MACH.get(cpu)||null;}
+function machoCpuCode(architecture){const name={x64:'x86_64',ia32:'i386'}[architecture]||architecture;return [...MACH].find(([,value])=>value===name)?.[0]??null;}
+function peHeaderFacts(coff) {
+ const machineCode=coff.readUInt16LE(4);
+ return {signature:coff.readUInt32LE(0),machineCode,declaredArchitecture:PE.get(machineCode)||null,sectionCount:coff.readUInt16LE(6),optionalBytes:coff.readUInt16LE(20),characteristics:coff.readUInt16LE(22)};
 }
 function macho(r, base = 0, size = r.size) {
   const first = r.get(base, 4).readUInt32BE(0);
@@ -119,4 +146,4 @@ function inspectBinary(file) {
 }
 function peArchitecture(machine) { return PE.get(machine) || null; }
 function peMachineCode(architecture) { return [...PE].find(([,name])=>name===architecture)?.[0] || null; }
-module.exports={parseBinary,inspectBinary,peArchitecture,peMachineCode};
+module.exports={parseBinary,inspectBinary,peArchitecture,peMachineCode,machoMagic,machoHeader,machoFatHeader,machoFatEntry,machoArchitecture,machoCpuCode,peHeaderFacts};

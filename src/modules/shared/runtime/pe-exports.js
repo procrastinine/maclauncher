@@ -1,9 +1,9 @@
+const BinaryArch = require('../../../core/binary-arch');
 const fs = require("node:fs"), path = require("node:path");
 const Guards = require("./guards");
 
 const LIMITS = Guards.limits({ sections: 96, exportNames: 8192, exportBytes: 1024 * 1024,
   readBytes: 2 * 1024 * 1024, nameBytes: 512 });
-const ARCHITECTURES = new Map([[0x14c, "x86"], [0x8664, "x86_64"], [0xaa64, "arm64"]]);
 
 // IMAGE_EXPORT_DIRECTORY and file-backed RVAs, as defined by Microsoft's PE format.
 // Export names alone are not executable-code evidence: forwarded and data exports
@@ -38,9 +38,10 @@ function readPeExports(file, { detection, headersOnly = false, imports = false }
     if (peOffset < 64 || peOffset > Guards.limit(1024 * 1024)) return null;
     const coff = read(peOffset, 24);
     if (coff.readUInt32LE(0) !== 0x4550) return null;
-    const architecture = ARCHITECTURES.get(coff.readUInt16LE(4));
-    const count = coff.readUInt16LE(6), optionalBytes = coff.readUInt16LE(20);
-    if (!architecture || !(coff.readUInt16LE(22) & 2) || !count || count > LIMITS.sections || optionalBytes < 104 || optionalBytes > Guards.limit(4096)) return null;
+    const facts = BinaryArch.peHeaderFacts(coff);
+    const architecture = ["i386", "x86_64", "arm64"].includes(facts.declaredArchitecture) ? (facts.declaredArchitecture === "i386" ? "x86" : facts.declaredArchitecture) : null;
+    const count = facts.sectionCount, optionalBytes = facts.optionalBytes;
+    if (!architecture || !(facts.characteristics & 2) || !count || count > LIMITS.sections || optionalBytes < 104 || optionalBytes > Guards.limit(4096)) return null;
     const optional = read(peOffset + 24, optionalBytes), magic = optional.readUInt16LE(0);
     const directories = magic === 0x10b ? 96 : magic === 0x20b ? 112 : null;
     if (!directories || (architecture === "x86") !== (magic === 0x10b) || directories + 8 > optional.length) return null;
@@ -54,8 +55,8 @@ function readPeExports(file, { detection, headersOnly = false, imports = false }
         rva: table.readUInt32LE(start + 12), offset, size, executable: Boolean(table.readUInt32LE(start + 36) & 0x20000000) });
     }
     const builtin = peOffset >= 80 && read(64, Math.min(64, peOffset - 64)).includes(Buffer.from('Wine builtin DLL\0'));
-    const header = { architecture, machine: coff.readUInt16LE(4), format: 'pe', form: builtin ? 'builtin' : 'native',
-      isDll: Boolean(coff.readUInt16LE(22) & 0x2000), sections };
+    const header = { architecture, machine: facts.machineCode, format: 'pe', form: builtin ? 'builtin' : 'native',
+      isDll: Boolean(facts.characteristics & 0x2000), sections };
     function fileOffset(rva, size) {
       const section = sections.find(row => rva >= row.rva && rva - row.rva <= row.size && size <= row.size - (rva - row.rva));
       if (!section) throw new Error("PE export RVA is not file-backed.");
