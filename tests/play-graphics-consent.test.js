@@ -108,3 +108,25 @@ test("skipping an optional download that is the only one of a Play installs the 
   assert.equal(shown[0].fallbackLabel, "Scene driver 2.0", "the question names the download skipping uses");
   assert.deepEqual(installed, ["scene:2.0"]);
 });
+
+test("a runtime whose versions are found after the Play dialog downloads without a second dialog", async t => {
+  const launchDownloads = Effects.launchDownloads;
+  Effects.launchDownloads = async () => [];
+  t.after(() => { Effects.launchDownloads = launchDownloads; });
+  const asked = [], installed = [];
+  let listed = false;
+  const state = () => ({ catalog: {}, installed: [] });
+  const host = { id: "host", label: "Host", getState: state, refreshCatalog: async () => { listed = true; }, installRuntime: async payload => installed.push(payload.version) };
+  // Before the catalog is read the plan names no section; the versioned plan names the default section.
+  const mod = { id: "fixture", runtimeManagers: [host], ensureRuntime: async () => listed
+    ? { managerId: "host", version: "1.0", installOptions: { sectionId: "default" } }
+    : { managerId: "host", version: null, discoveryRequired: true, installOptions: {} } };
+  const context = { runtimeId: "native", userDataDir: "/test-launcher-data", settings: { runtimes: {} },
+    confirmRuntimeInstall: async plan => { asked.push(plan.version ?? null); return true; } };
+  assert.equal(await prepareForLaunch({ entry: { effects: { schema: 1 } }, mod, context,
+    info: { runtime: { entries: { native: {} } } }, registry: { listModuleIds: () => [mod.id], getModule: () => mod },
+    runAction: () => assert.fail("No preparation action was declared"),
+    install: async (manager, payload) => manager.installRuntime(payload) }), true);
+  assert.deepEqual(asked, [null], "one dialog, before the versions are known");
+  assert.deepEqual(installed, ["1.0"]);
+});

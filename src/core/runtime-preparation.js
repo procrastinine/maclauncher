@@ -185,7 +185,9 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
   const managers = listRuntimeManagers(registry);
   let plans = await runtimePlans(entry, mod, info, context, managers);
   const approved = new Set(), refreshed = new Set(), declined = new Set();
-  const consentKey = plan => JSON.stringify([plan.managerId, Object.entries(plan.installOptions || {}).sort(([a], [b]) => a.localeCompare(b))]);
+  // A plan that names no section installs the default one, so a version found
+  // after the dialog keeps the approval given before the catalog was read.
+  const consentKey = plan => JSON.stringify([plan.managerId, Object.entries({ sectionId: "default", ...plan.installOptions }).sort(([a], [b]) => a.localeCompare(b))]);
   // A manager may remember an optional download that was declined or failed,
   // so later Plays do not offer it again.
   function skipped(plan) {
