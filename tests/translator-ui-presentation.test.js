@@ -124,11 +124,11 @@ test('D8 actual action and manifest render one refresh with no stale global Auto
   const state = { modules: [main.manifest], runtimeDefaults: {}, recents: [] };
   const api = { moduleSettingsAction: async (...args) => { requests.push(args); return result; }, setModuleRuntimeSettings: async () => {}, setGameRuntimeSettings: async () => {} };
   const harness = componentHarness(RuntimeSettingsWindow, { api, state, context: { scope: 'module', moduleId: 'crossover', runtimeId: 'crossover' }, error: null,
-    fieldKeys: schema.fields.filter(field => field.optionsAction === 'listTranslatorOptions').map(field => field.key),
+    fieldKeys: schema.fields.filter(field => field.optionsAction === 'listRuntimeRoles').map(field => field.key),
     controlled: { schema, values, save: async next => saves.push(next) } });
   try {
     harness.render(); const tree = await harness.settle(), markup = renderToStaticMarkup(tree);
-    assert.equal(requests.filter(args => args[1] === 'listTranslatorOptions').length, 1); assert.equal((markup.match(/aria-label="Refresh choices"/g) || []).length, 1);
+    assert.equal(requests.filter(args => args[1] === 'listRuntimeRoles').length, 1); assert.equal((markup.match(/aria-label="Refresh choices"/g) || []).length, 1);
     assert.equal((markup.match(/Included choices appear after the runtime is installed\./g) || []).length, 1);
     assert.doesNotMatch(markup, /keeps its automatic renderer until every Direct3D row/);
     assert.doesNotMatch(markup, /CrossOver shared automatic choice|global backend|Shared physical|API binding|Existing selection: Automatic/);

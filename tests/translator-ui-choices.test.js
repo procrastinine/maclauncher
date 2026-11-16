@@ -29,7 +29,7 @@ function builtin() {
 }
 function load(result, fields) {
   const received = [], failures = [];
-  return new Promise(resolve => choices.loadSettingChoices(['listTranslatorOptions'], async () => result,
+  return new Promise(resolve => choices.loadSettingChoices(['listRuntimeRoles'], async () => result,
     (_action, value) => received.push(value), (_action, error) => failures.push(error),
     () => resolve({ received, failures }), fields));
 }
@@ -43,7 +43,7 @@ test('actual two-line Template DXVK version text keeps every Sikarugir translato
   assert.equal(description.version, 'DXVK-Sikarugir-async-v1.10.3 D9VK-Sikarugir-v2.3');
   const option = { value: description.id, label: D.label(description) };
   assert.doesNotMatch(option.label, /[\x00-\x1f\x7f]/);
-  const fields = withSettings(manifest).runtime.entries.sikarugir.settings.fields.filter(field => field.optionsAction === 'listTranslatorOptions');
+  const fields = withSettings(manifest).runtime.entries.sikarugir.settings.fields.filter(field => field.optionsAction === 'listRuntimeRoles');
   assert.ok(fields.length > 1);
   const result = Object.fromEntries(fields.map(field => [field.optionsKey || field.key, [{ value: 'automatic', label: "Sikarugir's automatic choice" }, option]]));
   const loaded = await load(result, fields);
@@ -53,7 +53,7 @@ test('actual two-line Template DXVK version text keeps every Sikarugir translato
 
 test('a malformed optional choice or list preserves valid siblings, atomic patches and unrelated action metadata', async t => {
   const warnings = []; t.mock.method(console, 'warn', (...args) => warnings.push(args));
-  const fields = withSettings(manifest).runtime.entries.sikarugir.settings.fields.filter(field => field.optionsAction === 'listTranslatorOptions');
+  const fields = withSettings(manifest).runtime.entries.sikarugir.settings.fields.filter(field => field.optionsAction === 'listRuntimeRoles');
   const first = fields[0].optionsKey || fields[0].key, second = fields[1].optionsKey || fields[1].key;
   const valid = { value: 'included:prepared', label: 'Prepared component', runtimeSettingsPatch: { translatorD3D9: 'included:prepared' } };
   const sibling = { value: 'automatic', label: "Sikarugir's automatic choice" }, metadata = { future: 'preserved' };

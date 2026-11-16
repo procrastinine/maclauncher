@@ -37,19 +37,6 @@
       "label": "Sikarugir DXVK"
     },
     {
-      "id": "sikarugir-dxvk3",
-      "kind": "d3d-translator",
-      "parts": [
-        {
-          "path": "support/Frameworks/renderer/dxvk3",
-          "name": "dxvk3"
-        }
-      ],
-      "engine": "dxvk",
-      "vulkan": true,
-      "label": "Sikarugir DXVK 3"
-    },
-    {
       "id": "sikarugir-d9vk",
       "kind": "d3d-translator",
       "parts": [
@@ -61,6 +48,19 @@
       "engine": "dxvk",
       "vulkan": true,
       "label": "Sikarugir D9VK"
+    },
+    {
+      "id": "sikarugir-dxvk3",
+      "kind": "d3d-translator",
+      "parts": [
+        {
+          "path": "support/Frameworks/renderer/dxvk3",
+          "name": "dxvk3"
+        }
+      ],
+      "engine": "dxvk",
+      "vulkan": true,
+      "label": "Sikarugir DXVK 3"
     },
     {
       "id": "sikarugir-d3dmetal",
