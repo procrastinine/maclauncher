@@ -189,10 +189,7 @@
   },
   {
     "version": "1.10.0",
-    "bridgeVersion": {
-      "includedPackage": "java-steamworks",
-      "arch": "universal"
-    },
+    "bridgeVersion": "1.10.0-MCLv7",
     "abiProfile": "steamworks4j-1.10.0-ml1",
     "helperAbiProfile": "steamworks4j-1.10.0-ml1-offline-abi0.5.0",
     "helperVersion": {
