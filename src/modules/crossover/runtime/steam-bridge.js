@@ -5,7 +5,6 @@ const Bundled = require('../../shared/runtime/bundled-native');
 const { wineLayout } = require('../../shared/runtime/wine-layout');
 const { createSourceBackedManager } = require('../../../runtime-sources/manager');
 const source = require('../../../runtime-sources/steam-bridge/maclauncher-steam-bridge.json');
-const { compareRuntimeVersions } = require('../../shared/runtime/pinned-native-manager');
 const { readJsonObject, writeJsonAtomic } = require('../../../core/json-files');
 const Clients = require('../../shared/reshade/steam-client-models');
 const Steam = require('../../shared/runtime/steamworks/installed-client');
@@ -109,19 +108,18 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     return { label: 'Steam', value: `Steam client bridge ${version}` };
   }
   function installed(userDataDir) {
-    for (const row of [...base.core.listInstalled(userDataDir)].sort((a, b) => compareRuntimeVersions(a.version, b.version))) {
-      const selected = base.resolveSelection(null, {}, userDataDir, { version: row.version, verification: 'status' });
-      if (selected.ready) return selected.install;
-    }
-    return null;
+    const selected = base.resolveSelection(null, {}, userDataDir, { verification: 'status' });
+    return selected.ready ? selected.install : null;
   }
+
   async function requirements(entry, context) {
     const game = identifyGame(entry);
     if (!game || !discoverClient() || skipped(context.userDataDir).includes(String(game.appId)) || installed(context.userDataDir) && Components.current(context.userDataDir)) return [];
     const local = installed(context.userDataDir);
     const unusable = base.getState({ userDataDir: context.userDataDir }).installed.filter(row => row.ready === false);
-    const pin = base.core.listDiscoveredCatalog({ userDataDir: context.userDataDir }).filter(pin => !pin.installReason && !unusable.some(row => row.version === pin.version))
-      .sort((a, b) => compareRuntimeVersions(a.version, b.version))[0];
+    const selected = base.resolveSelection(null, {}, context.userDataDir, { verification: 'status',
+      compatible: pin => !unusable.some(row => row.version === pin.version) });
+    const pin = base.core.listDiscoveredCatalog({ userDataDir: context.userDataDir }).find(pin => pin.version === selected.version);
     // One question per game: Play with Steam downloads what is missing and
     // starts Steam for that Play. Sizes appear when the catalog or an earlier
     // Valve download recorded them.
