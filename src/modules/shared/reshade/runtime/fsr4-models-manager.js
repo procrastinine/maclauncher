@@ -21,8 +21,13 @@ function getState(context={}){
  const section={id:'default',label:'FSR 4 models',managementTitle:descriptor.label,supportsDefault:false,installed:current?[{...current,runtimePath:current.directory,sourcePath:current.directory,versionLabel:installedLabel(current),removalLabel:'Remove'}]:[],variants:[],capabilities:PROFILES.map(profile=>({...profile,available:current?.profiles.includes(profile.id)===true})),installing:null,catalog,sourceLinks:[{label:'Upstream release',url:descriptor.sourceUrl}],description:'AMD FSR 4.1.2 model data for the FSR 4 4.1.2 Lite and Lite Lossy profiles, from the fsr4-native-macos release. It is downloaded or imported, then prepared in the launcher profile.'};
  return {...section,id:descriptor.managerId,sections:[section]};
 }
+// The model data a Play's FSR 4 row with this profile needs, when it is missing. Reading it is offline.
+function launchPlan(context={},profile){
+ if(!PROFILES.some(item=>item.id===profile)||Library.read(context.userDataDir)?.profiles.includes(profile)||getState(context).catalog.installable!==true)return null;
+ return {managerId:descriptor.managerId,version:descriptor.version,label:descriptor.label,bytes:profile==='int8-lite-lossy'?bothBytes:descriptor.downloadBytes,installOptions:{sectionId:'default',fsr4Profile:profile}};
+}
 async function remove(context={}){const root=Library.directory(context.userDataDir);require('../../writable-input').assertOwnDirectory(context.userDataDir,root,{create:false});return require('../../../../core/coordinated-runtime-managers').withRuntimeMutation({...descriptor,sourcePath:root},()=>require('node:fs').promises.rm(root,{recursive:true,force:true}),{userDataDir:context.userDataDir});}
 module.exports={id:descriptor.managerId,label:'FSR 4 models',distributionRequired:false,delivery:{included:'none',catalog:'declared',sourceBuild:false},
- ui:{groupId:'graphics',tabLabel:'Graphics',sectionLabel:'FSR 4 models',order:0,memberOrder:7,management:'managed'},getState,normalizeSettings:()=>({}),installRuntime:context=>Library.install(managed(context)),
+ ui:{groupId:'graphics',tabLabel:'Graphics',sectionLabel:'FSR 4 models',order:0,memberOrder:7,management:'managed'},getState,launchPlan,normalizeSettings:()=>({}),installRuntime:context=>Library.install(managed(context)),
  coordinateImportRuntime:context=>Library.importRuntime(options(context)),importRuntime:context=>Library.importRuntime(options(context)),uninstallRuntime:remove,refreshCatalog:async context=>getState(context).catalog,
  performSetupAction:context=>{if(context.setupActionId==='download')return Library.install(managed(context));throw Error('Choose an available FSR 4 model action.');},core:Library};

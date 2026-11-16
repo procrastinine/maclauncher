@@ -136,6 +136,9 @@ test('the Play download dialog lists each download with its version and size, th
     detail: 'Adds Vulkan sharing. Fixture also starts without it.' }, { name: 'Fixture' });
   assert.deepEqual(Array.from(shown[1].buttons), ['Download and Play', 'Play Without It']);
   assert.equal(shown[1].detail, 'Adds Vulkan sharing. Fixture also starts without it.');
+  await context.confirmRuntimeInstallation({ label: 'Neural rendering model', versionLabel: 'm1', optional: true,
+    companions: [{ label: 'Shader collection', versionLabel: 's1' }] }, { name: 'Fixture' });
+  assert.deepEqual(Array.from(shown[2].buttons), ['Download and Play', 'Play Without Downloading'], 'optional downloads alone let the game start without them');
 });
 
 test('winemac matches the exact CrossOver ABI release without duplicate package declarations', t => {

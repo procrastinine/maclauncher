@@ -48,4 +48,25 @@ async function prepare(plan,options={},dependencies={}){
     return {id:node.id,kind:node.kind,method:node.kind==='shader'?node.shader.preset:node.method,modelOperation:operation,requestKey:require('../../effects/live-plan').selectionKey(node),retained:false,reason:reasons.get(operation)||'A compatible model is needed.',...(source?{acquisition:source}:{})};
   })};
 }
-module.exports={prepare,compatible};
+// The model downloads that the plan's enabled rows need: one per operation
+// without a compatible installed model whose recommended model this Mac's
+// graphics processor runs. Reading them is offline.
+function downloads(plan,options={},dependencies={}){
+  const active=plan.enabled===false?[]:plan.video.filter(node=>node.enabled&&!node.settings?.modelPath);
+  const methods=new Set(active.map(node=>Providers.modelOperation(node,options)).filter(Boolean));
+  if(!methods.size)return [];
+  const Neural=dependencies.neural||require('./index'),models=Neural.listModels(options.userDataDir),result=[];
+  let provider;
+  for(const method of methods){
+    if(models.some(row=>compatible(row,method)))continue;
+    const source=Setup.sourcesFor(method).find(row=>row.defaultForOperation)||Setup.sourcesFor(method)[0];
+    if(!source)continue;
+    provider??=dependencies.provider||Neural.resolve(options.root||require('../index').runtimeRoot(options.app),options)||null;
+    if(!(provider?.supportedMethods||provider?.descriptor?.operations||[]).includes(method))continue;
+    const plan=Setup.downloadPlan(source);
+    result.push({managerId:plan.managerId,version:plan.version,label:plan.label,...(source.bytes?{bytes:source.bytes}:{}),
+      installOptions:{sectionId:'default',setupActionId:source.files?'downloadModel:'+source.version:'downloadDlssMac'}});
+  }
+  return result;
+}
+module.exports={prepare,downloads,compatible};

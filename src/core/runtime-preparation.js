@@ -160,6 +160,15 @@ async function runtimePlans(entry, mod, info, context, managers) {
     const plan = await managerPlan(entry, info, context, managers, prerequisite);
     if (plan) plans.push(plan);
   }
+  // Graphics data that the game's saved graphics rows need joins the same
+  // question. Declining it starts the game without those rows.
+  if (info.runtime?.entries?.[context.runtimeId]?.graphicsHost) {
+    let graphics = [];
+    try { graphics = await require("../modules/shared/effects/runtime").launchDownloads(context.effectsEntry || entry, context); }
+    catch (error) { context.logger?.warn?.("[runtimes] The graphics downloads of this Play could not be listed.", error.message); }
+    for (const plan of graphics) plans.push({ ...plan, optional: true, companion: true, silentFallback: true, cancelLabel: "Play Without Downloading",
+      detail: "Used by this game's graphics settings.", declines: [`download:${plan.managerId}`] });
+  }
   const unique = new Map();
   for (const plan of plans) {
     const options = Object.entries(plan.installOptions || {}).sort(([a], [b]) => a.localeCompare(b));
@@ -197,7 +206,8 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
     if (!plan.optional || (!plan.fallback && !plan.silentFallback) || context.signal?.aborted) return false;
     declined.add(consentKey(plan));
     skipped(plan);
-    if (plan.silentFallback) return true;
+    // A later step of this Play does not offer it again.
+    if (plan.silentFallback) { decline(plan); return true; }
     // The line names the runtime from the consent dialog, the reason and the runtime used instead.
     const name = plan.label || managers.find(manager => manager.id === plan.managerId)?.label || plan.managerId;
     const used = plan.fallback.label || managers.find(manager => manager.id === plan.fallback.managerId)?.label || plan.fallback.managerId;
@@ -215,7 +225,9 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
       const manager = managers.find(manager => manager.id === plan.managerId);
       if (require("../modules/shared/runtime/custom-runtime").isPath(plan.version))
         throw new Error("The selected custom runtime is unavailable. Check its path in Runtimes.");
-      if (!manager || typeof manager.installRuntime !== "function") throw new Error("The selected runtime cannot be installed automatically.");
+      // A manager without an install action downloads through the setup action the plan names.
+      if (!manager || typeof manager.installRuntime !== "function" && !(plan.installOptions?.setupActionId && typeof manager.performSetupAction === "function"))
+        throw new Error("The selected runtime cannot be installed automatically.");
       const state = manager.getState?.({ settings: context.settings.runtimes?.[manager.id], runtimeSettings: context.settings.runtimes, userDataDir: context.userDataDir });
       const section = state && ((state.sections || [state]).find(section => section.id === plan.installOptions?.sectionId) || state.sections?.[0] || state);
       const requiresDownload = plan.requiresDownload ?? section?.catalog?.versionRequirements?.[plan.version]?.requiresDownload ?? true;
@@ -226,13 +238,16 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
     });
     // Consent covers discovery and acquisition before either occurs. One
     // dialog lists every required download of this Play and its optional
-    // companions, such as a package matched to the selected runtime, and
-    // approving it installs them all. Another optional download has its own
-    // dialog, and declining it continues Play.
+    // companions, such as a package matched to the selected runtime or the
+    // graphics data of the game's graphics rows, and approving it installs
+    // them all. Without a required download, the first companion leads the
+    // dialog and declining it continues Play without them. Another optional
+    // download has its own dialog, and declining it continues Play.
     let fallbackRequired = false;
     const pending = ({ plan, requiresDownload }) => (requiresDownload || !plan.version || plan.discoveryRequired) &&
       !approved.has(consentKey(plan)) && !declined.has(consentKey(plan));
-    const host = installations.find(item => !item.plan.optional && pending(item));
+    const host = installations.find(item => !item.plan.optional && pending(item)) ||
+      installations.find(item => item.plan.companion && !item.plan.companionCheckbox && pending(item));
     const companions = host ? installations.filter(item => item !== host && (!item.plan.optional || item.plan.companion) && pending(item)) : [];
     for (const { manager, plan, requiresDownload, versionLabel } of installations) {
       const key = consentKey(plan);
@@ -249,10 +264,9 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
             ...(item === optional ? { checkboxLabel: item.plan.companionCheckbox } : {}) })) } : {}) }) : false;
         if (consent !== true && consent?.approved !== true) {
           if (!plan.optional) return false;
-          declined.add(key);
-          skipped(plan);
-          decline(plan);
-          fallbackRequired ||= Boolean(plan.fallback);
+          for (const item of [{ plan }, ...listed]) {
+            declined.add(consentKey(item.plan)); skipped(item.plan); decline(item.plan); fallbackRequired ||= Boolean(item.plan.fallback);
+          }
           continue;
         }
         approved.add(key);
@@ -283,21 +297,23 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
       } catch (error) { if (!useFallback(plan, error)) throw error; }
       continue;
     }
-    let retry = false;
-    for (const { manager, plan, installedBefore } of installations) {
+    // The approved downloads run together.
+    const outcomes = await Promise.allSettled(installations.map(async ({ manager, plan, installedBefore }) => {
       const label = plan.label || manager.label || manager.id;
       const progressLabel = plan.progressLabel || `Installing ${label}…`;
       report({ phase: "install", label: progressLabel, managerId: manager.id, version: plan.version });
-      try {
-        const result = await install(manager, { ...plan.installOptions, version: plan.version }, { label, progressLabel });
-        // A version Play chose on its own may later be superseded and removed.
-        if (plan.automatic === true) require("./runtime-install-origins").recordPlayInstall({ userDataDir: context.userDataDir, manager, plan, result,
-          entry, settings: context.settings, installedBefore, logger: context.logger });
-      } catch (error) {
-        if (!useFallback(plan, error)) throw error;
-        retry = true;
-        break;
-      }
+      const target = typeof manager.installRuntime === "function" ? manager
+        : Object.assign(Object.create(manager), { installRuntime: options => manager.performSetupAction(options) });
+      const result = await install(target, { ...plan.installOptions, version: plan.version }, { label, progressLabel });
+      // A version Play chose on its own may later be superseded and removed.
+      if (plan.automatic === true) require("./runtime-install-origins").recordPlayInstall({ userDataDir: context.userDataDir, manager, plan, result,
+        entry, settings: context.settings, installedBefore, logger: context.logger });
+    }));
+    let retry = false;
+    for (const [index, outcome] of outcomes.entries()) {
+      if (outcome.status === "fulfilled") continue;
+      if (!useFallback(installations[index].plan, outcome.reason)) throw outcome.reason;
+      retry = true;
     }
     if (!retry) break;
     plans = await runtimePlans(entry, mod, info, context, managers);

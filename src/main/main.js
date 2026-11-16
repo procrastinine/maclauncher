@@ -356,7 +356,7 @@ async function confirmRuntimeInstallation(plan, entry, {signal} = {}) {
   // declined without cancelling the other downloads.
   const optional = companions.find(item => typeof item.checkboxLabel === "string" && item.checkboxLabel);
   const name = entry && (entry.name || path.basename(entry.gamePath || ""));
-  const options = { type: "question", buttons: companions.length ? ["Download and Play", "Cancel"] : [plan.confirmLabel || "Download and Play", plan.cancelLabel || "Cancel"],
+  const options = { type: "question", buttons: companions.length ? ["Download and Play", plan.optional ? "Play Without Downloading" : "Cancel"] : [plan.confirmLabel || "Download and Play", plan.cancelLabel || "Cancel"],
     defaultId: 0, cancelId: 1, ...(signal ? {signal} : {}),
     message: companions.length ? `Download what ${name || "this game"} needs?` : plan.message || `${plan.kind === "prerequisite" ? "Install" : "Download"} ${versionLabel}?`,
     detail: companions.length ? lines.join("\n") : plan.detail || (entry ? `Required to run ${name}.` : "Required by this runtime."),

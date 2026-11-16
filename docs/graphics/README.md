@@ -132,7 +132,7 @@ Each installed collection records the exact upstream revision it came from. **Se
 
 ### Shader files and parameters
 
-A saved chain can name a downloadable collection that is not installed. **Play** then offers to download it, and after consent the collection's version list is fetched if needed, the collection is installed and graphics preparation resumes. Browsing the library never goes online. If the download is declined, that effect is unavailable and the rest of the chain still runs.
+A saved chain can name a downloadable collection that is not installed. **Play** then lists it in the same download question as the game's runtimes, described in [Runtimes](../runtimes/README.md). After consent, the collection's version list is fetched if needed and the collection installs together with the other approved downloads before the game starts. Browsing the library never goes online. If the download is declined, that effect is unavailable for that Play and the rest of the chain still runs.
 
 A row can also use a shader file directly. **Custom shader…** and **Choose shader…** select a local entry file of up to 8 MiB, and its includes, preset passes and textures are read from their original locations relative to that file.
 

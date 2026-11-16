@@ -40,10 +40,17 @@ async function installRuntime(context={}){
   if(selected.generation){const fg=await Library.install({...options,operation:"interpolate"});if(!fg)return null;}
   return Library.listInstalled(context.userDataDir)[0];
 }
+// The download a Play's XeSS row needs when the runtime is missing or lacks a
+// component this Mac's XeSS host uses. Reading it is offline.
+function launchPlan(context={}){
+  const state=support(context),selected=state.available?state.provider:null;if(!selected)return null;
+  const bytes=missingBytes(Library.listInstalled(context.userDataDir)[0],selected);
+  return bytes?{managerId:Source.managerId,version:Source.version,label:versionLabel(),bytes,installOptions:{sectionId:"default"}}:null;
+}
 module.exports={id:Source.managerId,label:"XeSS",distributionRequired:false,
   delivery:{included:"none",catalog:"declared",sourceBuild:false},
   ui:{groupId:"graphics",tabLabel:"Graphics",sectionLabel:"XeSS",order:0,memberOrder:6,management:"managed"},
-  normalizeSettings,getState,installRuntime,coordinateImportRuntime:Library.importRuntime,importRuntime:Library.importRuntime,uninstallRuntime:Library.remove,
+  normalizeSettings,getState,installRuntime,launchPlan,coordinateImportRuntime:Library.importRuntime,importRuntime:Library.importRuntime,uninstallRuntime:Library.remove,
   performSetupAction:context=>{if(context.setupActionId==="download")return installRuntime(context);if(context.setupActionId==="downloadFrameGeneration"){const state=support({...context,operation:"interpolate"});if(!state.available)throw Error(state.reason);return Library.install({...context,operation:"interpolate"});}throw Error("Choose an available XeSS runtime action.");},
   refreshCatalog:async context=>getState(context).catalog,
   applySettingsUpdate:(action,payload,settings)=>action==="setDefault"?normalizeSettings({defaultVersion:payload?.version}):normalizeSettings(settings),

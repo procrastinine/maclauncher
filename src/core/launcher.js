@@ -298,8 +298,10 @@ function createLauncher({
       signal: options.signal,
       downloads: typeof downloads === "function" ? downloads() : downloads,
       autoInstallRuntime: options.autoInstallRuntime === true,
+      // A download declined earlier in this Play is not offered again.
       confirmRuntimeInstall: typeof confirmRuntimeInstall === "function"
-        ? plan => confirmRuntimeInstall(plan, entry, {signal: options.signal}) : undefined,
+        ? plan => options.declinedChoices?.has(`download:${plan?.managerId}`) ? Promise.resolve(false) : confirmRuntimeInstall(plan, entry, {signal: options.signal}) : undefined,
+      ...(options.declinedChoices ? { declinedChoices: options.declinedChoices } : {}),
       toolsButtonVisible: options.toolsButtonVisible ?? resolveToolsButtonVisible(entry, settings),
       cheatsFilePath: options.cheatsFilePath ?? writeCheatsFile(entry.gameId, moduleId, entry.cheats),
       runtimeId,
@@ -728,7 +730,7 @@ function createLauncher({
     }
     const runtimeUseScope = createRuntimeUseScope({ coordinator: runtimeCoordinator, managers: managedRuntimes(), userDataDir, readSettings: loadSettings });
     // Notices from this Play, such as a Steam client that did not sign in in time.
-    const ownedProcesses = new Set(), launchNotices = [];options = {...options, ownedProcesses, launchNotices};
+    const ownedProcesses = new Set(), launchNotices = [];options = {...options, ownedProcesses, launchNotices, declinedChoices: new Set()};
     let retained = false, failed = false;
     try {
       return await withRuntimeUseScope(runtimeUseScope, async () => {

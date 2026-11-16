@@ -357,6 +357,24 @@ function orderRows(plan, capabilities, bypass, {skipUnavailable = true} = {}) {
 const ORDER = "GRAPHICS_ROW_ORDER";
 const describeNode = node => ({id: node.id, kind: node.kind, method: node.kind === "shader" ? node.shader.preset : node.method});
 const droppedNode = row => ({id: row.id, ...(row.label ? {method: row.label} : {}), reason: row.reason});
+// The graphics data a launch of this entry would download: the shader
+// collections, neural models, FSR 4 model data, ANR kit and XeSS runtime that
+// its enabled rows need and that are not installed. Play lists them in its one download question.
+// Reading them is offline.
+async function launchDownloads(entry, options = {}) {
+  if (!require("./execution-requirements").analyze(entry).needed.processor) return [];
+  const requested = Plan.salvage(entry.effects);
+  if (requested.error || !requested.plan) return [];
+  const plan = Plan.execution(requested.plan);
+  if (plan.enabled === false) return [];
+  const active = plan.video.filter(node => node.enabled), uses = (kinds, method) => active.find(node => kinds.includes(node.kind) && node.method === method);
+  const fsr4 = uses(["temporal"], "fsr4");
+  return [...require("../reshade/shader-preparation").downloads(plan, options),
+    ...require("../reshade/neural/model-preparation").downloads(plan, options),
+    ...[fsr4 && require("../reshade/runtime/fsr4-models-manager").launchPlan(options, fsr4.settings?.fsr4Profile),
+      uses(["frame-generation"], "anr") && require("../reshade/runtime/anr-manager").launchPlan(options),
+      uses(["temporal", "frame-generation"], "xess") && require("../reshade/runtime/xess-manager").launchPlan(options)].filter(Boolean)];
+}
 async function prepare(entry, options = {}) {
   if (options.live && require("./execution-requirements").analyze(entry).needed.processor) {
     const attachment = LaunchBinding.read(entry, options)?.graphicsAttachment;
@@ -935,4 +953,4 @@ function releaseXess(binding, publication) {
   const Broker = require("../runtime/gpu-compute-broker"), before = Broker.demand(binding, false);
   if (before) publication?.onRollback?.(() => Broker.demand(binding, true));
 }
-module.exports = { file, activityFile, sceneDemandFile, lateCameraFile, lateCamera, sceneDemand, supported, info, templates, facts, describe, stageSettings, prepare, publishSimple, emptyDocument, acceptance, outcomes, acceptanceReason, preparation };
+module.exports = { file, activityFile, sceneDemandFile, lateCameraFile, lateCamera, sceneDemand, supported, info, templates, facts, describe, stageSettings, launchDownloads, prepare, publishSimple, emptyDocument, acceptance, outcomes, acceptanceReason, preparation };
