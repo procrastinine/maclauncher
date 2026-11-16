@@ -4,6 +4,8 @@ const { inspectMachOExportInfo } = require('./macho-exports');
 const { compareVersions } = require('./translator-description');
 const { wineLayout } = require('./wine-layout');
 const { binaryFiles } = require('./binary-files');
+const { acceptsBinary } = require('../../../core/launch-plan');
+const { peArchitecture, peMachineCode } = require('../../../core/binary-arch');
 
 // Per-installed-engine record, invalidated by file identity, never version.
 async function wineCompatibilityRecord(install, options) {
@@ -91,7 +93,7 @@ function resolveNativeDependency(file, image, library, { executablePath, runPath
   return null;
 }
 function requiredMachine(executableArchitecture) {
-  return { x86: 0x14c, i386: 0x14c, x64: 0x8664, x86_64: 0x8664, arm64: 0xaa64, aarch64: 0xaa64 }[executableArchitecture];
+  return peMachineCode({ x86: 'i386', x64: 'x86_64', aarch64: 'arm64' }[executableArchitecture] || executableArchitecture) || undefined;
 }
 function wineDependency(record, library) {
   const name = path.basename(library), target = record.modules[name];
@@ -138,9 +140,9 @@ function compatibility(description, record, { macOSVersion, executableArchitectu
   for (const file of selected.files) {
     if (!fs.existsSync(file.path)) return incompatible(`Required file is missing: ${file.path}`);
     const actual = file;
-    if (actual.format === 'pe' && machine && actual.machine !== machine) return incompatible(`${path.basename(file.path)} has no PE machine for ${executableArchitecture}`);
+    if (actual.format === 'pe' && machine && !acceptsBinary(expectedUnix, peArchitecture(machine), 'native', { format: 'pe', machine: peArchitecture(actual.machine) }).accepted) return incompatible(`${path.basename(file.path)} has no PE machine for ${executableArchitecture}`);
     if (actual.format !== 'macho') { if (actual.format === 'unknown') warnings.push(`Could not inspect ${file.path}`); continue; }
-    if (expectedUnix && !actual.cpuSlices.includes(expectedUnix)) return incompatible(`${path.basename(file.path)} has no ${expectedUnix} CPU slice`);
+    if (expectedUnix && !acceptsBinary(expectedUnix, peArchitecture(machine), 'native', { format: 'macho', architectures: actual.cpuSlices }).accepted) return incompatible(`${path.basename(file.path)} has no ${expectedUnix} CPU slice`);
     const image = actual.slices.find(slice => slice.architecture === expectedUnix) || actual.slices[0];
     if (macOSVersion && image.minimumMacOS && compareVersions(image.minimumMacOS, macOSVersion) > 0)
       return incompatible(`${path.basename(file.path)} requires macOS ${image.minimumMacOS}`);

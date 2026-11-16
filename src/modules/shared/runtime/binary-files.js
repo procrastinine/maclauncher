@@ -1,5 +1,7 @@
 const fs = require('node:fs'), path = require('node:path');
 const { inspectFile } = require('./translator-description');
+const { acceptsBinary } = require('../../../core/launch-plan');
+const { peArchitecture } = require('../../../core/binary-arch');
 
 // Choose by actual machine/slices, independently of a publisher's folder names.
 // Both compatibility and materialization consume this exact file set.
@@ -13,8 +15,8 @@ function binaryFiles(files, { machine, architecture, requiredPaths = [] } = {}) 
   }
   for (const rows of groups.values()) {
     const format = rows[0].format;
-    const matches = format === 'pe' && machine ? rows.filter(file => file.machine === machine)
-      : format === 'macho' && architecture ? rows.filter(file => file.cpuSlices?.includes(architecture)) : rows;
+    const matches = format === 'pe' && machine ? rows.filter(file => acceptsBinary(architecture, peArchitecture(machine), 'native', { format: 'pe', machine: peArchitecture(file.machine) }).accepted)
+      : format === 'macho' && architecture ? rows.filter(file => acceptsBinary(architecture, null, 'native', { format: 'macho', architectures: file.cpuSlices }).accepted) : rows;
     if (matches.length) selected.push(matches[0]);
     else missing.push({ file: rows[0], reason: format === 'pe' ? `No PE machine ${machine} for ${path.basename(rows[0].path)}` : `No ${architecture} CPU slice for ${path.basename(rows[0].path)}` });
   }

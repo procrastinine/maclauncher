@@ -117,4 +117,6 @@ function inspectBinary(file) {
  try { return inspect(reader(fs.fstatSync(fd).size,(offset,length)=>{const b=Buffer.alloc(length);if(fs.readSync(fd,b,0,length,offset)!==length) fail('file changed during inspection');return b;})); }
  finally {fs.closeSync(fd);}
 }
-module.exports={parseBinary,inspectBinary};
+function peArchitecture(machine) { return PE.get(machine) || null; }
+function peMachineCode(architecture) { return [...PE].find(([,name])=>name===architecture)?.[0] || null; }
+module.exports={parseBinary,inspectBinary,peArchitecture,peMachineCode};
