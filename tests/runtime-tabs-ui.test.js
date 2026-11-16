@@ -311,7 +311,7 @@ test('registry metadata exposes manageable production groups while exposing mana
       ['PS5 (AnyPS5)', 'Prosper', 'Switch / Switch 2 (nxnative)', 'MacLauncher Android', 'Mac.apk', 'AIM', 'PlayCover']);
     // One family group holds the nxnative runtime and its native tools for Switch and Switch 2 games.
     assert.deepEqual(['nxnative', 'nxnative-tools'].map(id => section(id).label), ['Switch / Switch 2 (nxnative)', 'Switch / Switch 2 (nxnative)']);
-    assert.deepEqual(groups.filter(group => group.category === 'compatibility').map(group => group.label), ['CrossOver', 'Sikarugir', 'WineCX', 'Steam client bridge', 'DOSBox', '32-bit Mac']);
+    assert.deepEqual(groups.filter(group => group.category === 'compatibility').map(group => group.label), ['CrossOver', 'Sikarugir', 'WineCX', 'Highball Wine', 'MetalSharp Wine', 'Steam client bridge', 'DOSBox', '32-bit Mac']);
     // The Wine runtimes share the Steam client bridge as one managed row.
     assert.deepEqual(runtimeGroupSections(section('maclauncher-steam-bridge'), sections).map(choice => [choice.label, choice.managerId]),
       [['Steam client bridge', 'maclauncher-steam-bridge']]);
@@ -494,7 +494,7 @@ test('translator member declarations separate DirectX targets, Vulkan drivers an
   modelTest(`const groups=groupRuntimeManagers(${JSON.stringify(states)});
     for(const [id,label,members] of [
       ['directx-vulkan','DirectX → Vulkan',['translator-dxvk','dxvk','translator-vkd3d-proton','translator-vkd3d','dxvk-nvapi','vkd3d-proton']],
-      ['directx-metal','DirectX → Metal',['sikarugir-graphics-bridge','translator-d3dmetal']],
+      ['directx-metal','DirectX → Metal',['sikarugir-graphics-bridge','translator-d3dmetal','translator-mullion']],
       ['vulkan-drivers','Vulkan drivers',['vulkan-moltenvk','vulkan-kosmickrisp','maclauncher-kosmickrisp','vulkan-moltenvk-scene']],
       ['codecs','Video codecs',['translator-gstreamer']]]){
       const group=groups.find(group=>group.id===id);assert.equal(group.label,label);

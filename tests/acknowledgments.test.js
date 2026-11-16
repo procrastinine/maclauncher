@@ -130,8 +130,11 @@ test('every registered runtime manager has a linked upstream project in Credits'
       for (const url of sources) assert.ok([...allProjects].some(project => projectPage(project, url)), `${id}: Credits must link its declared source project ${url}`);
       continue;
     }
-    assert.ok(upstream[id], `${id}: record its real upstream project when registering a manager`);
-    assert.ok(allProjects.has(normalized(upstream[id])), `${id}: Credits must link its upstream`);
+    // A manager served from source files links the repository they declare.
+    const declared = (manager.sources || []).find(source => source.upstream?.github)?.upstream.github;
+    const project = upstream[id] || (declared && `https://github.com/${declared}`);
+    assert.ok(project, `${id}: record its real upstream project when registering a manager`);
+    assert.ok(allProjects.has(normalized(project)), `${id}: Credits must link its upstream`);
   }
   const project = 'https://example.test/group/project';
   assert.equal(projectPage(project, project + '/releases'), true);

@@ -477,6 +477,18 @@
     "url": "https://github.com/dappermint/winecx-gptk"
   },
   {
+    "label": "MetalSharp Wine runtime (AGPL-3.0-only and component licenses)",
+    "url": "https://github.com/metalsharp/MetalSharp-Wine"
+  },
+  {
+    "label": "FEX x86 emulator (MIT)",
+    "url": "https://github.com/FEX-Emu/FEX"
+  },
+  {
+    "label": "Highball Wine engine (LGPL-2.1-or-later and component licenses)",
+    "url": "https://github.com/gauthierpiarrette/highball-engine"
+  },
+  {
     "label": "Wine upstream (LGPL-2.1-or-later)",
     "url": "https://gitlab.winehq.org/wine/wine"
   },
@@ -505,6 +517,7 @@
   { "label": "vkd3d-proton", "url": "https://github.com/HansKristian-Work/vkd3d-proton" },
   { "label": "Wine vkd3d", "url": "https://gitlab.winehq.org/wine/vkd3d" },
   { "label": "DXMT upstream", "url": "https://github.com/3Shain/dxmt" },
+  { "label": "Mullion (LGPL-2.1-or-later)", "url": "https://github.com/dttdrv/mullion" },
   { "label": "Apple Game Porting Toolkit", "url": "https://developer.apple.com/games/game-porting-toolkit/" },
   {
     "label": "MoltenVK, Sikarugir build (Apache-2.0 and component notices)",

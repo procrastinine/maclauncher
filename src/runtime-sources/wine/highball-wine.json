@@ -2,7 +2,7 @@
   "id": "highball-wine",
   "kind": "wine",
   "label": "Highball Wine",
-  "order": 204,
+  "order": 203,
   "upstream": {
     "github": "gauthierpiarrette/highball-engine",
     "assets": {

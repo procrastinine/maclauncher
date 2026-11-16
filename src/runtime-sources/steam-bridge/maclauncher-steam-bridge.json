@@ -2,7 +2,7 @@
   "id": "maclauncher-steam-bridge",
   "kind": "steam-bridge",
   "label": "Steam client bridge",
-  "order": 203,
+  "order": 204,
   "upstream": {
     "builds": "maclauncher-steam-bridge"
   }

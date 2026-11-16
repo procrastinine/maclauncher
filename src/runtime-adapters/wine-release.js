@@ -35,17 +35,22 @@ function createCatalog(source, dependencies = {}) {
   const SOURCE_URL = `https://github.com/${upstream.github}/releases`;
   const checksumOf = (files, name) => files.find(file => file.name === `${name}.sha256`) || files.find(file => /^sha256sums(?:\.txt)?$/i.test(file.name));
   const github = Upstream.github({repository: upstream.github, prerelease: upstream.prereleases === true, allArchitectures: true,
+    // One archive per CPU: among several matching names, the one with its own
+    // checksum file, then the shortest name.
     recognize: release => {
-      const archives = (release.assets || []).filter(asset => architectureOf(asset.name)), version = tagVersion(release.tag_name);
+      const assets = release.assets || [], version = tagVersion(release.tag_name), byCpu = new Map();
+      for (const asset of assets.filter(asset => architectureOf(asset.name))) byCpu.set(architectureOf(asset.name), [...(byCpu.get(architectureOf(asset.name)) || []), asset]);
+      const archives = [...byCpu.values()].map(found => found.sort((a, b) => Number(!assets.some(item => item.name === `${a.name}.sha256`)) -
+        Number(!assets.some(item => item.name === `${b.name}.sha256`)) || a.name.length - b.name.length)[0]);
       return version ? archives.map(asset => ({version: archives.length > 1 ? `${version}-${architectureOf(asset.name)}` : version,
-        assets: [asset, ...[checksumOf(release.assets.map(item => ({...item, name: item.name})), asset.name)].filter(Boolean)]})) : [];
+        assets: [asset, ...[checksumOf(assets, asset.name)].filter(Boolean)]})) : [];
     }});
   const versionLabel = (pin, installed) => {
     const record = pin || installed?.catalogEntry || installed;
     return record?.version ? `${label} ${record.version}` : record?.versionLabel;
   };
   function entryFor(row) {
-    const archive = row.files.find(file => architectureOf(file.name));
+    const archive = row.files.find(file => architectureOf(file.name) && !/\.sha256$/i.test(file.name));
     if (!archive) return null;
     const checksum = checksumOf(row.files, archive.name), asset = Upstream.asset(archive);
     const tag = row.sourceUrl ? decodeURIComponent(row.sourceUrl.split('/').pop()) : '';

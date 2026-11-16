@@ -1,6 +1,6 @@
 ---
 title: CrossOver, Sikarugir and WineCX
-description: "The three WINE runtimes in MacLauncher for macOS: free Sikarugir and WineCX, downloaded and set up for you, and CrossOver, used from your own installation. How they differ, how to choose, and where each game's Windows files live."
+description: "The WINE runtimes in MacLauncher for macOS: free Sikarugir and WineCX, downloaded and set up for you, and CrossOver, used from your own installation. How they differ, how to choose, and where each game's Windows files live."
 head:
   - tag: title
     content: "CrossOver vs Sikarugir vs WineCX on Mac: MacLauncher's WINE runtimes | MacLauncher"
@@ -8,7 +8,7 @@ sidebar:
   order: 1
 ---
 
-[WINE](https://www.winehq.org/) is the compatibility layer that lets Windows programs run on macOS, and on a Mac it usually comes as a *distribution*: a WINE build packaged with graphics translators and the libraries the Mac needs. MacLauncher can run games with three of them. [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) is a free distribution published on GitHub, and MacLauncher downloads it for you. [CrossOver](https://www.codeweavers.com/crossover/) is the commercial one, a paid app from CodeWeavers that you buy and install yourself. [WineCX](https://github.com/dappermint/winecx-gptk) is free as well and downloaded for you, and its WINE comes from CrossOver's own changes. Every game that can use WINE offers Sikarugir and WineCX, and it also offers CrossOver whenever MacLauncher finds or has registered a CrossOver application.
+[WINE](https://www.winehq.org/) is the compatibility layer that lets Windows programs run on macOS, and on a Mac it usually comes as a *distribution*: a WINE build packaged with graphics translators and the libraries the Mac needs. MacLauncher can run games with several of them. [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) is a free distribution published on GitHub, and MacLauncher downloads it for you. [CrossOver](https://www.codeweavers.com/crossover/) is the commercial one, a paid app from CodeWeavers that you buy and install yourself. [WineCX](https://github.com/dappermint/winecx-gptk) is free as well and downloaded for you, and its WINE comes from CrossOver's own changes. Every game that can use WINE offers Sikarugir and WineCX, and it also offers CrossOver whenever MacLauncher finds or has registered a CrossOver application.
 
 MacLauncher runs all three on one shared WINE layer. Settings, translator choices, private Windows environments, graphics effects, DLSS support and the Steam client bridge work the same way for each, so what differs is mostly where the WINE comes from and what it includes.
 
@@ -35,6 +35,10 @@ Like Sikarugir, WineCX is downloaded from GitHub after MacLauncher asks you, and
 Each release comes with DXMT, DXVK, MoltenVK and GStreamer video codecs. The DXVK in the current release has no 64-bit DXGI library (the DirectX component that sets up the display and lists the GPUs), so MacLauncher offers it to 32-bit games only. D3DMetal isn't included. Instead, you can install a D3DMetal version in **Runtimes → Graphics → DirectX → Metal**, for example from Sikarugir's Template releases or your own copy of Apple's Game Porting Toolkit, and pick it for Direct3D 11 or 12. Every other translator in Runtimes works with WineCX as it does with Sikarugir, including the DXVK and vkd3d-proton releases that pair with MacLauncher KosmicKrisp. Left on its automatic choice, WineCX uses its DXMT for Direct3D 10 and 11, WineD3D for Direct3D 8 and 9, WINE's own vkd3d for Direct3D 12 and its MoltenVK for Vulkan.
 
 Current WineCX releases need macOS 26 or later. MacLauncher reads that requirement from the first few megabytes of a release before downloading the rest, so a version your Mac can't run is listed with **Requires macOS 26 or later** and never downloaded. WineCX has no wrapper or bottle format of its own, so each game always gets a private Windows environment. Every WineCX launch is also checked against the list of files MacLauncher recorded when it installed that version. WineCX versions therefore come only from these downloads, and **Runtimes → WineCX** has no **Register custom…** button.
+
+## MetalSharp Wine and Highball Wine
+
+MetalSharp Wine and Highball Wine are free WINE runtimes listed from their publishers' GitHub releases and downloaded after consent, each checked against the publisher's checksum. [MetalSharp Wine](https://github.com/metalsharp/MetalSharp-Wine) is a signed WINE application for Apple Silicon that runs x86 Windows programs through FEX. [Highball Wine](https://github.com/gauthierpiarrette/highball-engine) comes from the Highball engine releases: Intel builds, and Apple Silicon builds that run through the signed WINE loader inside the Highball app, which are offered only while Highball is installed. MacLauncher changes nothing inside either download, so a signed application keeps its signature. Each of them is defined by one data file, which is all another WINE source needs as well.
 
 ## Which one to use
 
