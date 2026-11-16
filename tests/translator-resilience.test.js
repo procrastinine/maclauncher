@@ -92,14 +92,15 @@ test('translator resilience regenerates owned alias drift without changing prior
   put(component, 'winemetal.so', image({ cpu: X64 }));
   const plan = { runtime: 'sikarugir', components: { renderer: { used: D.describeTranslator(component, { engine: 'dxmt' }) } } };
   const options = { userDataDir, layout: { architecture: 'x86_64', unixName: 'x86_64-unix' }, logger: { warn: value => messages.push(value) } };
-  const symlink = fs.promises.symlink;
+  // File aliases are created by the selected-files adapter with symlinkSync.
+  const symlink = fs.symlinkSync;
   let raced = false;
-  const competing = t.mock.method(fs.promises, 'symlink', async (input, target) => {
-    if (!raced && target.endsWith('d3d11.dll')) {
-      raced = true; await symlink(path.relative(path.dirname(target), input), target);
+  const competing = t.mock.method(fs, 'symlinkSync', (input, target, ...rest) => {
+    if (!raced && String(target).endsWith('d3d11.dll')) {
+      raced = true; symlink(path.relative(path.dirname(target), input), target);
       throw Object.assign(Error('synthetic concurrent alias'), { code: 'EEXIST' });
     }
-    return symlink(input, target);
+    return symlink(input, target, ...rest);
   });
   const first = await Files.prepareTranslatorFiles(plan, options), alias = path.join(first.root, 'lib/wine/x86_64-windows/d3d11.dll');
   assert.equal(raced, true); competing.mock.restore();
