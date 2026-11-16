@@ -180,17 +180,18 @@ async function runtimePlans(entry, mod, info, context, managers) {
 
 // One question per Play. Once a download of this Play is approved, a later
 // download that the Play needs, such as graphics data that its launch step finds,
-// is approved with it and named in the log. A download declined earlier in this
-// Play, an optional offer, a question with companions to choose from and a
-// download under a licence (a licence sheet, an agreement or a named licence)
-// are still asked.
+// is approved with it and named in the log. A question that downloads nothing
+// (such as starting the Steam client), a download declined earlier in this Play,
+// an optional offer, a question with companions to choose from and a download
+// under a licence (a licence sheet, an agreement or a named licence) are still
+// asked.
 const licensed = plan => plan?.licenseRequired === true || plan?.kind === "licence" || typeof plan?.licenseUrl === "string";
 function askOncePerPlay(context) {
   const ask = context.confirmRuntimeInstall;
   if (typeof ask !== "function" || ask.oncePerPlay) return;
   let approved = false;
   context.confirmRuntimeInstall = Object.assign(async (plan, ...rest) => {
-    const covered = approved && !licensed(plan) && plan?.optional !== true && !plan?.companions?.length &&
+    const covered = approved && plan?.requiresDownload === true && !licensed(plan) && plan?.optional !== true && !plan?.companions?.length &&
       !context.declinedChoices?.has(`download:${plan?.managerId}`);
     if (covered) {
       context.logger?.info?.(`[runtimes] ${plan.label || plan.managerId} downloads with the approval given for this Play.`);

@@ -119,10 +119,11 @@ test("a download the launch step finds after the Play dialog is approved with it
   assert.equal(await ask({ managerId: "importer", label: "Importer licence", kind: "licence" }), true);
   assert.equal(await ask({ managerId: "android-system-image", label: "System image", licenseUrl: "https://example.invalid/terms" }), true);
   assert.equal(await ask({ managerId: "graphics-offer", label: "Offer", optional: true }), true);
+  assert.equal(await ask({ managerId: "steam-client", label: "Steam", kind: "client-start", requiresDownload: false }), true);
   (f.context.declinedChoices ||= new Set()).add("download:graphics-neural-models");
   assert.equal(await ask({ managerId: "graphics-neural-models", label: "Declined model" }), true);
   assert.deepEqual(f.events.filter(event => event.startsWith("consent")),
-    ["consent:Host", "consent:Metal toolchain", "consent:Importer licence", "consent:System image", "consent:Offer", "consent:Declined model"]);
+    ["consent:Host", "consent:Metal toolchain", "consent:Importer licence", "consent:System image", "consent:Offer", "consent:Steam", "consent:Declined model"]);
 });
 
 test("without a Play dialog, the first download the launch step finds asks and later ones of that Play are approved with it", async t => {
