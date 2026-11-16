@@ -114,7 +114,7 @@ struct macfx::FramePresenter::Impl:std::enable_shared_from_this<Impl>{
  uint64_t presentedCallbacks=0,nonpositivePresentations=0,duplicatePresentations=0;
  std::shared_ptr<ImageReservation>generationAdmission;GenerationEncoder*admittedGenerator=nullptr;unsigned admittedGenerationWidth=0,admittedGenerationHeight=0;uint64_t admittedGenerationSequence=0;ImageRetry generationRetry;
  GenerationEncoder*generationBudgetOwner=nullptr;uintptr_t generationBudgetDevice=0;unsigned generationBudgetWidth=0,generationBudgetHeight=0,generationBudgetMultiplier=0;MTLPixelFormat generationBudgetFormat=MTLPixelFormatInvalid;
- std::shared_ptr<GenerationEncoder>generator;std::unique_ptr<AdaptivePacing>pacing;DeliveryPlan delivery;std::shared_ptr<Batch>latest,handed;bool historyReady=false;uint64_t accountedDeliveryDrops=0;std::atomic<bool>pumpQueued{false},stopping{false};double lastSourceTime=0,interval=1.0/60;uint64_t lastSubmission=0,lastQueuedFrame=0,generationSequence=0,lastPublishedBatch=0,lastContentId=0,lastContentEpoch=0,lastImageRevision=0;double lastContentPTS=0,lastContentDuration=0,lastContentMediaDuration=0,lastContentTimeMs=0;bool lastContentPTSUnknown=false,lastContentMapped=false,pendingProducerReset=false;double lastContentTarget=0;int lastQueuedGenerated=-2;unsigned width=0,height=0,inFlight=0;std::array<double,8>recentPresentations{};unsigned presentationCursor=0;
+ std::shared_ptr<GenerationEncoder>generator;std::unique_ptr<AdaptivePacing>pacing;DeliveryPlan delivery;std::shared_ptr<Batch>latest,handed;bool historyReady=false;uint64_t accountedDeliveryDrops=0;std::atomic<bool>pumpRequested{false},pumpQueued{false},stopping{false};double lastSourceTime=0,interval=1.0/60;uint64_t lastSubmission=0,lastQueuedFrame=0,generationSequence=0,lastPublishedBatch=0,lastContentId=0,lastContentEpoch=0,lastImageRevision=0;double lastContentPTS=0,lastContentDuration=0,lastContentMediaDuration=0,lastContentTimeMs=0;bool lastContentPTSUnknown=false,lastContentMapped=false,pendingProducerReset=false;double lastContentTarget=0;int lastQueuedGenerated=-2;unsigned width=0,height=0,inFlight=0;std::array<double,8>recentPresentations{};unsigned presentationCursor=0;
  EffectPreparationObserver preparationObserver;std::string planReason;std::unique_ptr<EffectPlanExecutor>plans=std::make_unique<EffectPlanExecutor>();std::shared_ptr<EffectExecution>execution;std::shared_ptr<FrameCapture>sceneCapture;std::shared_ptr<const EffectSceneLease>sceneInputs;std::shared_ptr<const SceneWindowAuthority>sceneWindow;std::shared_ptr<TemporalSceneContinuation>sceneContinuation;std::function<ShaderResult()>receiptCompletion;bool receiptSynthetic=false;id<MTLTexture>planTarget;bool planMode=false;double begun=CACurrentMediaTime(),lastDetachedRetirementTrace=0;uint64_t outputSequence=0,generationEventSequence=0;
  EffectPlanState holdPlans;
  uint64_t refreshedHoldEpoch=0,refreshedHoldGeneration=0;const LiveState*refreshedHoldReader=nullptr;
@@ -334,7 +334,17 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   // identity remains cheap metadata; stopped owners keep no queue/model graph.
   {std::lock_guard lock(privateQueueMutex);queue=nil;displayQueue=nil;}planTarget=nil;generator.reset();generationAdmission.reset();execution.reset();plans.reset();
  }
- void schedule(bool visibilityChange=false){if(stopping.load()||!visibilityChange&&!outputVisible.load(std::memory_order_acquire)||pumpQueued.exchange(true))return;auto self=shared_from_this();dispatch_async(worker,^{@autoreleasepool{self->pump();}});}
+ void schedule(bool visibilityChange=false){
+  if(stopping.load()||!visibilityChange&&!outputVisible.load(std::memory_order_acquire))return;
+  pumpRequested.store(true);if(pumpQueued.exchange(true))return;
+  auto self=shared_from_this();dispatch_async(worker,^{@autoreleasepool{self->pump();}});
+ }
+ // A drawable or publication arriving during a pump must outlive its earlier
+ // readiness snapshot, even when that pump parks its display-link timer.
+ void finishPump(bool more=false){
+  pumpQueued.store(false);
+  if(pumpRequested.exchange(false)||more)schedule();
+ }
  void failWithoutLock(const std::string&reason){if(status.reason!=reason)nativeLog("Graphics presentation: "+reason);status.reason=reason;}
  void fail(const std::string&reason){std::lock_guard<std::mutex>lock(mutex);failWithoutLock(reason);}
  void deliveryMetrics(){const auto value=delivery.snapshot();const auto drops=value.droppedGenerated+value.droppedReal;status.dropped+=drops-accountedDeliveryDrops;accountedDeliveryDrops=drops;status.pending=value.pending+(immediate?1:0);status.maxPending=std::max(status.maxPending,status.pending);}
@@ -904,13 +914,14 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   }});return true;
  }
  void pump(){
+  pumpRequested.store(false);
   if(outputIdleCut.load(std::memory_order_acquire)){std::unique_lock serial(submission,std::try_to_lock);if(serial.owns_lock())applyOutputIdleCut();}
   if(!outputVisible.load(std::memory_order_acquire)||outputIdleCut.load(std::memory_order_acquire)){
-   std::lock_guard lock(mutex);if(wakeup)dispatch_source_set_timer(wakeup,DISPATCH_TIME_FOREVER,DISPATCH_TIME_FOREVER,0);pumpQueued.store(false);return;
+   std::lock_guard lock(mutex);if(wakeup)dispatch_source_set_timer(wakeup,DISPATCH_TIME_FOREVER,DISPATCH_TIME_FOREVER,0);finishPump();return;
   }
   pollRuntimeStatus(imageProcessingRequested());std::shared_ptr<Batch>undeliveredReal;bool waitingForDrawable=false;@try{try{
    CAMetalLayer *layer=layerSnapshot();const bool drawableReady=outputDrawableReady(layer);
-   std::optional<Display>display;{std::lock_guard<std::mutex>lock(mutex);if(stopping.load()){pumpQueued.store(false);return;}const double now=CACurrentMediaTime();
+   std::optional<Display>display;{std::lock_guard<std::mutex>lock(mutex);if(stopping.load()){finishPump();return;}const double now=CACurrentMediaTime();
     if(!drawableReady&&(immediate||generator&&generationEnabled&&delivery.nextTime()&&*delivery.nextTime()<=now+(displayHz.load()?1./displayHz.load():0)))waitingForDrawable=true;
     else if(immediate){display=immediate;immediate.reset();if(generator)deliveryMetrics();else status.pending=0;}
     else if(generator&&generationEnabled){const auto refresh=displayHz.load();const double lookahead=latest&&latest->targeted&&refresh?1./refresh:0;const auto before=delivery.snapshot();const auto due=delivery.takeAhead(now,lookahead);if(latest&&due&&diagnosticLine(latest))nativeLog(deliveryIdentity(latest)+" event=take now="+std::to_string(now)+" selected="+std::to_string(due?due->generated:-2)+" sourceId="+std::to_string(due?due->sourceId:0)+" generatedDrops="+std::to_string(delivery.snapshot().droppedGenerated-before.droppedGenerated));if(due&&latest&&due->sourceId==latest->id)display=Display{latest,due->generated,due->due};deliveryMetrics();}
@@ -940,10 +951,10 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   }catch(const std::exception&e){fail(e.what());}}@catch(NSException*e){fail(e.reason.UTF8String?:"Presentation failed");}
   if(undeliveredReal){std::lock_guard<std::mutex>lock(mutex);retireBatch(undeliveredReal);}
   {std::lock_guard lock(mutex);handed.reset();}
-  pumpQueued.store(false);bool more=false;{std::lock_guard<std::mutex>lock(mutex);more=immediate.has_value()&&!waitingForDrawable;if(wakeup&&!stopping.load()){auto next=delivery.nextTime();const auto refresh=displayHz.load();if(next&&latest&&latest->targeted&&refresh)*next-=1./refresh;if(motionFrame&&motionFrame->totalSubframes>1&&(!next||nextSubframeTime<*next))next=nextSubframeTime;
+  bool more=false;{std::lock_guard<std::mutex>lock(mutex);more=immediate.has_value()&&!waitingForDrawable;if(wakeup&&!stopping.load()){auto next=delivery.nextTime();const auto refresh=displayHz.load();if(next&&latest&&latest->targeted&&refresh)*next-=1./refresh;if(motionFrame&&motionFrame->totalSubframes>1&&(!next||nextSubframeTime<*next))next=nextSubframeTime;
    // Waiting for a drawable: the next display-link tick schedules the pump; the layer route retries after half a refresh.
    if(waitingForDrawable)next=metalTiming.load()?std::optional<double>{}:std::optional<double>(CACurrentMediaTime()+(refresh?0.5/refresh:0.004));
-   dispatch_source_set_timer(wakeup,next?dispatch_time(DISPATCH_TIME_NOW,int64_t(std::max(0.,*next-CACurrentMediaTime())*NSEC_PER_SEC)):DISPATCH_TIME_FOREVER,DISPATCH_TIME_FOREVER,100*NSEC_PER_USEC);}}if(more)schedule();
+   dispatch_source_set_timer(wakeup,next?dispatch_time(DISPATCH_TIME_NOW,int64_t(std::max(0.,*next-CACurrentMediaTime())*NSEC_PER_SEC)):DISPATCH_TIME_FOREVER,DISPATCH_TIME_FOREVER,100*NSEC_PER_USEC);}}finishPump(more);
  }
  void generationBudgetContract(unsigned w,unsigned h){
   const auto device=reinterpret_cast<uintptr_t>((__bridge void*)layer.device);const unsigned multiplier=config.generation?config.generation->multiplier:0;
