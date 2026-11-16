@@ -38,6 +38,9 @@ kernel void hudDifferenceCompose(texture2d<float,access::read>finalColor[[textur
 )MSL";}
 inline bool hudDifferenceSrgb(MTLPixelFormat f){return f==MTLPixelFormatRGBA8Unorm_sRGB||f==MTLPixelFormatBGRA8Unorm_sRGB;}
 inline bool hudDifferenceFormat(MTLPixelFormat f){return f==MTLPixelFormatRGBA8Unorm||f==MTLPixelFormatBGRA8Unorm||hudDifferenceSrgb(f)||f==MTLPixelFormatRGBA16Float||f==MTLPixelFormatRGBA32Float;}
+inline bool hudDifferenceOutput(id<MTLTexture>image,id<MTLTexture>finalColor,const ImageColorDescription&color){
+  return image&&finalColor&&image.device==finalColor.device&&image.width==finalColor.width&&image.height==finalColor.height&&image.textureType==MTLTextureType2D&&image.sampleCount==1&&!image.framebufferOnly&&hudDifferenceFormat(image.pixelFormat)&&(!hudDifferenceSrgb(image.pixelFormat)||color.transfer==ColorTransfer::SRGB||color.transfer==ColorTransfer::Linear)&&image!=finalColor;
+}
 inline bool hudDifferenceFrame(const SceneAovLease&aovs,const RSTemporalFrame&scene,id<MTLDevice>device,id<MTLTexture>finalColor,const ImageColorDescription&color,FrameOrigin origin){
   if(!finalColor||finalColor.device!=device||finalColor.textureType!=MTLTextureType2D||finalColor.sampleCount!=1||finalColor.framebufferOnly||finalColor.storageMode==MTLStorageModeMemoryless||!scene.frameId||aovs.value.images[RS_SCENE_AOV_UI_COLOR_ALPHA].texture)return false;
   const auto&p=aovs.value;const auto&r=p.images[RS_SCENE_AOV_HUDLESS_COLOR];auto hudless=aovs.textures[RS_SCENE_AOV_HUDLESS_COLOR];
@@ -74,10 +77,11 @@ public:
  GenerationResult prepare(id<MTLCommandBuffer>c,id<MTLTexture>source,const RSTemporalFrame*s)override{return provider->prepare(c,source,s);}
  ShaderResult bindDifference(id<MTLCommandBuffer>commands,id<MTLTexture>finalColor,const std::shared_ptr<const SceneAovLease>&aovs,const RSTemporalFrame&scene,FrameOrigin origin){
   std::lock_guard lock(mutex);frame={};if(!aovs||!aovs->value.images[RS_SCENE_AOV_HUDLESS_COLOR].texture||aovs->value.images[RS_SCENE_AOV_UI_COLOR_ALPHA].texture)return {true,{}};
-  if(provider->outputDisplayMapped(false))return {false,hudDifferenceReason};
-  if(!hudDifferenceFrame(*aovs,scene,device,finalColor,color,origin))return {false,hudDifferenceReason};
+  // The difference is optional. A frame it does not apply to generates from
+  // the final image, with the HUD interpolated along with the scene.
+  if(provider->outputDisplayMapped(false)||!hudDifferenceFrame(*aovs,scene,device,finalColor,color,origin))return {true,{}};
   auto hudless=aovs->textures[RS_SCENE_AOV_HUDLESS_COLOR];
-  if(!kernel||width!=finalColor.width||height!=finalColor.height||format!=finalColor.pixelFormat){if(!warming.exchange(true)){auto self=shared_from_this();const auto w=unsigned(finalColor.width),h=unsigned(finalColor.height);const auto f=finalColor.pixelFormat;dispatch_async(queue,^{@autoreleasepool{try{self->warm(w,h,f);}catch(...){}self->warming.store(false);}});}return {false,hudDifferenceReason,true};}
+  if(!kernel||width!=finalColor.width||height!=finalColor.height||format!=finalColor.pixelFormat){if(!warming.exchange(true)){auto self=shared_from_this();const auto w=unsigned(finalColor.width),h=unsigned(finalColor.height);const auto f=finalColor.pixelFormat;dispatch_async(queue,^{@autoreleasepool{try{self->warm(w,h,f);}catch(...){}self->warming.store(false);}});}return {true,{}};}
   frame={commands,finalColor,hudless,aovs,true};return {true,{}};
  }
  void setScene(const RSTemporalFrame&s)override{std::lock_guard lock(mutex);auto actual=s;if(frame.active!=previousDerived)actual.flags|=RS_TEMPORAL_RESET;previousDerived=frame.active;if(frame.active){actual.color=(__bridge void*)frame.hudless;actual.output=(__bridge void*)frame.hudless;}provider->setScene(actual);}
@@ -86,13 +90,17 @@ public:
  GenerationResult encodeColorTimed(id<MTLCommandBuffer>commands,id<MTLTexture>source,const std::vector<id<MTLTexture>>&out,uint64_t sequence,const InterpolationPlan&plan,bool mapped,bool measure)override{
   Frame current;PreparedImageLease prepared;std::shared_ptr<HudDifferenceKernel>encoder;ImageColorDescription domain;{std::lock_guard lock(mutex);current=frame;frame={};prepared=outputs;encoder=kernel;domain=color;}
   if(!current.active)return provider->encodeColorTimed(commands,source,out,sequence,plan,mapped,measure);
-  GenerationResult result;if(current.commands!=commands||current.finalColor!=source||out.size()>phases){result.reason=hudDifferenceReason;return result;}
-  auto holds=std::make_shared<std::vector<PooledImage>>();std::vector<id<MTLTexture>>raw;holds->reserve(out.size());raw.reserve(out.size());for(size_t i=0;i<out.size();++i){auto image=prepared.acquire();if(!image){result.busy=true;result.reason=hudDifferenceReason;return result;}raw.push_back(image.texture());holds->push_back(std::move(image));}
+  // Anything the composition cannot take generates from the final image, HUD included.
+  const auto ordinary=[&]{return provider->encodeColorTimed(commands,source,out,sequence,plan,mapped,measure);};
+  if(current.commands!=commands||current.finalColor!=source||out.size()>phases||!encoder)return ordinary();
+  for(auto image:out)if(!hudDifferenceOutput(image,current.finalColor,domain))return ordinary();
+  auto holds=std::make_shared<std::vector<PooledImage>>();std::vector<id<MTLTexture>>raw;holds->reserve(out.size());raw.reserve(out.size());for(size_t i=0;i<out.size();++i){auto image=prepared.acquire();if(!image)return ordinary();raw.push_back(image.texture());holds->push_back(std::move(image));}
+  GenerationResult result;
   [commands addCompletedHandler:^(id<MTLCommandBuffer>){(void)holds;(void)current;}];
   result=provider->encodeColorTimed(commands,current.hudless,raw,sequence,plan,mapped,measure);if(result.encoded&&result.ready)for(unsigned i=0;i<result.generated&&i<out.size();++i){const auto composed=encoder->encode(commands,current.finalColor,current.hudless,raw[i],out[i],domain);if(!composed.encoded){result.encoded=false;result.reason=composed.reason;return result;}}return result;
  }
  GenerationResult encodeInterval(id<MTLCommandBuffer>c,id<MTLTexture>previous,id<MTLTexture>source,const std::vector<id<MTLTexture>>&out,uint64_t sequence,const InterpolationPlan&p)override{
-  {std::lock_guard lock(mutex);if(frame.active){GenerationResult result;result.reason="HUD difference needs the ordinary real-endpoint generation path";return result;}}return provider->encodeInterval(c,previous,source,out,sequence,p);
+  {std::lock_guard lock(mutex);frame={};}return provider->encodeInterval(c,previous,source,out,sequence,p);
  }
  uint64_t imageBytes(unsigned w,unsigned h,const GenerationMeasure&measure)const override{const auto base=provider->imageBytes(w,h,measure);std::lock_guard lock(mutex);if(!outputs)return base;const auto unit=measure(w,h,format==MTLPixelFormatRGBA16Float||format==MTLPixelFormatRGBA32Float?8:4),count=uint64_t(4)*phases*(format==MTLPixelFormatRGBA32Float?2:1);if(count&&unit>UINT64_MAX/count)return UINT64_MAX;const auto extra=unit*count;return base>UINT64_MAX-extra?UINT64_MAX:base+extra;}
 };

@@ -912,9 +912,8 @@ ShaderResult EffectExecution::bindGenerationScene(id<MTLCommandBuffer>commands,s
     auto attachments=lease?copiedFrom?copiedSceneAovLease(lease->aovs,copiedFrom,colour):lease->aovs:nullptr;
     if(lease&&lease->interfaceLayer)attachments=interfaceLayerAttachments(commands,colour,lease->interfaceLayer,attachments,source,impl->colorDescription,origin);
     const auto pair=!attachments&&late?lateScenePair(*late,source.frameId,colour,imageColor()):nullptr;if(pair)attachments=pair;
-    // Late records have no per-image color domain. A real HUD-less-only late
-    // view cannot authorize subtraction in the final image's color encoding.
-    if(late&&late->images[0]&&!late->images[1]&&(!attachments||(!attachments->value.images[RS_SCENE_AOV_HUDLESS_COLOR].texture&&!attachments->value.images[RS_SCENE_AOV_UI_COLOR_ALPHA].texture)))return {false,hudDifferenceReason};
+    // Late records have no per-image color domain, so a HUD-less-only late view authorizes no subtraction. The frame
+    // still generates: the HUD difference applies only where it is valid and otherwise the HUD moves with the scene.
     const auto difference=bindHudDifference(stage.encoder,commands,colour,attachments,source,origin);if(!difference.encoded)return difference;
     auto actual=impl->normalizeScene(*scratch,commands,source,colour,colour,jittered,false,false,true,attachments,1,GuideAll,rawGuides);const auto aovs=temporalSceneAovs(actual);actual.owner=stage.state.get();if(aovs&&bindSceneAovLease(actual,aovs)!=RS_TEMPORAL_OK)return {false,"The generation endpoint attachments could not be retained"};
     bindMetalFxGenerationResources(actual,source,copiedFrom);
