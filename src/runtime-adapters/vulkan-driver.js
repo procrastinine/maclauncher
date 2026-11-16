@@ -15,7 +15,7 @@ function apply({build={},parts={},environment={},parameters={}}={}) {
   const descriptor=parts.icd?JSON.parse(fs.readFileSync(parts.icd,'utf8')):{file_format_version:'1.0.0',ICD:{api_version:parameters.apiVersion}};
   if(!descriptor.ICD||typeof descriptor.ICD!=='object')throw new Error('The selected Vulkan ICD has no driver declaration.');
   if(!parts.icd&&!/^\d+\.\d+\.\d+$/.test(parameters.apiVersion||''))throw new Error('A Vulkan build without an ICD must declare its API version.');
-  descriptor.ICD={...descriptor.ICD,library_path:driver,is_portability_driver:false};
+  descriptor.ICD={...descriptor.ICD,library_path:driver};
   icd=path.join(directory,'vulkan-icd.json');
   if([driver,library,parts.icd].includes(icd))throw new Error('The Vulkan view overlaps an installed part.');
   const text=JSON.stringify(descriptor)+'\n';
