@@ -355,6 +355,7 @@ async function confirmRuntimeInstallation(plan, entry, {signal} = {}) {
   // One optional companion can be a checkbox, checked by default, so it can be
   // declined without cancelling the other downloads.
   const optional = companions.find(item => typeof item.checkboxLabel === "string" && item.checkboxLabel);
+  if (optional?.fallbackLabel) lines.push(`Clearing "${optional.checkboxLabel}" uses ${optional.fallbackLabel} instead.`);
   const name = entry && (entry.name || path.basename(entry.gamePath || ""));
   const options = { type: "question", buttons: companions.length ? ["Download and Play", plan.optional ? "Play Without Downloading" : "Cancel"] : [plan.confirmLabel || "Download and Play", plan.cancelLabel || "Cancel"],
     defaultId: 0, cancelId: 1, ...(signal ? {signal} : {}),

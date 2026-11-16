@@ -74,3 +74,20 @@ test("a launch lists the FSR 4 model data of the row's profile and the XeSS runt
   assert.deepEqual(await Effects.launchDownloads({ effects: { schema: 2, mode: "advanced", enabled: false, video: [fsr4, xess] } }, { userDataDir: "/test-launcher-data" }), [],
     "a disabled graphics plan downloads nothing");
 });
+
+test("clearing a companion's checkbox installs the download the dialog names in its place without another question", async t => {
+  const fallback = { managerId: "scene", version: "2.0", label: "Scene driver" };
+  const companion = { managerId: "driver", version: "1.0", label: "Driver", optional: true, companion: true, companionCheckbox: "Use the driver", fallback };
+  const f = fixture(t, { graphics: [] });
+  const state = () => ({ catalog: {}, installed: [] });
+  const mod = { id: "fixture", runtimeManagers: ["host", "driver", "scene"].map(id => ({ id, label: id, installRuntime: async () => {}, getState: state })),
+    ensureRuntime: async () => ({ managerId: "host", version: "1.0", label: "Host" }), getRuntimeRequirements: async () => [companion] };
+  const shown = [], installed = [];
+  f.context.confirmRuntimeInstall = async plan => { shown.push(plan); return { approved: true, companionsDeclined: true }; };
+  assert.equal(await prepareForLaunch({ entry: {}, mod, context: f.context, info: { runtime: {} },
+    registry: { listModuleIds: () => [mod.id], getModule: () => mod }, runAction: () => assert.fail("No preparation action was declared"),
+    install: async (manager, payload) => installed.push(`${manager.id}:${payload.version}`) }), true);
+  assert.equal(shown.length, 1, "one question: " + shown.map(plan => plan.label).join(", "));
+  assert.deepEqual(shown[0].companions, [{ label: "Driver", versionLabel: "1.0", checkboxLabel: "Use the driver", fallbackLabel: "Scene driver 2.0" }]);
+  assert.deepEqual(installed.sort(), ["host:1.0", "scene:2.0"]);
+});

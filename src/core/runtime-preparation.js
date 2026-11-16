@@ -254,14 +254,16 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
       if (declined.has(key) || companions.some(item => item.plan === plan)) continue;
       if ((requiresDownload || !plan.version || plan.discoveryRequired) && !approved.has(key)) {
         const listed = host?.plan === plan ? companions : [];
-        // The dialog shows one companion's checkbox; clearing it declines only that companion.
+        // The dialog shows one companion's checkbox; clearing it declines only
+        // that companion and approves the download the dialog names in its place.
         const optional = listed.find(item => typeof item.plan.companionCheckbox === "string" && item.plan.companionCheckbox);
+        const named = plan => [plan.label || managers.find(manager => manager.id === plan.managerId)?.label || plan.managerId, plan.versionLabel || plan.version].filter(Boolean).join(" ");
         const consent = typeof context.confirmRuntimeInstall === "function" ? await context.confirmRuntimeInstall({ ...plan, ...(versionLabel ? { versionLabel } : {}),
           label: plan.label || manager.label || manager.id, requiresDownload,
           ...(listed.length ? { companions: listed.map(item => ({ label: item.plan.label || item.manager.label || item.manager.id,
             ...(item.versionLabel || item.plan.version ? { versionLabel: item.versionLabel || item.plan.version } : {}),
             ...(item.plan.bytes ? { bytes: item.plan.bytes } : {}),
-            ...(item === optional ? { checkboxLabel: item.plan.companionCheckbox } : {}) })) } : {}) }) : false;
+            ...(item === optional ? { checkboxLabel: item.plan.companionCheckbox, ...(item.plan.fallback ? { fallbackLabel: named(item.plan.fallback) } : {}) } : {}) })) } : {}) }) : false;
         if (consent !== true && consent?.approved !== true) {
           if (!plan.optional) return false;
           for (const item of [{ plan }, ...listed]) {
@@ -274,6 +276,7 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
         for (const item of listed) {
           if (item === optional && consent?.companionsDeclined === true) {
             declined.add(consentKey(item.plan)); skipped(item.plan); decline(item.plan); fallbackRequired ||= Boolean(item.plan.fallback);
+            if (item.plan.fallback) { approved.add(consentKey(item.plan.fallback)); grant(item.plan.fallback); }
           }
           else { approved.add(consentKey(item.plan)); grant(item.plan); }
         }
