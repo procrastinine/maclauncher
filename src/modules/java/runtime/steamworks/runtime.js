@@ -47,7 +47,7 @@ function requiredVariant(entry, { hostArch = process.arch, explicitVariant, pref
 }
 
 function resolveBundle(pin, { resourcesRoot, verification = "full", native = Native, declarations: includedDeclarations = declarations } = {}) {
-  const included = Included.resolveIncluded(includedDeclarations, { id: "java-steamworks", version: pin.bridgeVersion, resourcesRoot });
+  const included = Included.resolveIncluded(includedDeclarations, { id: "java-steamworks", version: pin.bridgeVersion, resourcesRoot, verification });
   if (included) {
     const { directory, manifest, item } = included;
     const record = JSON.parse(manifest.bytes);
@@ -58,8 +58,6 @@ function resolveBundle(pin, { resourcesRoot, verification = "full", native = Nat
     const libraryPath = path.join(directory, "libsteamworks4j.dylib"), agentPath = path.join(directory, "steam-agent.jar");
     const architectures = native.readMachOArchitectures(libraryPath, { allowLibrary: true });
     if (verification === "full") {
-      Bundle.verifyPayload(directory, { ...record, files: [...record.files,
-        { path: item.manifestRelative, size: manifest.size, sha256: item.manifestSha256, mode: 0o644 }] });
       if (JSON.stringify(architectures.slice().sort()) !== JSON.stringify(pin.architectures.slice().sort()))
         throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam JNI has a different CPU.");
     } else if (![libraryPath, agentPath].every(file => (fs.lstatSync(file).isFile() || Boolean(Bundle.appAlias(file)))))
