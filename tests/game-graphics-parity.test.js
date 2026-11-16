@@ -4,7 +4,7 @@ const native = name => fs.readFileSync(path.join(__dirname, "../src/modules/shar
 const presentation = () => native("presentation.mm");
 
 test("G4: only ExternalWindow supplies a display limit to generation delivery", () => {
-  assert.match(presentation(), /const bool windowCapture=frameSource\.load\(std::memory_order_relaxed\)==RuntimeFrameSource::ExternalWindow;\s*const auto deliveryMode=generationDelivery\(generator&&generationEnabled,outputPolicy\.active\(\),windowCapture\?displayHz\.load\(\):0,/);
+  assert.match(presentation(), /const bool windowCapture=frameSource\.load\(std::memory_order_relaxed\)==RuntimeFrameSource::ExternalWindow;\s*const auto deliveryMode=generationDelivery\(!callerOwnsSource&&generator&&generationEnabled,outputPolicy\.active\(\),windowCapture\?displayHz\.load\(\):0,/);
   assert.match(presentation(), /if\(windowCapture\)\{const bool requestedPhases=.*?displayLimitedPhases/);
 });
 
