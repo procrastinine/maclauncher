@@ -106,7 +106,7 @@ function resolvePlan({target,choices={},builds=[],system={}}={}) {
       const needs=[...(target.requires||[]),...requires(process)];
       for(const [kind,source] of Object.entries(choices))if(source&&source!=='automatic'&&kind!=='wine'&&kind!=='cpu-translator'){
         const explicit=builds.filter(b=>b.kind===kind&&b.source===source);
-        if(!explicit.length){state=null;break;}
+        if(!explicit.length){const reason=`The selected ${kind} source ${source} is unavailable.`;if(!unsatisfied.includes(reason))unsatisfied.push(reason);state=null;break;}
         const token=provides(explicit[0])[0];if(token)needs.push(token);else{state=null;break;}
       }
       if(state)state=satisfyAll(needs,state,context);
@@ -124,6 +124,7 @@ function resolvePlan({target,choices={},builds=[],system={}}={}) {
       return {satisfied:true,target:{guestArch:guest,execution:guestTranslation?`fex(${guestTranslation.id})`:processExecution},components,processes:[{build:process.id,hostArch:host,guestArch:guest,integration,execution:processExecution}],downloads:components.filter(b=>!b.installed).map(b=>b.build),excluded:excluded.filter(row=>!selectedIds.has(row.build)),unsatisfied};
     }
   }
+  if(choices.wine&&choices.wine!=='automatic'&&!builds.some(build=>build.kind==='wine'&&build.source===choices.wine))unsatisfied.push(`The selected Wine source ${choices.wine} is unavailable.`);
   unsatisfied.push('No complete execution plan satisfies the selected sources and capabilities.');
   return {satisfied:false,components:[],processes:[],downloads:[],excluded,unsatisfied};
 }
