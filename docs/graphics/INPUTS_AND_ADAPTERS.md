@@ -122,6 +122,22 @@ Scene frame generation has its own depth, motion, camera and history requirement
 
 Changing the size at which the game renders is separate from processing. Downsampling after rendering changes only the submitted image. Engine controls or the virtual-source protocol, on the other hand, can change the size the game allocates for rendering, although only after the game acknowledges the requested size. Neither window-stream dimensions nor the final output fit show that the game renders to a smaller target. [Game render allocation](FRAME_API.md#game-render-allocation-and-processing-extent) describes the source strategies.
 
+### Windows frame-generation inputs
+
+A game's frame-generation API and a Frame generation effect row have separate roles. The game API supplies renderer resources; the row selects a provider in the shared graph. A provider can process any backend whose producer supplies its required inputs. An API name alone does not establish those inputs or presentation ownership.
+
+| Game API | Scene input route | Presentation behavior |
+| --- | --- | --- |
+| NGX DLSS-G and Streamline `sl.dlss_g` through vkd3d-proton | The NGX core exposes Super Resolution and compatible Ray Reconstruction. Its frame-interpolation interface reports unsupported. Streamline camera capture accompanies DLSS Super Resolution evaluations; it does not capture DLSS-G resource tags. | Shared generation uses forwarded real scene frames. The NGX core supplies no generated image to the game's DLSS-G plugin. |
+| NGX through DXVK | Direct3D 11 Super Resolution evaluations supply temporal frames. No DLSS-G scene producer is exposed through this route. | Shared generation uses the forwarded real scene frames. |
+| FidelityFX API frame generation | The adapter forwards frame-generation contexts, configuration, queries and dispatches to the game's original library. Its scene producer records upscale dispatches only. | The game's frame-generation library retains its own presentation behavior. |
+| D3DMetal MetalFX frame interpolation | Classic MetalFX interpolation retains the original encode and observes matching distortion metadata on supported systems. This observation does not submit the interpolation inputs as a real scene frame. Metal 4 interpolation recordings carry synthetic-image provenance. | The translator retains its original interpolation. A synthetic Metal 4 recording cannot become another frame-generation source. |
+| XeSS-FG | The XeSS D3D11 adapter handles Super Resolution. XeSS-FG's resource tagging and swapchain API has no scene producer. | The game's original frame-generation calls remain its own. |
+
+The temporal Vulkan carrier reserves HUD-less color and UI slots, and compatible drivers bind supplied textures as scene attachments. The slots alone do not establish a usable HUD pair: the producer must also declare the matching composition pass, regions, color encoding and alpha convention. Missing conventions remain unknown. The NGX Super Resolution producer does not supply these images.
+
+FidelityFX Super Resolution 2 DLLs (`ffx_fsr2_api_x64.dll` and their backend libraries) use a different ABI from the five-export FidelityFX API adapter and run unchanged. Likewise, `libxess.dll` Direct3D 12 and Vulkan calls have no scene input adapter; the adapted XeSS game input route is Direct3D 11 through DXMT. Vulkan game calls are independent of whether a Direct3D translator also runs in the process.
+
 ## Module launch entry points
 
 A module tells the launcher how to start its games with graphics. Each runtime entry declares its `graphicsHost` in module metadata, and at launch the launcher prepares the shared processor through `context.getGameEffectsEnvironment()`. `context.applyGameEnvironment(base)` then combines that environment with the game's existing environment. Choosing an engine-specific renderer remains the module's job.

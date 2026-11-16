@@ -272,3 +272,11 @@ A virtual window can also be activated during play. A live activation prepares o
 An applied reduction waits for an acknowledgment that matches the completed source. This acknowledgment includes the source and presentation pixel dimensions, and a later resize invalidates it until another matching frame completes. A producer that already renders at the requested pixel size reports `virtual: false` without creating a separate output window (a proxy). An existing proxy, by contrast, accepts live height and divisor changes, including in fullscreen, and keeps its completed image while the source is reallocated. Applied results report the observed size of the source frames.
 
 In windowed mode, a null or full-size source restores the original window once its restored frame completes, and the same launch can enable the virtual source again later. Enabling or removing a virtual window, however, requires leaving fullscreen. Pointer gestures finish before their source coordinate map changes, and invalid or stale commands leave the accepted source in place.
+
+## Frame-generation source ownership
+
+A scene used for frame generation identifies a real rendered frame. An image produced by an interpolator is synthetic and cannot start another generation sequence. Metal 4 interpolation recordings retain this distinction even when later image effects process their output. Classic MetalFX interpolator observation preserves the original encode; observing its resources does not register a real scene producer.
+
+HUD-less and UI textures belong to the same declared composition pass as their real frame, with explicit regions, color descriptions and alpha conventions. Camera matrices retain their declared coordinate convention. Unknown metadata stays absent or unknown; a reserved carrier slot does not establish a valid attachment.
+
+Only one presenter schedules generated images. A game API whose plugin or swapchain schedules interpolation keeps that behavior unless an input adapter explicitly transfers presentation ownership. Exposing a game frame-generation capability requires that ownership contract in addition to an available provider and matching scene inputs.

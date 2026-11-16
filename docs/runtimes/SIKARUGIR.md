@@ -151,6 +151,10 @@ During installation, MacLauncher identifies the renderers that the selected Temp
 | WineD3D | Selected Wine engine | Wine's built-in Direct3D translation. |
 | CNC-DDraw | The Template's optional DirectDraw wrapper | Software DirectDraw compatibility for 32-bit Windows games; uses installed libraries without another download. |
 
+### Game frame-generation inputs
+
+Sikarugir uses the same [Windows frame-generation input routes](../graphics/INPUTS_AND_ADAPTERS.md#windows-frame-generation-inputs) as CrossOver and WineCX. A shared Frame generation row uses the scene producer's available data. It does not expose a new game DLSS-G capability or take presentation ownership from a game frame-generation plugin.
+
 ### Game temporal integration
 
 Temporal upscalers need the game's depth and motion data, which a Windows game passes to the upscaler it calls itself. **Game temporal integration** takes advantage of this with DXMT and D3DMetal by exposing MetalFX Temporal through a compatible 64-bit game's DLSS integration. It requires Apple Silicon and the selected package's NVAPI and NGX libraries. With DXMT it requires macOS 14 or later, and with D3DMetal macOS 26 or later; native dependencies can raise either minimum. The game's own DLSS setting activates the integration, and selecting a shared Temporal upscaling method also turns it on at launch. The setting controls the Template's own DXMT and D3DMetal. A DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12 turns the integration on by itself. Where the Mac, macOS, executable, libraries or Wine engine cannot run it, the game starts without it.
