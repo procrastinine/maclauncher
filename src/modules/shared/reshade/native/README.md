@@ -61,8 +61,8 @@ holds the legacy temporal selection (`RESHADE_TEMPORAL_*`), diagnostics
 the original image while an optional row is preparing or lacks scene guides.
 Intake observation leaves screenshot requests to the final-image consumer.
 `RESHADE_CAPTURE_INTAKE=1` additionally enables depth and motion dumps when
-diagnostics are active; the launcher sets it on the capture channel of both
-diagnostic capture and screenshots.
+diagnostics are active; the launcher sets it only for explicit diagnostic capture,
+never on the screenshot channel.
 
 Some launch variables name files that carry commands while the process runs.
 Live controls and the temporal control file are read at most ten times per

@@ -176,7 +176,7 @@ async function prepareLegacy(entry, { userDataDir, app, signal, runtimeId, logge
     // attaches to the presented frame only while a request is pending, so a
     // dormant launch captures the game's own frame. Diagnostic capture keeps
     // its own pairs. Nothing from an earlier launch stays staged.
-    const screenshotCapture = Boolean(launcherSettings?.launcher?.graphicsShortcuts?.screenshot) && !(diagnostics && capture) && screenshotSupport(root) ? captureEnvironment(directory, true) : null;
+    const screenshotCapture = Boolean(launcherSettings?.launcher?.graphicsShortcuts?.screenshot) && !(diagnostics && capture) && screenshotSupport(root) ? captureEnvironment(directory, true, false) : null;
     if (screenshotCapture) require("./screenshots").cleanup(screenshotCapture.RESHADE_CAPTURE_PREFIX);
     Writable.atomicWrite(path.join(directory, "launch.json"), JSON.stringify({ schema: 1, launchId, phase: "prepared", preparedAt: new Date().toISOString(),
       gameId: entry.gameId, runtimeId: runtimeId || entry.runtimeId || null, adapterVersion: state.version,
@@ -190,7 +190,7 @@ async function prepareLegacy(entry, { userDataDir, app, signal, runtimeId, logge
       RESHADE_CONTROL_FILE: controlFile, RESHADE_LIVE_EFFECTS: effects, RESHADE_EFFECT_KEY: Live.effectKey(settings, userDataDir),
       ...(temporalFile ? { RESHADE_TEMPORAL_CONTROL_FILE: temporalFile, RESHADE_TEMPORAL_METHOD: graphicsSettings.temporalMethod } : {}),
       RESHADE_WINDOW_STATE: sharedState, RESHADE_LAYER_SURFACE: "1", RESHADE_LOG: launchLog(directory),
-      ...captureEnvironment(directory, diagnostics && capture), ...(screenshotCapture ? {...screenshotCapture, RESHADE_CAPTURE_FINAL: "1"} : {}),
+      ...captureEnvironment(directory, diagnostics && capture, true), ...(screenshotCapture ? {...screenshotCapture, RESHADE_CAPTURE_FINAL: "1"} : {}),
       ...(trace ? { RESHADE_TRACE: "1" } : {}), ...(diagnostics ? { RESHADE_DIAGNOSTICS: path.join(directory, "diagnostics-" + launchId) } : {}),
       ...(gpuTiming ? { RESHADE_GPU_TIMING: path.join(directory, "gpu-timing-" + launchId) } : {}) };
   }
@@ -252,7 +252,7 @@ async function prepareLegacy(entry, { userDataDir, app, signal, runtimeId, logge
   // An explicit frame producer that keeps a live host's capabilities, such as
   // a window capture session, saves processed screenshots as a live host does.
   const screenshotCapture = Boolean(launcherSettings?.launcher?.graphicsShortcuts?.screenshot) && explicitHost && liveHost(graphicsHost) && !(diagnostics && capture) && screenshotSupport(root)
-    ? captureEnvironment(directory, true) : null;
+    ? captureEnvironment(directory, true, false) : null;
   if (screenshotCapture) require("./screenshots").cleanup(screenshotCapture.RESHADE_CAPTURE_PREFIX);
   // Preparation is distinct from a rendered frame. Keep one small receipt and
   // explicitly opt in to bounded native tracing and GPU timing independently.
@@ -275,7 +275,7 @@ async function prepareLegacy(entry, { userDataDir, app, signal, runtimeId, logge
       : { RESHADE_EFFECT: effect, RESHADE_PREPARED_EFFECT: prepared, RESHADE_INCLUDE_PATH: includePath, RESHADE_TEXTURE_PATH: texturePath } : {}),
     ...(combined ? { RESHADE_TECHNIQUE: Chain.TECHNIQUE } : {}),
     RESHADE_WINDOW_STATE: sharedState, RESHADE_LAYER_SURFACE: "1", RESHADE_LOG: launchLog(directory),
-    ...captureEnvironment(directory, diagnostics && capture), ...(screenshotCapture ? {...screenshotCapture, RESHADE_CAPTURE_FINAL: "1"} : {}),
+    ...captureEnvironment(directory, diagnostics && capture, true), ...(screenshotCapture ? {...screenshotCapture, RESHADE_CAPTURE_FINAL: "1"} : {}),
     ...(trace ? { RESHADE_TRACE: "1" } : {}),
     ...(diagnostics ? { RESHADE_DIAGNOSTICS: path.join(directory, "diagnostics-" + launchId) } : {}),
     ...(gpuTiming ? { RESHADE_GPU_TIMING: path.join(directory, "gpu-timing-" + launchId) } : {}) };
@@ -290,10 +290,12 @@ function liveHost(host) { return LIVE_HOSTS.has(host); }
 function screenshotSupport(root) {
   try { return require("./runtime-record").read(root).features?.graphics?.screenshotAPI === 1; } catch { return false; }
 }
-function captureEnvironment(directory, enabled) {
+// Intake depth/motion dumps belong to explicit diagnostic capture only; the
+// screenshot channel captures the final image and nothing else.
+function captureEnvironment(directory, enabled, intake) {
   if (!enabled) return {};
   return { RESHADE_CAPTURE_PREFIX: path.join(directory, "frame-capture"),
-    RESHADE_CAPTURE_TRIGGER: path.join(directory, "frame-capture.request"), RESHADE_CAPTURE_INTAKE: "1" };
+    RESHADE_CAPTURE_TRIGGER: path.join(directory, "frame-capture.request"), ...(intake ? { RESHADE_CAPTURE_INTAKE: "1" } : {}) };
 }
 // The native log appends and stops at its size limit, so each preparation
 // starts a new log and keeps the previous launch's beside it.

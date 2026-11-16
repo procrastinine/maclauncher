@@ -186,3 +186,24 @@ test("G9: game and window screenshot channels require an assigned Screenshot sho
     for (const key of ["RESHADE_CAPTURE_PREFIX", "RESHADE_CAPTURE_TRIGGER", "RESHADE_CAPTURE_FINAL"]) assert.equal(Object.hasOwn(environment, key), assigned, key);
   }
 });
+
+test("G9: only explicit diagnostic capture declares intake depth and motion dumps", {skip: process.platform !== "darwin"}, async t => {
+  const ReShade = require("../src/modules/shared/reshade"), Native = require("../src/modules/shared/runtime/bundled-native");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "screenshot-intake-"));t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const runtime = path.join(root, "runtime"), userDataDir = path.join(root, "profile");fs.mkdirSync(path.join(runtime, "effects"), {recursive: true});
+  for (const file of ["libreshade-macos.dylib", "fx-compile", "effects/crt.fx"]) fs.writeFileSync(path.join(runtime, file), "fixture");
+  fs.writeFileSync(path.join(runtime, "runtime.json"), JSON.stringify({schema: 1, version: "test", minimumMacOS: "11.0", features: {graphics: {effectPlanAPI: 1, screenshotAPI: 1}}}));
+  t.mock.method(Native, "systemVersionSync", () => "27.0");
+  const effects = {schema: 2, mode: "advanced", video: [{id: "spatial", kind: "spatial", enabled: true, method: "bilinear", settings: {}}]};
+  const settings = {launcher: {graphicsShortcuts: {screenshot: "Command+Shift+S"}}};let index = 0;
+  for (const explicitHost of [false, true]) for (const [diagnostics, capture] of [[false, false], [true, false], [true, true]]) {
+    const environment = await ReShade.prepare({gameId: "intake" + ++index, effects}, {root: runtime, userDataDir, diagnostics, capture, gpuTiming: false, trace: false,
+      verify: () => true, execute: () => assert.fail("no shader"), graphicsHost: "window", explicitHost, settings});
+    // The screenshot channel (final-image mode) never declares intake dumps,
+    // including with diagnostics on and capture off; diagnostic capture does.
+    const diagnosticCapture = diagnostics && capture;
+    assert.ok(environment.RESHADE_CAPTURE_TRIGGER, "capture channel");
+    assert.equal(environment.RESHADE_CAPTURE_FINAL, diagnosticCapture ? undefined : "1");
+    assert.equal(environment.RESHADE_CAPTURE_INTAKE, diagnosticCapture ? "1" : undefined);
+  }
+});
