@@ -23,6 +23,18 @@ function within(base, candidate) {
   return relative === '' || !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..' + path.sep);
 }
 
+function destinationPath(destination) {
+  let parent = path.resolve(destination);
+  const missing = [];
+  while (!fs.lstatSync(parent, {throwIfNoEntry: false})) {
+    missing.unshift(path.basename(parent));
+    parent = path.dirname(parent);
+  }
+  const existing = fs.realpathSync(parent);
+  if (!fs.statSync(existing).isDirectory()) throw new Error('The installation destination has no directory parent.');
+  return path.join(existing, ...missing);
+}
+
 function payloadPath(root, relative) {
   if (typeof relative !== 'string' || !relative || path.isAbsolute(relative) || relative.includes('\\') ||
       relative.includes('\0') || relative.split('/').includes('..'))
@@ -173,7 +185,7 @@ async function genericInstallation(input, dependencies, options) {
     if (!path.isAbsolute(directory || '') || fs.lstatSync(directory).isSymbolicLink() || !fs.statSync(directory).isDirectory() || fs.readdirSync(directory).length)
       throw new Error('Runtime staging must be a new empty owned directory.');
     if (!path.isAbsolute(transaction.destination || '') || fs.lstatSync(transaction.destination, {throwIfNoEntry: false}) ||
-        within(fs.realpathSync(directory), path.resolve(transaction.destination)))
+        within(fs.realpathSync(directory), destinationPath(transaction.destination)))
       throw new Error('An unused immutable installation destination outside staging is required.');
     const archive = path.join(directory, listed.name);
     const fetched = await (dependencies.download || Upstream.download)(listed, archive, {signal, onProgress: options.onProgress});
