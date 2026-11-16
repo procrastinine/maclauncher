@@ -112,13 +112,13 @@ function resolvePlan({target,choices={},builds=[],system={}}={}) {
       for(const candidate of builds){const problem=checked(candidate,host,guest,integration);if(problem)exclude(candidate,problem);}
       const components=[...state.values()].map(b=>{
         const binaries=b.binaries.map(binary=>({...structuredClone(binary),execution:binary.format==='macho'?processExecution:
-          binary.format==='pe'&&binary.machine==='x86_64'&&guestTranslation?`fex(${guestTranslation.id})`:'native'}));
+          binary.format==='pe'&&binary.machine==='x86_64'&&guestTranslation?`fex(${guestTranslation.id})`:processExecution}));
         const executions=[...new Set(binaries.map(binary=>binary.execution))];
         return {kind:b.kind,source:b.source,build:b.id,installed:b.installed===true,
           ...(b.kind==='wine'?{execution:processExecution}:executions.length===1?{execution:executions[0]}:{}),
           binaries,adapter:getKind(b.kind).adapter};
       });
-      return {satisfied:true,components,processes:[{build:process.id,hostArch:host,guestArch:guest,integration,execution:processExecution}],downloads:components.filter(b=>!b.installed).map(b=>b.build),excluded,unsatisfied};
+      return {satisfied:true,target:{guestArch:guest,execution:guestTranslation?`fex(${guestTranslation.id})`:processExecution},components,processes:[{build:process.id,hostArch:host,guestArch:guest,integration,execution:processExecution}],downloads:components.filter(b=>!b.installed).map(b=>b.build),excluded,unsatisfied};
     }
   }
   unsatisfied.push('No complete execution plan satisfies the selected sources and capabilities.');
