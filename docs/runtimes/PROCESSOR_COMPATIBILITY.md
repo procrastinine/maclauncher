@@ -1,6 +1,6 @@
 # Processor compatibility
 
-This page lists the processor code in each runtime, translator, driver and helper that MacLauncher downloads, includes or loads, and how that code runs on an Apple Silicon Mac. The CPU of Mac code is read from the Mach-O headers of the installed files, and Windows code is named by the machine type in its PE header. Labels follow the vocabulary of [Processor builds](README.md#processor-builds). [Rosetta](ROSETTA.md) describes how Play installs Rosetta when an Intel component needs it, [System requirements](SYSTEM_REQUIREMENTS.md) gives the macOS versions, and Apple describes Rosetta's availability in [About the Rosetta translation environment](https://developer.apple.com/documentation/apple-silicon/about-the-rosetta-translation-environment).
+This page lists the processor code in each runtime, translator, driver and helper that MacLauncher downloads, includes or loads, and how that code runs on an Apple Silicon Mac. The CPU of Mac code is read from the Mach-O headers of the installed files, and Windows code is named by the machine type in its PE header. Labels follow the vocabulary of [Processor builds](README.md#processor-builds). [Rosetta](ROSETTA.md) describes how Play installs Rosetta when an Intel component needs it, [System requirements](SYSTEM_REQUIREMENTS.md) gives the macOS versions, and Apple describes Rosetta's availability in [Using Intel-based apps on a Mac with Apple silicon](https://support.apple.com/en-us/102527).
 
 ## How code runs on Apple Silicon
 

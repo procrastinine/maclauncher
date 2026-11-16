@@ -1,20 +1,24 @@
 ---
 title: Rosetta and Apple Silicon
-description: "Apple keeps Rosetta as a general-purpose translator through macOS 27. Which parts of MacLauncher still run Intel code, how FEX differs from Rosetta, and how each part is moving to Apple Silicon."
+description: "Starting with macOS 28, Apple limits Rosetta to certain older games. Which parts of MacLauncher still run Intel code, how FEX differs from Rosetta, and how each part is moving to Apple Silicon."
 head:
   - tag: title
-    content: "Rosetta and Apple Silicon: Intel code in MacLauncher after macOS 27 | MacLauncher"
+    content: "Rosetta and Apple Silicon: Intel code in MacLauncher and macOS 28 | MacLauncher"
 ---
 
 Almost everything in MacLauncher already runs natively on Apple Silicon: the launcher itself, the graphics layer, the Android, iPhone and Switch runtimes, and most game engines. A few parts still contain Intel code, though, and on an Apple Silicon Mac they run through [Rosetta](https://support.apple.com/en-us/102527), Apple's translator for Intel programs. Apple has said how long Rosetta stays around in its current form, so this page covers what that means for MacLauncher and how each of those parts is moving to Apple Silicon.
 
 ## Apple's timeline
 
-Apple's developer documentation, in [About the Rosetta translation environment](https://developer.apple.com/documentation/apple-silicon/about-the-rosetta-translation-environment), puts it this way:
+Apple's support article [Using Intel-based apps on a Mac with Apple silicon](https://support.apple.com/en-us/102527), published September 21, 2026, says:
 
-> Rosetta was designed to make the transition to Apple silicon easier, and will be available through macOS 27 — as a general-purpose tool for Intel apps to help developers complete the migration of their apps. Beyond this timeframe, we will keep a subset of Rosetta functionality aimed at supporting older unmaintained gaming titles, that rely on Intel-based frameworks.
+> Rosetta is available for any Mac with Apple silicon using macOS 27 or earlier.
 
-Through macOS 27, then, Rosetta keeps working the way it does today. From macOS 28 on, only that subset remains, and the statement doesn't say what the subset covers. MacLauncher doesn't count on it, so the aim is for every part to work on Apple Silicon without Rosetta.
+> Starting with macOS 28, the next major macOS release, Rosetta functionality will be available only for certain older, unmaintained games that rely on Intel-based frameworks.
+
+Apple's developer news post [Upcoming changes to Rosetta support for Intel-based macOS apps](https://developer.apple.com/news/?id=w5ngl9k2), from September 1, 2026, gives the same cutoff: "macOS 27: Final release to support Rosetta".
+
+macOS 28 is therefore the line. Up to macOS 27, the Intel parts of MacLauncher keep running through Rosetta as they do today. From macOS 28, Rosetta covers only certain older games, so each part of MacLauncher needs an Apple Silicon route by then.
 
 ## Rosetta and FEX
 
