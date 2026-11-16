@@ -683,7 +683,7 @@ function isRosettaAvailable({ force = false } = {}) {
 function readInstallArchitectures(file) {
   try { return Native.readMachOArchitectures(file); }
   catch (error) {
-    if (!["Runtime must be a 64-bit macOS Mach-O executable.", "Runtime uses an unsupported macOS CPU architecture."].includes(error.message)) throw error;
+    if (!["Runtime must be a macOS Mach-O executable.", "Runtime must be a 64-bit macOS Mach-O executable.", "Runtime uses an unsupported macOS CPU architecture."].includes(error.message)) throw error;
     try { return require("../../../core/binary-arch").inspectBinary(file).architectures || []; }
     catch (inspectionError) {
       if (/^Invalid binary: unsupported Mach-O (?:header|CPU [0-9]+)$/.test(inspectionError.message)) return [];
