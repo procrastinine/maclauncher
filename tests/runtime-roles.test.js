@@ -101,3 +101,12 @@ test("an installed file whose header cannot be read is measured as unknown, and 
   assert.deepEqual(build.binaries, [{ path: "notes.so", format: "unknown" }]);
   assert.equal(require("../src/core/binary-compatibility").acceptsBinary("arm64", "x86_64", "native", build.binaries[0]).accepted, true);
 });
+
+test("the Wine is not a role row: the game's runtime choice selects it", () => {
+  const wine = { id: "sample", kind: "wine", label: "Sample", included: [] };
+  const install = { kind: "sample", id: "1.0-install", runtime: "sample", label: "Sample 1.0" };
+  const result = projectRuntimeRoles({ source: wine, settings: { runtimeId: "sample" }, wine: install,
+    plan: { roles: [{ id: "wine" }, { id: "d3d11" }], inventory: { included: [], choices: [] } } });
+  assert.deepEqual(result.roleKeys, ["translatorD3D11"]);
+  assert.equal(result.runtimeId, undefined);
+});

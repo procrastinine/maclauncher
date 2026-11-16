@@ -1,11 +1,12 @@
 'use strict';
-const definitions=[['wine','runtimeId'],['d3d-renderer','translatorRenderer'],...Array.from({length:5},(_,i)=>['d3d'+(i+8),'translatorD3D'+(i+8)]),['vulkan-driver','translatorVulkan'],['video','translatorVideo'],['cpu.x86_64','translatorCpuX64'],['cpu.i386','translatorCpuX86']];
+// The game's runtime choice selects the Wine, so the Wine is not a role row.
+const definitions=[['d3d-renderer','translatorRenderer'],...Array.from({length:5},(_,i)=>['d3d'+(i+8),'translatorD3D'+(i+8)]),['vulkan-driver','translatorVulkan'],['video','translatorVideo'],['cpu.x86_64','translatorCpuX64'],['cpu.i386','translatorCpuX86']];
 const ROLES=definitions.map(([id,settingsKey])=>({id,settingsKey}));
 const AUTOMATIC=new Set(['','auto','automatic']);
 function normalizeChoice(value,{sources=[]}={}){if(!value||AUTOMATIC.has(value))return 'automatic';if(value==='inherit'||/^(source|build):/.test(value))return value;return sources.some(source=>source.id===value)?'source:'+value:'build:'+value;}
 // Every option names its source: a source file or one of the Wine's included
 // components. A build's label is "<source label> · <version>".
-function projectRuntimeRoles({plan={},settings={},optionLists={},source={},sources=[],wine}={}){
+function projectRuntimeRoles({plan={},settings={},optionLists={},source={},sources=[]}={}){
  const data=source.source||source,included=data.included||[];
  const automatic=source.labels?.automatic||data.label+"'s automatic choice",environment=source.labels?.environment;
  const inventory=[...(plan.inventory?.included||[]),...(plan.inventory?.choices||[])];
@@ -18,10 +19,10 @@ function projectRuntimeRoles({plan={},settings={},optionLists={},source={},sourc
  const vulkan=require('../modules/shared/runtime/translator-roles').usedRenderers(plan).some(item=>origin(item).vulkan===true);
  const result={roleKeys:[]};
  for(const role of ROLES){
-  const row=plan.roles?.find(row=>row.id===role.id)||plan.components?.[role.id],saved=settings[role.settingsKey];if(!row&&!(role.id==='wine'&&wine))continue;
+  const row=plan.roles?.find(row=>row.id===role.id)||plan.components?.[role.id],saved=settings[role.settingsKey];if(!row)continue;
   if(role.id==='vulkan-driver'&&!vulkan&&!/^(source|build):/.test(normalizeChoice(saved)))continue;
   const output=[{value:'automatic',label:automatic,kind:'automatic',sourceId:data.id}];
-  if(environment&&role.id!=='wine')output.push({value:'inherit',label:environment,kind:'environment',sourceId:data.id});
+  if(environment)output.push({value:'inherit',label:environment,kind:'environment',sourceId:data.id});
   const groups=new Map();
   for(const option of row?.options||optionLists[role.settingsKey+'Options']||[]){
    if(!option.value||AUTOMATIC.has(option.value)||option.value==='inherit')continue;
