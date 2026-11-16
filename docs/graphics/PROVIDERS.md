@@ -85,7 +85,7 @@ Within one Temporal upscaling row, FSR 4's profile control selects a model:
 - FSR 4.1.2 Lossy uses the retrained six-layer model and depth-edge speck clamp from the October 29 upstream release.
 - FSR 4.1.2 Lite Lossy uses the independently adapted trained Lite model and guarded inference reuse. Its trained normal model covers 1080p and 4K tensor tiers; 8K and Ultra Performance use upstream's base Lite coefficients.
 
-The 4.1.2 Lite models and translated shaders download from fsr4-native-macos after consent, or import from its original release zip or matching local data. Preparation uses the launcher's included interpreter. Lite Lossy also downloads and statically decodes the matching GPL training release; Windows DLLs are never executed. These user-side data files are separate from the provider package. Existing usable local profiles require no download consent.
+The 4.1.2 Lite models and translated shaders download from fsr4-native-macos after consent, or import from its original release zip or matching local data. Preparation uses the launcher's included interpreter. Lite Lossy also downloads and statically decodes the matching GPL training release; Windows DLLs are never executed. These user-side data files are separate from the provider package. **Install** in Runtimes prepares Lite and Lite Lossy together; Play downloads only what the selected profile needs. Existing usable local profiles require no download consent.
 
 Every scene producer uses the same provider: native MetalFX callers, Godot, DXMT, NGX, FidelityFX and the explicit frame API supply the same color/depth/motion contract. A producer that lacks an input reports that limitation.
 

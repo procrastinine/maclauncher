@@ -35,3 +35,24 @@ test('FSR 4.1.2 profile options report a boolean availability and a download whe
  for(const id of ['exact-fast','lossy2-412'])assert.equal(profile(id).available,true,id);
  assert.equal(FSR4.profileOptions(null,os.tmpdir()).every(row=>row.available===false),true);
 });
+test('Runtimes FSR 4.1.2 model data installs both profiles and names what is installed',async t=>{
+ const Manager=require('../src/modules/shared/reshade/runtime/fsr4-models-manager'),Library=Manager.core,spec=require('../src/modules/shared/reshade/temporal/fsr4/model.json');
+ const userDataDir=fs.mkdtempSync(path.join(os.tmpdir(),'fsr4-models-'));t.after(()=>fs.rmSync(userDataDir,{recursive:true,force:true}));
+ const root=Library.directory(userDataDir),model=path.join(root,'build/fsr412_model');fs.mkdirSync(model,{recursive:true});
+ for(const name of ['initializers-lite.bin','initializers-lite-ultraperformance.bin'])fs.writeFileSync(path.join(model,name),Buffer.alloc(27392));
+ const record=profiles=>fs.writeFileSync(path.join(root,'runtime.json'),JSON.stringify({version:spec.version,archiveSha256:spec.archiveSha256,preparation:1,profiles}));
+ const state=()=>Manager.getState({userDataDir,root:'/nonexistent'}).sections[0];
+ record(['int8-lite']);let section=state();
+ assert.equal(section.catalog.versionLabels[spec.version],'FSR 4.1.2 Lite and Lite Lossy');
+ assert.equal(section.catalog.versionRequirements[spec.version].downloadBytes,spec.archiveBytes+spec.lossy.archiveBytes);
+ assert.equal(section.catalog.versionRequirements[spec.version].requiresDownload,true);
+ assert.equal(section.installed[0].versionLabel,'FSR 4.1.2 Lite');
+ assert.deepEqual(section.capabilities.map(row=>[row.label,row.available]),[['FSR 4.1.2 Lite',true],['FSR 4.1.2 Lite Lossy',false]]);
+ record(['int8-lite','int8-lite-lossy']);section=state();
+ assert.equal(section.installed[0].versionLabel,'FSR 4.1.2 Lite and Lite Lossy');
+ assert.equal(section.catalog.versionRequirements[spec.version].available,true);
+ assert.deepEqual(section.capabilities.map(row=>row.available),[true,true]);
+ const calls=[];t.mock.method(Library,'install',async context=>{calls.push(context.fsr4Profile);return null;});
+ await Manager.installRuntime({userDataDir,root:'/nonexistent'});await Manager.performSetupAction({userDataDir,root:'/nonexistent',setupActionId:'download'});await Manager.installRuntime({userDataDir,root:'/nonexistent',fsr4Profile:'int8-lite'});
+ assert.deepEqual(calls,['int8-lite-lossy','int8-lite-lossy','int8-lite']);
+});
