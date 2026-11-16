@@ -356,8 +356,12 @@ async function confirmRuntimeInstallation(plan, entry, {signal} = {}) {
   // declined without cancelling the other downloads.
   const optional = companions.find(item => typeof item.checkboxLabel === "string" && item.checkboxLabel);
   if (optional?.fallbackLabel) lines.push(`Clearing "${optional.checkboxLabel}" uses ${optional.fallbackLabel} instead.`);
+  // A download listed with others keeps its licence: the dialog names each one
+  // and its first button agrees to them.
+  const licences = companions.length ? items.filter(item => item.licenseRequired === true || typeof item.licenseUrl === "string") : [];
+  if (licences.length) lines.push("", ...licences.map(item => typeof item.licenseUrl === "string" ? `${item.label} license: ${item.licenseUrl}` : `${item.label}: ${item.detail || "License terms apply."}`));
   const name = entry && (entry.name || path.basename(entry.gamePath || ""));
-  const options = { type: "question", buttons: companions.length ? ["Download and Play", plan.optional ? "Play Without Downloading" : "Cancel"] : [plan.confirmLabel || "Download and Play", plan.cancelLabel || "Cancel"],
+  const options = { type: "question", buttons: companions.length ? [licences.length ? "Agree, Download and Play" : "Download and Play", plan.optional ? "Play Without Downloading" : "Cancel"] : [plan.confirmLabel || "Download and Play", plan.cancelLabel || "Cancel"],
     defaultId: 0, cancelId: 1, ...(signal ? {signal} : {}),
     message: companions.length ? `Download what ${name || "this game"} needs?` : plan.message || `${plan.kind === "prerequisite" ? "Install" : "Download"} ${versionLabel}?`,
     detail: companions.length ? lines.join("\n") : [plan.detail || (entry ? `Required to run ${name}.` : "Required by this runtime."),
@@ -366,7 +370,7 @@ async function confirmRuntimeInstallation(plan, entry, {signal} = {}) {
   const owner = getLauncherDialogOwner();
   const choice = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
   if (choice.response !== 0) return false;
-  const approval = plan.licenseRequired ? { approved: true, licenseAccepted: true } : true;
+  const approval = plan.licenseRequired || licences.length ? { approved: true, licenseAccepted: true } : true;
   return optional && !choice.checkboxChecked ? { ...(approval === true ? { approved: true } : approval), companionsDeclined: true } : approval;
 }
 function logRuntimeToolSpawn(child, metadata, identity) {

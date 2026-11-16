@@ -41,7 +41,7 @@ A normal launch imports the game, or refreshes its existing per-game record. The
 
 A command-line launch selects, downloads and installs runtimes in the same way as **Play**, following the [download rules](../runtimes/README.md#downloads-and-offline-use) of the runtime system. Module compatibility checks run before installation, and automatic installations keep global runtime defaults and unrelated edits to the game. `--inspect` uses no network. [Runtime installation](#runtime-installation) describes host prerequisites and manager actions.
 
-On a terminal, the command line asks for consent. Noninteractive callers receive an instruction instead of a prompt nobody would see. Apple's Rosetta license requires both `--yes` and `--accept-runtime-licenses`; the Rosetta system package has its own version, separate from the macOS version. Cancelling neither starts the game nor records it as played.
+On a terminal, the command line asks for consent. Noninteractive callers receive an instruction instead of a prompt nobody would see. Apple's Rosetta license, and any download listed in a Play's question that comes under a license, such as an RPG Maker RTP, require both `--yes` and `--accept-runtime-licenses`; the Rosetta system package has its own version, separate from the macOS version. Cancelling neither starts the game nor records it as played.
 
 ### Processes and output
 

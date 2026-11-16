@@ -117,23 +117,27 @@ async function runGameCli(argv = process.argv.slice(2)) {
             try { return /^y(?:es)?$/i.test((await input.question("Play with Steam? Steam starts and may connect to the Internet. [y/N] ")).trim()); }
             finally { input.close(); }
           }
-          if (options.yes && (!plan.licenseRequired || options["accept-runtime-licenses"])) {
-            return plan.licenseRequired ? { approved: true, licenseAccepted: true } : true;
+          // A download listed with this one can carry its own licence.
+          const licences = [plan, ...(plan.companions || [])].filter(item => item?.licenseRequired === true);
+          const licenseRequired = licences.length > 0;
+          if (options.yes && (!licenseRequired || options["accept-runtime-licenses"])) {
+            return licenseRequired ? { approved: true, licenseAccepted: true } : true;
           }
           const versionLabel = [plan.label, plan.versionLabel || plan.version].filter(Boolean).join(" ");
           if (!process.stdin.isTTY) {
             // Managers apply saved choices before offering an optional plan.
             // With no terminal or explicit approval, use its decline default.
             if (plan.optional) return false;
-            throw new Error(`${versionLabel} is required. Run with --yes${plan.licenseRequired ? " --accept-runtime-licenses" : ""} to install it or install it in Runtimes.`);
+            throw new Error(`${versionLabel} is required. Run with --yes${licenseRequired ? " --accept-runtime-licenses" : ""} to install it or install it in Runtimes.`);
           }
           const input = createInterface({ input: process.stdin, output: process.stderr });
           try {
             // A Play that needs several downloads names them all in one question.
             const all = [versionLabel, ...(plan.companions || []).map(item => [item.label, item.versionLabel].filter(Boolean).join(" "))];
-            const prompt = plan.licenseRequired ? `Agree to ${plan.licenseUrl} and install ${plan.label}? [y/N] ` : `${all.length > 1 ? `Download ${all.join(", ")}?` : plan.message || `Download ${versionLabel}?`} [y/N] `;
+            const terms = licences.map(item => item.licenseUrl || `the ${item.label} license`).join(", ");
+            const prompt = licenseRequired ? `Agree to ${terms} and ${all.length > 1 ? `download ${all.join(", ")}` : `install ${plan.label}`}? [y/N] ` : `${all.length > 1 ? `Download ${all.join(", ")}?` : plan.message || `Download ${versionLabel}?`} [y/N] `;
             const approved = /^y(?:es)?$/i.test((await input.question(prompt)).trim());
-            return approved && plan.licenseRequired ? { approved: true, licenseAccepted: true } : approved;
+            return approved && licenseRequired ? { approved: true, licenseAccepted: true } : approved;
           }
           finally { input.close(); }
         },

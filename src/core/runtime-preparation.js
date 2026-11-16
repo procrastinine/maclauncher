@@ -291,6 +291,8 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
           ...(listed.length ? { companions: listed.map(item => ({ label: item.plan.label || item.manager.label || item.manager.id,
             ...(item.versionLabel || item.plan.version ? { versionLabel: item.versionLabel || item.plan.version } : {}),
             ...(item.plan.bytes ? { bytes: item.plan.bytes } : {}),
+            // A listed download keeps its licence, which the dialog shows and asks to agree to.
+            ...(licensed(item.plan) ? { licenseRequired: true, ...(typeof item.plan.licenseUrl === "string" ? { licenseUrl: item.plan.licenseUrl } : { detail: item.plan.detail }) } : {}),
             ...(item === optional ? { checkboxLabel: item.plan.companionCheckbox, ...(item.plan.fallback ? { fallbackLabel: named(item.plan.fallback) } : {}) } : {}) })) } : {}),
           // An optional download asked alone names the download its skip uses.
           ...(!listed.length && plan.optional && plan.fallback ? { fallbackLabel: named(plan.fallback) } : {}) }) : false;

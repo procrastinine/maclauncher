@@ -283,7 +283,7 @@ function createRtpStore({ catalog = CATALOG, download = (file, destination, opti
     for (let index = 0; index < ids.length; index++) if (!values[index]) {
       const pack = packFor(ids[index]);
       plans.push({ managerId: "mkxpz", label: pack.label, version: pack.installVersion, requiresDownload: true, installOptions: { rtpPack: pack.id },
-        message: `Download ${pack.label} ${pack.version}?`, confirmLabel: "Agree, Download and Play", licenseRequired: true,
+        message: `Download ${pack.label} ${pack.version}?`, confirmLabel: "Agree, Download and Play", licenseRequired: true, licenseUrl: pack.termsUrl,
         detail: `This game declares ${pack.id}. Download size: ${Math.ceil(pack.archive.size / 1024 ** 2)} MiB. The pack is shared between games. Publisher's RTP terms apply: ${pack.termsUrl}` });
     }
     return plans;
