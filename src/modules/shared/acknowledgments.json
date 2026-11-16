@@ -519,6 +519,10 @@
     "url": "https://gitlab.freedesktop.org/mesa/mesa"
   },
   {
+    "label": "steamac KosmicKrisp patches (Apache-2.0; changes to Mesa MIT)",
+    "url": "https://github.com/fxgl/steamac"
+  },
+  {
     "label": "Vulkan Loader (Apache-2.0)",
     "url": "https://github.com/KhronosGroup/Vulkan-Loader"
   },
