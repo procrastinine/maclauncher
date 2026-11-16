@@ -713,6 +713,7 @@ module.exports = {
   installNightlyVersion,
   uninstallVersion,
   isRosettaAvailable,
+  projectBuilds: { projectId: "love", repository: "procrastinine/maclauncher-builds" },
   upstream: [stableSource, nightlySource],
   __test: {
     copyAppBundle,
