@@ -1150,7 +1150,10 @@ ShaderResult EffectExecution::encodeRange(const ShaderFrame &incoming,size_t beg
         }
         if(insideSDR){const auto converted=closeIsland();if(!converted.encoded)return converted;}
         const auto copied=impl->fit(frame,current,frame.target);if(!copied.encoded)return copied;if(displayMapped)*displayMapped=mapped;
-        if(const auto scene=temporal?temporal:sceneLease?&sceneLease->frame:held->scene?&*held->scene:nullptr){auto from=*scene;from.color=(__bridge void*)current;from.output=nullptr;from.colorX=from.colorY=0;from.renderWidth=current.width;from.renderHeight=current.height;auto to=from;to.color=(__bridge void*)frame.target;to.renderWidth=frame.target.width;to.renderHeight=frame.target.height;const bool byteCopy=current.width==frame.target.width&&current.height==frame.target.height&&current.pixelFormat==frame.target.pixelFormat;bindMetalFxGenerationResources(to,from,byteCopy?current:nil);}
+        // MetalFX generation resources bind only within the scene's own command buffer, which the caller holds. A scene
+        // presented later through another command buffer keeps only a raw pointer to its completed, possibly released
+        // command buffer, which is never messaged.
+        if(const auto scene=temporal?temporal:sceneLease?&sceneLease->frame:held->scene?&*held->scene:nullptr;scene&&scene->commandBuffer==(__bridge void*)frame.commands){auto from=*scene;from.color=(__bridge void*)current;from.output=nullptr;from.colorX=from.colorY=0;from.renderWidth=current.width;from.renderHeight=current.height;auto to=from;to.color=(__bridge void*)frame.target;to.renderWidth=frame.target.width;to.renderHeight=frame.target.height;const bool byteCopy=current.width==frame.target.width&&current.height==frame.target.height&&current.pixelFormat==frame.target.pixelFormat;bindMetalFxGenerationResources(to,from,byteCopy?current:nil);}
         return {true,reason};
     }catch(const TransientBusy&error){return {false,error.what(),!error.structurallyImpossible};}
     catch(const std::exception &error){return {false,error.what()};}
