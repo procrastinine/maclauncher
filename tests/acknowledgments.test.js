@@ -48,6 +48,7 @@ test('every registered runtime manager has a linked upstream project in Credits'
     love: 'https://github.com/love2d/love',
     mkxpz: 'https://github.com/mkxp-z/mkxp-z',
     'graphics-xess': 'https://github.com/intel/xess',
+    'graphics-fsr4-models': 'https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos',
     'vulkan-moltenvk': 'https://github.com/Sikarugir-App/MoltenVK',
     'vulkan-moltenvk-scene': 'https://github.com/KhronosGroup/MoltenVK',
     'maclauncher-crossover-winemac': 'https://www.codeweavers.com/crossover/source',

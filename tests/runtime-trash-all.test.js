@@ -28,6 +28,8 @@ function installFixture(manager, userDataDir) {
     directory=path.join(userDataDir,'runtimes',core.ID || 'lossless-models',version);
   } else if(core?.Source) {
     version=core.Source.version;directory=core.directory(userDataDir);
+  } else if(manager.id === 'graphics-fsr4-models') {
+    version=core.descriptor.version;directory=core.directory(userDataDir);
   } else if(manager.id === 'gamemaker-official') { version='2026.1.0.1'; directory=path.join(userDataDir,'runtimes',manager.id,version); }
   else if(manager.id === 'mpv-plugins') return Object.keys(require('../src/modules/video/plugins').packages).map(sectionId=>
     stage(path.join(userDataDir,'runtimes',manager.id,sectionId,version),{version,sectionId,architecture}));
