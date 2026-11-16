@@ -34,6 +34,9 @@ RSSceneAovs sanitizeHud(const RSSceneAovs&input,id<MTLDevice>device){
  if((v.images[RS_SCENE_AOV_HUDLESS_COLOR].texture&&unknownColor(v.hudlessColor))||
     (v.images[RS_SCENE_AOV_UI_COLOR_ALPHA].texture&&unknownColor(v.uiColor)))return v;
  const auto&hud=v.images[RS_SCENE_AOV_HUDLESS_COLOR];const auto&ui=v.images[RS_SCENE_AOV_UI_COLOR_ALPHA];auto texture=(__bridge id<MTLTexture>)ui.texture;
+ // A genuine HUD-less view can be consumed by the separate signed-difference
+ // route. It is not a premultiplied UI pair and supplies no opacity estimate.
+ if(hud.texture&&!ui.texture&&validImage(hud)&&hud.encoding==RS_SCENE_AOV_COLOR&&color(v.hudlessColor,true)&&(hud.pass?:v.pass)&&((hud.pass?:v.pass)==v.colorPass))return v;
  const auto format=texture.pixelFormat;const bool alpha=format==MTLPixelFormatRGBA8Unorm||format==MTLPixelFormatRGBA8Unorm_sRGB||format==MTLPixelFormatBGRA8Unorm||format==MTLPixelFormatBGRA8Unorm_sRGB||format==MTLPixelFormatRGBA16Float||format==MTLPixelFormatRGBA32Float||format==MTLPixelFormatRGB10A2Unorm;
  const auto hudPass=hud.pass?:v.pass,uiPass=ui.pass?:v.pass;
  if(!validImage(hud)||!validImage(ui)||hud.encoding!=RS_SCENE_AOV_COLOR||ui.encoding!=RS_SCENE_AOV_COLOR||!color(v.hudlessColor,true)||!color(v.uiColor,true)||v.uiColor.alpha==RS_COLOR_OPAQUE||!alpha||!hudPass||hudPass!=uiPass||hudPass!=v.colorPass){v.images[RS_SCENE_AOV_HUDLESS_COLOR]={};v.images[RS_SCENE_AOV_UI_COLOR_ALPHA]={};v.uiColor={};v.hudlessColor={};}

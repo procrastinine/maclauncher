@@ -34,6 +34,7 @@
 #include "metalfx-generation-resources.hpp"
 #include "recorded-scene.h"
 #include "hud-split.hpp"
+#include "hud-difference.hpp"
 #include <dlfcn.h>
 #include <filesystem>
 #include <mutex>
@@ -907,6 +908,10 @@ ShaderResult EffectExecution::bindGenerationScene(id<MTLCommandBuffer>commands,s
     auto attachments=lease?copiedFrom?copiedSceneAovLease(lease->aovs,copiedFrom,colour):lease->aovs:nullptr;
     if(lease&&lease->interfaceLayer)attachments=interfaceLayerAttachments(commands,colour,lease->interfaceLayer,attachments,source,impl->colorDescription,origin);
     const auto pair=!attachments&&late?lateScenePair(*late,source.frameId,colour,imageColor()):nullptr;if(pair)attachments=pair;
+    // Late records have no per-image color domain. A real HUD-less-only late
+    // view cannot authorize subtraction in the final image's color encoding.
+    if(!attachments&&late&&late->images[0]&&!late->images[1])return {false,hudDifferenceReason};
+    const auto difference=bindHudDifference(stage.encoder,commands,colour,attachments,source,origin);if(!difference.encoded)return difference;
     auto actual=impl->normalizeScene(*scratch,commands,source,colour,colour,jittered,false,false,true,attachments,1,GuideAll,rawGuides);const auto aovs=temporalSceneAovs(actual);actual.owner=stage.state.get();if(aovs&&bindSceneAovLease(actual,aovs)!=RS_TEMPORAL_OK)return {false,"The generation endpoint attachments could not be retained"};
     bindMetalFxGenerationResources(actual,source,copiedFrom);
     if(auto matrices=sceneMatricesForImage(source,lease?lease->matrices:temporalSceneMatrices(source),jittered,origin==FrameOrigin::BottomLeft);matrices&&!temporalSceneMatrices(actual))rsBindTemporalSceneMatrices(&actual,&*matrices);
@@ -1631,6 +1636,7 @@ EffectExecutionSelection EffectPlanExecutor::buildSnapshot(const ShaderFrame &in
                     const bool sdr=generationUsesSDRColor(node.method);
                     if(imageColorNeedsSDRIsland(description)||current.pixelFormat==MTLPixelFormatRGBA16Float||lsfgLinear)generator=makeColorIslandGenerationEncoder(next->device,generator,description,sdr,config.generation->multiplier-1);
                     else generator->setColorDescription(description);
+                    generator=makeHudDifferenceGenerationEncoder(next->device,generator,config.generation->multiplier-1,effectPreparationQueue());generator->setColorDescription(description);
                 }
                 if(!stageState)stageState=std::make_shared<EffectGenerationStage::State>();
                 impl->pendingGenerations[node.id]={pendingIdentity,algorithmIdentity,impl->guideKey,generator,stageState,acceptedGenerator};
