@@ -14,10 +14,12 @@ function reader(size, read) {
 }
 // Header facts accept bounded prefixes; container/section/export consumers keep
 // their own size limits, path rules and malformed-input policy.
+const THIN_MAGICS=new Map([[0xfeedface,['BE',false]],[0xcefaedfe,['LE',false]],[0xfeedfacf,['BE',true]],[0xcffaedfe,['LE',true]]]);
+const FAT_MAGICS=new Map([[0xcafebabe,['BE',false]],[0xbebafeca,['LE',false]],[0xcafebabf,['BE',true]],[0xbfbafeca,['LE',true]]]);
 function machoMagic(magic) {
- const thin=new Map([[0xfeedface,['BE',false]],[0xcefaedfe,['LE',false]],[0xfeedfacf,['BE',true]],[0xcffaedfe,['LE',true]]]).get(magic);
+ const thin=THIN_MAGICS.get(magic);
  if(thin)return {fat:false,endian:thin[0],little:thin[0]==='LE',wide:thin[1],headerSize:thin[1]?32:28};
- const fat=new Map([[0xcafebabe,['BE',false]],[0xbebafeca,['LE',false]],[0xcafebabf,['BE',true]],[0xbfbafeca,['LE',true]]]).get(magic);
+ const fat=FAT_MAGICS.get(magic);
  return fat?{fat:true,endian:fat[0],little:fat[0]==='LE',wide:fat[1],stride:fat[1]?32:20}:null;
 }
 function machoCpuType(bytes) { const format=machoMagic(bytes.readUInt32BE(0));return format&&!format.fat?bytes[`readUInt32${format.endian}`](4):null; }
@@ -41,42 +43,42 @@ function peHeaderFacts(coff) {
  return {signature:coff.readUInt32LE(0),machineCode,declaredArchitecture:PE.get(machineCode)||null,sectionCount:coff.readUInt16LE(6),optionalBytes:coff.readUInt16LE(20),characteristics:coff.readUInt16LE(22)};
 }
 function macho(r, base = 0, size = r.size) {
-  const first = r.get(base, 4).readUInt32BE(0);
-  const thin = new Map([[0xfeedface,['BE',28]],[0xcefaedfe,['LE',28]],[0xfeedfacf,['BE',32]],[0xcffaedfe,['LE',32]]]).get(first);
-  if (thin) {
-    if (size < thin[1]) fail('Mach-O header outside slice bounds');
-    const b = r.get(base, thin[1]), cpu = b[`readUInt32${thin[0]}`](4);
-    const commandCount = b[`readUInt32${thin[0]}`](16), commands = b[`readUInt32${thin[0]}`](20);
-    if (commands > size - thin[1] || commandCount > commands / 8) fail('Mach-O load commands outside slice bounds');
+  const initial = r.get(base, 4), format = machoMagic(initial.readUInt32BE(0));
+  if (format && !format.fat) {
+    const headerSize = format.headerSize;
+    if (size < headerSize) fail('Mach-O header outside slice bounds');
+    const facts = machoHeader(r.get(base, headerSize)), cpu = facts.cpu;
+    const commandCount = facts.commandCount, commands = facts.commandBytes;
+    if (commands > size - headerSize || commandCount > commands / 8) fail('Mach-O load commands outside slice bounds');
     let cursor = 0;
     for (let i = 0; i < commandCount; i++) {
       if (commands - cursor < 8) fail('Mach-O command outside load-command bounds');
-      const command = r.get(base + thin[1] + cursor, 8), length = command[`readUInt32${thin[0]}`](4);
+      const command = r.get(base + headerSize + cursor, 8), length = command[`readUInt32${format.endian}`](4);
       if (length < 8 || length > commands - cursor) fail('Mach-O command outside load-command bounds');
       cursor += length;
     }
-    const architecture = MACH.get(cpu); if (!architecture) fail(`unsupported Mach-O CPU ${cpu}`);
-    return { format: 'macho', architectures: [architecture], slices: [{ architecture, offset: base, size, endian: thin[0].toLowerCase() }] };
+    const architecture = facts.architecture; if (!architecture) fail(`unsupported Mach-O CPU ${cpu}`);
+    return { format: 'macho', architectures: [architecture], slices: [{ architecture, offset: base, size, endian: format.endian.toLowerCase() }] };
   }
-  const fat = new Map([[0xcafebabe,['BE',20]],[0xbebafeca,['LE',20]],[0xcafebabf,['BE',32]],[0xbfbafeca,['LE',32]]]).get(first);
-  if (!fat || base) fail('unsupported Mach-O header');
-  const count = r.get(4,4)[`readUInt32${fat[0]}`](0);
+  if (!format?.fat || base) fail('unsupported Mach-O header');
+  const container = machoFatHeader(Buffer.concat([initial, r.get(4, 4)])), count = container.count;
   if (!count || count > 128) fail('invalid Mach-O slice count');
-  const table = r.get(8,count*fat[1]), slices = [];
+  const table = r.get(8,count*container.stride), slices = [];
   for (let i=0; i<count; i++) {
-    const o=i*fat[1], u32=p=>table[`readUInt32${fat[0]}`](o+p), u64=p=>safe(table[`readBigUInt64${fat[0]}`](o+p));
-    const offset=fat[1]===32?u64(8):u32(8), length=fat[1]===32?u64(16):u32(12);
+    const entry = machoFatEntry(table, i, container), offset = entry.offset, length = entry.size;
+    if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length)) fail('offset too large');
     if (offset < 8+table.length || length > r.size-offset || slices.some(s=>offset<s.offset+s.size && s.offset<offset+length)) fail('Mach-O slice outside bounds or overlapping');
     const inner=macho(r,offset,length);
-    if (inner.architectures[0] !== MACH.get(u32(0))) fail('Mach-O slice CPU differs from fat header');
+    if (inner.architectures[0] !== machoArchitecture(entry.cpu)) fail('Mach-O slice CPU differs from fat header');
     slices.push(...inner.slices);
   }
   return { format:'macho', architectures:[...new Set(slices.map(s=>s.architecture))], slices };
 }
 function pe(r) {
   const dos=r.get(0,64), start=dos.readUInt32LE(60), coff=r.get(start,24);
-  if (coff.readUInt32LE(0)!==0x4550) fail('missing PE signature');
-  const machineCode=coff.readUInt16LE(4), declared=PE.get(machineCode), count=coff.readUInt16LE(6), length=coff.readUInt16LE(20);
+  const fields=peHeaderFacts(coff);
+  if (fields.signature!==0x4550) fail('missing PE signature');
+  const machineCode=fields.machineCode, declared=fields.declaredArchitecture, count=fields.sectionCount, length=fields.optionalBytes;
   if (!declared || !count || count>4096) fail('unsupported PE machine or section count');
   const optional=r.get(start+24,length), magic=optional.length>=2?optional.readUInt16LE(0):0, wide=magic===0x20b, prefix=wide?112:96;
   if (![0x10b,0x20b].includes(magic) || length<prefix || (declared==='i386')===wide) fail('invalid PE optional header');
