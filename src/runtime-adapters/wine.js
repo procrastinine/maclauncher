@@ -47,7 +47,11 @@ function definition(id) {
   const value = require('../runtime-sources').loadSources().find(source => source.kind === 'wine' && source.id === id);
   if (!value) throw new Error('Unknown Wine source: ' + id);
   const upstream=value.upstream||{};
-  return {...value,...existingWine[id],assets:Object.entries(upstream.assets||{}).map(([intendedCPU,match])=>({match,intendedCPU})),discover:{type:upstream.github?'github-releases':'local-app',repo:upstream.github,includePrereleases:upstream.prereleases}};
+  // A Wine declared only by its JSON file runs through Wine itself, keeps one
+  // prefix per Windows version and downloads its releases.
+  const generic={manager:{id,memberOrder:0,sectionLabel:value.label,tabLabel:value.label,category:'compatibility'},
+    labels:{source:value.label,automatic:`${value.label}'s automatic choice`},wine:{invocation:'wine',prefixModel:'windowsVersion',downloads:Boolean(upstream.github),graphicsSelector:false}};
+  return {...value,...(existingWine[id]||generic),assets:Object.entries(upstream.assets||{}).map(([intendedCPU,match])=>({match,intendedCPU})),discover:{type:upstream.github?'github-releases':'local-app',repo:upstream.github,includePrereleases:upstream.prereleases}};
 }
 function descriptor(id, transport) {
   const data = definition(id), wine = data.wine || {};
@@ -60,6 +64,7 @@ function descriptor(id, transport) {
 }
 function installationRoot(source, install) {
   if (install.installDir || install.appPath) return install.installDir || install.appPath;
+  if (!source.layout) return install.wineRoot;
   let root = install.executablePath;
   const segments = source.layout.entry.split('/');
   if (!root) {
@@ -71,6 +76,8 @@ function installationRoot(source, install) {
   return root;
 }
 function resolvePart(source, install, part) {
+  // A Wine without a declared layout places its included parts in its measured Wine tree.
+  if (!source.layout) return path.join(install.wineRoot || installationRoot(source,install),part.path);
   const support=install.templateRoot || install.supportRoot;
   if (support && part.path.startsWith('support/')) {
     const relative=part.path.slice('support/'.length);
@@ -98,7 +105,8 @@ function embeddedComponent(install, {sourceId, engine}) {
   return {source,embed,root:parts[0]?.path,parts};
 }
 function nativeLibraries(source, install) {
-  const media=source.included.find(embed=>embed.kind==='media'), driver=source.included.find(embed=>embed.kind==='vulkan-driver');
+  const media=source.included?.find(embed=>embed.kind==='media'), driver=source.included?.find(embed=>embed.kind==='vulkan-driver');
+  if (!media || !driver) return {libraries:[],frameworks:[],gstreamer:null};
   const parts=Object.fromEntries(media.parts.map(part=>[part.name,resolvePart(source,install,part)]));
   const library=path.dirname(resolvePart(source,install,driver.parts[0]));
   const lib=path.dirname(parts.core), framework=parts.framework && path.dirname(parts.framework);
@@ -117,7 +125,8 @@ function includedTranslators(source, install, add, context = {}) {
     }
   }
   for (const embed of source.included || []) {
-    if (embed.engine === 'wined3d' || context.requestedEngine && context.requestedEngine !== embed.engine) continue;
+    // An included CPU translator is loaded by the Wine itself.
+    if (embed.kind === 'cpu-translator' || embed.engine === 'wined3d' || context.requestedEngine && context.requestedEngine !== embed.engine) continue;
     const parts = Object.fromEntries(embed.parts.map(part => [part.name || 'component', resolve(part)]));
     let primary = embed.kind === 'media' ? parts.plugins : resolve(embed.parts[0]);
     if (embed.kind === 'vulkan-driver' && parts.icd && fs.existsSync(parts.icd)) {
@@ -178,7 +187,7 @@ function createBackend({source, dependencies = {}}) {
   const label = source.label, id = source.manager?.id || source.id;
   const base = createPinnedNativeManager({id, label, sourceUrl: Catalog.SOURCE_URL, sourceName: source.labels?.source,
     formatVersionLabel: Catalog.versionLabel, discoverCatalog: dependencies.discoverCatalog || Catalog.discover,
-    resolveExecutable: root => path.join(root, source.layout.entry),
+    resolveExecutable: (root, pin, {installationMetadata} = {}) => path.join(root, installationMetadata?.entry || source.layout?.entry || require('./wine-release').findWine(root)?.entry || 'bin/wine'),
     prepareInstall: options => Payload.preparePayload(options, dependencies),
     ...(dependencies.verifyArtifact ? {verifyArtifact: dependencies.verifyArtifact} : {}),
     ...(dependencies.customRuntime === false ? {customRuntime:false} : {}), dependencies});

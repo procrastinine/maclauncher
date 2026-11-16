@@ -1,0 +1,30 @@
+{
+  "id": "highball-wine",
+  "kind": "wine",
+  "label": "Highball Wine",
+  "order": 204,
+  "upstream": {
+    "github": "gauthierpiarrette/highball-engine",
+    "assets": {
+      "x86_64": "^engine-wine-.*\\.tar\\.gz$",
+      "arm64": "^engine-arm64-wine-.*\\.tar\\.gz$"
+    },
+    "app": {
+      "arm64": "Highball.app/Contents/Helpers/WineLoader.app/Contents/MacOS/wine"
+    }
+  },
+  "included": [
+    {
+      "id": "highball-fex",
+      "kind": "cpu-translator",
+      "label": "Highball FEX",
+      "engine": "fex",
+      "parts": [
+        { "path": "lib/wine/aarch64-windows/xtajit64.dll", "name": "arm64ec-client" },
+        { "path": "lib/wine/aarch64-unix/libarm64ecfex.so", "name": "arm64ec-helper" },
+        { "path": "lib/wine/aarch64-windows/xtajit.dll", "name": "wow64-client" },
+        { "path": "lib/wine/aarch64-unix/libwow64fex.so", "name": "wow64-helper" }
+      ]
+    }
+  ]
+}

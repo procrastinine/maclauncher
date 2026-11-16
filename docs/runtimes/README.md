@@ -90,7 +90,7 @@ The [web runtimes](WEB_RUNTIMES.md) page describes the first three. A game type 
 | [Unity](../game-types/UNITY.md) | `unity` (exact-version Unity Mono) |
 | [Video](../game-types/VIDEO.md) | `mpv` |
 | [VNDS](../game-types/VNDS.md) | `vnds_love` |
-| [Windows Game](../game-types/WINDOWS.md) | `sikarugir` ([downloaded Wine versions](SIKARUGIR.md)), `crossover` ([registered CrossOver applications](CROSSOVER.md)), `winecx` ([downloaded WineCX versions](WINECX.md)) |
+| [Windows Game](../game-types/WINDOWS.md) | `sikarugir` ([downloaded Wine versions](SIKARUGIR.md)), `crossover` ([registered CrossOver applications](CROSSOVER.md)), `winecx` ([downloaded WineCX versions](WINECX.md)), `metalsharp-wine` and `highball-wine` ([downloaded from their data files](WINE.md#sources-declared-by-their-data-file)) |
 | [WOLF RPG Editor](../game-types/WOLFRPG.md) | `browser-woditor` |
 
 Game types not listed here, such as [macOS Game](../game-types/MACOS.md) and the web game types, use only the shared ids.

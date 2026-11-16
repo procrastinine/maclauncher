@@ -31,7 +31,9 @@ function regularFile(root, relative, label) {
     throw new Error(`A ${label} runtime file escaped its installation.`);
   return file;
 }
-function walk(root, signal, label = "Wine") {
+// `external` names the application executables a link may reach outside the
+// installation, such as a signed loader the source runs its Wine through.
+function walk(root, signal, label = "Wine", external = []) {
   const result = [], canonicalRoot = fs.realpathSync(root);
   function visit(directory) {
     throwIfAborted(signal);
@@ -42,7 +44,7 @@ function walk(root, signal, label = "Wine") {
       const stat = fs.lstatSync(file);
       if (stat.isSymbolicLink()) {
         const target = fs.readlinkSync(file), real = fs.realpathSync(file);
-        if (path.isAbsolute(target) || !inside(canonicalRoot, real)) throw new Error(`A ${label} runtime link escaped its installation.`);
+        if (!external.includes(real) && (path.isAbsolute(target) || !inside(canonicalRoot, real))) throw new Error(`A ${label} runtime link escaped its installation.`);
         result.push({ relative, kind: "link", target, stamp: stamp(stat) });
       } else if (stat.isDirectory()) { result.push({ relative, kind: "directory" }); visit(file); }
       else if (stat.isFile()) result.push({ relative, kind: "file", bytes: stat.size, mode: stat.mode & 0o777, stamp: stamp(stat) });
@@ -52,7 +54,7 @@ function walk(root, signal, label = "Wine") {
   visit(root); return result.sort((a, b) => a.relative.localeCompare(b.relative));
 }
 // The same listing as walk, read without holding the thread.
-async function walkAsync(root, signal, label = "Wine") {
+async function walkAsync(root, signal, label = "Wine", external = []) {
   const result = [], canonicalRoot = await fs.promises.realpath(root);
   async function visit(directory) {
     throwIfAborted(signal);
@@ -63,7 +65,7 @@ async function walkAsync(root, signal, label = "Wine") {
       const stat = await fs.promises.lstat(file);
       if (stat.isSymbolicLink()) {
         const target = await fs.promises.readlink(file), real = await fs.promises.realpath(file);
-        if (path.isAbsolute(target) || !inside(canonicalRoot, real)) throw new Error(`A ${label} runtime link escaped its installation.`);
+        if (!external.includes(real) && (path.isAbsolute(target) || !inside(canonicalRoot, real))) throw new Error(`A ${label} runtime link escaped its installation.`);
         result.push({ relative, kind: "link", target, stamp: stamp(stat) });
       } else if (stat.isDirectory()) { result.push({ relative, kind: "directory" }); await visit(file); }
       else if (stat.isFile()) result.push({ relative, kind: "file", bytes: stat.size, mode: stat.mode & 0o777, stamp: stamp(stat) });
@@ -195,12 +197,12 @@ function createInventoryCheck({ label = "Wine", systemVersionSync = Host.systemV
       return { supported: false, reason: requiresMacOS(minimumMacOS) };
     return { supported: true };
   }
-  function check(installDir, seal, { verification = "full", signal, important = new Set(), minimumMacOS } = {}) {
+  function check(installDir, seal, { verification = "full", signal, important = new Set(), minimumMacOS, external = [] } = {}) {
     const { key, inventory } = sealed(installDir, seal), revision = InventoryRevision.retained();
     // The inspector worker reuses a tree that prepare checked fully until its
     // runtime inventory changes; every other check reads the files.
     if (revision !== null && prepared.get(key) === revision) return supportedHost(minimumMacOS);
-    const observed = verification === "status" ? null : walk(installDir, signal, label);
+    const observed = verification === "status" ? null : walk(installDir, signal, label, external);
     if (observed && JSON.stringify(observed.map(row => [row.relative, row.kind])) !== JSON.stringify(inventory.files.map(row => [row.relative, row.kind])))
       throw new Error(`${label} runtime files changed. Remove and install this version again.`);
     for (const row of inventory.files) {
@@ -209,7 +211,7 @@ function createInventoryCheck({ label = "Wine", systemVersionSync = Host.systemV
       const target = path.join(installDir, row.relative), current = fs.lstatSync(target);
       if (row.kind === "directory") { if (!current.isDirectory() || current.isSymbolicLink()) throw new Error(`${label} runtime directories changed.`); continue; }
       if (row.kind === "link") {
-        if (!current.isSymbolicLink() || fs.readlinkSync(target) !== row.target || !inside(fs.realpathSync(installDir), fs.realpathSync(target)))
+        if (!current.isSymbolicLink() || fs.readlinkSync(target) !== row.target || !external.includes(fs.realpathSync(target)) && !inside(fs.realpathSync(installDir), fs.realpathSync(target)))
           throw new Error(`${label} runtime links changed.`);
         continue;
       }
@@ -226,12 +228,12 @@ function createInventoryCheck({ label = "Wine", systemVersionSync = Host.systemV
   // The full check, reading the tree and any changed file's digest without
   // holding the thread. In the inspector worker, check then reuses it until
   // the runtime inventory changes. A failure is left to check, which reports it.
-  check.prepare = async (installDir, seal, { signal } = {}) => {
+  check.prepare = async (installDir, seal, { signal, external = [] } = {}) => {
     const revision = InventoryRevision.retained();
     if (revision === null) return false;
     const { key, inventory } = sealed(installDir, seal);
     if (prepared.get(key) === revision) return true;
-    const observed = await walkAsync(installDir, signal, label);
+    const observed = await walkAsync(installDir, signal, label, external);
     if (JSON.stringify(observed.map(row => [row.relative, row.kind])) !== JSON.stringify(inventory.files.map(row => [row.relative, row.kind]))) return false;
     const rows = new Map(observed.map(row => [row.relative, row])), root = await fs.promises.realpath(installDir);
     for (const row of inventory.files) {
@@ -239,7 +241,7 @@ function createInventoryCheck({ label = "Wine", systemVersionSync = Host.systemV
       const current = rows.get(row.relative), target = path.join(installDir, row.relative);
       if (row.kind === "directory") continue;
       if (row.kind === "link") {
-        if (current.target !== row.target || !inside(root, await fs.promises.realpath(target))) return false;
+        if (current.target !== row.target || !external.includes(await fs.promises.realpath(target)) && !inside(root, await fs.promises.realpath(target))) return false;
         continue;
       }
       if (current.bytes !== row.bytes || current.mode !== row.mode) return false;

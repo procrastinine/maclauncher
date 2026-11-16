@@ -1,0 +1,26 @@
+{
+  "id": "metalsharp-wine",
+  "kind": "wine",
+  "label": "MetalSharp Wine",
+  "order": 203,
+  "upstream": {
+    "github": "metalsharp/MetalSharp-Wine",
+    "assets": {
+      "arm64": "^MetalSharp-Wine-.*-arm64\\.zip$"
+    }
+  },
+  "included": [
+    {
+      "id": "metalsharp-wine-fex",
+      "kind": "cpu-translator",
+      "label": "MetalSharp FEX",
+      "engine": "fex",
+      "parts": [
+        { "path": "lib/wine/aarch64-windows/libarm64ecfex.dll", "name": "arm64ec-client" },
+        { "path": "lib/wine/aarch64-unix/libarm64ecfex.so", "name": "arm64ec-helper" },
+        { "path": "lib/wine/aarch64-windows/libwow64fex.dll", "name": "wow64-client" },
+        { "path": "lib/wine/aarch64-unix/libwow64fex.so", "name": "wow64-helper" }
+      ]
+    }
+  ]
+}

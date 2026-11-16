@@ -7,7 +7,11 @@ const IDS = Object.freeze(definitions.map(source => source.id));
 const loaded = new Map();
 function get(id) {
   if (!IDS.includes(id)) return null;
-  if (!loaded.has(id)) loaded.set(id, require(`./${id}`));
+  // A Wine with its own adapter file supplies its hooks there; any other Wine
+  // source is served from its JSON file alone.
+  if (!loaded.has(id)) loaded.set(id, require('node:fs').existsSync(require('node:path').join(__dirname, `${id}.js`)) ? require(`./${id}`) :
+    require('../../../runtime-adapters/wine').descriptor(id, { manager: () => require('../../../runtime-adapters/wine-release').manager(id),
+      dxmtBase: () => null, launchEnvironment: () => ({}) }));
   return loaded.get(id);
 }
 const all = () => IDS.map(get);

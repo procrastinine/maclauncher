@@ -1,14 +1,16 @@
 # Wine runtimes
 
-MacLauncher runs [Windows games](../game-types/WINDOWS.md), and the compatible Windows executables of other game types, through Wine. It offers three Wine sources, and each one is a separate choice in the game's runtime selector with its own tab in **Runtimes**:
+MacLauncher runs [Windows games](../game-types/WINDOWS.md), and the compatible Windows executables of other game types, through Wine. Each Wine source is a separate choice in the game's runtime selector with its own tab in **Runtimes**:
 
 | Source | Runtime selector | Origin | Delivery |
 | --- | --- | --- | --- |
 | [Sikarugir](SIKARUGIR.md) | **Sikarugir** | Sikarugir Wine engines with their Templates | Downloaded after consent; the default for Windows games |
 | [CrossOver](CROSSOVER.md) | **CrossOver** | CodeWeavers' CrossOver application | Registered from an installed, licensed application; never downloaded |
 | [WineCX](WINECX.md) | **WineCX** | dappermint's winecx-gptk runtime: CodeWeavers' CrossOver Wine changes on a current Wine release | Downloaded after consent |
+| MetalSharp Wine | **MetalSharp Wine** | The signed arm64 MetalSharp Wine application from metalsharp/MetalSharp-Wine, with its FEX x86 translation | Downloaded after consent |
+| Highball Wine | **Highball Wine** | Highball engine releases from gauthierpiarrette/highball-engine: Intel builds, and arm64 builds that run through the installed Highball application's signed Wine loader | Downloaded after consent; arm64 builds only while Highball is installed |
 
-The three sources share one Wine layer, so its settings, translator choices, graphics effects, DLSS support, Steam client bridge and private Windows environments work the same way with each of them. The page for each source covers only what differs: where its Wine tree comes from, how its versions are listed and installed, and the kind of existing environment it can use.
+The sources share one Wine layer, so its settings, translator choices, graphics effects, DLSS support, Steam client bridge and private Windows environments work the same way with each of them. The page for each source covers only what differs: where its Wine tree comes from, how its versions are listed and installed, and the kind of existing environment it can use.
 
 ## Shared behavior
 
@@ -49,6 +51,18 @@ The game's **Network access** setting applies in addition to the macOS answer. W
 ### Steam
 
 [Windows Steam games](WINDOWS_STEAM.md) describes the optional bridge to the Steam client for Mac. It runs the game in the game's own Windows environment and writes only Steam registry keys there.
+
+## Sources declared by their data file
+
+Each Wine source is a data file in `src/runtime-sources/wine`, and every such file is a runtime of the Windows module. A source with no adapter of its own, such as MetalSharp Wine and Highball Wine, is served entirely from its file:
+
+- Its releases are the GitHub releases of `upstream.github` with an asset matching one of the `upstream.assets` patterns. The pattern's key names the CPU of that download, and the release version starts at the first dotted number of the tag.
+- A download is verified against the publisher's SHA-256: the checksum file published beside the archive (`<archive>.sha256` or `SHA256SUMS`), otherwise the digest GitHub lists for the asset.
+- The Wine tree is found by its files: the folder holding `lib/wine` with a `wine` executable in `bin`, or in `MacOS` inside an application. Nothing in the download is moved or rewritten, so a signed application keeps its signature.
+- `upstream.app` names, per CPU, an application executable that builds for that CPU run through, relative to the Applications folder. Such a build is offered and usable only while that application is installed; its Wine tree's Unix loader (`lib/wine/aarch64-unix/wine` for arm64) is a link to that executable, which is where Wine looks for it.
+- Included components (`included`) are paths in the Wine tree. An included CPU translator, such as FEX, is loaded by that Wine itself.
+
+Removing a source's file removes its runtime.
 
 ## What each source supplies
 
