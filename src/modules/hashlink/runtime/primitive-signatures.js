@@ -1,3 +1,4 @@
+const BinaryArch = require('../../../core/binary-arch');
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 const path = require("node:path");
@@ -29,21 +30,19 @@ function fixedName(data, offset) {
 
 function intelSlice(input) {
   if (!Buffer.isBuffer(input) || input.length < 32 || input.length > LIMITS.bytes) fail("native file exceeds inspection bounds.");
-  const magic = input.readUInt32BE(0);
-  if (![0xcafebabe, 0xcafebabf].includes(magic)) return input;
-  const count = input.readUInt32BE(4), wide = magic === 0xcafebabf, stride = wide ? 32 : 20;
+  const format = BinaryArch.machoMagic(input.readUInt32BE(0));
+  if (!format?.fat || format.little) return input;
+  const container = BinaryArch.machoFatHeader(input), count = container.count, wide = container.wide, stride = container.stride;
   if (!count || count > 32) fail("invalid universal slice count.");
   range(8, count * stride, input.length);
   const slices = [], candidates = [];
   for (let i = 0; i < count; i++) {
-    const cursor = 8 + i * stride;
-    const value = offset => wide ? Number(input.readBigUInt64BE(cursor + offset)) : input.readUInt32BE(cursor + offset);
-    const offset = value(8), size = value(wide ? 16 : 12);
+    const entry = BinaryArch.machoFatEntry(input.subarray(8), i, container), { offset, size } = entry;
     range(offset, size, input.length);
     if (offset < 8 + count * stride || size < 32 || slices.some(s => offset < s.offset + s.size && s.offset < offset + size))
       fail("invalid or overlapping universal slices.");
     slices.push({ offset, size });
-    if (input.readUInt32BE(cursor) === 0x01000007) candidates.push(input.subarray(offset, offset + size));
+    if (BinaryArch.machoArchitecture(entry.cpu) === 'x86_64') candidates.push(input.subarray(offset, offset + size));
   }
   if (candidates.length !== 1) fail("one Intel bytecode slice is required.");
   return candidates[0];
@@ -51,9 +50,10 @@ function intelSlice(input) {
 
 function layout(input) {
   const data = intelSlice(input);
-  if (data.readUInt32LE(0) !== 0xfeedfacf || data.readUInt32LE(4) !== 0x01000007 || ![2, 6, 8].includes(data.readUInt32LE(12)))
+  const format = BinaryArch.machoMagic(data.readUInt32BE(0));
+  if (!format || format.fat || !format.wide || !format.little || BinaryArch.machoArchitecture(BinaryArch.machoCpuType(data)) !== 'x86_64' || ![2, 6, 8].includes(BinaryArch.machoHeader(data).fileType))
     fail("an Intel Mach-O executable or library is required.");
-  const count = data.readUInt32LE(16), bytes = data.readUInt32LE(20);
+  const facts = BinaryArch.machoHeader(data), count = facts.commandCount, bytes = facts.commandBytes;
   if (count > LIMITS.commands || bytes > 4 * 1024 * 1024 || count * 8 > bytes) fail("load commands exceed inspection bounds.");
   range(32, bytes, data.length);
   const sections = [], symbols = new Map();

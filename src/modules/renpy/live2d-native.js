@@ -1,3 +1,4 @@
+const BinaryArch = require('../../core/binary-arch');
 const fs = require("node:fs");
 const Native = require("../shared/runtime/local-native");
 
@@ -19,20 +20,17 @@ function exportsByArchitecture(file) {
   Native.readMachOArchitectures(file, { allowLibrary: true });
   const size = fs.statSync(file).size;
   if (size > 16 * 1024 * 1024) throw new Error("Live2D Core library exceeds supported inspection bounds.");
-  const bytes = fs.readFileSync(file), magic = bytes.readUInt32BE(0), slices = [];
-  if ([0xcafebabe, 0xcafebabf, 0xbebafeca, 0xbfbafeca].includes(magic)) {
-    const little = magic === 0xbebafeca || magic === 0xbfbafeca;
-    const u32 = p => little ? bytes.readUInt32LE(p) : bytes.readUInt32BE(p);
-    const u64 = p => Number(little ? bytes.readBigUInt64LE(p) : bytes.readBigUInt64BE(p));
-    const count = u32(4), fat64 = magic === 0xcafebabf || magic === 0xbfbafeca, stride = fat64 ? 32 : 20;
-    for (let i = 0; i < count; i++) { const p = 8 + i * stride; slices.push({ offset: fat64 ? u64(p + 8) : u32(p + 8), size: fat64 ? u64(p + 16) : u32(p + 12) }); }
+  const bytes = fs.readFileSync(file), format = BinaryArch.machoMagic(bytes.readUInt32BE(0)), slices = [];
+  if (format?.fat) {
+    const container = BinaryArch.machoFatHeader(bytes);
+    for (let i = 0; i < container.count; i++) { const entry = BinaryArch.machoFatEntry(bytes.subarray(8), i, container); slices.push({offset:entry.offset,size:entry.size}); }
   } else slices.push({ offset: 0, size: bytes.length });
   const result = {};
   for (const slice of slices) {
-    const part = bytes.subarray(slice.offset, slice.offset + slice.size), little = part.readUInt32BE(0) === 0xcffaedfe;
+    const part = bytes.subarray(slice.offset, slice.offset + slice.size), facts = BinaryArch.machoHeader(part), little = facts.little;
     const u32 = p => little ? part.readUInt32LE(p) : part.readUInt32BE(p);
-    if (u32(12) !== 6) throw new Error("Live2D Core must be a native macOS dynamic library.");
-    const arch = u32(4) === 0x0100000c ? "arm64" : "x86_64", commands = u32(16), commandEnd = 32 + u32(20);
+    if (facts.fileType !== 6) throw new Error("Live2D Core must be a native macOS dynamic library.");
+    const arch = facts.architecture === "arm64" ? "arm64" : "x86_64", commands = facts.commandCount, commandEnd = 32 + facts.commandBytes;
     let cursor = 32, symtab;
     for (let i = 0; i < commands; i++) {
       if (cursor + 8 > commandEnd) throw new Error("Truncated Live2D Mach-O commands.");

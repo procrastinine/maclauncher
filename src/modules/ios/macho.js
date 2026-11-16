@@ -1,31 +1,30 @@
+const BinaryArch = require('../../core/binary-arch');
 // Mach-O load-command adaptation. Constants/layouts are defined by Apple's
 // <mach-o/loader.h> and <mach-o/fat.h>; executable instructions stay unchanged.
-const ARM64 = 0x0100000c;
+const ARM64 = BinaryArch.machoCpuCode("arm64");
 const MAGICS = new Set([0xfeedfacf, 0xcafebabe, 0xbebafeca, 0xcafebabf, 0xbfbafeca]);
 function isMachO(bytes) { return bytes.length >= 4 && MAGICS.has(bytes.readUInt32LE(0)); }
 function armSlice(input) {
   if (input.length < 32) throw new Error("Truncated Mach-O executable.");
-  if (input.readUInt32LE(0) === 0xfeedfacf) return input;
-  const magic = input.readUInt32BE(0), little = magic === 0xbebafeca || magic === 0xbfbafeca;
-  if (![0xcafebabe, 0xcafebabf, 0xbebafeca, 0xbfbafeca].includes(magic)) throw new Error("Unsupported executable format.");
-  const wide = magic === 0xcafebabf || magic === 0xbfbafeca;
-  const u32 = p => little ? input.readUInt32LE(p) : input.readUInt32BE(p);
-  const u64 = p => Number(little ? input.readBigUInt64LE(p) : input.readBigUInt64BE(p));
-  const count = u32(4), size = wide ? 32 : 20;
+  const format = BinaryArch.machoMagic(input.readUInt32BE(0));
+  if (format && !format.fat && format.wide && format.little) return input;
+  if (!format?.fat) throw new Error("Unsupported executable format.");
+  const container = BinaryArch.machoFatHeader(input), count = container.count, size = container.stride;
   if (!count || count > 32 || 8 + count * size > input.length) throw new Error("Invalid universal executable header.");
   let selected;
   for (let i = 0; i < count; i++) {
-    const p = 8 + i * size, offset = wide ? u64(p + 8) : u32(p + 8), length = wide ? u64(p + 16) : u32(p + 12);
+    const entry = BinaryArch.machoFatEntry(input.subarray(8), i, container), offset = entry.offset, length = entry.size;
     if (!Number.isSafeInteger(offset + length) || offset < 8 + count * size || length < 32 || offset + length > input.length) throw new Error("Invalid universal executable slice.");
-    if (u32(p) === ARM64 && (u32(p + 4) & 0xffffff) === 0) selected = input.subarray(offset, offset + length);
+    if (entry.cpu === ARM64 && (entry.subtype & 0xffffff) === 0) selected = input.subarray(offset, offset + length);
   }
   if (!selected) throw new Error("The IPA needs a standard ARM64 executable; ARM64e-only and Intel apps are unsupported.");
   return selected;
 }
 function inspect(input) {
   const bytes = armSlice(input);
-  if (bytes.readUInt32LE(0) !== 0xfeedfacf || bytes.readUInt32LE(4) !== ARM64 || (bytes.readUInt32LE(8) & 0xffffff) !== 0) throw new Error("The IPA needs a standard ARM64 executable.");
-  const count = bytes.readUInt32LE(16), length = bytes.readUInt32LE(20);
+  const format = BinaryArch.machoMagic(bytes.readUInt32BE(0));
+  if (!format || format.fat || !format.wide || !format.little || BinaryArch.machoHeader(bytes).cpu !== ARM64 || (BinaryArch.machoHeader(bytes).subtype & 0xffffff) !== 0) throw new Error("The IPA needs a standard ARM64 executable.");
+  const facts = BinaryArch.machoHeader(bytes), count = facts.commandCount, length = facts.commandBytes;
   if (!count || count > 4096 || length > 16 * 1024 * 1024 || 32 + length > bytes.length) throw new Error("Invalid Mach-O load commands.");
   const commands = []; let p = 32, firstData = bytes.length, encrypted = false;
   for (let i = 0; i < count; i++) {
@@ -54,7 +53,7 @@ function inspect(input) {
     commands.push({ cmd, bytes: bytes.subarray(p, p + size) }); p += size;
   }
   if (p !== 32 + length || firstData < p || firstData > bytes.length) throw new Error("Invalid Mach-O header layout.");
-  return { bytes, commands, firstData, encrypted, fileType: bytes.readUInt32LE(12) };
+  return { bytes, commands, firstData, encrypted, fileType: facts.fileType };
 }
 function dylib(command, name) {
   const encoded = Buffer.from(name + "\0"), size = Math.ceil((24 + encoded.length) / 8) * 8;
