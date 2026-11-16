@@ -1,4 +1,5 @@
 #include "depth-resample.hpp"
+#include "layer-composition.h"
 #include "caller-copy.hpp"
 #include "live-controls.hpp"
 #include "log.hpp"
@@ -1111,7 +1112,7 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
         static const char sourceInfoKey=0;
         if(!objc_getAssociatedObject(metal.layer,&sourceInfoKey)){
             objc_setAssociatedObject(metal.layer,&sourceInfoKey,@YES,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            log("Metal publisher source "+std::to_string(metal.texture.width)+"x"+std::to_string(metal.texture.height)+" format="+std::to_string(metal.texture.pixelFormat)+" opaque="+(metal.layer.opaque?"true":"false"));
+            log("Metal publisher source "+std::to_string(metal.texture.width)+"x"+std::to_string(metal.texture.height)+" format="+std::to_string(metal.texture.pixelFormat)+" opaque="+(macfx::layerComposesOpaquely(metal.layer)?"true":"false"));
         }
     }
     RSMFrameDepth *captured=capturedDepth(buffer,metal.texture);
@@ -1157,7 +1158,7 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
             auto readback=replayed&&metal.texture.framebufferOnly?macfx::framebuffer::capture(metal.layer,buffer,metal.texture):framebuffer;
             id<MTLTexture> source=replayed?(readback?readback->raw:metal.texture):(framebuffer?framebuffer->raw:metal.texture);
             const auto space=macfx::imageColorSpace(metal.layer.colorspace,metal.layer.wantsExtendedDynamicRangeContent);
-            auto description=macfx::describeImageColor(space);description.alpha=metal.layer.opaque?macfx::ColorAlpha::Opaque:macfx::ColorAlpha::Straight;
+            auto description=macfx::describeImageColor(space);description.alpha=macfx::layerComposesOpaquely(metal.layer)?macfx::ColorAlpha::Opaque:macfx::ColorAlpha::Straight;
             if(auto capture=macfx::FrameCapture::begin(buffer,source,captureFrame,false,&description))capture->finish(buffer,source);
         }catch(const std::exception &error){log("Metal frame capture failed: "+std::string(error.what()));}}
         @catch(NSException *error){log("Metal frame capture failed: "+std::string(error.reason.UTF8String?:"Capture failed"));}
@@ -1169,7 +1170,7 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
                 source=[source newTextureViewWithPixelFormat:source.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB?MTLPixelFormatBGRA8Unorm:MTLPixelFormatRGBA8Unorm];
             if(!source)throw std::runtime_error("Cannot read the game presentation texture");
             if(macfx::effectPlanDemands(macfx::PlanDemandGeneration))macfx::copyCallerIntervalSource(metal.texture,source);
-            auto result=presentation->submitDisplayFrame(buffer,source,0,sourceTime>0?sourceTime:CACurrentMediaTime(),metal.layer.opaque,captured?&depth:nullptr);
+            auto result=presentation->submitDisplayFrame(buffer,source,0,sourceTime>0?sourceTime:CACurrentMediaTime(),macfx::layerComposesOpaquely(metal.layer),captured?&depth:nullptr);
             const auto outcome=macfx::presentationFrameWithScreenshot(result,presentation->outputRevealed(),[&]{capturePresented();});
             if(outcome==macfx::PresentationFrameOutcome::Encoded){macfx::observeTiming(buffer,timingScope,source.width,source.height);return;}
             if(outcome==macfx::PresentationFrameOutcome::Declined)return;
@@ -1201,8 +1202,8 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
             target=[target newTextureViewWithPixelFormat:target.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB?MTLPixelFormatBGRA8Unorm:MTLPixelFormatRGBA8Unorm];
             if(!target) throw std::runtime_error("Cannot create an sRGB drawable view");
         }
-        const auto colorSpace=macfx::imageColorSpace(metal.layer.colorspace,metal.layer.wantsExtendedDynamicRangeContent);auto colorDescription=macfx::describeImageColor(colorSpace);colorDescription.alpha=metal.layer.opaque?macfx::ColorAlpha::Opaque:macfx::ColorAlpha::Straight;
-        {macfx::DiagnosticScope scope(macfx::DiagnosticStage::MetalEncode,0,target.width,target.height);runtime.render(buffer,target,target,macfx::SpatialMethod::Bilinear,0,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft,captured?&depth:nullptr,nullptr,metal.layer.opaque,nullptr,nullptr,colorSpace,&colorDescription,sourceTime);}
+        const auto colorSpace=macfx::imageColorSpace(metal.layer.colorspace,metal.layer.wantsExtendedDynamicRangeContent);auto colorDescription=macfx::describeImageColor(colorSpace);colorDescription.alpha=macfx::layerComposesOpaquely(metal.layer)?macfx::ColorAlpha::Opaque:macfx::ColorAlpha::Straight;
+        {macfx::DiagnosticScope scope(macfx::DiagnosticStage::MetalEncode,0,target.width,target.height);runtime.render(buffer,target,target,macfx::SpatialMethod::Bilinear,0,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft,captured?&depth:nullptr,nullptr,macfx::layerComposesOpaquely(metal.layer),nullptr,nullptr,colorSpace,&colorDescription,sourceTime);}
         macfx::observeRuntimeFrameSource(runtime.statusContext,macfx::RuntimeFrameSource::MetalDrawable,captured?macfx::RuntimeInputDepth:0);
         if(history){try{macfx::InPlaceHistory::capture(history,buffer,framebuffer?framebuffer->image:metal.texture,framebuffer?framebuffer->paste:nil);}
             catch(const std::exception &error){macfx::InPlaceHistory::bypass(history);log("In-place effects use original rendering after history failure: "+std::string(error.what()));}}
@@ -1413,7 +1414,7 @@ void readyMetal4Frame(RSMMetal4Bridge*state,uint64_t value){
             auto commands=frame->commands;const auto signal=frame->value;
             if(const auto source=macfx::temporalOutputSourceFrame(commands,frame->drawable.texture);source&&source->timeMs>0)frame->sourceTime=source->timeMs/1000;
             @try{try{auto layer=frame->drawable.layer;const auto color=layer.colorspace;const bool sameColor=frame->color==color||(frame->color&&color&&CFEqual(frame->color,color));
-                if(!state->failed.load()&&sameColor&&frame->opaque==layer.opaque&&frame->extended==layer.wantsExtendedDynamicRangeContent)process(commands,frame->drawable,"metal4-effects-and-producer-dependency",frame->captureFrame,frame->sourceTime);
+                if(!state->failed.load()&&sameColor&&frame->opaque==macfx::layerComposesOpaquely(layer)&&frame->extended==layer.wantsExtendedDynamicRangeContent)process(commands,frame->drawable,"metal4-effects-and-producer-dependency",frame->captureFrame,frame->sourceTime);
                 else if(macfx::effectRequested()){const auto presentation=macfx::metalPresentation(layer);if(!presentation||presentation->snapshot().stopped)if(auto history=nativeHistory(layer,false))if(auto retained=history->images.retained(frame->drawable.texture,reinterpret_cast<uintptr_t>(frame->color)))replayNativeHistory(retained,commands,frame->drawable.texture,reinterpret_cast<uintptr_t>((__bridge void*)layer));}}
                 catch(const std::exception&error){log("Metal 4 frame processing retained native output: "+std::string(error.what()));}}
             @catch(NSException*error){log("Metal 4 frame processing retained native output: "+std::string(error.reason.UTF8String?:"Image processing failed"));}
@@ -1467,7 +1468,7 @@ void signalMetal4Drawable(id object,SEL selector,id<MTLDrawable> drawable) {
     // Build the whole effect buffer before placing any dependent work on the
     // application queue. Failed/unsupported shaders still release the fence.
     [effects encodeWaitForEvent:state->producer value:value];
-    auto pending=std::make_shared<Metal4PendingFrame>();pending->commands=effects;pending->drawable=metal;pending->value=value;pending->captureFrame=captureFrame;pending->sourceTime=CACurrentMediaTime();pending->opaque=metal.layer.opaque;pending->extended=metal.layer.wantsExtendedDynamicRangeContent;pending->color=metal.layer.colorspace;if(pending->color)CGColorSpaceRetain(pending->color);state->pending.emplace(value,pending);
+    auto pending=std::make_shared<Metal4PendingFrame>();pending->commands=effects;pending->drawable=metal;pending->value=value;pending->captureFrame=captureFrame;pending->sourceTime=CACurrentMediaTime();pending->opaque=macfx::layerComposesOpaquely(metal.layer);pending->extended=metal.layer.wantsExtendedDynamicRangeContent;pending->color=metal.layer.colorspace;if(pending->color)CGColorSpaceRetain(pending->color);state->pending.emplace(value,pending);
     const bool waiting=macfx::observeDeferredTemporalOutput(effects,metal.texture,0,state->recordingQueue,[state,value](macfx::ShaderResult){readyMetal4Frame(state,value);});
     macfx::ownPresentationBuffer(effects);
     claimNativePresentation(drawable);
