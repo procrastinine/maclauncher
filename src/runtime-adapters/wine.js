@@ -240,7 +240,8 @@ function listBuilds({manager,sources,context={}}) {
       const architectures=row.architectures || [];
       const binaries=executable && root && architectures.length ? [{path:path.relative(root,executable),format:'macho',architectures:[...architectures]}] : [];
       builds.push({id:source.id+':'+row.version,source:source.id,kind:'wine',version:row.version,installed:true,measured:binaries.length>0,binaries,
-        root,label:row.versionLabel || source.label,order:source.order,parts:{executable,server:row.serverPath},
+        root,label:row.versionLabel || source.label,order:source.order,
+        parts:[...(executable && root ? [{path:path.relative(root,executable),name:'executable'}] : []),...(row.serverPath && root ? [{path:path.relative(root,row.serverPath),name:'server',optional:true}] : [])],
         interfaces:{provides:source.interfaces?.provides || [],requires:[...(source.interfaces?.requires || []),...(row.minimumMacOS?['macos>='+row.minimumMacOS]:[])]},
         ...(source.selector?{selector:source.selector}:{}),...(source.automatic?{automatic:source.automatic}:{}),labels:source.labels,
         ...(row.ready===false?{available:false,unavailableReason:row.reason || row.error || 'Wine installation is unavailable.'}:{}),
@@ -251,9 +252,10 @@ function listBuilds({manager,sources,context={}}) {
       if (installed.some(row=>row.version===pin.version)) continue;
       const asset=source.assets?.find(asset=>new RegExp(asset.match,'i').test(pin.asset?.filename || ''));
       if (!asset) continue;
-      builds.push({id:source.id+':'+pin.version,source:source.id,kind:'wine',version:pin.version,installed:false,measured:false,
-        binaries:[{path:source.layout.entry,format:'macho',architectures:[...asset.declares.macho]}],label:pin.versionLabel || source.label,
-        order:source.order,interfaces:asset.interfaces || source.interfaces || {},bytes:pin.downloadBytes || pin.asset.bytes,
+      const offer=require('../runtime-sources/available-build').projectAvailableBuild({source,asset,id:source.id+':'+pin.version,version:pin.version,
+        bytes:pin.downloadBytes || pin.asset.bytes,provenance:{upstreamRevision:pin.upstreamRevision,assetUrl:pin.asset.url}});
+      if (pin.minimumMacOS) offer.interfaces.requires.push('macos>='+pin.minimumMacOS);
+      builds.push({...offer,label:pin.versionLabel || source.label,order:source.order,
         ...(pin.installReason?{available:false,unavailableReason:pin.installReason}:{}),aliases:[pin.version]});
     }
   }
