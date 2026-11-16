@@ -45,3 +45,13 @@ test("a newer Wine release with a new asset name matching the same pattern is of
   assert.equal(catalog.versionRequirements["4.8.1"].architecture, "x64");
   assert.deepEqual(fs.readFileSync(SOURCE_FILE), declaration, "no source file changes");
 });
+
+test("Wine asset patterns match names of any version while the Sikarugir catalog keeps its engine floor", () => {
+  const source = JSON.parse(fs.readFileSync(path.join(__dirname, "../src/runtime-sources/wine/sikarugir.json"), "utf8"));
+  const pattern = new RegExp(source.upstream.assets.x86_64, "i");
+  for (const version of ["9.9", "10.0_7", "10.0_8", "11.0", "11.0_1", "12.0", "130.4_2"])
+    assert.match(`WS12WineSikarugir${version}.tar.xz`, pattern, version);
+  const Catalog = require("../src/modules/crossover/sikarugir/runtime/catalog");
+  assert.deepEqual(["9.9", "10.0_7", "10.0_8", "11.0", "11.0_1", "12.0"].filter(version => Catalog.parseEngineName(`WS12WineSikarugir${version}.tar.xz`)),
+    ["10.0_8", "11.0_1", "12.0"]);
+});

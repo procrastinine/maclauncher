@@ -26,6 +26,7 @@ function parseEngineName(name) {
   if (!match) return null;
   const version = match.groups.version, [base, revisionText] = version.split('_'), [major,minor] = base.split('.').map(Number), revision=Number(revisionText||0);
   if (![major,minor,revision].every(Number.isSafeInteger)) return null;
+  if (major < 10 || major === 10 && minor === 0 && revision < 8 || major === 11 && minor === 0 && revision === 0) return null;
   return {version,major,minor,revision,wrapper:Number(match.groups.wrapper)};
 }
 // One archive per version and release: the newest wrapper generation, then
