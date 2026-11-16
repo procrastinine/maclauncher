@@ -87,3 +87,7 @@ function resolvePlan({target,choices={},builds=[],sources=[],system={},environme
  failures.push('No complete execution plan satisfies the selected sources and capabilities.');return{satisfied:false,components:[],roles:[],processes:[],downloads:[],excluded,unsatisfied:failures};
 }
 module.exports={acceptsBinary,resolvePlan,selectLogicalLibraries};
+// Existing saved-description inputs have one compatibility adapter. The old
+// selector module paths are removed; all live imports use this resolver package.
+module.exports.resolveLegacyPlan=input=>require('./runtime-resolution/translator-plan').resolvePlan(input);
+module.exports.resolveLegacyApiRoles=(plan,input)=>require('./runtime-resolution/translator-plan').resolveApiRoles(plan,input);

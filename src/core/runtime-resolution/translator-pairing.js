@@ -1,6 +1,6 @@
 const path = require('node:path');
-const Roles = require('./translator-roles');
-const { label } = require('./translator-description');
+const Roles = require('../../modules/shared/runtime/translator-roles');
+const { label } = require('../../modules/shared/runtime/translator-description');
 
 const isDxgi = file => file.format === 'pe' && path.basename(file.path).toLowerCase() === 'dxgi.dll';
 const explicit = row => row?.selected && !row.projected && !['automatic', 'inherit'].includes(row.value);

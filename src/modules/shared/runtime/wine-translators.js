@@ -1,5 +1,5 @@
 const fs = require('node:fs'), path = require('node:path');
-const Description = require('./translator-description'), Plan = require('./translator-plan');
+const Description = require('./translator-description'), Plan = require('../../../core/runtime-resolution/translator-plan');
 const { wineLayout, wineRoot } = require('./wine-layout');
 const Binary = require('./binary-compatibility');
 const { systemVersionSync } = require('./bundled-native');
@@ -7,7 +7,7 @@ const warn = require('../graphics-warning');
 const Architecture = require('./architecture');
 const Roles = require('./translator-roles');
 const Requirements = require('./feature-requirements');
-const Pairing = require('./translator-pairing');
+const Pairing = require('../../../core/runtime-resolution/translator-pairing');
 const ReadPass = require('./read-pass');
 const { compareRuntimeVersions } = require('./pinned-native-manager');
 const SETTINGS = Object.freeze({ 'd3d-renderer': 'translatorRenderer', 'vulkan-driver': 'translatorVulkan', d3d12: 'translatorD3D12', video: 'translatorVideo' });
@@ -558,15 +558,15 @@ function withSettings(manifest) {
       role.id === 'vulkan-driver' ? 'Chooses the Vulkan driver used by translators that render through Vulkan.' : 'Adds codec plugins to the runtime’s video support.' }))];
   for (const runtime of Object.keys(result.runtime.entries)) {
     const schema = result.runtime.entries[runtime].settings;
-    schema.visibilityAction = 'listTranslatorOptions';
-    schema.environmentAction = 'listTranslatorOptions';
+    schema.visibilityAction = 'listRuntimeRoles';
+    schema.environmentAction = 'listRuntimeRoles';
     const index = schema.fields.findIndex(field => field.key === 'graphicsBackend');
     // Retain saved legacy values for existing games, without a second editable
     // selector.
     for (const field of schema.fields) if (['graphicsBackend', 'vulkanBackend', 'graphicsBridgeVersion'].includes(field.key)) field.hidden = true;
     for (const role of controls) schema.defaults[role.settingsKey] = '';
     schema.fields.splice(Math.max(0, index), 0, ...controls.map(role => {
-      return { key: role.settingsKey, type: 'select', label: role.label, optionsAction: 'listTranslatorOptions', optionsKey: role.optionsKey,
+      return { key: role.settingsKey, type: 'select', label: role.label, optionsAction: 'listRuntimeRoles', optionsKey: role.optionsKey,
         options: [{ value: '', label: sourceFor(runtime).labels.automatic }],
         inheritFrom: 'environmentReference', inheritanceInOptions: true, section: 'Basic',
         description: role.description };

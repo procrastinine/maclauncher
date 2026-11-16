@@ -4,7 +4,7 @@ const Writable = require("../writable-input");
 const AppBundle = require("./app-bundle");
 const os = require("node:os");
 
-const { INHERIT } = require("./translator-plan");
+const { INHERIT } = require("../../../core/runtime-resolution/translator-plan");
 const privateEnvironments = new WeakSet();
 const inside = (root, file) => {
   const relative = path.relative(root, file);

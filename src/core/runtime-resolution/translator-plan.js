@@ -1,12 +1,12 @@
-const { COMPONENTS, label } = require('./translator-description');
+const { COMPONENTS, label } = require('../../modules/shared/runtime/translator-description');
 const AUTOMATIC = 'automatic', INHERIT = 'inherit';
 const UNAVAILABLE_CHOICE_LABEL = 'Saved selection (unavailable)';
-const Roles = require('./translator-roles');
+const Roles = require('../../modules/shared/runtime/translator-roles');
 const Pairing = require('./translator-pairing');
 const fs = require('node:fs'), path = require('node:path');
-const { fileDigest } = require('./verified-identity');
+const { fileDigest } = require('../../modules/shared/runtime/verified-identity');
 // Labels and the graphics selector come from the Wine source's descriptor.
-const sourceOf = runtime => require('../../crossover/sources').get(runtime);
+const sourceOf = runtime => require('../../modules/crossover/sources').get(runtime);
 const usesSelector = plan => plan?.graphicsSelector ?? Boolean(sourceOf(plan?.runtime)?.graphicsSelector);
 function sourceLabels(runtime) {
   const labels = sourceOf(runtime)?.labels || sourceOf('sikarugir').labels;
@@ -54,7 +54,11 @@ function selectorBackend(plan, selections, included) {
   return Roles.DIRECT3D_ROLES.every(role => role.id === 'd3d12' || [undefined, '', AUTOMATIC, INHERIT].includes(selections[role.id])) ? backend : null;
 }
 const serves = (description, role) => !description?.apis?.length || description.apis.some(api => role.apis.includes(api));
-const findChoice = (choices, value) => choices.find(item => item.id === value) || choices.find(item => item.aliases?.includes(value)) || null;
+const findChoice = (choices, value) => {
+  const id=String(value||'').replace(/^build:/,'');
+  if(String(value||'').startsWith('source:')){const source=value.slice(7);return choices.find(item=>item.managerId===source||item.engine===source||item.source===source||item.source?.id===source||item.source?.kind===source)||null;}
+  return choices.find(item => item.id === id) || choices.find(item => item.aliases?.includes(id)) || null;
+};
 const identity = description => description && `${description.id}:${description.root || ''}`;
 function filesForRole(description, role) {
   const files = description?.files || [], primary = files.filter(file => Roles.fileApis(file).some(api => role.apis.includes(api)));
