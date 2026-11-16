@@ -102,7 +102,7 @@ bool intakeDumpFormat(MTLPixelFormat format,MTLBlitOption&option){
         default:return false;
     }
 }
-void intakeDump(id<MTLCommandBuffer> commands,id<MTLTexture> texture,id<MTLFence> fence,const std::string&file,uint32_t x,uint32_t y,uint32_t width,uint32_t height){
+void intakeDump(id<MTLCommandBuffer> commands,id<MTLTexture> texture,id<MTLFence> fence,const std::string&file,uint64_t frameId,uint32_t x,uint32_t y,uint32_t width,uint32_t height){
     MTLBlitOption option;
     if(!commands||!texture||commands.status>=MTLCommandBufferStatusCommitted||texture.device!=commands.device||texture.textureType!=MTLTextureType2D||texture.sampleCount!=1||!region(texture,x,y,width,height)||!intakeDumpFormat(texture.pixelFormat,option)){
         macfx::nativeLog("Temporal intake dump skipped: "+file+" "+intakeTexture(texture));return;
@@ -121,7 +121,7 @@ void intakeDump(id<MTLCommandBuffer> commands,id<MTLTexture> texture,id<MTLFence
             const auto temporary=name+".partial";unlink(temporary.c_str());
             macfx::writeCaptureFile(temporary,bytes.contents,width,height,false,false,stride);
             if(std::rename(temporary.c_str(),name.c_str()))throw std::runtime_error("Cannot publish "+name);
-            macfx::nativeLog("Temporal intake dump saved: "+name);
+            macfx::nativeLog("Temporal intake dump saved: "+name+" frame="+std::to_string(frameId));
         }catch(const std::exception&error){macfx::nativeLog(error.what());}}});
     }];
 }
@@ -142,10 +142,10 @@ IntakeObservation observeIntake(const RSTemporalFrame*f,id<MTLCommandBuffer> com
         observed.hudless=image(RS_SCENE_AOV_HUDLESS_COLOR);observed.ui=image(RS_SCENE_AOV_UI_COLOR_ALPHA);
     }
     if(dump&&commands&&!f->commandBufferKind){
-        const auto prefix=macfx::nativeConfig().capture.prefix+"-intake-"+std::to_string(f->frameId);
-        intakeDump(commands,(__bridge id<MTLTexture>)f->depth,fence,prefix+"-depth.rgba",f->depthX,f->depthY,f->renderWidth,f->renderHeight);
+        const auto&prefix=macfx::nativeConfig().capture.prefix;
+        intakeDump(commands,(__bridge id<MTLTexture>)f->depth,fence,macfx::temporalIntakeDumpPath(prefix,"depth"),f->frameId,f->depthX,f->depthY,f->renderWidth,f->renderHeight);
         const bool displayMotion=f->flags&RS_TEMPORAL_OUTPUT_MOTION;
-        intakeDump(commands,(__bridge id<MTLTexture>)f->motion,fence,prefix+"-motion.rgba",f->motionX,f->motionY,displayMotion?f->outputWidth:f->renderWidth,displayMotion?f->outputHeight:f->renderHeight);
+        intakeDump(commands,(__bridge id<MTLTexture>)f->motion,fence,macfx::temporalIntakeDumpPath(prefix,"motion"),f->frameId,f->motionX,f->motionY,displayMotion?f->outputWidth:f->renderWidth,displayMotion?f->outputHeight:f->renderHeight);
     }
     return observed;
 }

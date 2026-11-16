@@ -15,6 +15,11 @@ inline void temporalOutputMotionView(RSTemporalFrame&frame,unsigned width,unsign
  if(!(frame.flags&RS_TEMPORAL_OUTPUT_MOTION)||!width||!height||frame.motionX>=width||frame.motionY>=height)return;
  frame.outputWidth=std::min(frame.outputWidth,width-frame.motionX);frame.outputHeight=std::min(frame.outputHeight,height-frame.motionY);
 }
+// Diagnostic intake dumps keep only the latest pair. The first traced frame of
+// each capture request replaces <prefix>-intake-depth.rgba and
+// <prefix>-intake-motion.rgba (the log names its frame), so repeated requests
+// never accumulate files beside the capture prefix.
+inline std::string temporalIntakeDumpPath(const std::string&prefix,const char*plane){return prefix+"-intake-"+plane+".rgba";}
 inline std::string sceneRejectionReason(const std::string&reason,const std::string&rejection){return !rejection.empty()&&reason.rfind("Needs matching renderer",0)==0?rejection:reason;}
 template<class Selected,class Default,class Report>
 int temporalFrameWithFallback(const RSTemporalFrame*f,const RSImageColorDescription*color,RSTemporalResult*r,bool originalRetained,Selected selected,Default fallback,Report report){
