@@ -32,6 +32,7 @@
         }
       ],
       "engine": "dxvk",
+      "vulkan": true,
       "label": "WineCX DXVK"
     },
     {

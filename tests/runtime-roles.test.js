@@ -56,6 +56,33 @@ test("role options name their source, label builds by source and version, and ca
     "an unusable saved choice stays named and its value is unchanged");
 });
 
+test("a saved source choice listed under its saved value is that source's option", () => {
+  const wine = { id: "sample", kind: "wine", label: "Sample", included: [
+    { id: "sample-dxvk", kind: "d3d-translator", label: "Sample DXVK", engine: "dxvk", vulkan: true, parts: [{ path: "dxvk", name: "dxvk" }] }] };
+  const rows = projectRuntimeRoles({ source: wine, settings: { translatorD3D11: "source:sample-dxvk" }, plan: { roles: [{ id: "d3d11" }], inventory: { included: [], choices: [] } },
+    optionLists: { translatorD3D11Options: [{ value: "", label: "Automatic" }, { value: "source:sample-dxvk", label: "DXVK 1.10.3 · Sample 1.0" }] } }).translatorD3D11;
+  assert.deepEqual(rows.slice(1), [{ value: "source:sample-dxvk", label: "Sample DXVK", kind: "source", sourceId: "sample-dxvk" }]);
+});
+
+test("the Vulkan driver row appears when a used Direct3D build renders through Vulkan or a driver choice is saved", () => {
+  for (const source of loadSources()) for (const item of source.included || [])
+    if (item.kind === "d3d-translator") assert.equal(item.vulkan === true, item.engine === "dxvk", `${item.id} marks whether it renders through Vulkan`);
+  const wine = { id: "sample", kind: "wine", label: "Sample", included: [
+    { id: "sample-dxvk", kind: "d3d-translator", label: "Sample DXVK", engine: "dxvk", vulkan: true, parts: [{ path: "dxvk", name: "dxvk" }] },
+    { id: "sample-dxmt", kind: "d3d-translator", label: "Sample DXMT", engine: "dxmt", parts: [{ path: "dxmt", name: "dxmt" }] },
+    { id: "sample-moltenvk", kind: "vulkan-driver", label: "Sample MoltenVK", engine: "moltenvk", parts: [{ path: "lib", name: "loader" }] }] };
+  const install = { kind: "sample", id: "1.0-install", runtime: "sample", label: "Sample 1.0" };
+  const item = engine => ({ id: `included:d3d-renderer:${engine}`, engine, included: true, version: "1.0", source: install });
+  const moltenvk = { id: "included:vulkan-driver:moltenvk", engine: "moltenvk", included: true, version: "1.2", source: install };
+  const rows = (engine, settings = {}) => projectRuntimeRoles({ source: wine, settings, plan: {
+    components: { "d3d-renderer": { used: item(engine) }, d3d11: { used: item(engine) }, "vulkan-driver": { used: moltenvk } },
+    inventory: { included: [item("dxvk"), item("dxmt"), moltenvk], choices: [] } } }).roleKeys;
+  assert.equal(rows("dxmt").includes("translatorVulkan"), false, "DXMT renders through Metal");
+  assert.equal(rows("dxvk").includes("translatorVulkan"), true, "DXVK renders through Vulkan");
+  assert.equal(rows("dxmt", { translatorVulkan: "source:sample-moltenvk" }).includes("translatorVulkan"), true, "a saved driver choice stays visible");
+  assert.equal(rows("dxmt", { translatorVulkan: "inherit" }).includes("translatorVulkan"), false);
+});
+
 test("creating the existing source-backed managers reports no unknown source keys", t => {
   const warnings = [];
   t.mock.method(console, "warn", message => warnings.push(String(message)));

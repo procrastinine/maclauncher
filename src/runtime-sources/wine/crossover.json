@@ -29,6 +29,7 @@
         }
       ],
       "engine": "dxvk",
+      "vulkan": true,
       "label": "CrossOver DXVK"
     },
     {

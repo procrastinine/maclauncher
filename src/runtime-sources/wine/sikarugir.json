@@ -33,6 +33,7 @@
         }
       ],
       "engine": "dxvk",
+      "vulkan": true,
       "label": "Sikarugir DXVK"
     },
     {
@@ -45,6 +46,7 @@
         }
       ],
       "engine": "dxvk",
+      "vulkan": true,
       "label": "Sikarugir DXVK 3"
     },
     {
@@ -57,6 +59,7 @@
         }
       ],
       "engine": "dxvk",
+      "vulkan": true,
       "label": "Sikarugir D9VK"
     },
     {

@@ -13,16 +13,23 @@ function projectRuntimeRoles({plan={},settings={},optionLists={},source={},sourc
  const itemFor=value=>inventory.find(item=>item.id===String(value).replace(/^build:/,''));
  const origin=item=>declared(item?.sourceId)||(item?.included?included.find(entry=>entry.engine===item.engine&&(!item.templateComponent||entry.parts?.some(part=>part.name===item.templateComponent))):null)||
   {id:item?.id,label:[data.label,item?.engine].filter(Boolean).join(' ')};
+ // The Vulkan driver row appears when a used Direct3D build renders through
+ // Vulkan, and while a driver choice is saved.
+ const vulkan=require('../modules/shared/runtime/translator-roles').usedRenderers(plan).some(item=>origin(item).vulkan===true);
  const result={roleKeys:[]};
  for(const role of ROLES){
-  const row=plan.roles?.find(row=>row.id===role.id)||plan.components?.[role.id];if(!row&&!(role.id==='wine'&&wine))continue;
+  const row=plan.roles?.find(row=>row.id===role.id)||plan.components?.[role.id],saved=settings[role.settingsKey];if(!row&&!(role.id==='wine'&&wine))continue;
+  if(role.id==='vulkan-driver'&&!vulkan&&!/^(source|build):/.test(normalizeChoice(saved)))continue;
   const output=[{value:'automatic',label:automatic,kind:'automatic',sourceId:data.id}];
   if(environment&&role.id!=='wine')output.push({value:'inherit',label:environment,kind:'environment',sourceId:data.id});
   const groups=new Map();
   for(const option of row?.options||optionLists[role.settingsKey+'Options']||[]){
    if(!option.value||AUTOMATIC.has(option.value)||option.value==='inherit')continue;
-   const item=option.description||itemFor(option.value),from=item?origin(item):{id:String(option.value),label:option.label};
+   // A saved source choice can be listed under its saved value.
+   const named=String(option.value).startsWith('source:')&&declared(option.value.slice(7));
+   const item=!named&&(option.description||itemFor(option.value)),from=named||(item?origin(item):{id:String(option.value),label:option.label});
    if(!groups.has(from.id))groups.set(from.id,{label:from.label,builds:[]});
+   if(named)continue;
    groups.get(from.id).builds.push({value:normalizeChoice(option.value),kind:'build',sourceId:from.id,version:String(item?.version||option.label),
     exact:String(option.value).replace(/^build:/,'').split(':').slice(1).join(':'),...(option.prerelease||item?.prerelease?{prerelease:true}:{})});
   }
@@ -32,7 +39,6 @@ function projectRuntimeRoles({plan={},settings={},optionLists={},source={},sourc
    const repeated=new Set(group.builds.map(build=>build.version).filter((version,index,all)=>all.indexOf(version)!==index));
    for(const {exact,...build}of group.builds)output.push({...build,label:group.label+' · '+(repeated.has(build.version)&&exact?exact:build.version)});
   }
-  const saved=settings[role.settingsKey];
   if(saved&&!AUTOMATIC.has(saved)&&saved!=='inherit'&&!output.some(option=>option.value===normalizeChoice(saved))){
    const id=String(saved).replace(/^(?:source|build):/,''),item=itemFor(saved),from=declared(id)||(item&&origin(item));
    output.push({value:saved,label:from?(item?from.label+' · '+item.version:from.label):id,kind:String(saved).startsWith('source:')?'source':'build',sourceId:from?.id||id,disabled:true});
