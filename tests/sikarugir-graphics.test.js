@@ -7,14 +7,18 @@ const crypto = require("node:crypto");
 const Graphics = require("../src/modules/crossover/sources/wine-graphics");
 const Template = require("../src/modules/crossover/sikarugir/runtime/template-closure");
 const Hardware = require("../src/modules/shared/runtime/graphics-hardware");
+const Translators = require("../src/modules/shared/runtime/wine-translators");
+const Roles = require("../src/modules/shared/runtime/translator-roles");
 const { X64, image } = require("./fixtures/macho-image");
+const { peFixture } = require("./helpers/pe-fixture");
 
 function put(file, bytes = "fixture") { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file; }
+// A Wine builtin DLL image: a complete PE header for the folder's CPU, the
+// builtin marker in the DOS stub, and a distinct label.
 function builtinDll(file, architecture, label) {
-  const bytes = Buffer.alloc(512); bytes.writeUInt16LE(0x5a4d, 0); bytes.writeUInt32LE(120, 60);
-  bytes.write("Wine builtin DLL\0", 64); bytes.writeUInt32LE(0x4550, 120);
-  bytes.writeUInt16LE(architecture === "i386-windows" ? 0x14c : 0x8664, 124); bytes.writeUInt16LE(0x2000, 142);
-  bytes.write(label, 256); return put(file, bytes);
+  const { bytes, peOffset } = peFixture({ is64: architecture !== "i386-windows" });
+  bytes.write("Wine builtin DLL\0", 64); bytes.writeUInt16LE(0x2002, peOffset + 22);
+  bytes.write(label, 0x200); return put(file, bytes);
 }
 function fixture(t, { rendererParent = "Frameworks" } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-sikarugir-graphics-"));
@@ -64,6 +68,19 @@ async function installed(t, options) {
   return { ...f, metadata, install: { templateRoot: f.support, engineRoot: f.engineRoot, executablePath: path.join(f.engineRoot, "bin", "wine"), capabilities: { msync: true } } };
 }
 const hash = file => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+// The one resolver plans each view from the game's settings, and the view applies that plan.
+async function resolvePlan({ install, settings = {}, host = {}, executableArchitecture }) {
+  const context = { runtimeId: "sikarugir", runtimeSettings: settings, settings: {}, userDataDir: path.resolve(install.templateRoot, "../../profile") };
+  return { context, plan: await Translators.resolve(install, "sikarugir", context, { managers: [], executableArchitecture, host }) };
+}
+async function prepare(options) {
+  const { context, plan } = await resolvePlan(options), settings = Translators.settingsForPlan(options.settings || {}, plan);
+  return Graphics.prepareGraphicsView({ host: {}, ...options, settings, translatorPlan: plan, context, userDataDir: context.userDataDir });
+}
+// The Template renderers a prepared view uses, by their Template names.
+const components = result => [...new Set(Roles.usedRenderers(result.translatorPlan || result).map(item => item.templateComponent || item.engine)
+  .filter(name => name !== "wined3d"))].sort();
+const canonical = value => fs.existsSync(value) ? fs.realpathSync(value) : value;
 
 test("graphics staging excludes wrapper UI and keeps runtime links, notices and optional driver floors separate", async t => {
   const f = await installed(t);
@@ -86,7 +103,7 @@ test("graphics staging finds renderers in the Template's SharedSupport folder an
   assert.equal(f.metadata.componentVersions.d3dmetal, "4.0b2");
   assert.ok(f.metadata.nativeDependencies.some(item => item.path === "renderer/dxmt/wine/x86_64-unix/winemetal.so"));
   assert.equal(fs.readFileSync(path.join(f.support, "Frameworks", "renderer", "dxmt", "LICENSE"), "utf8"), "dxmt license");
-  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "d3dmetal" }, viewRoot: path.join(f.root, "game", "view"),
+  const result = await prepare({ install: f.install, settings: { graphicsBackend: "d3dmetal" }, viewRoot: path.join(f.root, "game", "view"),
     host: { hardwareArch: "arm64", macOSVersion: "26.5" }, executableArchitecture: "x86_64" });
   assert.ok(result.env.DYLD_FALLBACK_FRAMEWORK_PATH.includes(path.join(fs.realpathSync(f.support), "Frameworks", "renderer", "d3dmetal", "external")));
   const legacy = await installed(t);
@@ -122,8 +139,16 @@ test("recorded renderer floors, physical CPU and unknown host facts remain indep
   metadata.graphicsCapabilities.minimumMacOS.kosmickrisp = "26.4.2";
   const higher = capabilities({ hardwareArch: "arm64", macOSVersion: "26.4.1" });
   assert.equal(higher.kosmickrisp, false);
-  assert.throws(() => Graphics.__test.selectGraphics({ vulkanBackend: "kosmickrisp" }, higher, "x86_64"), /macOS 26\.4\.2 or later/);
-  assert.equal(Graphics.__test.selectGraphics({}, higher, "x86_64").vulkanBackend, "moltenvk");
+  // The one resolver reads the driver's floor from its image: an explicit
+  // KosmicKrisp below it falls back with a message naming the floor, and
+  // Automatic does not choose it.
+  const measured = await installed(t), host = { hardwareArch: "arm64", macOSVersion: "26.4.1", physicalAppleGPU: true };
+  fs.writeFileSync(path.join(measured.support, "Frameworks", "libvulkan_kosmickrisp.dylib"), image({ cpu: X64, minimumOS: 0x001a0402 }));
+  const explicit = (await resolvePlan({ install: measured.install, settings: { vulkanBackend: "kosmickrisp" }, host, executableArchitecture: "x86_64" })).plan;
+  assert.equal(explicit.components["vulkan-driver"].used.engine, "moltenvk");
+  assert.match(explicit.warnings.join("\n"), /KosmicKrisp .*requires macOS 26\.4\.2/);
+  const automatic = (await resolvePlan({ install: measured.install, settings: {}, host, executableArchitecture: "x86_64" })).plan;
+  assert.equal(automatic.components["vulkan-driver"].used.engine, "moltenvk");
 });
 test("graphics discovery orders known layouts by an open-ended version threshold", t => {
   const f = fixture(t);
@@ -158,14 +183,14 @@ test("graphics staging cancellation does not publish a partial runtime", async t
 });
 test("Automatic on older macOS uses DXMT without forcing Tahoe D9VK and selects MoltenVK", async t => {
   const f = await installed(t), viewRoot = path.join(f.root, "game", "view");
-  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: {}, viewRoot, host: { hardwareArch: "arm64", macOSVersion: "15.7" }, executableArchitecture: "x86" });
-  assert.deepEqual(result.components, ["dxmt"]); assert.equal(result.vulkanBackend, "moltenvk");
-  assert.equal(result.capabilities.kosmickrisp, false); assert.equal(result.capabilities.msync, true);
+  const result = await prepare({ install: f.install, settings: {}, viewRoot, host: { hardwareArch: "arm64", macOSVersion: "15.7" }, executableArchitecture: "x86" });
+  assert.deepEqual(components(result), ["dxmt"]); assert.equal(result.vulkanBackend, "moltenvk");
+  assert.equal(result.translatorPlan.compatibility["included:vulkan-driver:kosmickrisp"].compatible, false); assert.equal(result.capabilities.msync, true);
   assert.equal(fs.existsSync(path.join(result.dllRoot, "i386-windows", "d3d11.dll")), true);
   assert.equal(fs.existsSync(path.join(result.dllRoot, "i386-windows", "d3d9.dll")), false);
   assert.equal(fs.existsSync(path.join(result.dllRoot, "x86_64-windows", "_d3d12.dll")), false);
-  assert.deepEqual(result.dllOverrides, ["d3d10core,d3d11,dxgi,winemetal=b"]);
-  assert.equal(JSON.parse(fs.readFileSync(result.env.VK_DRIVER_FILES)).ICD.library_path, fs.realpathSync(path.join(f.support, "Frameworks", "libMoltenVK.dylib")));
+  assert.deepEqual(result.dllOverrides, ["d3d10core=b", "d3d11=b", "dxgi=b", "winemetal=b"]);
+  assert.equal(canonical(JSON.parse(fs.readFileSync(result.env.VK_DRIVER_FILES)).ICD.library_path), fs.realpathSync(path.join(f.support, "Frameworks", "libMoltenVK.dylib")));
 });
 test("DLSS adds DXMT vendor libraries only when explicitly enabled and keeps shared binaries unchanged", async t => {
   const f = await installed(t), root = path.join(f.support, "Frameworks", "renderer", "dxmt", "wine", "x86_64-windows");
@@ -175,17 +200,17 @@ test("DLSS adds DXMT vendor libraries only when explicitly enabled and keeps sha
   put(path.join(system32, "d3d11.dll"), "existing prefix library");
   const external = put(path.join(f.root, "custom.dll"), "custom library");fs.symlinkSync(external, path.join(system32, "d3d10core.dll"));
   const base = { install: f.install, prefixPath, host: { hardwareArch: "arm64", macOSVersion: "15.7" }, executableArchitecture: "x86_64" };
-  const enabled = await Graphics.prepareGraphicsView({ ...base, settings: { dlss: true }, viewRoot: path.join(f.root, "game", "dlss") });
+  const enabled = await prepare({ ...base, settings: { dlss: true }, viewRoot: path.join(f.root, "game", "dlss") });
   assert.equal(enabled.env.DXMT_ENABLE_NVEXT, "1");
   assert.equal(enabled.env.D3DM_ENABLE_METALFX, "0");
   assert.equal(enabled.dlss.enabled, true);
-  assert.ok(enabled.dllOverrides.some(line => line.includes("nvapi64,nvngx=b")));
+  for (const name of ["nvapi64", "nvngx"]) assert.ok(enabled.dllOverrides.includes(name + "=b"), name);
   assert.equal(fs.realpathSync(path.join(enabled.dllRoot, "x86_64-windows", "nvngx.dll")), fs.realpathSync(original));
   await enabled.applyPrefix();
   assert.equal(fs.readlinkSync(path.join(system32, "nvngx.dll")), path.join(enabled.dllRoot, "x86_64-windows", "nvngx.dll"));
   assert.equal(fs.readFileSync(path.join(system32, "d3d11.dll"), "utf8"), "existing prefix library");
   assert.equal(fs.readlinkSync(path.join(system32, "d3d10core.dll")), external);
-  const disabled = await Graphics.prepareGraphicsView({ ...base, settings: {}, viewRoot: path.join(f.root, "game", "default") });
+  const disabled = await prepare({ ...base, settings: {}, viewRoot: path.join(f.root, "game", "default") });
   assert.equal(disabled.env.DXMT_ENABLE_NVEXT, "0");
   assert.equal(fs.existsSync(path.join(disabled.dllRoot, "x86_64-windows", "nvngx.dll")), false);
   await disabled.applyPrefix();
@@ -193,9 +218,9 @@ test("DLSS adds DXMT vendor libraries only when explicitly enabled and keeps sha
   assert.equal(fs.readFileSync(path.join(system32, "d3d11.dll"), "utf8"), "existing prefix library");
   assert.equal(fs.readlinkSync(path.join(system32, "d3d10core.dll")), external);
   assert.equal(hash(original), before);
-  await assert.rejects(Graphics.prepareGraphicsView({ ...base, settings: { dlss: true }, executableArchitecture: "x86", viewRoot: path.join(f.root, "game", "x86") }), /64-bit Windows/);
+  await assert.rejects(prepare({ ...base, settings: { dlss: true }, executableArchitecture: "x86", viewRoot: path.join(f.root, "game", "x86") }), /64-bit Windows/);
   fs.unlinkSync(original);
-  await assert.rejects(Graphics.prepareGraphicsView({ ...base, settings: { dlss: true }, viewRoot: path.join(f.root, "game", "missing") }), /unavailable/);
+  await assert.rejects(prepare({ ...base, settings: { dlss: true }, viewRoot: path.join(f.root, "game", "missing") }), /unavailable/);
 });
 test("D3DMetal DLSS requires the engine's actual path conversion exports before preparing a game", async t => {
   const f = await installed(t), viewRoot = path.join(f.root, "game", "dlss-d3dm");
@@ -204,55 +229,58 @@ test("D3DMetal DLSS requires the engine's actual path conversion exports before 
   const ntdll = path.join(f.engineRoot, "lib", "wine", "x86_64-unix", "ntdll.so");
   for (const symbols of [[], ["wine_nt_to_unix_file_name", "wine_unix_to_nt_file_name"], ["ntdll_get_unix_file_name"]]) {
     fs.writeFileSync(ntdll, image({ cpu: X64, symbols }));
-    await assert.rejects(Graphics.prepareGraphicsView(options), /cannot expose MetalFX Temporal through D3DMetal/);
+    await assert.rejects(prepare(options), /cannot expose MetalFX Temporal through D3DMetal/);
     assert.equal(fs.existsSync(viewRoot), false);
   }
   // Integration that an explicitly selected translator enables starts the game without it.
-  const optional = await Graphics.prepareGraphicsView({ ...options, settings: { ...options.settings, dlssOptional: true }, viewRoot: viewRoot + "-optional" });
+  const optional = await prepare({ ...options, settings: { ...options.settings, dlssOptional: true }, viewRoot: viewRoot + "-optional" });
   assert.equal(optional.dlss.d3dmetal, false);
   assert.equal(optional.env.D3DM_ENABLE_METALFX, "0");
   fs.writeFileSync(ntdll, image({ cpu: X64, symbols: ["ntdll_get_unix_file_name", "ntdll_get_dos_file_name"] }));
-  const result = await Graphics.prepareGraphicsView(options);
+  const result = await prepare(options);
   assert.equal(result.dlss.d3dmetal, true);
   assert.equal(result.env.D3DM_ENABLE_METALFX, "1");
   assert.equal(result.env.D3DM_VENDOR_ID, undefined, "a Wine without adapter identity support reports its own adapter");
   // A Wine whose win32u reads the identity variables reports an NVIDIA
   // adapter, so the game offers DLSS for D3DMetal to perform.
-  const identity = await Graphics.prepareGraphicsView({ ...options, install: { ...f.install, capabilities: { ...f.install.capabilities, adapterIdentity: true } },
+  const identity = await prepare({ ...options, install: { ...f.install, capabilities: { ...f.install.capabilities, adapterIdentity: true } },
     viewRoot: viewRoot + "-identity" });
   assert.deepEqual([identity.env.D3DM_VENDOR_ID, identity.env.D3DM_DEVICE_ID], ["0x10de", "0x2684"]);
   assert.equal(optional.env.D3DM_VENDOR_ID, undefined, "the identity follows the D3DMetal DLSS route only");
   // Ordinary D3DMetal rendering does not need NGX discovery.
   fs.writeFileSync(ntdll, image({ cpu: X64 }));
-  const plain = await Graphics.prepareGraphicsView({ ...options, settings: { graphicsBackend: "d3dmetal" }, viewRoot: viewRoot + "-off" });
+  const plain = await prepare({ ...options, settings: { graphicsBackend: "d3dmetal" }, viewRoot: viewRoot + "-off" });
   assert.equal(plain.dlss.enabled, false);
 });
 test("Automatic on Tahoe selects KosmicKrisp under D9VK while retaining DXMT and private cache state", async t => {
   const f = await installed(t), viewRoot = path.join(f.root, "game", "view");
   const before = hash(path.join(f.support, "Frameworks", "renderer", "dxmt", "wine", "i386-windows", "d3d11.dll"));
   const options = { install: f.install, settings: {}, viewRoot, host: { hardwareArch: "arm64", macOSVersion: "26.1", physicalAppleGPU: true }, executableArchitecture: "x86" };
-  const result = await Graphics.prepareGraphicsView(options);
-  assert.deepEqual(result.components, ["dxmt", "d9vk"]); assert.equal(result.vulkanBackend, "kosmickrisp");
+  const result = await prepare(options);
+  assert.deepEqual(components(result), ["d9vk", "dxmt"]); assert.equal(result.vulkanBackend, "kosmickrisp");
   assert.equal(fs.realpathSync(path.join(result.dllRoot, "i386-windows", "d3d9.dll")), fs.realpathSync(path.join(f.support, "Frameworks", "renderer", "d9vk", "wine", "i386-windows", "d3d9.dll")));
   assert.equal(result.env.GST_REGISTRY_1_0, path.join(viewRoot, "gstreamer-registry.bin"));
   assert.equal(result.env.VK_DRIVER_FILES, result.env.VK_ICD_FILENAMES);
   assert.ok(result.env.DYLD_FALLBACK_LIBRARY_PATH.includes(path.join(fs.realpathSync(f.engineRoot), "lib", "wine", "x86_64-unix")));
-  await Graphics.prepareGraphicsView(options);
+  await prepare(options);
   assert.equal(hash(path.join(f.support, "Frameworks", "renderer", "dxmt", "wine", "i386-windows", "d3d11.dll")), before);
 });
 test("Automatic keeps DXMT and chooses MoltenVK when physical Apple GPU support is unknown or virtual", async t => {
-  const f = await installed(t), viewRoot = path.join(f.root, "game", "view");
-  const base = { install: f.install, settings: {}, viewRoot, executableArchitecture: "x86" };
-  await Graphics.prepareGraphicsView({ ...base, host: { hardwareArch: "arm64", macOSVersion: "26.1", physicalAppleGPU: true } });
-  const result = await Graphics.prepareGraphicsView({ ...base, host: { hardwareArch: "arm64", macOSVersion: "26.1", physicalAppleGPU: false } });
-  assert.deepEqual(result.components, ["dxmt"]); assert.equal(result.vulkanBackend, "moltenvk");
-  assert.equal(result.capabilities.kosmickrisp, true); assert.equal(result.capabilities.automaticKosmicKrisp, false);
+  // A launch names each view after its translator files, so each selection has its own view.
+  const f = await installed(t), view = name => path.join(f.root, "game", name);
+  const base = { install: f.install, settings: {}, executableArchitecture: "x86" };
+  const physical = await prepare({ ...base, viewRoot: view("physical"), host: { hardwareArch: "arm64", macOSVersion: "26.1", physicalAppleGPU: true } });
+  assert.deepEqual(components(physical), ["d9vk", "dxmt"]);
+  const result = await prepare({ ...base, viewRoot: view("virtual"), host: { hardwareArch: "arm64", macOSVersion: "26.1", physicalAppleGPU: false } });
+  assert.deepEqual(components(result), ["dxmt"]); assert.equal(result.vulkanBackend, "moltenvk");
+  assert.equal(result.translatorPlan.compatibility["included:vulkan-driver:kosmickrisp"].compatible, true,
+    "KosmicKrisp is usable on this macOS, and Automatic waits for a physical Apple GPU");
   assert.equal(fs.existsSync(path.join(result.dllRoot, "i386-windows", "d3d9.dll")), false);
   assert.equal(fs.existsSync(path.join(result.dllRoot, "i386-windows", "d3d8.dll")), false);
   assert.equal(fs.existsSync(path.join(result.dllRoot, "i386-windows", "d3d11.dll")), true);
-  const explicit = await Graphics.prepareGraphicsView({ ...base, settings: { vulkanBackend: "kosmickrisp" },
+  const explicit = await prepare({ ...base, viewRoot: view("explicit"), settings: { vulkanBackend: "kosmickrisp" },
     host: { hardwareArch: "arm64", macOSVersion: "26.1", physicalAppleGPU: false } });
-  assert.equal(explicit.vulkanBackend, "kosmickrisp"); assert.deepEqual(explicit.components, ["dxmt", "d9vk"]);
+  assert.equal(explicit.vulkanBackend, "kosmickrisp"); assert.deepEqual(components(explicit), ["d9vk", "dxmt"]);
 });
 test("graphics hardware evidence is conservative, bounded to display records and cached without network", async () => {
   assert.equal(Hardware.gpuName({ SPDisplaysDataType: [{ sppci_model: "Apple M2 Max" }] }), "Apple M2 Max");
@@ -277,7 +305,7 @@ test("graphics hardware evidence is conservative, bounded to display records and
 });
 test("WineD3D has no replacement DLLs but still configures a Vulkan driver for direct Vulkan applications", async t => {
   const f = await installed(t), viewRoot = path.join(f.root, "game", "view");
-  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "wined3d", vulkanBackend: "moltenvk" }, viewRoot, host: { hardwareArch: "arm64", macOSVersion: "26.1" } });
+  const result = await prepare({ install: f.install, settings: { graphicsBackend: "wined3d", vulkanBackend: "moltenvk" }, viewRoot, host: { hardwareArch: "arm64", macOSVersion: "26.1" } });
   assert.deepEqual(result.components, []); assert.deepEqual(result.dllOverrides, []);
   assert.equal(result.wineRoot, path.join(viewRoot, "wine"), "the game still runs from the private view and its Game Mode bundle");
   assert.equal(result.executablePath, path.join(viewRoot, "wine", "MacLauncher Game.app", "Contents", "MacOS", "wine"));
@@ -288,33 +316,41 @@ test("private MoltenVK discovery works for Windows instance flags and preserves 
   const before = hash(source), original = JSON.parse(fs.readFileSync(source));
   const options = { install: f.install, settings: { graphicsBackend: "wined3d", vulkanBackend: "moltenvk" },
     viewRoot: path.join(f.root, "game", "moltenvk"), host: { hardwareArch: "arm64", macOSVersion: "26.1" } };
-  const result = await Graphics.prepareGraphicsView(options), descriptor = JSON.parse(fs.readFileSync(result.env.VK_DRIVER_FILES));
+  const result = await prepare(options), descriptor = JSON.parse(fs.readFileSync(result.env.VK_DRIVER_FILES));
   assert.equal(original.ICD.is_portability_driver, true); assert.equal(descriptor.ICD.is_portability_driver, false);
   assert.equal(descriptor.ICD.api_version, original.ICD.api_version); assert.equal(hash(source), before);
   assert.equal(result.env.VK_DRIVER_FILES, result.env.VK_ICD_FILENAMES);
-  const kosmic = await Graphics.prepareGraphicsView({ ...options, settings: { graphicsBackend: "wined3d", vulkanBackend: "kosmickrisp" },
+  const kosmic = await prepare({ ...options, settings: { graphicsBackend: "wined3d", vulkanBackend: "kosmickrisp" },
     viewRoot: path.join(f.root, "game", "kosmic") });
   assert.equal(Object.hasOwn(JSON.parse(fs.readFileSync(kosmic.env.VK_DRIVER_FILES)).ICD, "is_portability_driver"), false);
 });
 test("DXVK selects the older MoltenVK-compatible layout or full newer KosmicKrisp layout", async t => {
   const f = await installed(t);
   for (const [driver, component] of [["moltenvk", "dxvk"], ["kosmickrisp", "dxvk3"]]) {
-    const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "dxvk", vulkanBackend: driver }, viewRoot: path.join(f.root, "game", driver), host: { hardwareArch: "arm64", macOSVersion: "26.1" } });
-    assert.deepEqual(result.components, [component]);
+    const result = await prepare({ install: f.install, settings: { graphicsBackend: "dxvk", vulkanBackend: driver }, viewRoot: path.join(f.root, "game", driver), host: { hardwareArch: "arm64", macOSVersion: "26.1" } });
+    assert.deepEqual(components(result), [component]);
   }
 });
-test("unsupported host, D3DMetal 32-bit game and malformed settings fail with actionable messages", async t => {
+test("an unsupported host, a 32-bit D3DMetal game and a malformed setting resolve to usable choices with actionable messages", async t => {
   const f = await installed(t);
-  const base = { install: f.install, viewRoot: path.join(f.root, "game", "view"), host: { hardwareArch: "arm64", macOSVersion: "15.7" } };
-  await assert.rejects(Graphics.prepareGraphicsView({ ...base, settings: { vulkanBackend: "kosmickrisp" } }), /Apple Silicon and macOS 26/);
-  await assert.rejects(Graphics.prepareGraphicsView({ ...base, host: { hardwareArch: "arm64", macOSVersion: "26.5" }, settings: { graphicsBackend: "d3dmetal" }, executableArchitecture: "x86" }), /64-bit Windows/);
-  await assert.rejects(Graphics.prepareGraphicsView({ ...base, settings: { graphicsBackend: "bogus" } }), /Unsupported Direct3D/);
-  await assert.rejects(Graphics.prepareGraphicsView({ ...base, host: { hardwareArch: "arm64", macOSVersion: "13.6" } }), /requires macOS 14/);
+  const resolved = async options => (await resolvePlan({ install: f.install, host: { hardwareArch: "arm64", macOSVersion: "15.7" }, ...options })).plan;
+  const kosmic = await resolved({ settings: { vulkanBackend: "kosmickrisp" } });
+  assert.equal(kosmic.components["vulkan-driver"].used.engine, "moltenvk");
+  assert.match(kosmic.warnings.join("\n"), /KosmicKrisp .*requires macOS 26\.0\.0\. Using MoltenVK/);
+  // D3DMetal has no 32-bit libraries, so a 32-bit game keeps another Direct3D translator.
+  const metal = await resolved({ host: { hardwareArch: "arm64", macOSVersion: "26.5" }, settings: { graphicsBackend: "d3dmetal" }, executableArchitecture: "x86" });
+  assert.equal(components(metal).includes("d3dmetal"), false);
+  assert.match(metal.warnings.join("\n"), /D3DMetal .*No PE machine i386 for /);
+  // An unknown Direct3D value is Automatic.
+  assert.deepEqual(components(await resolved({ settings: { graphicsBackend: "bogus" } })), components(await resolved({ settings: {} })));
+  // Below the Template's measured macOS floor only the Wine's own WineD3D remains.
+  const older = await resolved({ host: { hardwareArch: "arm64", macOSVersion: "13.6" }, settings: {} });
+  assert.deepEqual(Roles.usedRenderers(older).map(item => item.engine), ["wined3d"]);
 });
 test("D3DMetal stages its native bridge without modifying shared framework files", async t => {
   const f = await installed(t), viewRoot = path.join(f.root, "game", "view");
-  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "d3dmetal" }, viewRoot, host: { hardwareArch: "arm64", macOSVersion: "26.5" }, executableArchitecture: "x86_64" });
-  assert.deepEqual(result.components, ["d3dmetal"]);
+  const result = await prepare({ install: f.install, settings: { graphicsBackend: "d3dmetal" }, viewRoot, host: { hardwareArch: "arm64", macOSVersion: "26.5" }, executableArchitecture: "x86_64" });
+  assert.deepEqual(components(result), ["d3dmetal"]);
   assert.ok(result.env.DYLD_FALLBACK_FRAMEWORK_PATH.includes(path.join(fs.realpathSync(f.support), "Frameworks", "renderer", "d3dmetal", "external")));
   assert.ok(fs.lstatSync(path.join(result.dllRoot, "x86_64-unix", "d3d11.so")).isSymbolicLink());
   assert.equal(fs.existsSync(path.join(result.dllRoot, "i386-windows", "d3d12.dll")), false);
@@ -323,30 +359,32 @@ test("DirectDraw compatibility is an explicit 32-bit override independent of the
   const f = await installed(t), viewRoot = path.join(f.root, "game", "view");
   const options = { install: f.install, settings: { graphicsBackend: "wined3d", cncDdraw: true }, viewRoot,
     host: { hardwareArch: "arm64", macOSVersion: "26.5" }, executableArchitecture: "x86" };
-  const result = await Graphics.prepareGraphicsView(options);
-  assert.deepEqual(result.components, ["cnc_ddraw"]); assert.deepEqual(result.dllOverrides, ["ddraw=b"]);
+  const result = await prepare(options);
+  assert.deepEqual(components(result), ["cnc_ddraw"]); assert.deepEqual(result.dllOverrides, ["ddraw=b"]);
   assert.ok(fs.existsSync(path.join(result.dllRoot, "i386-windows", "ddraw.dll")));
   assert.equal(fs.existsSync(path.join(result.dllRoot, "x86_64-windows", "d3d11.dll")), false);
-  await assert.rejects(Graphics.prepareGraphicsView({ ...options, executableArchitecture: "x86_64" }), /32-bit Windows/);
+  await assert.rejects(prepare({ ...options, executableArchitecture: "x86_64" }), /32-bit Windows/);
 });
 test("per-game renderer paths reject links into shared installations and changed DLL selections", async t => {
   const f = await installed(t), viewRoot = path.join(f.root, "game", "view");
   const options = { install: f.install, settings: {}, viewRoot, host: { hardwareArch: "arm64", macOSVersion: "15.7" } };
-  await assert.rejects(Graphics.prepareGraphicsView({ ...options, viewRoot: path.join(f.support, "view") }), /outside the shared runtime/);
+  await assert.rejects(prepare({ ...options, viewRoot: path.join(f.support, "view") }), /outside the shared runtime/);
   fs.mkdirSync(path.dirname(viewRoot), { recursive: true }); fs.symlinkSync(f.support, viewRoot);
-  await assert.rejects(Graphics.prepareGraphicsView(options), /symbolic links|outside the shared runtime/);
-  fs.unlinkSync(viewRoot); const result = await Graphics.prepareGraphicsView(options);
+  await assert.rejects(prepare(options), /symbolic links|outside the shared runtime/);
+  fs.unlinkSync(viewRoot); const result = await prepare(options);
   const dll = path.join(result.dllRoot, "i386-windows", "d3d11.dll"); fs.unlinkSync(dll); fs.writeFileSync(dll, "modified");
-  await assert.rejects(Graphics.prepareGraphicsView(options), /private renderer selection changed/);
+  await assert.rejects(prepare(options), /private renderer selection changed/);
 });
 test("selected renderers use a private loader anchor with shared immutable fallback and reusable small copies", async t => {
   const f = await installed(t), options = { install: f.install, settings: {}, viewRoot: path.join(f.root, "game", "view"),
     host: { hardwareArch: "arm64", macOSVersion: "15.7" } };
   const original = path.join(f.engineRoot, "bin", "wine"), sourceNtdll = path.join(f.engineRoot, "lib", "wine", "x86_64-unix", "ntdll.so");
   const before = [hash(original), hash(sourceNtdll)];
-  const result = await Graphics.prepareGraphicsView(options), ntdll = path.join(result.dllRoot, "x86_64-unix", "ntdll.so");
+  const result = await prepare(options), ntdll = path.join(result.dllRoot, "x86_64-unix", "ntdll.so");
   assert.equal(result.wineRoot, path.join(options.viewRoot, "wine"));
-  assert.equal(result.env.WINEDLLPATH, path.join(fs.realpathSync(f.engineRoot), "lib", "wine"));
+  const dllPath = result.env.WINEDLLPATH.split(path.delimiter);
+  assert.equal(canonical(dllPath.at(-1)), path.join(fs.realpathSync(f.engineRoot), "lib", "wine"), "the unchanged engine is the last fallback");
+  assert.ok(dllPath.slice(0, -1).every(entry => entry.startsWith(result.dllRoot)), "the selected renderer links come first");
   assert.equal(result.env.DYLD_LIBRARY_PATH.split(path.delimiter)[0], result.libraryOverride);
   for (const [copy, source] of [[result.executablePath, original], [ntdll, sourceNtdll]]) {
     assert.ok(fs.lstatSync(copy).isFile()); assert.equal(hash(copy), hash(source)); assert.notEqual(fs.statSync(copy).ino, fs.statSync(source).ino);
@@ -354,32 +392,40 @@ test("selected renderers use a private loader anchor with shared immutable fallb
   for (const name of ["ntdll.dll", "apisetschema.dll"]) assert.equal(fs.realpathSync(path.join(result.dllRoot, "x86_64-windows", name)),
     fs.realpathSync(path.join(f.engineRoot, "lib", "wine", "x86_64-windows", name)));
   assert.equal(fs.realpathSync(path.join(result.wineRoot, "share")), fs.realpathSync(path.join(f.engineRoot, "share")));
-  const inode = fs.statSync(ntdll).ino; await Graphics.prepareGraphicsView(options); assert.equal(fs.statSync(ntdll).ino, inode);
+  const inode = fs.statSync(ntdll).ino; await prepare(options); assert.equal(fs.statSync(ntdll).ino, inode);
   assert.deepEqual([hash(original), hash(sourceNtdll)], before);
-  fs.writeFileSync(ntdll, "changed"); await assert.rejects(Graphics.prepareGraphicsView(options), /private Wine loader changed/);
+  fs.writeFileSync(ntdll, "changed"); await assert.rejects(prepare(options), /private Wine loader changed/);
   assert.deepEqual([hash(original), hash(sourceNtdll)], before);
 });
-test("renderer selection validates actual Wine DLL format and architecture before launch", async t => {
-  const f = await installed(t), source = path.join(f.support, "Frameworks", "renderer", "dxmt", "wine", "i386-windows", "d3d11.dll");
-  const options = { install: f.install, settings: {}, viewRoot: path.join(f.root, "game", "view"), host: { hardwareArch: "arm64", macOSVersion: "15.7" } };
-  builtinDll(source, "x86_64-windows", "wrong machine");
-  await assert.rejects(Graphics.prepareGraphicsView(options), /does not match its Windows architecture/);
-  const bytes = fs.readFileSync(source); bytes.fill(0, 64, 128); fs.writeFileSync(source, bytes);
-  await assert.rejects(Graphics.prepareGraphicsView(options), /supported Wine builtin DLL package/);
+test("renderer selection places each Wine DLL by its measured machine and loads an unmarked DLL as native", async t => {
+  const f = await installed(t), folder = path.join(f.support, "Frameworks", "renderer", "dxmt", "wine", "i386-windows");
+  const options = { install: f.install, settings: {}, host: { hardwareArch: "arm64", macOSVersion: "15.7" }, executableArchitecture: "x86" };
+  builtinDll(path.join(folder, "d3d11.dll"), "x86_64-windows", "wrong machine");
+  const result = await prepare({ ...options, viewRoot: path.join(f.root, "game", "machine") });
+  assert.equal(fs.existsSync(path.join(result.dllRoot, "i386-windows", "d3d11.dll")), false, "a 64-bit image in the 32-bit folder is not a 32-bit library");
+  assert.equal(result.dllOverrides.includes("d3d11=b"), false);
+  assert.equal(fs.existsSync(path.join(result.dllRoot, "i386-windows", "dxgi.dll")), true);
+  // Without the Wine builtin marker the file is a native Windows DLL: Wine loads
+  // it natively first, and it never enters the private builtin folder.
+  const dxgi = path.join(folder, "dxgi.dll"), bytes = fs.readFileSync(dxgi); bytes.fill(0, 64, 128); fs.writeFileSync(dxgi, bytes);
+  const native = await prepare({ ...options, viewRoot: path.join(f.root, "game", "marker") });
+  assert.equal(native.translatorPlan.components["d3d-renderer"].used.files.find(file => file.path.endsWith("i386-windows/dxgi.dll")).form, "native");
+  assert.equal(fs.existsSync(path.join(native.dllRoot, "i386-windows", "dxgi.dll")), false);
+  assert.ok(native.dllOverrides.includes("dxgi=n,b"));
 });
 test("engines with a separate Unix loader retain its distinct address-space layout", async t => {
   const f = await installed(t), unixLoader = path.join(f.engineRoot, "lib", "wine", "x86_64-unix", "wine");
   put(unixLoader, "producer loader with small PAGEZERO and fixed high text address");
   const options = { install: f.install, settings: {}, viewRoot: path.join(f.root, "game", "modern-view"), host: { hardwareArch: "arm64", macOSVersion: "15.7" } };
-  const result = await Graphics.prepareGraphicsView(options), copy = path.join(result.dllRoot, "x86_64-unix", "wine");
+  const result = await prepare(options), copy = path.join(result.dllRoot, "x86_64-unix", "wine");
   // The re-executed loader is a private copy inside the Game Mode bundle.
   assert.equal(fs.realpathSync(copy), fs.realpathSync(path.join(result.wineRoot, "MacLauncher Game.app/Contents/MacOS/wine")));
   assert.equal(fs.lstatSync(fs.realpathSync(copy)).isFile(), true);
   assert.equal(result.executablePath, path.join(result.wineRoot, "bin", "wine"), "bin/wine still starts the separate loader");
   assert.equal(hash(copy), hash(unixLoader));assert.notEqual(hash(copy), hash(result.executablePath));
   assert.notEqual(fs.statSync(copy).ino, fs.statSync(unixLoader).ino);
-  const inode = fs.statSync(copy).ino;await Graphics.prepareGraphicsView(options);assert.equal(fs.statSync(copy).ino, inode);
-  fs.writeFileSync(copy, "changed");await assert.rejects(Graphics.prepareGraphicsView(options), /private Wine loader changed/);
+  const inode = fs.statSync(copy).ino;await prepare(options);assert.equal(fs.statSync(copy).ino, inode);
+  fs.writeFileSync(copy, "changed");await assert.rejects(prepare(options), /private Wine loader changed/);
   assert.equal(fs.readFileSync(unixLoader, "utf8"), "producer loader with small PAGEZERO and fixed high text address");
 });
 test("camera rendering uses one private matched closure and a distinct immutable native-library alias", async t => {
@@ -387,9 +433,10 @@ test("camera rendering uses one private matched closure and a distinct immutable
   for (const name of ["nvapi64", "nvngx"]) builtinDll(path.join(base, "x86_64-windows", name + ".dll"), "x86_64-windows", name);
   for (const name of ["d3d11", "dxgi", "nvngx"]) builtinDll(path.join(directory, "x86_64-windows", name + ".dll"), "x86_64-windows", "adapted " + name);
   put(path.join(directory, "x86_64-unix/winemetal.so"), "forwarder");
-  const selectedBase = path.join(f.root, "managed-bridge/wine");fs.cpSync(base, selectedBase, { recursive: true });
+  // The selected DXMT is the base the adapted libraries were matched against, as the temporal route chooses it.
+  const selectedBase = base;
   const native = path.join(selectedBase, "x86_64-unix/winemetal.so"), before = hash(native), cameraBridge = { baseRoot: selectedBase, dxmt: { directory, native } };
-  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { dlss: true, graphicsBackend: "dxmt" }, viewRoot: path.join(f.root, "game/camera-view"),
+  const result = await prepare({ install: f.install, settings: { dlss: true, graphicsBackend: "dxmt" }, viewRoot: path.join(f.root, "game/camera-view"),
     host: { hardwareArch: "arm64", macOSVersion: "26.0" }, executableArchitecture: "x86_64", cameraBridge });
   for (const file of ["x86_64-windows/d3d11.dll", "x86_64-windows/dxgi.dll", "x86_64-windows/nvngx.dll", "x86_64-unix/winemetal.so"])
     assert.equal(fs.realpathSync(path.join(result.dllRoot, file)), fs.realpathSync(path.join(directory, file)));
@@ -403,7 +450,7 @@ test("GPU compute helper pairs use a private Wine anchor even for direct Vulkan 
   const windows = builtinDll(path.join(f.root, "helper", "maclauncher-compute.dll"), "x86_64-windows", "compute helper");
   const unix = put(path.join(f.root, "helper", "maclauncher-compute.so"), image({ cpu: X64, minimumOS: 0x000e0000 }));
   const original = hash(f.install.executablePath);
-  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "wined3d", vulkanBackend: "kosmickrisp" },
+  const result = await prepare({ install: f.install, settings: { graphicsBackend: "wined3d", vulkanBackend: "kosmickrisp" },
     viewRoot, host: { hardwareArch: "arm64", macOSVersion: "26.4" }, executableArchitecture: "x64",
     helperLibraries: [{ name: "maclauncher-compute", windows, unix }] });
   assert.deepEqual(result.components, []);
@@ -412,7 +459,7 @@ test("GPU compute helper pairs use a private Wine anchor even for direct Vulkan 
   assert.equal(fs.realpathSync(path.join(result.dllRoot, "x86_64-windows", "maclauncher-compute.dll")), fs.realpathSync(windows));
   assert.equal(fs.realpathSync(path.join(result.dllRoot, "x86_64-unix", "maclauncher-compute.so")), fs.realpathSync(unix));
   assert.deepEqual(result.dllOverrides, ["maclauncher-compute=b"]);
-  await assert.rejects(Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "wined3d" },
+  await assert.rejects(prepare({ install: f.install, settings: { graphicsBackend: "wined3d" },
     viewRoot: path.join(f.root, "compute", "reserved"), host: { hardwareArch: "arm64", macOSVersion: "26.4" },
     helperLibraries: [{ name: "ntdll", windows, unix }] }), /helper name/);
 });
@@ -422,10 +469,10 @@ test("vendor dependencies use fallback paths while the HUD and private ntdll ove
   fs.mkdirSync(gstLib, {recursive: true});
   const translatorView = {identity: "fallback-scope", links: {}, env: {}, dllOverrides: [],
     libraryPaths: [path.join(f.root, "translator-dependencies")], frameworkPaths: [path.join(f.root, "translator-frameworks")]};
-  const result = await Graphics.prepareGraphicsView({install: f.install, settings: {graphicsBackend: "dxmt"},
+  const result = await prepare({install: f.install, settings: {graphicsBackend: "dxmt"},
     viewRoot: path.join(f.root, "game", "fallback-view"), host: {hardwareArch: "arm64", macOSVersion: "26.4"}, translatorView});
   const vendors = [frameworks, gstLib, path.join(f.engineRoot, "lib/wine/x86_64-unix"),
-    path.join(frameworks, "renderer/dxmt/wine/x86_64-unix"), ...translatorView.libraryPaths];
+    path.join(result.dllRoot, "x86_64-unix"), ...translatorView.libraryPaths];
   assert.deepEqual(result.env.DYLD_LIBRARY_PATH.split(path.delimiter), [result.libraryOverride],
     "only the private ntdll anchor may override system library lookup");
   assert.deepEqual(fs.readdirSync(result.libraryOverride), ["ntdll.so"]);
@@ -453,7 +500,7 @@ test("a translator builtin without its own Unix module uses the engine's module 
     links[`lib/wine/x86_64-windows/${name}.dll`] = builtinDll(path.join(set, "x86_64-windows", name + ".dll"), "x86_64-windows", "set " + name);
   links["lib/wine/x86_64-unix/d3d12.so"] = put(path.join(set, "x86_64-unix", "d3d12.so"), image({ cpu: X64, minimumOS: 0x000e0000 }));
   const translatorView = { identity: "unix-modules", links, env: {}, dllOverrides: ["winemetal=b", "d3d11=b", "nvngx=b", "d3d12=b"], libraryPaths: [], frameworkPaths: [] };
-  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "wined3d" },
+  const result = await prepare({ install: f.install, settings: { graphicsBackend: "wined3d" },
     viewRoot: path.join(f.root, "game", "unix-view"), host: { hardwareArch: "arm64", macOSVersion: "26.4" }, translatorView });
   const view = file => path.join(result.wineRoot, "lib/wine/x86_64-unix", file);
   assert.equal(fs.realpathSync(view("winemetal.so")), fs.realpathSync(engineMetal));
@@ -492,7 +539,7 @@ test("the game's Wine loader runs from a games-category bundle that keeps the lo
   const f = await installed(t), unixLoader = path.join(f.engineRoot, "lib/wine/x86_64-unix/wine");
   put(unixLoader, loaderWithInfo('<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n    <key>CFBundleExecutable</key>\n    <string>wineloader</string>\n' +
     '    <key>CFBundleIdentifier</key>\n    <string>org.winehq.wine</string>\n    <key>NSPrincipalClass</key>\n    <string>WineApplication</string>\n    <key>LSUIElement</key>\n    <string>1</string>\n</dict>\n</plist>\n'));
-  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "wined3d" }, viewRoot: path.join(f.root, "game", "bundle-view"),
+  const result = await prepare({ install: f.install, settings: { graphicsBackend: "wined3d" }, viewRoot: path.join(f.root, "game", "bundle-view"),
     host: { hardwareArch: "arm64", macOSVersion: "26.4" } });
   const contents = path.join(result.wineRoot, "MacLauncher Game.app", "Contents"), executable = path.join(contents, "MacOS", "wine");
   assert.equal(fs.lstatSync(executable).isFile(), true, "the bundle holds a private copy, so macOS associates the process with the bundle");
@@ -524,7 +571,7 @@ test("the game's Wine loader runs from a games-category bundle that keeps the lo
   assert.equal(value("LSUIElement"), "1");
   // A loader without embedded properties gets a minimal games-category bundle.
   fs.rmSync(unixLoader);
-  const plain = await Graphics.prepareGraphicsView({ install: { ...f.install }, settings: { graphicsBackend: "wined3d" }, viewRoot: path.join(f.root, "game", "plain-view"),
+  const plain = await prepare({ install: { ...f.install }, settings: { graphicsBackend: "wined3d" }, viewRoot: path.join(f.root, "game", "plain-view"),
     host: { hardwareArch: "arm64", macOSVersion: "26.4" } });
   assert.match(fs.readFileSync(path.join(plain.wineRoot, "MacLauncher Game.app/Contents/Info.plist"), "utf8"), /<key>LSApplicationCategoryType<\/key>\s*<string>public\.app-category\.games<\/string>/);
 });
@@ -535,7 +582,7 @@ test("a selected Vulkan driver's library names come before the Wine module's own
   // engine's own copy, which dyld searches before DYLD_FALLBACK_LIBRARY_PATH.
   const links = { "lib/wine/x86_64-unix/libMoltenVK.dylib": loaderLibrary, "lib/wine/x86_64-unix/libvulkan.1.dylib": loaderLibrary };
   const translatorView = { identity: "vulkan-names", links, env: { CX_LIBVULKAN: loaderLibrary }, dllOverrides: [], libraryPaths: [driver], frameworkPaths: [] };
-  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "dxmt" },
+  const result = await prepare({ install: f.install, settings: { graphicsBackend: "dxmt" },
     viewRoot: path.join(f.root, "game", "vulkan-view"), host: { hardwareArch: "arm64", macOSVersion: "26.4" }, translatorView });
   const override = result.env.DYLD_LIBRARY_PATH.split(path.delimiter)[0];
   for (const name of ["libMoltenVK.dylib", "libvulkan.1.dylib"])
