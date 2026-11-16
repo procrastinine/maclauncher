@@ -9,7 +9,7 @@ test('a camera set after its frame\'s evaluation binds only to that frame by its
  const binary=path.join(directory,'check');
  const build=spawnSync('xcrun',['clang++','-std=c++17','-Wall','-Wextra','-Werror','-I'+path.join(reshade,'native'),'-I'+directory,path.join(__dirname,'native/late-camera.cpp'),'-o',binary],{encoding:'utf8'});
  assert.ifError(build.error);assert.equal(build.status,0,build.stderr);
- const run=spawnSync(binary,[],{encoding:'utf8'});assert.ifError(run.error);assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/late-camera: pass 23/);
+ const run=spawnSync(binary,[],{encoding:'utf8'});assert.ifError(run.error);assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/late-camera: pass 25/);
 });
 test('generation scenes take the late camera before their provider reads the scene',()=>{
  const source=fs.readFileSync(path.join(reshade,'native/effects-execution.mm'),'utf8');

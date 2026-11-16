@@ -877,7 +877,7 @@ static void attachLateCamera(RSTemporalFrame&actual,const RSTemporalFrame&raw){
     const auto result=late_camera::take(late_camera::mapped(),raw.jitterX,raw.jitterY,(raw.flags&RS_TEMPORAL_DEPTH_REVERSED)!=0,camera);
     static std::atomic<unsigned>reported{0};const unsigned bit=1u<<unsigned(result);
     if(result!=late_camera::NoMailbox&&!(reported.fetch_or(bit)&bit)){
-        static const char*const reasons[]={"bound","","no camera record has this frame's jitter offset","the matching record is not one of the two newest",
+        static const char*const reasons[]={"bound","","no camera record has this frame's jitter offset","the matching record is outside the retained publication window",
             "several records have this frame's jitter offset","the record's depth direction differs","the frame has no jitter offset"};
         nativeLog(result==late_camera::Bound?"Late camera on a generation scene: near "+std::to_string(camera.nearPlane)+((camera.flags&RS_TEMPORAL_DEPTH_INFINITE)?" far infinite":" far "+std::to_string(camera.farPlane))+" fov "+std::to_string(camera.verticalFov)
             :std::string("No late camera on a generation scene: ")+reasons[unsigned(result)]);}

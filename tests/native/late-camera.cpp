@@ -38,17 +38,19 @@ int main() {
   assert(take(&m, -.25f, .166667f, true, out) == NoRecord && !out.size);checks++;
   assert(take(&m, 0.f, 0.f, true, out) == Unjittered);checks++;
   assert(take(&m, .25f, -.166667f, false, out) == DepthDirection && !out.size);checks++;
-  // the record must be one of the two newest: a frame whose own record is not yet written never takes an older one
+  // Generation can trail more than two publications: every retained slot remains eligible, by exact unique jitter.
   publish(m, -.25f, .388889f, 2, ue);
   assert(take(&m, .25f, -.166667f, true, out) == Bound);checks++;
   publish(m, .375f, -.055556f, 3, ue);
-  assert(take(&m, .25f, -.166667f, true, out) == NotNewest && !out.size);checks++;
+  assert(take(&m, .25f, -.166667f, true, out) == Bound && out.nearPlane == 10.f);checks++;
   assert(take(&m, -.25f, .388889f, true, out) == Bound);checks++;
   // a jitter offset in two records is ambiguous
   publish(m, -.25f, .388889f, 4, ue);
+  assert(take(&m, .25f, -.166667f, true, out) == Bound);checks++;
   assert(take(&m, -.25f, .388889f, true, out) == Ambiguous && !out.size);checks++;
   // a record that its writer holds is not read
   publish(m, .1f, .2f, 5, ue);auto &held = m.slot[(m.published - 1) % slots];held.sequence += 1;
+  assert(take(&m, .25f, -.166667f, true, out) == NoRecord && !out.size);checks++;
   assert(take(&m, .1f, .2f, true, out) == NoRecord);checks++;held.sequence += 1;
   assert(take(&m, .1f, .2f, true, out) == Bound);checks++;
   // preparation reads the newest record with the scene's depth direction, whatever its jitter offset

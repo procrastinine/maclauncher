@@ -10,9 +10,9 @@
 // complete.
 // Such a row admits a scene without a camera once the NGX core has published a record (pending), because a frame's
 // record arrives after the frame's evaluation, when its scene has already been received.
-// A generation stage takes a camera only for a scene without one, from one of the two newest records, when that
+// A generation stage takes a camera only for a scene without one, from a retained record, when that
 // record's jitter offset equals the scene's bit for bit, is nonzero, and no other record carries the same offset,
-// and when the depth direction agrees. A jitter sequence that repeats within three frames therefore never binds.
+// and when the depth direction agrees. Repeated jitter within the retained four-record window never binds.
 // Preparing such a stage reads the newest record with the scene's depth direction (newest).
 // Temporal upscaling needs the camera at the evaluation and never uses this record.
 #include <atomic>
@@ -93,7 +93,7 @@ inline Result take(const Mailbox *mailbox, float jitterX, float jitterY, bool re
       continue;
     ++matches;
     found = record;
-    newest = record.publication && record.publication <= published && record.publication + 2 > published;
+    newest = record.publication && record.publication <= published && published - record.publication < slots;
   }
   if (!matches)
     return NoRecord;
