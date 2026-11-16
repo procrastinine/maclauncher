@@ -66,21 +66,26 @@ function resolvePlan({target,choices={},builds=[],system={}}={}) {
     }
   }
   const satisfyAll=(tokens,state,context)=>solve(tokens,state,context).next().value||null;
-  function translator(format,arch,host,integration,state,context) {
+  function* translators(format,arch,host,integration,state,context) {
     for(const candidate of builds.filter(b=>b.kind==='cpu-translator')) {
       const issue=usable(candidate);if(issue){exclude(candidate,issue);continue;}
-      const reach=candidate.reach?.find(r=>r.guestFormat===format&&r.guestArch===arch&&r.hostArch===host&&(!integration||r.integration===integration));
+      const reaches=candidate.reach?.filter(r=>r.guestFormat===format&&r.guestArch===arch&&r.hostArch===host&&(!integration||r.integration===integration))||[];
+      if(!reaches.length){exclude(candidate,`No declared ${format}/${arch} reach for ${host}.`);continue;}
+      for(const reach of reaches){
       if(reach&&Object.keys(reach).some(key=>!['guestFormat','guestArch','hostArch','integration','requires'].includes(key))){exclude(candidate,'The translator reach contains unsupported constraints.');continue;}
-      if(!reach){exclude(candidate,`No declared ${format}/${arch} reach for ${host}.`);continue;}
       if(format==='macho' && (!system.rosettaAvailable||reach.integration!=='process')){exclude(candidate,'Rosetta is unavailable for this macOS process.');continue;}
       const ctx={...context,integration:reach.integration};
       const binaryIssue=checked(candidate,ctx.host,ctx.guest,ctx.integration);if(binaryIssue){exclude(candidate,binaryIssue);continue;}
-      let next=satisfyAll([...requires(candidate),...(reach.requires||[])],copy(state),ctx);
-      if(!next){exclude(candidate,'The translator requires an unavailable host interface.');continue;}
-      next.set(candidate.kind,candidate);return {state:next,integration:reach.integration,build:candidate};
+      let reached=false;
+      for(const next of solve([...requires(candidate),...(reach.requires||[])],copy(state),ctx)){
+        if(candidate.parent&&![...next.values()].some(build=>build.id===candidate.parent)){exclude(candidate,'The required parent build is not selected.');continue;}
+        reached=true;next.set(candidate.kind,candidate);yield {state:next,integration:reach.integration,build:candidate};
+      }
+      if(!reached)exclude(candidate,'The translator requires an unavailable host interface.');
+      }
     }
-    return null;
   }
+
   const guest=target?.binaries?.find(b=>b.format==='pe')?.machine;
   if(!guest)return {satisfied:false,components:[],processes:[],downloads:[],excluded,unsatisfied:['A measured Windows target is required.']};
   for(const process of builds.filter(b=>b.kind==='wine')) {
@@ -91,38 +96,41 @@ function resolvePlan({target,choices={},builds=[],system={}}={}) {
       const hostIssue=process.binaries.filter(b=>b.format==='macho').map(b=>acceptsBinary(host,guest,'native',b)).find(result=>!result.accepted);
       if(hostIssue){exclude(process,hostIssue.reason);continue;}
       if(![system.hostArch,'x86_64'].includes(host) || host==='x86_64' && !['arm64','x86_64'].includes(system.hostArch)){exclude(process,`Cannot start a ${host} macOS process on ${system.hostArch}.`);continue;}
-      let state=new Map([['wine',process]]),integration='native',guestTranslation=null,processExecution='native';
-      if(host!==system.hostArch) {
-        const route=translator('macho',host,system.hostArch,'process',state,{host,guest,integration});
-        if(!route){exclude(process,'The host process requires an unavailable CPU translator.');continue;}
-        state=route.state;processExecution='rosetta';
+      const initial=new Map([['wine',process]]),processExecution=host===system.hostArch?'native':'rosetta';
+      const hostRoutes=host===system.hostArch?[{state:initial}]:translators('macho',host,system.hostArch,'process',initial,{host,guest,integration:'native'});
+      let foundHost=false;
+      for(const hostRoute of hostRoutes){
+        foundHost=true;
+        const native=host==='x86_64'&&['x86_64','i386'].includes(guest)||host==='arm64'&&guest==='arm64';
+        const guestRoutes=native?[{state:hostRoute.state,integration:'native',build:null}]:translators('pe',guest,host,null,hostRoute.state,{host,guest,integration:'native'});
+        let foundGuest=false;
+        for(const guestRoute of guestRoutes){
+          foundGuest=true;
+          let state=guestRoute.state;const integration=guestRoute.integration,guestTranslation=guestRoute.build;
+          const context={host,guest,integration};
+          const needs=[...(target.requires||[]),...requires(process)];
+          for(const [kind,source] of Object.entries(choices))if(source&&source!=='automatic'&&kind!=='wine'&&kind!=='cpu-translator'){
+            const explicit=builds.filter(b=>b.kind===kind&&b.source===source);
+            if(!explicit.length){const reason=`The selected ${kind} source ${source} is unavailable.`;if(!unsatisfied.includes(reason))unsatisfied.push(reason);state=null;break;}
+            const token=provides(explicit[0])[0];if(token)needs.push(token);else{state=null;break;}
+          }
+          if(state)state=satisfyAll(needs,state,context);
+          if(!state){exclude(process,'The selected components have unsatisfied capabilities.');continue;}
+          for(const candidate of builds){const problem=checked(candidate,host,guest,integration);if(problem)exclude(candidate,problem);}
+          const components=[...state.values()].map(b=>{
+            const binaries=b.binaries.map(binary=>({...structuredClone(binary),execution:binary.format==='macho'?processExecution:
+              binary.format==='pe'&&binary.machine==='x86_64'&&guestTranslation?`fex(${guestTranslation.id})`:processExecution}));
+            const executions=[...new Set(binaries.map(binary=>binary.execution))];
+            return {kind:b.kind,source:b.source,build:b.id,installed:b.installed===true,
+              ...(b.kind==='wine'?{execution:processExecution}:executions.length===1?{execution:executions[0]}:{}),
+              binaries,adapter:getKind(b.kind).adapter};
+          });
+          const selectedIds=new Set(components.map(component=>component.build));
+          return {satisfied:true,target:{guestArch:guest,execution:guestTranslation?`fex(${guestTranslation.id})`:processExecution},components,processes:[{build:process.id,hostArch:host,guestArch:guest,integration,execution:processExecution}],downloads:components.filter(b=>!b.installed).map(b=>b.build),excluded:excluded.filter(row=>!selectedIds.has(row.build)),unsatisfied};
+        }
+        if(!foundGuest)exclude(process,'The guest requires an unavailable CPU translator.');
       }
-      const native=host==='x86_64'&&['x86_64','i386'].includes(guest)||host==='arm64'&&guest==='arm64';
-      if(!native) {
-        const route=translator('pe',guest,host,null,state,{host,guest,integration});
-        if(!route){exclude(process,'The guest requires an unavailable CPU translator.');continue;}
-        state=route.state;integration=route.integration;guestTranslation=route.build;
-      }
-      const context={host,guest,integration};
-      const needs=[...(target.requires||[]),...requires(process)];
-      for(const [kind,source] of Object.entries(choices))if(source&&source!=='automatic'&&kind!=='wine'&&kind!=='cpu-translator'){
-        const explicit=builds.filter(b=>b.kind===kind&&b.source===source);
-        if(!explicit.length){const reason=`The selected ${kind} source ${source} is unavailable.`;if(!unsatisfied.includes(reason))unsatisfied.push(reason);state=null;break;}
-        const token=provides(explicit[0])[0];if(token)needs.push(token);else{state=null;break;}
-      }
-      if(state)state=satisfyAll(needs,state,context);
-      if(!state){exclude(process,'The selected components have unsatisfied capabilities.');continue;}
-      for(const candidate of builds){const problem=checked(candidate,host,guest,integration);if(problem)exclude(candidate,problem);}
-      const components=[...state.values()].map(b=>{
-        const binaries=b.binaries.map(binary=>({...structuredClone(binary),execution:binary.format==='macho'?processExecution:
-          binary.format==='pe'&&binary.machine==='x86_64'&&guestTranslation?`fex(${guestTranslation.id})`:processExecution}));
-        const executions=[...new Set(binaries.map(binary=>binary.execution))];
-        return {kind:b.kind,source:b.source,build:b.id,installed:b.installed===true,
-          ...(b.kind==='wine'?{execution:processExecution}:executions.length===1?{execution:executions[0]}:{}),
-          binaries,adapter:getKind(b.kind).adapter};
-      });
-      const selectedIds=new Set(components.map(component=>component.build));
-      return {satisfied:true,target:{guestArch:guest,execution:guestTranslation?`fex(${guestTranslation.id})`:processExecution},components,processes:[{build:process.id,hostArch:host,guestArch:guest,integration,execution:processExecution}],downloads:components.filter(b=>!b.installed).map(b=>b.build),excluded:excluded.filter(row=>!selectedIds.has(row.build)),unsatisfied};
+      if(!foundHost)exclude(process,'The host process requires an unavailable CPU translator.');
     }
   }
   if(choices.wine&&choices.wine!=='automatic'&&!builds.some(build=>build.kind==='wine'&&build.source===choices.wine))unsatisfied.push(`The selected Wine source ${choices.wine} is unavailable.`);
