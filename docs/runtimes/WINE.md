@@ -61,6 +61,7 @@ Each Wine source is a data file in `src/runtime-sources/wine`, and every such fi
 - The Wine tree is found by its files: the folder holding `lib/wine` with a `wine` executable in `bin`, or in `MacOS` inside an application. Nothing in the download is moved or rewritten, so a signed application keeps its signature.
 - `upstream.app` names, per CPU, an application executable that builds for that CPU run through, relative to the Applications folder. Such a build is offered and usable only while that application is installed; its Wine tree's Unix loader (`lib/wine/aarch64-unix/wine` for arm64) is a link to that executable, which is where Wine looks for it.
 - Included components (`included`) are paths in the Wine tree. An included CPU translator, such as FEX, is loaded by that Wine itself.
+- A loader that its publisher signed inside an application bundle holding a provisioning profile (`Contents/embedded.provisionprofile`), as MetalSharp Wine's loaders are, runs from that bundle: the game's Wine view links it instead of copying it, because macOS ends a copy of a loader whose restricted entitlements need that profile. Such a loader runs with the hardened runtime and does not accept injected libraries, so MacLauncher's graphics layer (effects, live controls and screenshots) does not run in its games.
 
 Removing a source's file removes its runtime.
 
