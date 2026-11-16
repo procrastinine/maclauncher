@@ -91,3 +91,20 @@ test("clearing a companion's checkbox installs the download the dialog names in 
   assert.deepEqual(shown[0].companions, [{ label: "Driver", versionLabel: "1.0", checkboxLabel: "Use the driver", fallbackLabel: "Scene driver 2.0" }]);
   assert.deepEqual(installed.sort(), ["host:1.0", "scene:2.0"]);
 });
+
+test("skipping an optional download that is the only one of a Play installs the download the dialog names for skipping, without another question", async t => {
+  const fallback = { managerId: "scene", version: "2.0", label: "Scene driver" };
+  const offer = { managerId: "driver", version: "1.0", label: "Driver", optional: true, companion: true, companionCheckbox: "Use the driver", cancelLabel: "Use the scene driver", fallback };
+  const f = fixture(t, { graphics: [] });
+  const state = () => ({ catalog: {}, installed: [] });
+  const mod = { id: "fixture", runtimeManagers: ["driver", "scene"].map(id => ({ id, label: id, installRuntime: async () => {}, getState: state })),
+    ensureRuntime: async () => null, getRuntimeRequirements: async () => [offer] };
+  const shown = [], installed = [];
+  f.context.confirmRuntimeInstall = async plan => { shown.push(plan); return false; };
+  assert.equal(await prepareForLaunch({ entry: {}, mod, context: f.context, info: { runtime: {} },
+    registry: { listModuleIds: () => [mod.id], getModule: () => mod }, runAction: () => assert.fail("No preparation action was declared"),
+    install: async (manager, payload) => installed.push(`${manager.id}:${payload.version}`) }), true);
+  assert.equal(shown.length, 1, "one question: " + shown.map(plan => plan.label).join(", "));
+  assert.equal(shown[0].fallbackLabel, "Scene driver 2.0", "the question names the download skipping uses");
+  assert.deepEqual(installed, ["scene:2.0"]);
+});

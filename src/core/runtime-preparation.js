@@ -263,12 +263,16 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
           ...(listed.length ? { companions: listed.map(item => ({ label: item.plan.label || item.manager.label || item.manager.id,
             ...(item.versionLabel || item.plan.version ? { versionLabel: item.versionLabel || item.plan.version } : {}),
             ...(item.plan.bytes ? { bytes: item.plan.bytes } : {}),
-            ...(item === optional ? { checkboxLabel: item.plan.companionCheckbox, ...(item.plan.fallback ? { fallbackLabel: named(item.plan.fallback) } : {}) } : {}) })) } : {}) }) : false;
+            ...(item === optional ? { checkboxLabel: item.plan.companionCheckbox, ...(item.plan.fallback ? { fallbackLabel: named(item.plan.fallback) } : {}) } : {}) })) } : {}),
+          // An optional download asked alone names the download its skip uses.
+          ...(!listed.length && plan.optional && plan.fallback ? { fallbackLabel: named(plan.fallback) } : {}) }) : false;
         if (consent !== true && consent?.approved !== true) {
           if (!plan.optional) return false;
           for (const item of [{ plan }, ...listed]) {
             declined.add(consentKey(item.plan)); skipped(item.plan); decline(item.plan); fallbackRequired ||= Boolean(item.plan.fallback);
           }
+          // That dialog named the download its skip uses, so skipping approves it.
+          if (!listed.length && plan.fallback) { approved.add(consentKey(plan.fallback)); grant(plan.fallback); }
           continue;
         }
         approved.add(key);

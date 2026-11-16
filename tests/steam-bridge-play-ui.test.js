@@ -159,7 +159,7 @@ test('with another Play download, the bridge is one line of that dialog', async 
 test('Runtimes lists the bridge as one managed row with its Valve files, and removing its last version removes them', async t => {
   const root = scratch(t), userDataDir = path.join(root, 'data'), { bridge, install, received, item, valve } = offlineBridge(root);
   assert.deepEqual({ ...bridge.ui }, { groupId: 'steam-bridge', tabLabel: 'Steam client bridge', sectionLabel: 'Steam client bridge',
-    management: 'managed', order: 203, category: 'compatibility' });
+    management: 'managed', order: 204, category: 'compatibility' });
   const empty = bridge.getState({ userDataDir }).sections[0];
   assert.equal(empty.supportsDefault, false);
   assert.match(empty.description, /^Connects Windows Steam games in CrossOver, Sikarugir and WineCX to the Steam client for Mac\./);

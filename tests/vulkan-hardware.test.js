@@ -187,9 +187,10 @@ test("first Intel Vulkan Play offers the managed Intel package once and installs
   });
 });
 
-test("declining first Intel KosmicKrisp consent continues with consented MoltenVK in the same Play", async t => {
+test("declining first Intel KosmicKrisp consent continues with the MoltenVK its dialog named, in the same Play", async t => {
   const result = await prepareFixture(t, { decline: true });
-  assert.deepEqual(result.events, ["consent:" + Managed.projectId, "consent:vulkan-moltenvk", "refresh:vulkan-moltenvk", "install:vulkan-moltenvk", "prepare"]);
+  assert.deepEqual(result.events, ["consent:" + Managed.projectId, "refresh:vulkan-moltenvk", "install:vulkan-moltenvk", "prepare"]);
+  assert.match(result.offered[0].fallbackLabel, /moltenvk/i, "the KosmicKrisp question names the MoltenVK download its skip uses");
   assert.equal(result.resolved.backend, "moltenvk");
   assert.deepEqual(result.warnings, []);
 });

@@ -142,6 +142,9 @@ test('the Play download dialog lists each download with its version and size, th
   await context.confirmRuntimeInstallation({ label: 'DXVK', versionLabel: '2.7', companions: [{ label: 'KosmicKrisp', versionLabel: '27.0.0',
     checkboxLabel: 'Use MacLauncher KosmicKrisp', fallbackLabel: 'MoltenVK scene build 1.3' }] }, { name: 'Fixture' });
   assert.equal(shown[3].detail, 'DXVK 2.7\nKosmicKrisp 27.0.0\nClearing "Use MacLauncher KosmicKrisp" uses MoltenVK scene build 1.3 instead.');
+  await context.confirmRuntimeInstallation({ label: 'MacLauncher KosmicKrisp', versionLabel: '27.0.0', optional: true, cancelLabel: 'Use MoltenVK',
+    detail: "MacLauncher's DXVK runs on KosmicKrisp.", fallbackLabel: 'MoltenVK scene build 1.3' }, { name: 'Fixture' });
+  assert.equal(shown[4].detail, 'MacLauncher\'s DXVK runs on KosmicKrisp.\n\n"Use MoltenVK" downloads MoltenVK scene build 1.3.', 'an optional download asked alone names what its skip downloads');
 });
 
 test('winemac matches the exact CrossOver ABI release without duplicate package declarations', t => {

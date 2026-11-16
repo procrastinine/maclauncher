@@ -360,7 +360,8 @@ async function confirmRuntimeInstallation(plan, entry, {signal} = {}) {
   const options = { type: "question", buttons: companions.length ? ["Download and Play", plan.optional ? "Play Without Downloading" : "Cancel"] : [plan.confirmLabel || "Download and Play", plan.cancelLabel || "Cancel"],
     defaultId: 0, cancelId: 1, ...(signal ? {signal} : {}),
     message: companions.length ? `Download what ${name || "this game"} needs?` : plan.message || `${plan.kind === "prerequisite" ? "Install" : "Download"} ${versionLabel}?`,
-    detail: companions.length ? lines.join("\n") : plan.detail || (entry ? `Required to run ${name}.` : "Required by this runtime."),
+    detail: companions.length ? lines.join("\n") : [plan.detail || (entry ? `Required to run ${name}.` : "Required by this runtime."),
+      ...(plan.fallbackLabel ? [`"${plan.cancelLabel || "Cancel"}" downloads ${plan.fallbackLabel}.`] : [])].join("\n\n"),
     ...(optional ? { checkboxLabel: optional.checkboxLabel, checkboxChecked: true } : {}) };
   const owner = getLauncherDialogOwner();
   const choice = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
