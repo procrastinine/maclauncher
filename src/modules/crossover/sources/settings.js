@@ -24,7 +24,7 @@ function withSources(manifest) {
       settings: { defaults, fields } };
     result.runtime.manager[source.id] = source.managerId;
     result.runtime.managerUi[source.id] = { groupId: source.id, tabLabel: source.label, sectionLabel: source.label, memberOrder: 0,
-      management: "managed", order: source.order, category: "compatibility" };
+      management: "managed", order: source.order, category: "compatibility", hostGroup: "Wine" };
   }
   delete result.runtime.windows;
   return result;

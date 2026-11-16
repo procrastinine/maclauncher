@@ -401,6 +401,15 @@ test('the Runtimes sidebar heads category sections and a visible tab names its p
   assert.match(markup, /role="tab" aria-selected="true"[^>]*title="Backend reader"[^>]*>Reader<\/button>/);
   assert.doesNotMatch(markup, /class="runtimePanelTitle"/);
 });
+test('the Runtimes sidebar lists Wine sources under Apple Silicon and Intel headings by their measured CPU', () => {
+  const wine = (id, architectures) => ({ ...manager(id, { groupId: id, tabLabel: id, category: 'compatibility', hostGroup: 'Wine' },
+    { versions: ['1'] }, [{ version: '1', ready: true, architecture: 'arm64', architectures }]), launcherArchitecture: 'arm64' });
+  const markup = render([wine('Intel Wine', ['x86_64']), wine('Apple Wine', ['arm64'])], 'Intel Wine');
+  const sidebar = markup.match(/<nav class="launcherSidebarChoices"[^>]*>([\s\S]*?)<\/nav>/)[1];
+  const order = [...sidebar.matchAll(/<h2 class="launcherSidebarHeading"[^>]*>([^<]+)<\/h2>|class="launcherSidebarItem[^>]*>([^<]+)<\/button>/g)]
+    .map(match => match[1] ? `# ${match[1]}` : match[2]);
+  assert.deepEqual(order, ['# Wine · Apple Silicon', 'Apple Wine', '# Wine · Intel (Rosetta)', 'Intel Wine']);
+});
 test('fixed built-ins expose no management tab or setup control while managed included fallbacks remain visible', () => {
   const fixed = manager('fixed', { tabLabel: 'Fixed runtime', management: 'built-in' }, { versions: ['fixed-v1'] });
   const managed = manager('managed', { tabLabel: 'Managed runtime', management: 'managed' }, { versions: ['managed-v1'] },

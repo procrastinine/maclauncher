@@ -74,7 +74,7 @@ test.after(() => directory && require('node:fs').rmSync(directory, { recursive: 
 
 function modelTest(body) {
   const script = `import assert from 'node:assert/strict';
-    const { groupRuntimeManagers, runtimeGroupSections, runtimeSectionTabs, resolveRuntimeTabSelection, runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation, runtimeRemovalPresentation, isRuntimeManageable, managedRuntimeSections } = await import(${JSON.stringify(model)});
+    const { groupRuntimeManagers, splitRuntimeGroupsByHost, runtimeGroupSections, runtimeSectionTabs, resolveRuntimeTabSelection, runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation, runtimeRemovalPresentation, isRuntimeManageable, managedRuntimeSections } = await import(${JSON.stringify(model)});
     const manager = (id, label, ui, names = ['Versions']) => ({ id, label, ui,
       sections: names.map((label, index) => ({ id: index === 0 ? 'default' : 'secondary', label, installed: [{ version: id + '-v1' }], catalog: { versions: [id + '-v1'] } })) });
     const sections = manager => manager.sections;
@@ -82,6 +82,40 @@ function modelTest(body) {
   const result = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', script], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
+
+test('Wine runtimes are listed by the CPU of their version rows, and a source with both CPUs appears under both headings', () => modelTest(`
+  const categories = [{ id: 'compatibility', label: 'Compatibility' }, { id: 'graphics', label: 'Graphics' }];
+  const wine = (id, label, installed, catalog = { versions: installed.map(row => row.version) }) => ({ id, label,
+    ui: { groupId: id, tabLabel: label, category: 'compatibility', hostGroup: 'Wine' },
+    sections: [{ id: 'default', label: 'Versions', launcherArchitecture: 'arm64', installed, catalog }] });
+  // The install slot says arm64, the measured slices say Intel: the slices decide.
+  const intel = wine('intel-wine', 'Intel Wine', [{ version: '1', architecture: 'arm64', architectures: ['x86_64'] }]);
+  const apple = wine('apple-wine', 'Apple Wine', [{ version: '2', architectures: ['arm64'] }]);
+  const both = wine('both-wine', 'Both Wine', [{ version: 'a', architectures: ['x86_64'] }, { version: 'b', architectures: ['arm64'] }],
+    { versions: ['a', 'b', 'c', 'd'], versionRequirements: { c: { architecture: 'arm64' } } });
+  const unknown = wine('unknown-wine', 'Unknown Wine', [], { versions: ['u'] });
+  const dos = manager('dosbox', 'DOSBox', { groupId: 'dosbox', tabLabel: 'DOSBox', category: 'compatibility' });
+  const effects = manager('effects', 'Effects', { groupId: 'graphics', tabLabel: 'Effects', category: 'graphics' });
+  const groups = splitRuntimeGroupsByHost(groupRuntimeManagers([effects, both, unknown, dos, apple, intel], categories), sections);
+  // A source without CPU facts keeps its heading; the Wine headings follow it, Apple Silicon first.
+  assert.deepEqual(groups.map(group => [group.heading, group.label]), [
+    ['Compatibility', 'DOSBox'], ['Compatibility', 'Unknown Wine'],
+    ['Wine · Apple Silicon', 'Apple Wine'], ['Wine · Apple Silicon', 'Both Wine'],
+    ['Wine · Intel (Rosetta)', 'Both Wine'], ['Wine · Intel (Rosetta)', 'Intel Wine'],
+    ['Graphics', 'Effects']]);
+  const rows = (group, key) => group.managers[0].sections[0][key];
+  const [appleBoth, intelBoth] = groups.filter(group => group.label === 'Both Wine');
+  assert.notEqual(appleBoth.id, intelBoth.id);
+  assert.deepEqual(rows(appleBoth, 'installed').map(row => row.version), ['b']);
+  assert.deepEqual(rows(intelBoth, 'installed').map(row => row.version), ['a']);
+  // A listed version without a stated CPU stays in both entries.
+  assert.deepEqual(rows(appleBoth, 'catalog').versions, ['b', 'c', 'd']);
+  assert.deepEqual(rows(intelBoth, 'catalog').versions, ['a', 'd']);
+  assert.equal(appleBoth.managers[0].id, 'both-wine', 'actions keep the source manager id');
+  assert.equal(resolveRuntimeTabSelection(groups, 'both-wine', 'default', sections, intelBoth.id).group.id, intelBoth.id);
+  assert.equal(resolveRuntimeTabSelection(groups, 'both-wine', 'default', sections).group.id, appleBoth.id);
+  assert.equal(groups.find(group => group.label === 'Unknown Wine').managers[0], unknown, 'a source with no CPU facts is unchanged');
+`));
 
 test('shader collections retain exact action targets beneath one stable Graphics tab', () => modelTest(`
   const models = manager('models', 'Models', { groupId: 'graphics', tabLabel: 'Graphics', memberOrder: 0 });

@@ -2,7 +2,7 @@ import type { RuntimeManagerState, RuntimeRefreshOptions } from "../types";
 import { sanitizeErrorMessage } from "../../../../core/runtime-errors.mjs";
 import packageInfo from "../../../../../package.json";
 import { isPrereleaseVersion } from "../ui-helpers";
-import { cpuId } from "../../../../core/cpu-labels.mjs";
+import { cpuId, cpuLabel } from "../../../../core/cpu-labels.mjs";
 
 // Shared by initial UI state and the source/import controls. An explicit
 // choice stays selected; automatic choices prefer stable published releases.
@@ -135,6 +135,67 @@ export function groupRuntimeManagers(managers: RuntimeManagerState[], categories
     rank(a) - rank(b) || (alphabetical(a) ? 0 : a.order - b.order) || a.label.localeCompare(b.label));
 }
 
+// A group whose managers name a host group (Wine) is listed under one heading
+// per CPU its version rows run on, "Wine · Apple Silicon" and "Wine · Intel
+// (Rosetta)", after the block of its declared category. An installed row's CPU
+// is its measured slices, then its stated architecture; a listed version's CPU
+// is the one its list states, then that of its installed row. Each entry keeps
+// the rows of its CPU and every row whose CPU is unknown. A group with no CPU
+// facts stays under its declared heading.
+const HOST_CPUS = ["arm64", "x64"] as const;
+type HostCpu = typeof HOST_CPUS[number];
+function hostCpu(value: unknown): HostCpu | "" {
+  const cpu = cpuId(value);
+  return cpu === "arm64" || cpu === "universal" ? "arm64" : cpu === "x64" ? "x64" : "";
+}
+function installCpu(row: Record<string, any>): HostCpu | "" {
+  const slices = Array.isArray(row?.architectures) ? row.architectures.map(hostCpu) : [];
+  if (slices.length) return slices.includes("arm64") ? "arm64" : slices.includes("x64") ? "x64" : "";
+  return hostCpu(row?.architecture);
+}
+function versionCpu(section: Record<string, any>, version: string): HostCpu | "" {
+  const stated = hostCpu(section.catalog?.versionRequirements?.[version]?.architecture);
+  if (stated) return stated;
+  const cpus = new Set((section.installed || []).filter((row: any) => row?.version === version).map(installCpu));
+  return cpus.size === 1 ? [...cpus][0] as HostCpu | "" : "";
+}
+function sectionCpus(section: Record<string, any>): Set<HostCpu> {
+  const cpus = [...(section.installed || []).map(installCpu),
+    ...(Array.isArray(section.catalog?.versions) ? section.catalog.versions.map((version: string) => versionCpu(section, version)) : [])];
+  return new Set(cpus.filter(Boolean) as HostCpu[]);
+}
+function sectionForCpu(section: Record<string, any>, cpu: HostCpu) {
+  const keeps = (found: string) => !found || found === cpu;
+  const catalog = section.catalog && { ...section.catalog, ...Object.fromEntries(["versions", "installableVersions"]
+    .filter(key => Array.isArray(section.catalog[key]))
+    .map(key => [key, section.catalog[key].filter((version: string) => keeps(versionCpu(section, version)))])) };
+  return { ...section, installed: (section.installed || []).filter((row: any) => keeps(installCpu(row))), ...(catalog ? { catalog } : {}) };
+}
+export function splitRuntimeGroupsByHost(groups: RuntimeTabGroup[],
+  resolveSections: (manager: RuntimeManagerState) => Array<Record<string, any>>): RuntimeTabGroup[] {
+  const out: RuntimeTabGroup[] = [];
+  let pending: Array<{ cpu: HostCpu; group: RuntimeTabGroup }> = [];
+  const flush = () => {
+    for (const cpu of HOST_CPUS) out.push(...pending.filter(item => item.cpu === cpu).map(item => item.group));
+    pending = [];
+  };
+  groups.forEach((group, index) => {
+    const name = text(group.managers.find(manager => text(manager.ui?.hostGroup))?.ui?.hostGroup);
+    const sections = new Map(group.managers.map(manager => [manager, resolveSections(manager)]));
+    const cpus = new Set([...sections.values()].flatMap(list => list.flatMap(section => [...sectionCpus(section)])));
+    if (!name || !cpus.size) out.push(group);
+    else {
+      const host = [...sections.values()].flat().map(section => section.launcherArchitecture).find(Boolean);
+      for (const cpu of HOST_CPUS) if (cpus.has(cpu)) pending.push({ cpu, group: { ...group, id: `${group.id}:${cpu}`,
+        category: `${group.category || group.id}:${cpu}`, heading: `${name} · ${cpuLabel(cpu, { hostArchitecture: host })}`,
+        managers: group.managers.map(manager => ({ ...manager, sections: sections.get(manager)!.map(section => sectionForCpu(section, cpu)) })) } });
+    }
+    if (groups[index + 1]?.category !== group.category) flush();
+  });
+  flush();
+  return out;
+}
+
 export function runtimeGroupSections(group: RuntimeTabGroup, resolveSections: (manager: RuntimeManagerState) => Array<Record<string, any>>): RuntimeTabSection[] {
   return group.managers.flatMap(manager => {
     const sections = resolveSections(manager);
@@ -166,9 +227,11 @@ export function runtimeSectionTabs(sections: RuntimeTabSection[]): RuntimeSectio
   return tabs;
 }
 
+// A source listed under two headings is selected by the entry chosen in the sidebar.
 export function resolveRuntimeTabSelection(groups: RuntimeTabGroup[], managerId: string | null, sectionId: string | null,
-  resolveSections: (manager: RuntimeManagerState) => Array<Record<string, any>>) {
-  const group = groups.find(item => item.managers.some(manager => manager.id === managerId)) || groups[0] || null;
+  resolveSections: (manager: RuntimeManagerState) => Array<Record<string, any>>, groupId: string | null = null) {
+  const has = (item: RuntimeTabGroup) => item.managers.some(manager => manager.id === managerId);
+  const group = groups.find(item => item.id === groupId && has(item)) || groups.find(has) || groups[0] || null;
   if (!group) return { group: null, section: null, sections: [] as RuntimeTabSection[] };
   const sections = runtimeGroupSections(group, resolveSections);
   const section = sections.find(item => item.managerId === managerId && item.sectionId === sectionId) ||

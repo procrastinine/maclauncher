@@ -12,7 +12,7 @@ import {
   sortInstalled
 } from "../ui-helpers";
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
-import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs,
+import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
   runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
   managedRuntimeSections, runtimePendingAction, runtimeRefreshPayload, runtimeSourceUiKey,
@@ -143,9 +143,11 @@ export function RuntimesView({
   onCancelDownload,
   onOpenSource
 }: RuntimesViewProps) {
-  const runtimeGroups = useMemo(() => groupRuntimeManagers(presentRuntimeManagers(withLauncherLibraries(runtimeManagers)), runtimeCategories), [runtimeManagers]);
+  const runtimeGroups = useMemo(() => splitRuntimeGroupsByHost(groupRuntimeManagers(presentRuntimeManagers(withLauncherLibraries(runtimeManagers)), runtimeCategories),
+    resolveRuntimeSections), [runtimeManagers]);
+  const [runtimeGroupId, setRuntimeGroupId] = useState<string | null>(null);
   const selection = useMemo(() => resolveRuntimeTabSelection(runtimeGroups, runtimeManagerId,
-    runtimeSectionId, resolveRuntimeSections), [runtimeGroups, runtimeManagerId, runtimeSectionId]);
+    runtimeSectionId, resolveRuntimeSections, runtimeGroupId), [runtimeGroups, runtimeManagerId, runtimeSectionId, runtimeGroupId]);
   const activeRuntimeGroup = selection.group;
   const activeRuntimeChoices = selection.sections;
   const componentGroup = Boolean(activeRuntimeGroup?.managers.some(manager => manager.ui?.componentGroup));
@@ -194,6 +196,7 @@ export function RuntimesView({
     if (next) selectSection(next);
   }
   function selectGroup(group: RuntimeTabGroup) {
+    setRuntimeGroupId(group.id);
     const choices = runtimeGroupSections(group, resolveRuntimeSections);
     const prior = remembered.current.get(group.id);
     const next = choices.find(choice => choice.managerId === prior?.managerId && choice.sectionId === prior?.sectionId) || choices[0];

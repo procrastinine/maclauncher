@@ -498,6 +498,8 @@ export type RuntimeManagerState = {
     management?: "managed" | "built-in"; sectionManagement?: Record<string, "managed" | "built-in">; library?: "shaders" | "plugins" | "components";
     /** Translator groups name the CPU build (x64, arm64 or universal) of every version. */
     cpuBuildLabels?: boolean; position?: "last";
+    /** Runtimes of one host group (Wine) are listed under one heading per CPU their versions run on. */
+    hostGroup?: string;
     settingsContext?: { moduleId: string; runtimeId: string }; configurationFieldKeys?: string[];
     pluginActions?: { install: string; setEnabled: string; update?: string } };
   sections?: Array<Record<string, any>>;
