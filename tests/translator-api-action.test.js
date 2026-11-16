@@ -80,7 +80,7 @@ test('real translator options action resolves draft API roles and advertises ato
 });
 
 test('saved KosmicKrisp manager IDs retain their installed choice through both Wine actions and resolvers', async t => {
-  const f = fixture(t), Managed = require('../src/modules/shared/vulkan/managed'), Plan = require('../src/modules/shared/runtime/translator-plan');
+  const f = fixture(t), Managed = require('../src/modules/shared/vulkan/managed'), Plan = require('../src/core/runtime-resolution/translator-plan');
   const version = '27.0.0-devel-MCLv8', saved = `${Managed.manager.formerIds[0]}:${version}`, canonical = `${Managed.projectId}:${version}`;
   const relative = `profile/runtimes/${Managed.manager.formerIds[0]}/x64/${version}/payload/files`;
   const driver = f.put(`${relative}/libvulkan_kosmickrisp.dylib`, image({ cpu: X64 }));

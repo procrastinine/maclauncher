@@ -21,7 +21,7 @@ test('initial Play graphics Off retries only graphics with latest settings while
 
 test('graphics preparation receives the single post-fallback translator plan from runtime context',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'translator-graphics-preparation-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- const plan=require('../src/modules/shared/runtime/translator-plan').resolvePlan({runtime:'crossover'});
+ const plan=require('../src/core/runtime-resolution/translator-plan').resolvePlan({runtime:'crossover'});
  const inputs={architecture:'x86_64',depth:false},manifest={id:'fixture',runtime:{supported:['crossover'],default:'crossover',entries:{crossover:{graphicsHost:'window'}}}};
  const mod={manifest,resolveGraphicsInputs:(_entry,context)=>{context.translatorPlan=plan;return inputs;}},registry={listModules:()=>[manifest],getModule:()=>mod,getModuleInfo:()=>manifest};
  const launcher=createLauncher({userDataDir:root,registry}),entry={gameId:'translator-context',moduleId:'fixture',runtimeId:'crossover',gamePath:'/fixture',effects:{schema:2,mode:'advanced',enabled:true,video:[]}};

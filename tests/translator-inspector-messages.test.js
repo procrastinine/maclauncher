@@ -5,7 +5,7 @@ const { react, componentHarness } = require('./helpers/renderer-component');
 const { createLibraryFixture } = require('./library-layout-fixture');
 const { peFixture } = require('./helpers/pe-fixture');
 const Description = require('../src/modules/shared/runtime/translator-description');
-const Plan = require('../src/modules/shared/runtime/translator-plan');
+const Plan = require('../src/core/runtime-resolution/translator-plan');
 const Wine = require('../src/modules/shared/runtime/wine-translators');
 const Providers = require('../src/modules/shared/runtime/providers');
 let GameDetails;

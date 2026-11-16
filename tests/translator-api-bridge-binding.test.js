@@ -1,6 +1,6 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const Plan = require('../src/modules/shared/runtime/translator-plan');
+const Plan = require('../src/core/runtime-resolution/translator-plan');
 const Description = require('../src/modules/shared/runtime/translator-description');
 const Files = require('../src/modules/shared/runtime/translator-files');
 const Binary = require('../src/modules/shared/runtime/binary-compatibility');

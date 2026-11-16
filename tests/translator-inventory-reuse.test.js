@@ -57,7 +57,7 @@ test('runtime states report an inventory change only when installed or included 
 
 test('translator choices whose same-named libraries differ in size are distinct without reading their bytes', t => {
   const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-  const Plan = require('../src/modules/shared/runtime/translator-plan');
+  const Plan = require('../src/core/runtime-resolution/translator-plan');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'choice-sizes-')); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const choice = (id, bytes) => {
     const file = path.join(root, id, 'd3d11.dll'); fs.mkdirSync(path.dirname(file)); fs.writeFileSync(file, bytes);

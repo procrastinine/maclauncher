@@ -248,9 +248,9 @@ test("a translator set that ships its own DXGI is offered only for the architect
   assert.deepEqual(included("dxvk").files.map(file => file.relative), ["x32/d3d11.dll", "x32/dxgi.dll"], "the x64 DXVK libraries without their DXGI are left out");
   assert.deepEqual(included("dxvk").incompleteMachines, [X64]);
   assert.equal(included("dxmt").files.length, 5, "a set with DXGI for both architectures stays whole, x64-only helpers included");
-  const wineDxgi = require("../src/modules/shared/runtime/translator-pairing").completeSets({ files: [pe("x32", "d3d11.dll", X86), pe("x64", "d3d11.dll", X64)] });
+  const wineDxgi = require("../src/core/runtime-resolution/translator-pairing").completeSets({ files: [pe("x32", "d3d11.dll", X86), pe("x64", "d3d11.dll", X64)] });
   assert.equal(wineDxgi.files.length, 2, "a set built for Wine's DXGI is complete for every architecture it has");
-  const Plan = require("../src/modules/shared/runtime/translator-plan");
+  const Plan = require("../src/core/runtime-resolution/translator-plan");
   const input = { included: inventory.included.filter(item => sets[item.engine]), choices: [], selections: {}, environment: null };
   const offered = executableArchitecture => Translators.optionLists(install, "winecx", { runtimeSettings: {} },
     { inventory: structuredClone(input), plan: Plan.resolvePlan(input), executableArchitecture }).translatorD3D11Options.map(row => row.value);

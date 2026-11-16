@@ -1,6 +1,6 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const Plan = require('../src/modules/shared/runtime/translator-plan');
+const Plan = require('../src/core/runtime-resolution/translator-plan');
 const Binding = require('../src/modules/shared/reshade/launch-binding');
 const ReShade = require('../src/modules/shared/reshade'), Effects = require('../src/modules/shared/effects/runtime');
 const components = {'d3d-renderer':['d3dmetal','dxmt','dxvk','wined3d'], d3d12:['d3dmetal','vkd3d','vkd3d-proton'], 'vulkan-driver':['moltenvk','kosmickrisp'], video:['gstreamer']};

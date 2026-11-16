@@ -3,7 +3,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const React = require('react'), { renderToStaticMarkup } = require('react-dom/server'), { build } = require('vite');
 const { react, componentHarness } = require('./helpers/renderer-component');
 const Description = require('../src/modules/shared/runtime/translator-description');
-const Plan = require('../src/modules/shared/runtime/translator-plan');
+const Plan = require('../src/core/runtime-resolution/translator-plan');
 const Wine = require('../src/modules/shared/runtime/wine-translators');
 const Roles = require('../src/modules/shared/runtime/translator-roles');
 const { peFixture } = require('./helpers/pe-fixture');

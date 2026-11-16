@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const Architecture = require("../src/modules/shared/runtime/architecture");
 const Wine = require("../src/modules/shared/runtime/wine-translators");
-const Plan = require("../src/modules/shared/runtime/translator-plan");
+const Plan = require("../src/core/runtime-resolution/translator-plan");
 const Vulkan = require("../src/modules/shared/vulkan");
 
 const apple = { platform: "darwin", hardwareArch: "arm64", macOSVersion: "26.0" };

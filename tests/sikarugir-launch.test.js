@@ -47,7 +47,7 @@ function adapters(install, { included = true } = {}) {
     resolveTranslators: async (_install, runtime, context) => {
       const selected = { id: "fixture-dxmt", engine: "dxmt", component: "d3d-renderer", form: "builtin", root: install.wineRoot, files: [], source: "synthetic Template",
         ...(included ? { included: true } : { managerId: "dxmt", runtimeVersion: "fixture" }) };
-      const plan = require("../src/modules/shared/runtime/translator-plan").resolvePlan({ runtime, choices: [selected], selections: { "d3d-renderer": selected.id } });
+      const plan = require("../src/core/runtime-resolution/translator-plan").resolvePlan({ runtime, choices: [selected], selections: { "d3d-renderer": selected.id } });
       plan.layout = require("../src/modules/shared/runtime/wine-layout").wineLayout(install);
       context.translatorPlan = plan; return plan;
     },

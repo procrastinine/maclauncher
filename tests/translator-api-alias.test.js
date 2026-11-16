@@ -1,7 +1,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const Description = require('../src/modules/shared/runtime/translator-description');
-const Plan = require('../src/modules/shared/runtime/translator-plan');
+const Plan = require('../src/core/runtime-resolution/translator-plan');
 const { peFixture } = require('./helpers/pe-fixture');
 const { image, X64 } = require('./fixtures/macho-image');
 

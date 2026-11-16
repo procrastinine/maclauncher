@@ -1130,7 +1130,7 @@ test('Installed ordering compares component releases before host releases and pr
   const plain={...custom[0],version:'/fixture/plain',translator:{...custom[0].translator,version:'3.1.1'}};
   const plainRow=Labels.registeredLabels([plain])[0];assert.equal(plainRow.sortVersion,custom[0].sortVersion);
   assert.match(custom[0].versionLabel,/Registered/);assert.equal(custom[0].translator.source,'custom');
-  const Description=require('../src/modules/shared/runtime/translator-description'),Plan=require('../src/modules/shared/runtime/translator-plan'),Wine=require('../src/modules/shared/runtime/wine-translators');
+  const Description=require('../src/modules/shared/runtime/translator-description'),Plan=require('../src/core/runtime-resolution/translator-plan'),Wine=require('../src/modules/shared/runtime/wine-translators');
   const selected={...managedTemplate.translator,id:custom[0].version,version:custom[0].translator.version,source:'custom'};
   const plan=Plan.resolvePlan({runtime:'sikarugir',included:[selected],selections:{'d3d-renderer':selected.id}});
   Plan.resolveApiRoles(plan,{included:[selected],selections:{d3d11:selected.id},automatic:{d3d11:selected}});
