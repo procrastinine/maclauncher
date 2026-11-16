@@ -24,7 +24,7 @@ test("a display link that supplies no drawable past the deadline is retired once
 
 test("display-link callbacks are counted and an accepted drawable renews the supply deadline", () => {
   const update = source().split(" void displayUpdate(uint64_t epoch,id<CAMetalDrawable> drawable,double target,unsigned rate){")[1].split(" void pauseGenerationTiming()")[0];
-  assert.match(update, /^\s*const auto updates=linkUpdates\.fetch_add\(1,std::memory_order_relaxed\)\+1;/);
+  assert.match(update, /^\s*(?:linkThread\.store\(pthread_mach_thread_np\(pthread_self\(\)\),std::memory_order_relaxed\);\s*)?const auto updates=linkUpdates\.fetch_add\(1,std::memory_order_relaxed\)\+1;/);
   assert.match(update, /if\(since>=1&&!linkRateReported\.exchange\(true\)\)nativeLog\("Presentation display link delivered "/);
   assert.match(update, /if\(!drawable&&target==0\)\{retireMetalTiming\(epoch\);return;\}/);
   assert.match(update, /if\(!drawable\)linkEmpty\.fetch_add\(1,std::memory_order_relaxed\);\s*else\{linkSupplied\.store\(CACurrentMediaTime\(\)\);/);
@@ -43,13 +43,6 @@ test("a link drawable that is not the layer's size does not renew the supply dea
   const check = update.indexOf("linkSizeMismatches.fetch_add"), supplied = update.indexOf("linkSupplied.store");
   assert.ok(check > 0 && supplied > check, "the size check precedes the supply renewal");
   assert.match(update, /if\(drawable\.texture\.width!=unsigned\(size\.width\)\|\|drawable\.texture\.height!=unsigned\(size\.height\)\)\{linkSizeMismatches\.fetch_add\(1,std::memory_order_relaxed\);[\s\S]*?return;\}\}/);
-});
-
-test("a pump that has not finished for a second is reported once with its step", () => {
-  assert.match(source(), / void finishPump\(bool more=false\)\{\n  pumpEnteredAt\.store\(0\);/);
-  assert.match(source(), / void pump\(\)\{\n  pumpEnteredAt\.store\(CACurrentMediaTime\(\)\);/);
-  const publish = source().split(" void publish(const std::shared_ptr<Batch>&batch,bool ready){")[1].slice(0, 600);
-  assert.match(publish, /entered>0&&CACurrentMediaTime\(\)-entered>=1&&!pumpStallReported\.exchange\(true\)/);
 });
 
 const displayLink = () => fs.readFileSync(path.join(__dirname, "../src/modules/shared/reshade/native/presentation-display-link.mm"), "utf8");

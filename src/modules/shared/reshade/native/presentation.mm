@@ -28,6 +28,7 @@
 #include "generation-budget.hpp"
 #include "generation-timeline.hpp"
 #include "hud-overlay.hpp"
+#include "thread-stack.hpp"
 #include <mach/mach.h>
 #include <mach/mach_time.h>
 #import <CoreVideo/CoreVideo.h>
@@ -101,8 +102,9 @@ struct macfx::FramePresenter::Impl:std::enable_shared_from_this<Impl>{
  // that stops supplying them while images are due is retired for layer drawables (linkSupplyTimeout).
  static constexpr double linkSupplyTimeout=0.5;
  std::atomic<double>linkStarted{0},linkSupplied{0};std::atomic<uint64_t>linkUpdatesAtStart{0};std::atomic<bool>linkRateReported{true};std::atomic<uint64_t>linkUpdates{0},linkAccepted{0},linkEmpty{0},linkStale{0},drawableSizeDrops{0};std::atomic<bool>drawableSizeReported{false},linkSizeReported{false};std::atomic<uint64_t>linkRetiredEpoch{0},linkSizeMismatches{0};
- // A pump that has not finished for a second is reported once, with the step it reached.
- std::atomic<double>pumpEnteredAt{0};std::atomic<int>pumpStep{0};std::atomic<bool>pumpStallReported{false};
+ // A pump that has not finished for a second is reported with the step it reached and the stacks of the pump,
+ // main and display-link threads, at most four times per presenter; its finish is logged with its duration.
+ std::atomic<double>pumpEnteredAt{0},pumpStallReportedAt{0};std::atomic<int>pumpStep{0};std::atomic<unsigned>pumpStallReports{0};std::atomic<thread_act_t>pumpThread{MACH_PORT_NULL},linkThread{MACH_PORT_NULL};
  // Serializes link attachment/retirement with fallback layer acquisition.
  std::recursive_mutex drawableRouteMutex;
  std::mutex displayDrawableMutex;id<CAMetalDrawable>displayDrawable=nil;
@@ -269,6 +271,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
    " stale="+std::to_string(linkStale.load())+" linkSizeMismatches="+std::to_string(linkSizeMismatches.load())+" imageSizeMismatches="+std::to_string(drawableSizeDrops.load());
  }
  void displayUpdate(uint64_t epoch,id<CAMetalDrawable> drawable,double target,unsigned rate){
+  linkThread.store(pthread_mach_thread_np(pthread_self()),std::memory_order_relaxed);
   const auto updates=linkUpdates.fetch_add(1,std::memory_order_relaxed)+1;
   if(!linkRateReported.load(std::memory_order_relaxed)){const double since=CACurrentMediaTime()-linkStarted.load();
    if(since>=1&&!linkRateReported.exchange(true))nativeLog("Presentation display link delivered "+std::to_string(updates-linkUpdatesAtStart.load())+" updates in the "+std::to_string(int(since*1000))+" ms after it started");}
@@ -369,7 +372,9 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
  // A drawable or publication arriving during a pump must outlive its earlier
  // readiness snapshot, even when that pump parks its display-link timer.
  void finishPump(bool more=false){
-  pumpEnteredAt.store(0);pumpQueued.store(false);
+  if(const double entered=pumpEnteredAt.exchange(0);entered>0&&entered==pumpStallReportedAt.load())
+   nativeLog("Presentation pump finished after "+std::to_string(int((CACurrentMediaTime()-entered)*1000))+" ms; it was reported at step "+std::to_string(pumpStep.load()));
+  pumpQueued.store(false);
   if(pumpRequested.exchange(false)||more)schedule();
  }
  void failWithoutLock(const std::string&reason){if(status.reason!=reason)nativeLog("Graphics presentation: "+reason);status.reason=reason;}
@@ -652,8 +657,10 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
  bool diagnosticLine(const std::shared_ptr<Batch>&batch){return deliveryDiagnostics&&batch&&batch->diagnostic&&batch->diagnosticLines.fetch_add(1,std::memory_order_relaxed)<32;}
  void deliveryDecision(const std::shared_ptr<Batch>&batch,const char*decision){if(diagnosticLine(batch))nativeLog(deliveryIdentity(batch)+" decision="+decision);}
  void publish(const std::shared_ptr<Batch>&batch,bool ready){
-   if(const double entered=pumpEnteredAt.load();entered>0&&CACurrentMediaTime()-entered>=1&&!pumpStallReported.exchange(true))
-    nativeLog("Presentation pump has not finished for "+std::to_string(int((CACurrentMediaTime()-entered)*1000))+" ms at step "+std::to_string(pumpStep.load())+" (1 selection, 2 drawable, 3 drawable returned, 4 command buffer, 5 final encode, 6 commit, 7 committed)");
+   if(double entered=pumpEnteredAt.load(),previous=pumpStallReportedAt.load();entered>0&&CACurrentMediaTime()-entered>=1&&previous!=entered&&pumpStallReportedAt.compare_exchange_strong(previous,entered)&&pumpStallReports.fetch_add(1)<4){
+    const int step=pumpStep.load();const auto pumpStack=describeThreadStack(pumpThread.load()),mainStack=describeMainThreadStack(),linkStack=describeThreadStack(linkThread.load());
+    if(pumpEnteredAt.load()==entered)nativeLog("Presentation pump has not finished for "+std::to_string(int((CACurrentMediaTime()-entered)*1000))+" ms at step "+std::to_string(step)+" (1 selection, 2 drawable, 3 drawable returned, 4 command buffer, 5 final encode, 51 admitted, 52 effects encode, 53 effects encoded, 54 color, 55 copy, 56 capture, 57 overlay, 58 handlers, 59 encoded, 6 commit, 7 committed); pump thread: "+pumpStack+"; main thread: "+mainStack+"; display-link thread: "+linkStack);
+   }
    if(diagnosticLine(batch))nativeLog(deliveryIdentity(batch)+" event=source-completed providerReady="+std::to_string(ready)+" phases="+std::to_string(batch->phases.count));
    const bool sceneChecked=ready&&bool(batch->sceneCompletion);
    if(ready&&batch->sceneCompletion&&!batch->sceneCompletion().encoded)ready=false;
@@ -747,6 +754,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   if(display.generated<0&&!retirement)retirement=display.batch->retirement;
   uint64_t frameHoldEpoch=0;
   {std::lock_guard<std::mutex>lock(mutex);if(stopping.load()||display.batch->retired||display.batch->epoch!=presentationEpoch||holdActive&&(!holdResuming||display.batch->contract!=desiredHoldContract)){++status.dropped;if(display.generated<0)retireBatch(display.batch);return false;}if(holdActive)frameHoldEpoch=holdStatus.epoch;if(display.generated<0&&!display.replay){display.batch->realAdmitted=true;admission.active=true;}}
+  pumpStep.store(51,std::memory_order_relaxed);
   const auto image=display.generated<0?display.batch->real:display.batch->generated.at(display.generated);
   bool displayMapped=display.generated<0?display.batch->realMapped:unsigned(display.generated)<display.batch->generatedMapped.size()?display.batch->generatedMapped[display.generated]:false;
   const auto outputSize=layer.drawableSize;
@@ -758,6 +766,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   const bool colorOutput=!display.replay&&(comparing||display.batch->output.toneMapping!="auto"||final.pixelFormat!=drawable.texture.pixelFormat||!sameImageColorDescription(display.batch->color,targetColor)||imageColorIsHDR(display.batch->color));
   std::string_view colorPolicyReason;
   if(display.batch->execution&&!display.replay){
+   pumpStep.store(52,std::memory_order_relaxed);
    // The batch retains its exact chain even if a later source selects another
    // revision. Generated images receive no fabricated game depth or motion.
    id<MTLTexture> target=drawable.texture;
@@ -770,6 +779,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
    frame.opaqueDisplay=display.batch->opaqueDisplay;frame.totalSubframes=display.totalSubframes;frame.currentSubframe=display.subframe+1;
    const ImageContentStamp contentStamp{contentIdentity,display.batch->contentEpoch,display.batch->id,display.batch->imageRevision,display.generated>=0||display.batch->sourceSynthetic,displayMapped,display.generated<0&&!display.batch->sourceSynthetic?display.batch->scene:nullptr};
    const auto encoded=(display.batch->contentStamped||display.batch->scene)?display.batch->execution->encodeContentImage(frame,contentStamp,true,display.batch->redraw||display.subframe||display.repeatedCycle,&displayMapped):display.batch->redraw?display.batch->execution->encodeRealImage(frame,display.batch->execution->hasTemporal(),true):display.batch->execution->hasTemporal()?display.batch->execution->encodeAfterScene(frame,true,display.generated>=0,displayMapped,&displayMapped):display.batch->execution->encode(frame,true,display.generated>=0,displayMapped,&displayMapped);
+   pumpStep.store(53,std::memory_order_relaxed);
    if(!encoded.encoded){if(encoded.busy){drawables.abandon(drawable);std::lock_guard<std::mutex>lock(mutex);++status.dropped;return false;}throw std::runtime_error(encoded.reason);}
    final=target;
   }
@@ -780,6 +790,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
    const auto encoded=comparison->encodeAligned(commands,display.batch->comparisonRaw,final,before,after,combined,display.batch->output.comparison,display.batch->color,targetColor,display.batch->inputMapped,displayMapped,display.outputId?display.outputId:display.batch->id,&finalColor,display.batch->output.toneMapping,&colorPolicyReason);if(!encoded.encoded)throw std::runtime_error(encoded.reason);final=combined;displayMapped=true;
   }
   if(colorOutput){
+   pumpStep.store(54,std::memory_order_relaxed);
    id<MTLTexture>target=drawable.texture;
    if(config.flipY||display.batch->output.active()){
     if(!display.batch->outputScratch||display.batch->outputScratch.width!=drawable.texture.width||display.batch->outputScratch.height!=drawable.texture.height||display.batch->outputScratch.pixelFormat!=drawable.texture.pixelFormat)display.batch->outputScratch=makeTexture(layer.device,drawable.texture.width,drawable.texture.height,drawable.texture.pixelFormat);
@@ -790,9 +801,11 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
    conversion.ditherBits=imageQuantizationBits(target.pixelFormat);
    const auto converted=colorEncoder->encode(commands,final,target,conversion);if(!converted.encoded)throw std::runtime_error(converted.reason);final=target;
   }
+  pumpStep.store(55,std::memory_order_relaxed);
   if(display.batch->output.active()&&!display.replay)encodeMotion(commands,final,drawable.texture,display);else if(config.flipY&&!display.replay)encodeFlipped(commands,final,drawable.texture);else if(final!=drawable.texture){
   auto copy=[commands blitCommandEncoder];if(!copy)throw std::runtime_error("Cannot create final presentation encoder");
   [copy copyFromTexture:final sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(final.width,final.height,1) toTexture:drawable.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[copy endEncoding];}
+  pumpStep.store(56,std::memory_order_relaxed);
   if(display.batch->capture&&!display.replay)display.batch->capture->finish(commands,screenshot.prepare(commands,drawable.texture,targetColor,display.outputId?display.outputId:display.batch->id,colorEncoder));
   // Only a prepared virtual transition opts into this one immutable image.
   // Capture final orientation/effects once, before the producer may be hidden.
@@ -811,12 +824,14 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   }
   // The overlay is drawn last, after capture and replay retention, so neither
   // a screenshot nor a retained image contains it.
+  pumpStep.store(57,std::memory_order_relaxed);
   if(display.batch->output.hud!="off"&&!hudFailed.load(std::memory_order_relaxed)){
    hudShown.store(true,std::memory_order_relaxed);const auto batch=display.batch;
    try{@try{hud.encode(commands,drawable.texture,display.batch->output.hud=="detailed",targetColor.transfer,targetColor.referenceWhite,CACurrentMediaTime(),[&]{return hudSample(batch);});}
     @catch(NSException*error){throw std::runtime_error(error.reason.UTF8String?:"Performance overlay failed");}}
    catch(const std::exception&error){hudFailed.store(true);nativeLog(std::string("Performance overlay disabled for this output: ")+error.what());}
   }else if(hudShown.exchange(false,std::memory_order_relaxed))hud.reset();
+  pumpStep.store(58,std::memory_order_relaxed);
   const bool linkDrawable=drawables.fromDisplayLink(drawable);
   const double encodedAt=CACurrentMediaTime();
   auto held=std::make_shared<std::optional<Display>>(display);std::weak_ptr<Impl>weak=shared_from_this();
@@ -922,6 +937,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
     }
     if(!failure.empty()&&retirement)retirement->cancel();
    }}];
+  pumpStep.store(59,std::memory_order_relaxed);
   admission.encoded=true;return true;
  }
  bool replayCompleted(){
@@ -943,7 +959,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   }});return true;
  }
  void pump(){
-  pumpEnteredAt.store(CACurrentMediaTime());pumpStep.store(1,std::memory_order_relaxed);
+  pumpThread.store(pthread_mach_thread_np(pthread_self()),std::memory_order_relaxed);pumpStep.store(1,std::memory_order_relaxed);pumpEnteredAt.store(CACurrentMediaTime());
   pumpRequested.store(false);
   if(outputIdleCut.load(std::memory_order_acquire)){std::unique_lock serial(submission,std::try_to_lock);if(serial.owns_lock())applyOutputIdleCut();}
   if(!outputVisible.load(std::memory_order_acquire)||outputIdleCut.load(std::memory_order_acquire)){
