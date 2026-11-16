@@ -18,8 +18,15 @@ function macho(r, base = 0, size = r.size) {
   if (thin) {
     if (size < thin[1]) fail('Mach-O header outside slice bounds');
     const b = r.get(base, thin[1]), cpu = b[`readUInt32${thin[0]}`](4);
-    const commands = b[`readUInt32${thin[0]}`](20);
-    if (commands > size - thin[1]) fail('Mach-O load commands outside slice bounds');
+    const commandCount = b[`readUInt32${thin[0]}`](16), commands = b[`readUInt32${thin[0]}`](20);
+    if (commands > size - thin[1] || commandCount > commands / 8) fail('Mach-O load commands outside slice bounds');
+    let cursor = 0;
+    for (let i = 0; i < commandCount; i++) {
+      if (commands - cursor < 8) fail('Mach-O command outside load-command bounds');
+      const command = r.get(base + thin[1] + cursor, 8), length = command[`readUInt32${thin[0]}`](4);
+      if (length < 8 || length > commands - cursor) fail('Mach-O command outside load-command bounds');
+      cursor += length;
+    }
     const architecture = MACH.get(cpu); if (!architecture) fail(`unsupported Mach-O CPU ${cpu}`);
     return { format: 'macho', architectures: [architecture], slices: [{ architecture, offset: base, size, endian: thin[0].toLowerCase() }] };
   }
@@ -84,8 +91,17 @@ function elf(r) {
   const b=r.get(0,bits===64?64:52), u16=o=>b[`readUInt16${endian}`](o), u32=o=>b[`readUInt32${endian}`](o), u64=o=>safe(b[`readBigUInt64${endian}`](o));
   const machine=ELF.get(u16(18));if(!machine) fail('unsupported ELF machine');
   if(u16(bits===64?52:40)!==b.length) fail('invalid ELF header size');
-  for(const [offset,entrySize,count] of bits===64?[[u64(32),u16(54),u16(56)],[u64(40),u16(58),u16(60)]]:[[u32(28),u16(42),u16(44)],[u32(32),u16(46),u16(48)]]) {
-    if(count && (!entrySize || offset>r.size || entrySize*count>r.size-offset)) fail('ELF table outside file bounds');
+  const wide = bits === 64, phoff = wide ? u64(32) : u32(28), shoff = wide ? u64(40) : u32(32);
+  const phsize = u16(wide ? 54 : 42), shsize = u16(wide ? 58 : 46);
+  let phnum = u16(wide ? 56 : 44), shnum = u16(wide ? 60 : 48);
+  if (phnum === 0xffff || (!shnum && shoff)) {
+    if (shsize < (wide ? 64 : 40)) fail('ELF extended counts require a section header');
+    const zero = r.get(shoff, wide ? 64 : 40);
+    if (!shnum) shnum = wide ? safe(zero[`readBigUInt64${endian}`](32)) : zero[`readUInt32${endian}`](20);
+    if (phnum === 0xffff) phnum = zero[`readUInt32${endian}`](wide ? 44 : 28);
+  }
+  for (const [offset, entrySize, count, minimum] of [[phoff, phsize, phnum, wide ? 56 : 32], [shoff, shsize, shnum, wide ? 64 : 40]]) {
+    if (count && (entrySize < minimum || offset > r.size || count > (r.size - offset) / entrySize)) fail('ELF table outside file bounds');
   }
   return {format:'elf',machine,bits,endian:endian.toLowerCase()};
 }
