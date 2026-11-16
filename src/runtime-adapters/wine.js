@@ -37,6 +37,12 @@ async function launch(plan, context, {processes = require('../modules/shared/run
 // Selection and process architecture have already been resolved by core.
 function apply({environment = {}}) { return {environment: {...environment}}; }
 const existingWine = {"sikarugir":{"manager":{"id":"sikarugir","memberOrder":0,"sectionLabel":"Sikarugir","tabLabel":"Sikarugir","category":"compatibility"},"layout":{"type":"archive","entry":"wswine.bundle/bin/wine"},"labels":{"source":"Sikarugir Template","automatic":"Sikarugir's automatic choice","environment":"Wrapper setting","environmentName":"Sikarugir wrapper"},"wine":{"invocation":"wine","prefixModel":"windowsVersion","downloads":true,"environmentKind":"sikarugir-wrapper","directDraw":true,"graphicsSelector":false,"vulkanLibrarySelector":false}},"winecx":{"manager":{"id":"winecx","memberOrder":0,"sectionLabel":"WineCX","tabLabel":"WineCX","category":"compatibility"},"layout":{"type":"archive","entry":"Libraries/Wine/bin/wine"},"labels":{"source":"WineCX","automatic":"WineCX's automatic choice"},"wine":{"invocation":"wine","prefixModel":"windowsVersion","downloads":true,"graphicsSelector":false}},"crossover":{"manager":{"id":"crossover","memberOrder":0,"sectionLabel":"CrossOver","tabLabel":"CrossOver","category":"compatibility"},"layout":{"type":"local-app","entry":"Contents/SharedSupport/CrossOver/bin/wine","paths":["/Applications/CrossOver.app","~/Applications/CrossOver.app"]},"labels":{"source":"CrossOver","automatic":"CrossOver's automatic choice","environment":"Bottle setting","environmentName":"CrossOver bottle"},"wine":{"invocation":"crossover","prefixModel":"bottleTemplate","downloads":false,"environmentKind":"crossover-bottle","ownComponents":true,"graphicsSelector":true,"vulkanLibrarySelector":true},"selector":{"type":"environment","key":"CX_GRAPHICS_BACKEND","automatic":"auto"}}};
+// The CPU a downloadable asset delivers: the key of the source's asset pattern
+// that matches its file name.
+function assetArchitecture(source, name) {
+  const match=Object.entries(source.upstream?.assets||{}).find(([,pattern])=>new RegExp(pattern,'i').test(String(name||'')));
+  return match?require('../modules/shared/runtime/architecture').normalizeArchitecture(match[0]):null;
+}
 function definition(id) {
   const value = require('../runtime-sources').loadSources().find(source => source.kind === 'wine' && source.id === id);
   if (!value) throw new Error('Unknown Wine source: ' + id);
@@ -225,6 +231,10 @@ function createBackend({source, dependencies = {}}) {
         return {...result.install,versionLabel:Catalog.versionLabel(row.catalogEntry,result.install),ready:true,status:'ready',...(componentSummary?{componentSummary}:{})};
       });
       Catalog.describeRequirements?.(base.core.catalog,requirements,installed,options,dependencies);
+      // A listed version's CPU is the key of the asset pattern its download matched;
+      // an installed version keeps the CPU measured from its files.
+      for(const pin of base.core.catalog){const architecture=assetArchitecture(source,pin.asset?.filename||pin.asset?.name);if(architecture&&requirements[pin.version])requirements[pin.version]={...requirements[pin.version],architecture};}
+      for(const row of installed)if(row.ready!==false&&row.architecture&&requirements[row.version])requirements[row.version]={...requirements[row.version],architecture:row.architecture};
       const catalog={...state.catalog,delivery:'download',importable:false,versionRequirements:requirements,
         installableVersions:state.catalog.installableVersions.filter(version=>!requirements[version]?.installReason),latestInstalledVersion:installed.find(row=>row.ready)?.version||null,
         installReason:state.catalog.installable||installed.some(row=>row.ready)?null:state.catalog.status==='success'?`No compatible ${label} downloads are currently available.`:`Reload versions to select a ${label} download. Play also prepares the required version automatically.`};
@@ -284,4 +294,4 @@ function listBuilds({manager,sources,context={}}) {
   return builds;
 }
 
-module.exports = {apply, launch, createLog, definition, descriptor, includedTranslators, installationRoot, resolvePart, embeddedComponent, nativeLibraries, supportFacts, createBackend, listBuilds};
+module.exports = {apply, launch, createLog, definition, assetArchitecture, descriptor, includedTranslators, installationRoot, resolvePart, embeddedComponent, nativeLibraries, supportFacts, createBackend, listBuilds};
