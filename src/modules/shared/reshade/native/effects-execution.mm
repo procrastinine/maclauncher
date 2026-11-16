@@ -341,7 +341,7 @@ void reportInterfaceLayer(const std::string&state){static std::mutex mutex;stati
 // generation image, published through the shared HUD pair every scene
 // generation provider reads. The pair belongs to this exact image.
 std::shared_ptr<const SceneAovLease>interfaceLayerAttachments(id<MTLCommandBuffer>commands,id<MTLTexture>colour,const std::shared_ptr<HudSplitImages>&images,const std::shared_ptr<const SceneAovLease>&base,const RSTemporalFrame&source,const ImageColorDescription&color,FrameOrigin origin){
-    if(!images||base&&(base->value.images[RS_SCENE_AOV_HUDLESS_COLOR].texture||base->value.images[RS_SCENE_AOV_UI_COLOR_ALPHA].texture))return base;
+    if(!images||base&&base->value.images[RS_SCENE_AOV_UI_COLOR_ALPHA].texture)return base;
     std::string reason;if(!HudSplitEncoder::forDevice(commands.device)->split(commands,colour,*images,reason)){reportInterfaceLayer("unavailable: "+reason);return base;}
     RSSceneAovs packet{};if(base)packet=base->value;else{packet.size=sizeof(packet);packet.version=RS_SCENE_AOV_ABI_VERSION;packet.frameId=source.frameId;packet.viewId=1;packet.epoch=1;packet.color=writeImageColor(color);packet.preExposure=1;packet.pass=packet.colorPass=RS_SCENE_AOV_TEMPORAL_INPUT;}
     if(!packet.colorPass){reportInterfaceLayer("unavailable: the renderer attachments name no colour pass");return base;}
@@ -910,7 +910,7 @@ ShaderResult EffectExecution::bindGenerationScene(id<MTLCommandBuffer>commands,s
     const auto pair=!attachments&&late?lateScenePair(*late,source.frameId,colour,imageColor()):nullptr;if(pair)attachments=pair;
     // Late records have no per-image color domain. A real HUD-less-only late
     // view cannot authorize subtraction in the final image's color encoding.
-    if(!attachments&&late&&late->images[0]&&!late->images[1])return {false,hudDifferenceReason};
+    if(late&&late->images[0]&&!late->images[1]&&(!attachments||(!attachments->value.images[RS_SCENE_AOV_HUDLESS_COLOR].texture&&!attachments->value.images[RS_SCENE_AOV_UI_COLOR_ALPHA].texture)))return {false,hudDifferenceReason};
     const auto difference=bindHudDifference(stage.encoder,commands,colour,attachments,source,origin);if(!difference.encoded)return difference;
     auto actual=impl->normalizeScene(*scratch,commands,source,colour,colour,jittered,false,false,true,attachments,1,GuideAll,rawGuides);const auto aovs=temporalSceneAovs(actual);actual.owner=stage.state.get();if(aovs&&bindSceneAovLease(actual,aovs)!=RS_TEMPORAL_OK)return {false,"The generation endpoint attachments could not be retained"};
     bindMetalFxGenerationResources(actual,source,copiedFrom);
