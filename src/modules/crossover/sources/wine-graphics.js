@@ -17,12 +17,6 @@ const CORE_DLLS = Object.freeze({ dxmt: ["d3d10core", "d3d11", "dxgi", "winemeta
   dxvk: ["d3d10core", "d3d11", "dxgi"], dxvk3: ["d3d8", "d3d9", "d3d10core", "d3d11", "dxgi"],
   d9vk: ["d3d8", "d3d9"], cnc_ddraw: ["ddraw"], d3dmetal: ["d3d11", "d3d12", "dxgi", "atidxx64", "nvapi64", "nvngx"] });
 function fail(message) { throw new Error(`Sikarugir graphics: ${message}`); }
-function supportRoot(install) {
-  const value = install.templateRoot || install.supportRoot || install.runtimeLibraries ||
-    (install.installDir && path.join(install.installDir, "support"));
-  if (typeof value !== "string" || !path.isAbsolute(value)) fail("The selected engine has no installed graphics libraries. Reinstall this version.");
-  return fs.realpathSync(value);
-}
 function engineRoot(install) {
   const root = install.engineRoot || install.wineRoot || (install.executablePath && path.dirname(path.dirname(install.executablePath)));
   if (!path.isAbsolute(root || "")) fail("The selected Wine engine is unavailable.");
@@ -284,23 +278,6 @@ async function prepareLoaderView(engine, viewRoot, install, signal, source) {
   await linkFile(path.join(unix, "ntdll.so"), path.join(libraryOverride, "ntdll.so"), signal);
   return { wineRoot, dllRoot, executablePath: separate ? executablePath : gameLoader, serverPath, libraryOverride, sourceMainExecutablePath: separate ? unixLoader : install.executablePath || path.join(engine,"bin","wine"), plannedMainExecutablePath: gameLoader };
 }
-async function clearUnusedRenderers(dllRoot, renderers, components, signal) {
-  const selected = new Set(components.flatMap(name => CORE_DLLS[name].map(module => module + ".dll")));
-  const known = new Set(Object.values(CORE_DLLS).flat().map(module => module + ".dll"));
-  for (const architecture of ["i386-windows", "x86_64-windows", "x86_64-unix"]) {
-    for (const name of await fs.promises.readdir(path.join(dllRoot, architecture))) {
-      signal?.throwIfAborted();
-      if (architecture !== "x86_64-unix" && (!known.has(name) || selected.has(name))) continue;
-      if (architecture === "x86_64-unix" && !/\.(?:so|dylib)$/.test(name)) continue;
-      const file = path.join(dllRoot, architecture, name), stat = await fs.promises.lstat(file);
-      if (!stat.isSymbolicLink()) continue;
-      const target = await fs.promises.realpath(file);
-      if (!Closure.inside(renderers, target)) continue;
-      const component = path.relative(renderers, target).split(path.sep)[0];
-      if (!components.includes(component)) await fs.promises.unlink(file);
-    }
-  }
-}
 async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, layout = {}) {
   // Wine 11 requires builtin files to exist in the prefix after bootstrap.
   // Existing prefix DLLs remain authoritative; only links into our renderer
@@ -343,7 +320,7 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     { userDataDir: userDataDir || context?.userDataDir, layout: translatorPlan.layout, signal });
   if(!translatorPlan)throw new Error('A resolved runtime plan is required before preparing Wine graphics.');
   const native = source.nativeLibraries(install);
-  const support = null, engine = engineRoot(install), hostInfo = {
+  const engine = engineRoot(install), hostInfo = {
     hardwareArch: require("../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, ...host };
   const layout = translatorPlan?.layout || wineLayout(install);
   let capabilities = { ...install.capabilities, wined3d: true, componentVersions: {} };
@@ -353,20 +330,21 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
   if (cameraBridge) capabilities.dxmt = true;
   const selection = { graphicsBackend: translatorPlan.apiMode ? 'wined3d' : translatorPlan.components["d3d-renderer"].used?.engine || "auto",
     vulkanBackend: translatorPlan.components["vulkan-driver"].used?.engine || "auto", components: [] };
-  const rendererRoot = support && path.join(support, "Frameworks", "renderer");
+  // The DXMT builds the plan uses; one of them renders the camera route.
+  const dxmt = require("../../shared/runtime/translator-roles").usedRenderers(translatorPlan).filter(item => item.engine === "dxmt");
   let dlss = DLSS.checkSelection(settings, { ...hostInfo, executableArchitecture, translatorPlan, vulkan: vulkanDLSS?.enabled===true,
-    backend: selection.components.includes("dxmt") ? "dxmt" : selection.graphicsBackend === "auto" ? "wined3d" : selection.graphicsBackend,
-    dxmt: settings.dlss === true && (translatorPlan ? Boolean(cameraBridge) || DLSS.hasPlanLibraries(translatorPlan, "dxmt") : capabilities.dxmt && (Boolean(cameraBridge) || DLSS.hasLibraries(path.join(rendererRoot, "dxmt", "wine", layout.primaryWindows)))),
-    d3dmetal: settings.dlss === true && (translatorPlan ? DLSS.hasPlanLibraries(translatorPlan, "d3dmetal") : capabilities.d3dmetal && DLSS.hasLibraries(path.join(rendererRoot, "d3dmetal", "wine", layout.primaryWindows))) });
+    backend: dxmt.length ? "dxmt" : selection.graphicsBackend === "auto" ? "wined3d" : selection.graphicsBackend,
+    dxmt: settings.dlss === true && (Boolean(cameraBridge) || DLSS.hasPlanLibraries(translatorPlan, "dxmt")),
+    d3dmetal: settings.dlss === true && DLSS.hasPlanLibraries(translatorPlan, "d3dmetal") });
   if (dlss.d3dmetal && !await DLSS.hasD3DMetalPathBridge(engine)) {
     if (settings.dlssOptional !== true) fail("The selected Wine engine cannot expose MetalFX Temporal through D3DMetal's game integration. Choose DXMT, select a compatible newer Wine version, or disable MetalFX Temporal.");
     dlss = { ...dlss, d3dmetal: false, enabled: dlss.dxmt || dlss.vulkan === true };
   }
   const destination = prospectiveRealPath(viewRoot || ".");
-  const installed = install.installDir && fs.existsSync(install.installDir) ? fs.realpathSync(install.installDir) : null;
-  if ((support && Closure.inside(support, destination)) || (installed && Closure.inside(installed, destination)) || Closure.inside(engine, destination)) fail("Per-game graphics state must be outside the shared runtime.");
+  // The engine, its installation and its support libraries are shared by every game.
+  const shared = [engine, ...[install.installDir, install.templateRoot || install.supportRoot].filter(root => path.isAbsolute(root || "") && fs.existsSync(root)).map(root => fs.realpathSync(root))];
+  if (shared.some(root => Closure.inside(root, destination))) fail("Per-game graphics state must be outside the shared runtime.");
   ownDirectory(viewRoot);
-  const renderers = support && path.join(support, "Frameworks", "renderer");
   if (!Array.isArray(helperLibraries) || helperLibraries.length > 8) fail("The GPU helper declaration is invalid.");
   const helpers = [], helperNames = new Set();
   for (const item of helperLibraries) {
@@ -383,15 +361,20 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
   }
   // Every game runs from the private loader view and its Game Mode bundle.
   const loader = await prepareLoaderView(engine, viewRoot, install, signal, source);
-  const dllRoot = loader.dllRoot, dllOverrides = [], selectedUnix = [];
+  const dllRoot = loader.dllRoot, dllOverrides = [];
   ownDirectory(dllRoot);
   for (const architecture of [...layout.windows, layout.unixName]) ownDirectory(path.join(dllRoot, architecture));
-  if (!translatorPlan) await clearUnusedRenderers(dllRoot, renderers, selection.components, signal);
   if (translatorView) {
+    // DXMT's NVIDIA libraries join the view only while its DLSS integration is on.
+    const dxmtRoots = dxmt.filter(item => item.root && fs.existsSync(item.root)).map(item => fs.realpathSync(item.root)), withheld = new Set();
     for (const [relative, original] of Object.entries(translatorView.links)) {
+      const name = path.basename(relative, ".dll").toLowerCase();
+      if (!dlss.dxmt && relative.endsWith(".dll") && DLSS.DLLS.includes(name) && dxmtRoots.some(root => Closure.inside(root, fs.realpathSync(original)))) { withheld.add(name); continue; }
       const source = cameraBridge ? require("../temporal").rendererFile(cameraBridge, path.basename(path.dirname(relative)), path.basename(relative), original) : original;
       await linkFile(source, path.join(loader.wineRoot, relative), signal);
     }
+    // The camera adapter forwards to the selected DXMT's own native library through a private alias.
+    if (cameraBridge && dxmt.length && dlss.dxmt) await linkFile(cameraBridge.dxmt.native, require("../temporal").environment(cameraBridge, dllRoot).MACLAUNCHER_DXMT_BASE_LIBRARY, signal);
     // Wine opens a builtin's Unix module beside the folder it loaded the
     // builtin from. A set that supplies a builtin without its Unix module,
     // such as WineCX's DXMT winemetal.dll, uses the engine's module of that name.
@@ -410,7 +393,10 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
       const relative = `lib/wine/${layout.unixName}/${name}`;
       if (Object.hasOwn(translatorView.links, relative)) await linkFile(translatorView.links[relative], path.join(loader.libraryOverride, name), signal);
     }
-    dllOverrides.push(...translatorView.dllOverrides);
+    for (const line of translatorView.dllOverrides) {
+      const [names, mode] = line.split("="), kept = names.split(",").filter(name => !withheld.has(name.toLowerCase()));
+      if (kept.length) dllOverrides.push(kept.join(",") + "=" + mode);
+    }
   }
   for (const helper of helpers) {
     await linkFile(helper.windows, path.join(dllRoot, layout.primaryWindows, helper.name + ".dll"), signal);
@@ -418,8 +404,7 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     dllOverrides.push(helper.name + "=b");
   }
   const gstreamer = native.gstreamer;
-  const external = selection.components.includes("d3dmetal") ? path.join(renderers, "d3dmetal", "external") : null;
-  const libraryPaths = [...new Set([path.join(dllRoot, layout.unixName), ...selectedUnix, ...(external ? [external] : []), path.join(engine, "lib", "wine", layout.unixName), ...native.libraries,
+  const libraryPaths = [...new Set([path.join(dllRoot, layout.unixName), path.join(engine, "lib", "wine", layout.unixName), ...native.libraries,
     ...(gstreamer ? [gstreamer.lib] : [])])];
   // Only ntdll's private anchor overrides lookup: Unix Wine modules must reuse
   // its initialized copy. Vendor dependencies must not replace system libraries
@@ -427,10 +412,10 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
   const env = { WINEDLLPATH: path.join(engine, "lib", "wine"),
     DYLD_LIBRARY_PATH: loader.libraryOverride,
     DYLD_FALLBACK_LIBRARY_PATH: libraryPaths.join(path.delimiter),
-    ...(native.frameworks.length || external ? { DYLD_FALLBACK_FRAMEWORK_PATH: [...native.frameworks, ...(external ? [external] : [])].join(path.delimiter) } : {}),
+    ...(native.frameworks.length ? { DYLD_FALLBACK_FRAMEWORK_PATH: native.frameworks.join(path.delimiter) } : {}),
     GST_REGISTRY_1_0: path.join(viewRoot, "gstreamer-registry.bin") };
   Object.assign(env, DLSS.environment(dlss), DLSS.adapterEnvironment(dlss, install?.capabilities));
-  if (selection.components.includes("dxmt") && dlss.dxmt) Object.assign(env, require("../temporal").environment(cameraBridge, dllRoot));
+  if (dxmt.length && dlss.dxmt) Object.assign(env, require("../temporal").environment(cameraBridge, dllRoot));
   if (gstreamer) {
     env.GST_PLUGIN_SYSTEM_PATH_1_0 = gstreamer.plugins;
     env.GST_PLUGIN_PATH_1_0 = "";
