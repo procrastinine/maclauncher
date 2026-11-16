@@ -635,7 +635,9 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
     // producer attempts must not compress a slower reconstruction interval.
     const double fresh=latest&&!latest->redraw&&!batch->contentStamped?batch->sourceTime-latest->sourceTime:batch->sourcePeriod;
     if(std::isfinite(fresh)&&fresh>0)batch->sourcePeriod=batch->contentTimed?fresh:boundedSourcePeriod(fresh);
-    const unsigned hz=displayHz.load(),budget=displayVisibleImages(hz,batch->sourcePeriod,maximumTimelineImages);
+    // Display capacity limits only external captures, as at generation admission.
+    const bool windowCapture=frameSource.load(std::memory_order_relaxed)==RuntimeFrameSource::ExternalWindow;
+    const unsigned hz=displayHz.load(),budget=displayVisibleImages(windowCapture?hz:0,batch->sourcePeriod,maximumTimelineImages);
     const bool carry=latest&&latest!=batch&&!latest->redraw&&!latest->realIssued&&!latest->retired;
     if(delivery.replace(batch->id,phases,now,batch->sourcePeriod,budget,carry,batch->targeted?std::optional<double>(batch->target+(batch->contentTimed?batch->sourcePeriod:0)):std::nullopt,batch->contentTimed)){
      // Decoded video retains one source interval of lookahead so every
