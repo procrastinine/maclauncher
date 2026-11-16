@@ -76,7 +76,9 @@ public:
   if(!commands||!ui||ui.device!=device||commands.device!=device||!hudSplitFormat(ui.pixelFormat))return {};
   std::shared_ptr<HudSplitImages>set;{std::lock_guard guard(lock);
    for(const auto&candidate:pool)if(candidate.use_count()==1&&!candidate->leased.load(std::memory_order_acquire)){set=candidate;break;}
-   if(!set){if(pool.size()>=4)return {};pool.push_back(std::make_shared<HudSplitImages>());set=pool.back();}}
+   // The pool grows to the number of frames whose copies are held at once (the
+   // generation history and the frames in flight); a set is reused once free.
+   if(!set){pool.push_back(std::make_shared<HudSplitImages>());set=pool.back();}}
   if(!set->snapshot||set->snapshot.width!=ui.width||set->snapshot.height!=ui.height||set->snapshot.pixelFormat!=ui.pixelFormat)set->snapshot=image(device,ui.width,ui.height,ui.pixelFormat,MTLTextureUsageShaderRead);
   auto blit=set->snapshot?[commands blitCommandEncoder]:nil;if(!blit)return {};
   blit.label=@"MacLauncher interface layer";[blit copyFromTexture:ui toTexture:set->snapshot];[blit endEncoding];return set;

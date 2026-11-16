@@ -68,6 +68,33 @@ int main(){@autoreleasepool{
   assert.match(run.stdout, /KERNEL_OK|NO_DEVICE/);
 });
 
+// Each presented frame's copy of the interface layer lives as long as the scene
+// lease that carries it: frame generation keeps the previous scene and several
+// frames are in flight. A copy must not fail while more of them are held.
+test('The interface layer copy succeeds for every frame while earlier copies are still held', t => {
+  const directory = temporary(t), source = path.join(directory, 'pool.mm'), binary = path.join(directory, 'pool');
+  fs.writeFileSync(source, String.raw`#import <Metal/Metal.h>
+#include "hud-split.hpp"
+#include <cstdio>
+#include <vector>
+int main(){@autoreleasepool{
+ auto device=MTLCreateSystemDefaultDevice();if(!device){std::puts("NO_DEVICE");return 0;}
+ auto descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:64 height:36 mipmapped:NO];descriptor.usage=MTLTextureUsageShaderRead|MTLTextureUsageRenderTarget;
+ auto ui=[device newTextureWithDescriptor:descriptor];auto queue=[device newCommandQueue];auto encoder=macfx::HudSplitEncoder::forDevice(device);
+ std::vector<std::shared_ptr<macfx::HudSplitImages>>held;
+ for(int frame=0;frame<8;frame++){auto commands=[queue commandBuffer];auto set=encoder->snapshot(commands,ui);[commands commit];[commands waitUntilCompleted];
+  if(!set){std::printf("COPY_FAILED frame %d with %zu held\n",frame,held.size());return 1;}held.push_back(set);}
+ held.erase(held.begin(),held.begin()+6);auto commands=[queue commandBuffer];auto reused=encoder->snapshot(commands,ui);[commands commit];[commands waitUntilCompleted];
+ if(!reused){std::puts("REUSE_FAILED");return 1;}
+ std::puts("POOL_OK");return 0;}}
+`);
+  const built = spawnSync('xcrun', ['clang++', '-std=c++17', '-fobjc-arc', '-x', 'objective-c++', '-I', native, source, '-framework', 'Metal', '-framework', 'Foundation', '-o', binary], { encoding: 'utf8', timeout: 60000 });
+  assert.equal(built.status, 0, built.stderr);
+  const run = spawnSync(binary, [], { encoding: 'utf8', timeout: 30000 });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, /POOL_OK|NO_DEVICE/);
+});
+
 test('The Godot bridge registers the UI layer methods and forwards them to the core', t => {
   const header = process.env.MACLAUNCHER_GDEXTENSION_INTERFACE_DIR;
   if (!header || !fs.existsSync(path.join(header, 'gdextension_interface.h'))) { t.skip('Set MACLAUNCHER_GDEXTENSION_INTERFACE_DIR to the Godot 4.4 gdextension_interface.h directory.'); return; }
