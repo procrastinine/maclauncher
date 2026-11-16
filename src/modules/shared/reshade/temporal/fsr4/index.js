@@ -70,7 +70,7 @@ function profileOptions(installed, userDataDir) {
   return SOURCE.profiles.map(profile=>{
     const supported=installed?.profiles?.includes(profile.id)===true;
     const data=profile.userData?require('./models').read(userDataDir):null;
-    const ready=supported&&(!profile.userData||data?.profiles.includes(profile.id));
+    const ready=supported&&(!profile.userData||data?.profiles.includes(profile.id)===true);
     return {id:profile.id,label:labels[profile.id],model:profile.model,available:ready,
       reason:!supported?'The installed FSR 4 provider does not support this profile.':!ready?'Download or import the FSR 4.1.2 model data.':null,
       ...(profile.userData?{delivery:{...require('./models').descriptor,...(profile.id==='int8-lite-lossy'?{downloadBytes:require('./model.json').archiveBytes+require('./model.json').lossy.archiveBytes}:{}),requiresDownload:!data?.profiles.includes(profile.id),canImport:true}}:{})};

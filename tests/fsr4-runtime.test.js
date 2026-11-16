@@ -29,3 +29,9 @@ test('FSR4 preserves a higher installed patch floor and separates inspection fro
 });
 
 test('immutable three-profile payloads retain all legacy profile identities',t=>{const {root,file,options}=fixture(t);fs.writeFileSync(file,JSON.stringify({providerABI:1,complete:true,commit:'old',model:source.model,library:'libmaclauncher-fsr4.dylib',profilesAPI:1,resourcePreparation:1,supportedProfiles:['exact-fast','lite','lite2'],profiles:source.legacyProfileContracts}));assert.deepEqual(FSR4.resolve(root,options).profiles,['exact-fast','lite','lite2']);assert.equal(FSR4.prepare(root,{...options,fsr4Profile:'lite2'}).FSR4_BUILD_DIR,fs.realpathSync(path.join(root,'temporal/fsr4/build')));assert.throws(()=>FSR4.prepare(root,{...options,fsr4Profile:'int8-lite'}),/does not contain/);});
+test('FSR 4.1.2 profile options report a boolean availability and a download when their model data is absent',t=>{
+ const profile=id=>FSR4.profileOptions({profiles:source.profiles.map(value=>value.id)},fs.mkdtempSync(path.join(os.tmpdir(),'fsr4-profile-data-'))).find(row=>row.id===id);
+ for(const id of ['int8-lite','int8-lite-lossy']){const row=profile(id);assert.equal(row.available,false,id);assert.equal(row.delivery.requiresDownload,true,id);assert.equal(row.reason,'Download or import the FSR 4.1.2 model data.');}
+ for(const id of ['exact-fast','lossy2-412'])assert.equal(profile(id).available,true,id);
+ assert.equal(FSR4.profileOptions(null,os.tmpdir()).every(row=>row.available===false),true);
+});
