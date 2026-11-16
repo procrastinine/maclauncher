@@ -69,7 +69,7 @@ separate profile. Legacy Lite2 resources use a separate build namespace.
 AMD's 4.1.2 Lite data and 170 translated shaders come from the original
 fsr4-native-macos v3.2 release zip. Installation follows explicit consent or a
 local import and prepares the data in the launcher profile with the included
-interpreter. The provider package contains the MIT preparation code. It does
+interpreter in isolated mode. Preparation never uses system Python, PATH, a user virtual environment or development tools. The provider package contains the MIT preparation code. It does
 not contain the restricted Lite initializers or translated shaders. Lite Lossy
 also uses the separately pinned GPL training release, read statically with the
 upstream macOS DXC helper from the verified kit. No Windows DLL is executed.
@@ -83,3 +83,5 @@ epilogues and shared CT2D weights. Lite POST uses upstream's shared color tile.
 Per-subpixel trained biases, conditional first-tap biases and native/shader cache
 revision checks follow the v3.2 source. Original/tiled experimental profiles and
 optional pixelization/new-look controls are separate upstream options.
+
+Archive import checks the selected release archive digest and extracts it with path and size limits. The model directory and installed file record are derived from the archive contents. The app contains no per-file download hash inventory. Local directory imports are checked for the initializer/Metal-source interfaces consumed by preparation.
