@@ -18,7 +18,6 @@ public:
 };
 bool callerCopyRecording(id<MTLCommandBuffer>)noexcept;
 void observeCallerImageCopy(id<MTLCommandBuffer>,id<MTLTexture>,NSUInteger,NSUInteger,MTLOrigin,MTLSize,id<MTLTexture>,NSUInteger,NSUInteger,MTLOrigin);
-void finishCallerImageCopies(id<MTLCommandBuffer>);
 void performCallerCopyEnqueue(id<MTLCommandBuffer>,const std::function<void()>&original);
 void performCallerCopyCommit(id<MTLCommandBuffer>,const std::function<void()>&original);
 void observeCallerPresentation(id<MTLCommandBuffer>,id<MTLTexture>);

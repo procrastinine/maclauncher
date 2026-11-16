@@ -1219,7 +1219,6 @@ void commit(id object,SEL selector) {
     // command buffer commit passes through here.
     static const bool trace=std::getenv("RESHADE_TRACE")!=nullptr,layerSurface=std::getenv("RESHADE_LAYER_SURFACE")!=nullptr;
     if(trace && calls.fetch_add(1)==0) log("Metal commit: "+std::string(object_getClassName(object)));
-    macfx::finishCallerImageCopies(object);
     encodePendingPresentations(object);
     reinterpret_cast<void(*)(id,SEL)>(original(object,selector))(object,selector);
     if(!encodingEffects && layerSurface && !macfx::ownsPresentationBuffer(object)) {
