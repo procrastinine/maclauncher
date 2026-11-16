@@ -136,8 +136,14 @@ int main(){
   assert.match(run.stdout, /BRIDGE_UI_LAYER_OK/);
 });
 
+// Standard Godot: these scripts need no .NET runtime.
 const godot = process.env.MACLAUNCHER_TEST_GODOT || path.join(os.homedir(), 'Library', 'Application Support', 'maclauncher',
-  'runtimes', 'godot', '4.6.3-stable', 'mono', 'Godot_mono.app', 'Contents', 'MacOS', 'Godot');
+  'runtimes', 'godot', '4.6.3-stable', 'standard', 'Godot.app', 'Contents', 'MacOS', 'Godot');
+// Headless, with its log file and user data inside the test directory, and a
+// frame limit so a failed check always ends the process instead of a timeout.
+const runGodot = (directory, script) => spawnSync(godot, ['--headless', '--log-file', path.join(directory, 'godot.log'),
+  '--quit-after', '600', '--path', directory, '--script', script],
+  { encoding: 'utf8', timeout: 30000, env: { ...process.env, HOME: directory } });
 
 test('The Godot graphics scripts parse headless', t => {
   if (!fs.existsSync(godot)) { t.skip('A local Godot runtime is required for GDScript parsing.'); return; }
@@ -155,7 +161,7 @@ func _init() -> void:
 	print("GODOT_SCRIPTS_PARSE_OK")
 	quit(0)
 `);
-  const result = spawnSync(godot, ['--headless', '--path', directory, '--script', 'res://verify.gd'], { encoding: 'utf8', timeout: 30000, env: { ...process.env, HOME: directory } });
+  const result = runGodot(directory, 'res://verify.gd');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /GODOT_SCRIPTS_PARSE_OK/);
   assert.doesNotMatch(result.stderr, /SCRIPT ERROR|Parse Error/);
@@ -173,6 +179,11 @@ class FakeBridge extends RefCounted:
 		return demand
 var ui: Node
 var hud: CanvasLayer
+var failed := false
+func check(ok: bool, message: String) -> void:
+	if not ok:
+		failed = true
+		printerr("CHECK_FAILED " + message)
 func _init() -> void:
 	var source = load("res://autoload.gd")
 	ui = Control.new()
@@ -187,38 +198,39 @@ func _check(source) -> void:
 	var layers: Array[WeakRef] = [weakref(hud)]
 	var layer = source.UILayer.new(root)
 	layer.update(bridge, layers)
-	assert(layer.viewport == null, "no layer without demand")
-	assert(root.get_node_or_null("MacLauncherUILayer") == null)
-	assert(root.get_child_count(true) == 2, "no node added without demand")
+	check(layer.viewport == null, "no layer without demand")
+	check(root.get_node_or_null("MacLauncherUILayer") == null, "root.get_node_or_null('MacLauncherUILayer') == null")
+	check(root.get_child_count(true) == 2, "no node added without demand")
 	bridge.demand = 1
 	layer.update(bridge, layers)
-	assert(root.get_child_count() == 2, "the layer is internal to the window")
-	assert(layer.viewport != null, "layer while demanded")
-	assert(layer.viewport.transparent_bg and layer.viewport.disable_3d and layer.viewport.gui_disable_input)
-	assert(layer.viewport.world_2d == root.world_2d)
-	assert(layer.viewport.size == Vector2i(root.get_texture().get_size()))
-	assert(layer.canvases.has(hud.get_canvas()), "canvas layers attached")
+	check(root.get_child_count() == 2, "the layer is internal to the window")
+	check(layer.viewport != null, "layer while demanded")
+	check(layer.viewport.transparent_bg and layer.viewport.disable_3d and layer.viewport.gui_disable_input, "layer.viewport.transparent_bg and layer.viewport.disable_3d ")
+	check(layer.viewport.world_2d == root.world_2d, "layer.viewport.world_2d == root.world_2d")
+	check(layer.viewport.size == Vector2i(root.get_texture().get_size()), "layer.viewport.size == Vector2i(root.get_texture().get_size(")
+	check(layer.canvases.has(hud.get_canvas()), "canvas layers attached")
 	root.msaa_2d = Viewport.MSAA_4X
 	root.snap_2d_transforms_to_pixel = true
 	root.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 	layer.update(bridge, layers)
-	assert(layer.viewport.msaa_2d == Viewport.MSAA_4X and layer.viewport.snap_2d_transforms_to_pixel, "2D rasterization mirrored")
-	assert(layer.viewport.canvas_item_default_texture_filter == Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST)
+	check(layer.viewport.msaa_2d == Viewport.MSAA_4X and layer.viewport.snap_2d_transforms_to_pixel, "2D rasterization mirrored")
+	check(layer.viewport.canvas_item_default_texture_filter == Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST, "layer.viewport.canvas_item_default_texture_filter == Viewpor")
 	if root.has_method("get_oversampling"):
 		root.oversampling_override = 2.5
 		layer.update(bridge, layers)
-		assert(is_equal_approx(layer.viewport.get("oversampling_override"), root.get_oversampling()), "font oversampling mirrored")
+		check(is_equal_approx(layer.viewport.get("oversampling_override"), root.get_oversampling()), "font oversampling mirrored")
 		root.oversampling_override = 0.0
-	assert(not layer.canvases.has(root.world_2d.canvas), "the shared world canvas is drawn by the shared world")
+	check(not layer.canvases.has(root.world_2d.canvas), "the shared world canvas is drawn by the shared world")
 	bridge.demand = 0
 	layer.update(bridge, layers)
-	assert(layer.viewport == null, "layer detached when demand ends")
-	assert(root.get_node_or_null("MacLauncherUILayer") == null)
-	assert(ui.get_parent() == root and hud.get_parent() == root, "game nodes untouched")
-	print("GODOT_UI_LAYER_OK")
-	quit(0)
+	check(layer.viewport == null, "layer detached when demand ends")
+	check(root.get_node_or_null("MacLauncherUILayer") == null, "root.get_node_or_null('MacLauncherUILayer') == null")
+	check(ui.get_parent() == root and hud.get_parent() == root, "game nodes untouched")
+	if not failed:
+		print("GODOT_UI_LAYER_OK")
+	quit(1 if failed else 0)
 `);
-  const result = spawnSync(godot, ['--headless', '--path', directory, '--script', 'res://verify.gd'], { encoding: 'utf8', timeout: 30000, env: { ...process.env, HOME: directory } });
+  const result = runGodot(directory, 'res://verify.gd');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /GODOT_UI_LAYER_OK/);
   assert.doesNotMatch(result.stderr, /SCRIPT ERROR|Parse Error/);
