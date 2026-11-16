@@ -62,8 +62,12 @@ projection, and `cameraArguments` adds the argument only when an enabled frame
 generation row consumes the camera. The NGX core matches the constants to the
 evaluation they follow by its jitter offset and writes the camera, with that
 evaluation's own offset, to `effect-plan.temporal-camera` beside the effect
-plan. The graphics pipeline gives it to that frame's frame generation at
-presentation (`late-camera.hpp`); temporal upscaling receives no camera there.
+plan. The effect runtime creates that file while an enabled frame-generation
+row consumes the camera and removes it otherwise; the NGX core only maps an
+existing file. After the first record, a frame-generation row that needs a
+camera admits a scene without one, and the generation stage gives the frame
+its own record at presentation or does not generate it (`late-camera.hpp`);
+temporal upscaling receives no camera there.
 
 ## DXMT and D3DMetal
 

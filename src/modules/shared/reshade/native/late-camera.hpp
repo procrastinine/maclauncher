@@ -4,14 +4,18 @@
 // Unreal Engine's Streamline plugin sets each frame's constants after its own NGX DLSS evaluation of the frame, so
 // the evaluation carries no camera. The NGX core in the game process matches those constants to the evaluation they
 // follow and publishes the camera with that evaluation's exact jitter offset in effect-plan.temporal-camera, a
-// fixed-size file beside effect-plan.json that the NGX core creates and clears at its first direct evaluation; both
-// sides map it once. Each slot is a
-// sequence-locked record: an odd sequence while it is written, the next even one when it is complete.
+// fixed-size file beside effect-plan.json. The launcher creates it while an enabled frame-generation row consumes the
+// camera and removes it otherwise; the NGX core clears it at its first direct evaluation. Each side maps it once it
+// exists. Each slot is a sequence-locked record: an odd sequence while it is written, the next even one when it is
+// complete.
+// Such a row admits a scene without a camera once the NGX core has published a record (pending), because a frame's
+// record arrives after the frame's evaluation, when its scene has already been received.
 // A generation stage takes a camera only for a scene without one, from one of the two newest records, when that
 // record's jitter offset equals the scene's bit for bit, is nonzero, and no other record carries the same offset,
 // and when the depth direction agrees. A jitter sequence that repeats within three frames therefore never binds.
 // Temporal upscaling needs the camera at the evaluation and never uses this record.
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -59,11 +63,21 @@ inline bool read(const Slot &source, Slot &out) {
   return __atomic_load_n(&source.sequence, __ATOMIC_RELAXED) == before;
 }
 
+inline bool published(const Mailbox *mailbox) {
+  return mailbox && __atomic_load_n(&mailbox->magic, __ATOMIC_ACQUIRE) == magic && mailbox->version == version &&
+         mailbox->slotCount == slots;
+}
+
+// Whether a scene without its own camera can expect one through this channel before its generation stage: the NGX
+// core has published a record. The generation stage still binds a camera only to its own frame (take).
+inline bool pending(const Mailbox *mailbox) {
+  return published(mailbox) && __atomic_load_n(&mailbox->published, __ATOMIC_ACQUIRE);
+}
+
 // The camera of the scene whose evaluation jitter is (jitterX, jitterY) and whose depth is reversed or not.
 inline Result take(const Mailbox *mailbox, float jitterX, float jitterY, bool reversed, RSTemporalCamera &out) {
   out = {};
-  if (!mailbox || __atomic_load_n(&mailbox->magic, __ATOMIC_ACQUIRE) != magic || mailbox->version != version ||
-      mailbox->slotCount != slots)
+  if (!published(mailbox))
     return NoMailbox;
   if (!std::isfinite(jitterX) || !std::isfinite(jitterY) || (jitterX == 0 && jitterY == 0))
     return Unjittered;
@@ -92,28 +106,40 @@ inline Result take(const Mailbox *mailbox, float jitterX, float jitterY, bool re
   return Bound;
 }
 
-// The file beside RESHADE_EFFECT_PLAN, mapped read-only once per process; null without one.
-inline const Mailbox *mapped() {
-  static const Mailbox *mailbox = nullptr;
-  static std::once_flag once;
-  std::call_once(once, [] {
-    const char *plan = std::getenv("RESHADE_EFFECT_PLAN");
-    if (!plan || plan[0] != '/')
-      return;
-    std::string path(plan);
-    path.resize(path.find_last_of('/') + 1);
-    path += "effect-plan.temporal-camera";
-    const int file = open(path.c_str(), O_RDONLY | O_CLOEXEC);
-    if (file < 0)
-      return;
-    struct stat info {};
-    if (fstat(file, &info) == 0 && info.st_size == off_t(fileSize)) {
-      void *view = mmap(nullptr, fileSize, PROT_READ, MAP_SHARED, file, 0);
-      if (view != MAP_FAILED)
-        mailbox = static_cast<const Mailbox *>(view);
-    }
-    close(file);
-  });
-  return mailbox;
+// The file beside RESHADE_EFFECT_PLAN, mapped read-only; null until the file exists with its full size. A missing
+// file is looked up again after retry, so a stage that asks before the file exists still finds it later; the first
+// mapping is kept for the life of the process.
+inline const Mailbox *mapped(std::chrono::milliseconds retry = std::chrono::milliseconds(250)) {
+  static std::atomic<const Mailbox *> mailbox{nullptr};
+  static std::mutex lock;
+  static std::chrono::steady_clock::time_point next{};
+  if (const auto found = mailbox.load(std::memory_order_acquire))
+    return found;
+  std::unique_lock<std::mutex> hold(lock, std::try_to_lock);
+  if (!hold.owns_lock())
+    return nullptr;
+  if (const auto found = mailbox.load(std::memory_order_relaxed))
+    return found;
+  const auto now = std::chrono::steady_clock::now();
+  if (now < next)
+    return nullptr;
+  next = now + retry;
+  const char *plan = std::getenv("RESHADE_EFFECT_PLAN");
+  if (!plan || plan[0] != '/')
+    return nullptr;
+  std::string path(plan);
+  path.resize(path.find_last_of('/') + 1);
+  path += "effect-plan.temporal-camera";
+  const int file = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+  if (file < 0)
+    return nullptr;
+  struct stat info {};
+  if (fstat(file, &info) == 0 && S_ISREG(info.st_mode) && info.st_size == off_t(fileSize)) {
+    void *view = mmap(nullptr, fileSize, PROT_READ, MAP_SHARED, file, 0);
+    if (view != MAP_FAILED)
+      mailbox.store(static_cast<const Mailbox *>(view), std::memory_order_release);
+  }
+  close(file);
+  return mailbox.load(std::memory_order_relaxed);
 }
 } // namespace late_camera

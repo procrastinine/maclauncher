@@ -314,11 +314,15 @@ public:
  }
  ~ShaderCallBindings(){if(isf)bindISFSceneInputs(node,nullptr);if(placebo)module->bindScene(node.get(),nullptr);}
 };
-bool generationCameraAvailable(const std::string&method,const RSTemporalFrame*scene){if(!scene)return false;if(scene->flags&RS_TEMPORAL_CAMERA_VALID)return true;
+// The scene's own camera, or for MetalFX its matrices.
+bool sceneGenerationCamera(const std::string&method,const RSTemporalFrame*scene){if(!scene)return false;if(scene->flags&RS_TEMPORAL_CAMERA_VALID)return true;
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
 if(method=="metalfx")if(@available(macOS 27.0,*)){const auto matrices=temporalSceneMatrices(*scene);return matrices&&(matrices->flags&(RS_SCENE_VIEW_VALID|RS_SCENE_PROJECTION_VALID))==(RS_SCENE_VIEW_VALID|RS_SCENE_PROJECTION_VALID)&&(matrices->flags&(RS_SCENE_CLIP_ZERO_TO_ONE|RS_SCENE_CLIP_MINUS_ONE_TO_ONE));}
 #endif
 return false;}
+// Admission when the scene is received: its own camera, or the late camera that its game sets after this frame's
+// evaluation (late-camera.hpp). The generation stage binds the late camera and declines a frame it does not match.
+bool generationCameraAvailable(const std::string&method,const RSTemporalFrame*scene){return sceneGenerationCamera(method,scene)||scene&&late_camera::pending(late_camera::mapped());}
 ShaderResult sceneShaderCall(const std::shared_ptr<ShaderNode>&node,const std::string&format,const ShaderFrame&frame,const RSShaderSceneInputsV1*inputs,bool prepare){ShaderCallBindings bindings(node,format,inputs);if(!bindings.result.encoded)return bindings.result;return prepare?node->prepare(frame):node->encode(frame);}
 
 }
@@ -868,6 +872,7 @@ ShaderResult EffectExecution::bindGenerationScene(id<MTLCommandBuffer>commands,s
     bindMetalFxGenerationResources(actual,source,copiedFrom);
     if(auto matrices=sceneMatricesForImage(source,lease?lease->matrices:temporalSceneMatrices(source),jittered,origin==FrameOrigin::BottomLeft);matrices&&!temporalSceneMatrices(actual))rsBindTemporalSceneMatrices(&actual,&*matrices);
     attachLateCamera(actual,rawGuides?*rawGuides:source);
+    if(stage.row<impl->rows.size()&&generationRequiresCamera(impl->rows[stage.row].spec.method)&&!sceneGenerationCamera(impl->rows[stage.row].spec.method,&actual))return {false,"Needs matching renderer camera inputs"};
     actual.method=RS_TEMPORAL_OFF;actual.reserved=0;
     if(nativeConfig().diagnostics.enabled){static std::atomic<unsigned>reported{0};if(reported.fetch_add(1,std::memory_order_relaxed)<64)nativeLog("Generation scene request stageOwner="+std::to_string(reinterpret_cast<uintptr_t>(stage.state.get()))+" commands="+std::to_string(reinterpret_cast<uintptr_t>((__bridge void*)commands))+" scene="+std::to_string(actual.frameId)+" sourceOwner="+std::to_string(reinterpret_cast<uintptr_t>(source.owner))+" flags="+std::to_string(actual.flags)+" reset="+std::to_string(bool(actual.flags&RS_TEMPORAL_RESET)));}
     stage.encoder->setScene(actual);stage.encoder->setSceneColorJitter(jittered);stage.encoder->setSceneOrigin(origin);return {true,{}};
@@ -1282,6 +1287,8 @@ EffectExecutionSelection EffectPlanExecutor::prepareSnapshot(const ShaderFrame&i
     if(aovs){const auto&packet=aovs->value;append(packet.flags);append(packet.pass);append(packet.colorPass);append(packet.viewId);append(packet.epoch);for(const auto&attachment:packet.images){imageInfo((__bridge id<MTLTexture>)attachment.texture);for(uint32_t v:{attachment.x,attachment.y,attachment.width,attachment.height,attachment.encoding,attachment.space,attachment.channel,attachment.origin,attachment.pass})append(v);geometry.append(reinterpret_cast<const char*>(&attachment.scale),sizeof(float)*2);}geometry.append(reinterpret_cast<const char*>(&packet.color),sizeof(packet.color));geometry.append(reinterpret_cast<const char*>(&packet.uiColor),sizeof(packet.uiColor));geometry.append(reinterpret_cast<const char*>(&packet.hudlessColor),sizeof(packet.hudlessColor));}else append(0);
     const auto guideBytes=geometry.size();imageInfo(incoming.source);imageInfo(incoming.target);append(reinterpret_cast<uintptr_t>((__bridge void*)incoming.commands.device));append(reinterpret_cast<uintptr_t>((__bridge void*)actualQueue));append(reinterpret_cast<uintptr_t>((__bridge void*)finalQueue));append(incoming.opaqueDisplay);append(unsigned(incoming.origin));append(presentation);append(unsigned(space));append(unsigned(color.primaries));append(unsigned(color.transfer));append(unsigned(color.range));append(unsigned(color.alpha));append(color.sceneReferred);
     for(const float value:{color.referenceWhite,color.peakLuminance,color.blackLuminance,color.hlgSystemGamma})geometry.append(reinterpret_cast<const char*>(&value),sizeof(value));
+    // A late camera (late-camera.hpp) admits generation rows that need a camera for scenes without one.
+    append(temporal&&!(temporal->flags&RS_TEMPORAL_CAMERA_VALID)&&std::any_of(snapshot->nodes.begin(),snapshot->nodes.end(),[](const auto&node){return node.enabled&&node.kind=="frame-generation"&&generationRequiresCamera(node.method);})&&late_camera::pending(late_camera::mapped()));
     const auto qualityKey=snapshot->quality?snapshot->quality->key+':'+std::to_string(snapshot->quality->scale)+':'+std::to_string(snapshot->quality->requestId):std::string{};
     bool recoverScene=false;if(temporal&&impl->current)for(const auto&row:impl->current->impl->rows)if(row.neuralScene){const auto status=row.neuralScene->framePreparationStatus(*temporal);recoverScene|=!status.encoded&&!status.busy;}
     if(recoverScene&&!impl->sceneRecoveryRequested){++impl->sceneRecoveryGeneration;impl->sceneRecoveryRequested=true;}else if(!recoverScene)impl->sceneRecoveryRequested=false;

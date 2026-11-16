@@ -19,6 +19,12 @@ function file(entry, userDataDir) { return path.join(path.dirname(Live.file(entr
 // the game's own implementation read it without parsing the plan.
 function activityFile(planFile) { return path.join(path.dirname(planFile), "effect-plan.active"); }
 function sceneDemandFile(planFile) { return path.join(path.dirname(planFile), "effect-plan.scene-demand"); }
+// The camera that a game sets after its frame's upscaling evaluation reaches the
+// frame-generation stage through this file; it exists only while an enabled
+// frame-generation row consumes the camera.
+function lateCameraFile(planFile) { return path.join(path.dirname(planFile), "effect-plan.temporal-camera"); }
+const lateCamera = document => document.mode === "advanced" && document.nodes.some(node => node.enabled === true &&
+  node.kind === "frame-generation" && GENERATION[node.method]?.scene === true && GENERATION[node.method]?.camera === true);
 const sceneDemand = document => document.mode === "advanced" && document.nodes.some(node => node.enabled === true &&
   (node.kind === "frame-generation" && GENERATION[node.method]?.scene === true ||
    node.kind === "temporal" && TEMPORAL[node.method]?.matrices === true ||
@@ -29,6 +35,7 @@ const activity = document => document.nodes.some(node => node.enabled === true) 
 // write, its activation, after its selections, controls and this byte.
 function writeDocument(target, document, {root, publication}) {
   const demandFile = sceneDemandFile(target), demandByte = sceneDemand(document);
+  require("../reshade/mapped-demand").camera(lateCameraFile(target), lateCamera(document), {root});
   if (publication) publication.write(demandFile, demandByte, {root, mappedByte: true});
   else require("../reshade/mapped-demand").write(demandFile, demandByte, {root});
   for (const [name, bytes, activation] of [[activityFile(target), activity(document), false], [target, JSON.stringify(document), true]]) {
@@ -928,4 +935,4 @@ function releaseXess(binding, publication) {
   const Broker = require("../runtime/gpu-compute-broker"), before = Broker.demand(binding, false);
   if (before) publication?.onRollback?.(() => Broker.demand(binding, true));
 }
-module.exports = { file, activityFile, sceneDemandFile, sceneDemand, supported, info, templates, facts, describe, stageSettings, prepare, publishSimple, emptyDocument, acceptance, outcomes, acceptanceReason, preparation };
+module.exports = { file, activityFile, sceneDemandFile, lateCameraFile, lateCamera, sceneDemand, supported, info, templates, facts, describe, stageSettings, prepare, publishSimple, emptyDocument, acceptance, outcomes, acceptanceReason, preparation };

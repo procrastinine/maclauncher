@@ -15,4 +15,20 @@ function write(file, value, {root = path.dirname(file)} = {}) {
     if (fs.writeSync(descriptor, bytes, 0, 1, 0) !== 1) throw new Error("Cannot publish mapped demand.");
   } finally { fs.closeSync(descriptor); }
 }
-module.exports = {write};
+// The late camera file (native late-camera.hpp): the game's NGX core writes it and
+// the graphics library reads it, both through a mapping, so an existing file of
+// its fixed size keeps its inode and contents. It exists only while wanted.
+function camera(file, wanted, {root = path.dirname(file), size = 4096} = {}) {
+  Writable.assertOwnDirectory(root, path.dirname(file));
+  let current = null;
+  try { current = fs.lstatSync(file); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (current && wanted && current.isFile() && current.size === size) return;
+  if (current) {
+    if (current.isDirectory()) throw new Error("The late camera file must be one ordinary file.");
+    fs.unlinkSync(file);
+  }
+  if (!wanted) return;
+  const descriptor = fs.openSync(file, fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+  try { fs.ftruncateSync(descriptor, size); } finally { fs.closeSync(descriptor); }
+}
+module.exports = {write, camera};

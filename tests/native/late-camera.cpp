@@ -1,6 +1,7 @@
 // The late camera record (late-camera.hpp): exact jitter binding of a camera set after its frame's evaluation.
 #include "late-camera.hpp"
 #include <cassert>
+#include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -50,15 +51,25 @@ int main() {
   publish(m, .1f, .2f, 5, ue);auto &held = m.slot[(m.published - 1) % slots];held.sequence += 1;
   assert(take(&m, .1f, .2f, true, out) == NoRecord);checks++;held.sequence += 1;
   assert(take(&m, .1f, .2f, true, out) == Bound);checks++;
-  // the launcher's file beside the plan, mapped once; records written through the file are read through the map
+  // admission when the scene is received: only after the NGX core has published a record
+  Mailbox empty{};
+  assert(!pending(nullptr) && !pending(&empty));checks++;
+  assert(pending(&m));checks++;
+  // the launcher's file beside the plan: a lookup before the file exists does not stop a later one from mapping it
   const char *temporary = std::getenv("TMPDIR");std::string pattern = std::string(temporary && *temporary ? temporary : "/tmp") + "/late-camera-XXXXXX";
   char *directory = pattern.data();assert(mkdtemp(directory));
   const std::string plan = std::string(directory) + "/effect-plan.json", file = std::string(directory) + "/effect-plan.temporal-camera";
-  int fd = open(file.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0600);assert(fd >= 0 && ftruncate(fd, fileSize) == 0);
-  setenv("RESHADE_EFFECT_PLAN", plan.c_str(), 1);const Mailbox *view = mapped();assert(view && mapped() == view);checks++;
-  assert(take(view, .25f, -.166667f, true, out) == NoMailbox);checks++;
+  setenv("RESHADE_EFFECT_PLAN", plan.c_str(), 1);
+  assert(!mapped(std::chrono::milliseconds(0)));checks++;
+  int fd = open(file.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0600);assert(fd >= 0);
+  assert(!mapped(std::chrono::milliseconds(200)));checks++; // not yet its full size
+  assert(ftruncate(fd, fileSize) == 0);
+  assert(!mapped());checks++; // looked up again only after the retry interval, never on every frame
+  usleep(250000);
+  const Mailbox *view = mapped();assert(view && mapped() == view);checks++;
+  assert(take(view, .25f, -.166667f, true, out) == NoMailbox && !pending(view));checks++;
   Mailbox written{};publish(written, .25f, -.166667f, 7, ue);assert(pwrite(fd, &written, sizeof(written), 0) == ssize_t(sizeof(written)));
-  assert(take(view, .25f, -.166667f, true, out) == Bound && out.frameId == 11);checks++;
+  assert(pending(view) && take(view, .25f, -.166667f, true, out) == Bound && out.frameId == 11);checks++;
   close(fd);unlink(file.c_str());rmdir(directory);
   std::printf("late-camera: pass %u\n", checks);
 }
