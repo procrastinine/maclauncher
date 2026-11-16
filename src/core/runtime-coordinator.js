@@ -4,7 +4,7 @@ const { randomUUID } = require("node:crypto");
 const { execFile } = require("node:child_process");
 const { readJsonDocument, writeJsonAtomic } = require("./json-files");
 const { mergeSettingsChanges, settingsUnreadable, withoutClearedDefaults } = require("./settings-merge");
-const { CURRENT_SETTINGS_MIGRATION } = require("./data-migration-ids");
+const { CURRENT_SETTINGS_MIGRATION, VULKAN_SETTING_MIGRATION } = require("./data-migration-ids");
 
 function coordinationError(code, message) { return Object.assign(new Error(message), { code }); }
 function runtimeIdentity(value) {
@@ -158,8 +158,10 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
     // No await between fresh read, merge and atomic commit: one host is the writer.
     const current = currentSettings(file);
     const merged = mergeSettingsChanges(before, after, current);
-    const next = merged?.dataMigrations?.[CURRENT_SETTINGS_MIGRATION]?.complete === true ? merged
+    let next = merged?.dataMigrations?.[CURRENT_SETTINGS_MIGRATION]?.complete === true ? merged
       : require("./backcompat/settings-conversions").completeDeferredSettingsMigration(userDataDir, merged);
+    if (next?.dataMigrations?.[VULKAN_SETTING_MIGRATION]?.complete !== true)
+      next = require("./backcompat/vulkan-setting").completeDeferredMigration(userDataDir, next);
     if (next && typeof next === "object" && next.runtimes) next.runtimes = withoutClearedDefaults(next.runtimes);
     writeJsonAtomic(file, next); return next;
   }

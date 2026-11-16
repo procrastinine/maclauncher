@@ -26,7 +26,7 @@ async function moltenVk(context, dependencies) {
   const available = (dependencies.installedVulkan || Vulkan.installed)(context, VULKAN_OPTIONS);
   const installed = available.find(provider => provider.backend === "moltenvk");
   const resolve = dependencies.resolveVulkan || Vulkan.resolve;
-  const selectedContext = id => ({ ...context, runtimeSettings: { ...context.runtimeSettings, vulkanRuntime: id } });
+  const selectedContext = id => ({ ...context, runtimeSettings: { ...context.runtimeSettings, translatorVulkan: id } });
   if (installed) return resolve(selectedContext(installed.id), VULKAN_OPTIONS);
   const manager = dependencies.moltenVkManager || managers.find(provider => provider.backend === "moltenvk");
   const selection = manager.resolveSelection({}, context.settings, context.userDataDir, { verification: "status", ...VULKAN_OPTIONS });
@@ -46,7 +46,7 @@ async function resolveGraphics(entry, context, payload, metadata, { renderer, vu
   if (renderer !== "metal" || (metadata.requiredGlEsVersion || 0) <= METAL_GLES_CEILING ||
       explicitBackend(entry, context) === "metal" || payload.profile?.angleVulkanVersion !== 1)
     return { renderer, vulkan };
-  const requested = context.runtimeSettings?.vulkanRuntime || "auto";
+  const requested = context.runtimeSettings?.translatorVulkan || "auto";
   const native = context.runtimeSettings?.execution === "art";
   // ART's original gralloc imports need MoltenVK's Metal texture attachment
   // interface. A selected native Vulkan library remains an explicit preference.

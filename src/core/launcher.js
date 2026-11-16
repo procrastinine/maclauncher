@@ -31,7 +31,7 @@ const SteamClientStart = require("../modules/shared/runtime/steamworks/client-st
 const Installers = require("../modules/shared/installers");
 const { prepareModuleInput, applyInputChanges } = require("../modules/shared/writable-input");
 const { applySaveIdentity } = require("./save-identity");
-const { CURRENT_SETTINGS_MIGRATION } = require("./data-migration-ids");
+const { CURRENT_SETTINGS_MIGRATION, VULKAN_SETTING_MIGRATION } = require("./data-migration-ids");
 const { isAbortError } = require("../modules/shared/runtime/download-utils");
 const { afterProcessStop, waitForProcessStop } = require("./process-lifecycle");
 const GameAvailability = require("./game-availability");
@@ -123,11 +123,14 @@ function createLauncher({
     let document;
     try { document = readJsonDocument(path.join(userDataDir, "settings.json")) || {}; }
     catch (error) { logger?.warn?.("[settings] Stored settings could not be read:", error.message); }
-    const raw = document?.dataMigrations?.[CURRENT_SETTINGS_MIGRATION]?.complete === true ? document
+    let raw = document?.dataMigrations?.[CURRENT_SETTINGS_MIGRATION]?.complete === true ? document
       : document ? require("./backcompat/settings-conversions").migrateLegacySettings(document, {
       userDataDir, registry, logger,
       commitSettings: (before, next) => coordinatorFor(userDataDir).client().applySettings(before, next)
     }) : {};
+    if (document && raw?.dataMigrations?.[VULKAN_SETTING_MIGRATION]?.complete !== true)
+      raw = require("./backcompat/vulkan-setting").migrateSettings(raw, { userDataDir,
+        commitSettings: (before, next) => coordinatorFor(userDataDir).client().applySettings(before, next) });
     const modules = isRecord(raw.modules) ? { ...raw.modules } : {};
     for (const info of registry.listModules()) {
       modules[info.id] = {

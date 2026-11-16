@@ -29,7 +29,7 @@ const { readJsonObject, readJsonDocument, onUnreadablePreserved, writeJsonAtomic
 const { coordinatorFor } = require("../core/runtime-coordinator");
 const { createSettingsSnapshots } = require("../core/settings-snapshots");
 const { applySaveIdentity } = require("../core/save-identity");
-const { ORIGINAL_GAME_MIRRORS_MIGRATION, CURRENT_SETTINGS_MIGRATION, TRANSLATOR_ENVIRONMENT_MIGRATION, KOSMICKRISP_RENAME_MIGRATION } = require("../core/data-migration-ids");
+const { ORIGINAL_GAME_MIRRORS_MIGRATION, CURRENT_SETTINGS_MIGRATION, TRANSLATOR_ENVIRONMENT_MIGRATION, KOSMICKRISP_RENAME_MIGRATION, VULKAN_SETTING_MIGRATION } = require("../core/data-migration-ids");
 const { createUtilityWindowController } = require("./utility-windows");
 const { runRuntimeManagerAction } = require("../core/runtime-manager-service");
 const { createBackendService } = require("../core/backend-worker-client");
@@ -477,9 +477,14 @@ function readSettingsDocument() {
   // MacLauncher KosmicKrisp settings and choices saved under its former ID
   // move to the current ID.
   const rename = document?.dataMigrations?.[KOSMICKRISP_RENAME_MIGRATION];
-  if (rename?.complete === true || rename?.settings === true) return document;
-  return require("../core/backcompat/kosmickrisp-rename").migrateSettings(document, { userDataDir, logger,
-    commitSettings: (before, next) => settingsCoordinator.applySettings(before, next) });
+  if (rename?.complete !== true && rename?.settings !== true)
+    document = require("../core/backcompat/kosmickrisp-rename").migrateSettings(document, { userDataDir, logger,
+      commitSettings: (before, next) => settingsCoordinator.applySettings(before, next) });
+  // Move the Vulkan role before normalization or any default/record cache read.
+  if (document?.dataMigrations?.[VULKAN_SETTING_MIGRATION]?.complete !== true)
+    document = require("../core/backcompat/vulkan-setting").migrateSettings(document || {}, { userDataDir,
+      commitSettings: (before, next) => settingsCoordinator.applySettings(before, next) });
+  return document;
 }
 
 // One notice names each new copy of an unreadable stored document, whether

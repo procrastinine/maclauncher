@@ -28,7 +28,7 @@ function consumerContext(context, dependencies, projectId) {
 }
 // The saved Vulkan choice of a consumer; a value that is not a choice is Automatic.
 function savedChoice(context) {
-  const saved = context.runtimeSettings?.vulkanRuntime;
+  const saved = context.runtimeSettings?.translatorVulkan;
   return typeof saved === "string" && saved ? saved : "auto";
 }
 // Whether every source of a completed catalog refresh answered for this CPU
@@ -160,7 +160,7 @@ function requirements(context, dependencies = {}) {
     // An installed driver keeps Play offline. Only a first Intel-program launch
     // offers the managed Intel KosmicKrisp build before MoltenVK.
     if (request === "auto" && architecture === "x64" && dependencies.preferredBackend === "kosmickrisp") {
-      const fallback = () => requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, vulkanRuntime: "moltenvk:auto" } }, dependencies);
+      const fallback = () => requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, translatorVulkan: "moltenvk:auto" } }, dependencies);
       const offer = kosmicKrispOffer(context, dependencies);
       return offer ? [{ ...offer, fallback: fallback()[0] }] : fallback();
     }
@@ -219,7 +219,7 @@ function kosmicKrispOffer(context, dependencies = {}) {
   if (Requirements.requirementSupport(Requirements.METAL4, host).supported !== true || host.physicalAppleGPU === false) return null;
   let preferred;
   try {
-    preferred = requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, vulkanRuntime: managed.selectionId } }, dependencies)[0];
+    preferred = requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, translatorVulkan: managed.selectionId } }, dependencies)[0];
   } catch (error) { context.logger?.warn?.("[runtimes] The Intel KosmicKrisp package is unavailable; using MoltenVK.", error.message); }
   // A refreshed catalog that already lists no build for this CPU offers MoltenVK alone.
   const listedNone = preferred?.discoveryRequired && catalogListsNoBuild(dependencies.adaptedManager ||

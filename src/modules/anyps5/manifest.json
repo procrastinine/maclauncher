@@ -73,12 +73,12 @@
         "settings": {
           "environmentAction": "listTranslatorEnvironments",
           "defaults": {
-            "vulkanRuntime": "auto",
+            "translatorVulkan": "auto",
             "mouseInput": "auto"
           },
           "fields": [
             {
-              "key": "vulkanRuntime",
+              "key": "translatorVulkan",
               "type": "select",
               "label": "Vulkan",
               "optionsAction": "listVulkanRuntimes",

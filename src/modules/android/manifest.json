@@ -64,7 +64,7 @@
             "width": 1280,
             "height": 800,
             "angleBackend": "metal",
-            "vulkanRuntime": "auto",
+            "translatorVulkan": "auto",
             "audioInput": "",
             "cameraInput": "",
             "googleIntegration": false,
@@ -127,7 +127,7 @@
               "description": "Select ANGLE's graphics backend for the next launch. Vulkan uses the selected Vulkan implementation."
             },
             {
-              "key": "vulkanRuntime",
+              "key": "translatorVulkan",
               "type": "string",
               "label": "Vulkan implementation",
               "optionsAction": "listVulkanRuntimes",
