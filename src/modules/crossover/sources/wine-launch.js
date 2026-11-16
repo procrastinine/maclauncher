@@ -352,7 +352,10 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   context.processPlan=processPlan;
   return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, windowsWorkingDirectory, graphics, environment, args, translatorPlan, processPlan,
     existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath,
-    sessionPath: graphics.executablePath && graphics.executablePath !== selected.install.executablePath ? selected.install.executablePath : "" };
+    sessionPath: graphics.executablePath && graphics.executablePath !== selected.install.executablePath ? selected.install.executablePath : "",
+    // The game runs from a loader whose signature refuses the graphics layer.
+    ...(existingEnvironment || require("./wine-graphics").graphicsLayerAttachable(selected.install) ? {} :
+      { graphicsUnavailable: "The Wine loader that runs the game is signed with the hardened runtime, which ignores DYLD graphics libraries." }) };
 }
 
 // The launch functions of one Wine source.

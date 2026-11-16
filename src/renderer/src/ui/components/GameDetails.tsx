@@ -909,7 +909,7 @@ export const GameDetails = memo(function GameDetails({
           {g.ephemeral && Boolean(g.sessionTargets?.length) &&
             <SessionTargets gamePath={g.gamePath} targets={g.sessionTargets!} onRemove={actions.onRemoveSessionTarget} />}
 
-          {canLaunch && <EffectsControls key={`effects:${g.gamePath}`} game={g} running={gameRunning}
+          {canLaunch && g.graphicsLayer !== false && <EffectsControls key={`effects:${g.gamePath}`} game={g} running={gameRunning}
             live={graphicsLive} warnings={g.graphicsWarnings}
             graphicsHost={moduleInfo?.runtime.entries?.[g.runtimeId]?.graphicsHost}
             visible={visible}

@@ -63,6 +63,12 @@ function createProvider({ source, manager, launch = WineLaunch.forSource(source)
     },
     runtimeDirectory: launch.runtimeDirectory, resolveSaveLocations: (entry, context) => resolveSaveLocations(entry, context, { source }),
     supports: SUPPORTS,
+    // Whether the graphics layer can attach to a game of the selected version;
+    // the game's settings leave out the Graphics section when it cannot.
+    graphicsLayer: (entry, context = {}) => {
+      const selected = runtimeManager().resolveSelection(entry, context.settings, context.userDataDir, { verification: "status" });
+      return !selected?.ready || !selected.install || require("./wine-graphics").graphicsLayerAttachable(selected.install);
+    },
     canLaunchRuntime: (runtimeId, entry) => runtimeId === id && platform === "darwin" && supportsEntry(entry),
     ensureRuntime: async (entry, context) => {
       if (!supportsEntry(entry)) throw new Error(notSupported);

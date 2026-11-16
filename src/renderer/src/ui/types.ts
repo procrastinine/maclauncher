@@ -430,6 +430,8 @@ export type RecentGame = {
   reshade?: GameReShadeSettings;
   graphics?: GameGraphicsSettings;
   graphicsWarnings?: string[];
+  /** False when the selected runtime's loader measurably refuses the graphics layer. */
+  graphicsLayer?: false;
   /** Non-blocking notices from the latest Play, such as a Steam start that timed out. */
   launchNotices?: string[];
   effects?: GameEffectsPlan | null;

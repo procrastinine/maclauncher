@@ -1311,6 +1311,7 @@ function normalizeGameEntry(entry, settings, precomputed = null) {
     moduleLabel: labels.label,
     moduleShortLabel: labels.shortLabel,
     moduleRuntimeSupport: checks.runtimeSupport,
+    ...(checks.graphicsLayer === false ? { graphicsLayer: false } : {}),
     moduleSupports: {
       launch: checks.launch,
       launchRequirement: checks.launchRequirement || null,

@@ -247,7 +247,11 @@ function createLauncher({
     const saveLocationOverride = (supports.saveLocationOverride ?? info?.supports?.saveLocationOverride) !== false;
     const defaultSaveDir = typeof entry.defaultSaveDir === "string" && entry.defaultSaveDir ? entry.defaultSaveDir : null;
     const launch = canLaunchEntry({ mod, info, entry: context, runtimeId, moduleSettings, context: { app, userDataDir, settings } });
-    return { runtimeId,
+    // A runtime whose selected version measurably refuses the graphics layer
+    // leaves the game's Graphics section out. Unknown counts as attachable.
+    let graphicsLayer = true;
+    try { graphicsLayer = mod?.getRuntimeProvider?.(runtimeId)?.graphicsLayer?.(context, { app, userDataDir, settings }) !== false; } catch {}
+    return { runtimeId, ...(graphicsLayer ? {} : { graphicsLayer: false }),
       runtimeSupport: resolveRuntimeSupportForEntry(mod, info, context, moduleSettings, { app, userDataDir, settings, getRuntimeManagerState: states }),
       launch,
       launchRequirement: hostRequirement(mod)?.message || (!launch && hostRuntimeReason(info, requested || runtimeId)) || null,
@@ -472,7 +476,7 @@ function createLauncher({
         .catch(error => warnGraphics(logger, "The private graphics copy could not be removed.", error.message));
     };
     const preflightGameGraphics = async (command, args, spawnOptions) => {
-      const {graphicsExecutable, ...nativeOptions} = spawnOptions || {};
+      const {graphicsExecutable, graphicsUnavailable, ...nativeOptions} = spawnOptions || {};
       const target = Object.hasOwn(spawnOptions || {}, "graphicsExecutable") ? graphicsExecutable : command;
       const original = {command, args, options: nativeOptions};
       const Injection = require("../modules/shared/runtime/native-injection");
@@ -482,9 +486,12 @@ function createLauncher({
       const processing = ReShade.executionRequirements(context.effectsEntry || entry).needed.processor;
       if (!preparedGraphics?.DYLD_INSERT_LIBRARIES) {if (!processing) releaseCopy(target);return original;}
       const libraries = preparedGraphics.DYLD_INSERT_LIBRARIES.split(path.delimiter).filter(Boolean);
-      let checked = await Injection.preflight(target, libraries, {signal: context.signal});
+      // A runtime that measured its game process refusing the layer says so;
+      // a private copy of the program it starts cannot change that.
+      const refused = typeof graphicsUnavailable === "string" && graphicsUnavailable;
+      let checked = refused ? {available: false, reason: graphicsUnavailable} : await Injection.preflight(target, libraries, {signal: context.signal});
       if (checked.available !== false) {if (checked.available || !processing) releaseCopy(target);return original;}
-      if (processing && copyDirectory && typeof target === "string" && fs.statSync(target, {throwIfNoEntry: false})?.isFile()) {
+      if (!refused && processing && copyDirectory && typeof target === "string" && fs.statSync(target, {throwIfNoEntry: false})?.isFile()) {
         try {
           const NativeApplication = require("../modules/shared/native-application"), unit = NativeApplication.copyUnit(target);
           const prepared = await NativeApplication.prepareCopy({unit, directory: copyDirectory, signal: context.signal,
@@ -500,7 +507,7 @@ function createLauncher({
           if (context.signal?.aborted || isAbortError(error)) throw error;
           checked = {available: false, reason: checked.reason + " A private copy for graphics could not be used: " + (error?.message || String(error))};
         }
-      } else if (!processing) releaseCopy(target);
+      } else if (!processing || refused) releaseCopy(target);
       graphicsAttachment = checked;
       try { require("../modules/shared/reshade/launch-binding").attachmentUnavailable(entry, checked.reason, {userDataDir}); }
       catch (error) { warnGraphics(logger, "Graphics attachment status could not be recorded.", error.message); }

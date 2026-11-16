@@ -27,7 +27,7 @@ async function launch(plan, context, {processes = require('../modules/shared/run
     const args = plan.existingEnvironment ? processes.externalArguments(plan.winePath, plan.args, plan.environment, plan.sessionPath) :
       supervisorArguments(plan.winePath, plan.serverPath, 'play', plan.args, plan.environment, plan.sessionPath);
     const child = await context.spawnDetachedChecked('/bin/sh', args,
-      {cwd: plan.workingDirectory || path.dirname(plan.executablePath), env: plan.environment, stdio: ['ignore','pipe','pipe'], graphicsExecutable: plan.winePath}, false);
+      {cwd: plan.workingDirectory || path.dirname(plan.executablePath), env: plan.environment, stdio: ['ignore','pipe','pipe'], graphicsExecutable: plan.winePath, ...(plan.graphicsUnavailable ? {graphicsUnavailable: plan.graphicsUnavailable} : {})}, false);
     log.attach(child);
     activation.followWineActivation(child, context);
     return child;

@@ -289,7 +289,7 @@ export default function App() {
   const runtimeInspectionKey = useMemo(() => {
     if (!inspectionGame) return "";
     const graphicsHost = inspectionModule?.runtime?.entries?.[inspectionGame.runtimeId]?.graphicsHost;
-    const inspectGraphics = ["window", "catalyst", "remote", "explicit"].includes(graphicsHost || "");
+    const inspectGraphics = inspectionGame.graphicsLayer !== false && ["window", "catalyst", "remote", "explicit"].includes(graphicsHost || "");
     const sectionId = resolveRuntimeSectionId(inspectionModule, inspectionGame.runtimeId, inspectionGame, { managerState: inspectionManager });
     const statusAction = runtimeInspectorStatusAction(inspectionModule, inspectionGame.runtimeId, inspectionGame, sectionId);
     const recommend = Boolean(inspectionModule?.runtime?.manager?.[inspectionGame.runtimeId]);

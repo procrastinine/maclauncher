@@ -260,6 +260,42 @@ const publisherSigned = install => {
   return Boolean(publisherLoader(install.executablePath || path.join(engineRoot(install), "bin", "wine")) ||
     (unixName && publisherLoader(path.join(engineRoot(install), "lib", "wine", unixName, "wine"))));
 };
+// The publisher-signed loader that runs the game's processes, or null when the
+// game runs from the view's own bundle.
+function gameLoader(install) {
+  const engine = engineRoot(install), unixName = wineLayout(install).unixName;
+  const unixLoader = unixName && path.join(engine, "lib", "wine", unixName, "wine");
+  return unixLoader && fs.existsSync(unixLoader) ? publisherLoader(unixLoader) : publisherLoader(install.executablePath || path.join(engine, "bin", "wine"));
+}
+function codesignOutput(file) {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (/^(?:DYLD_|RESHADE_)/.test(key)) delete env[key];
+  const result = require("node:child_process").spawnSync("/usr/bin/codesign", ["--display", "--verbose=4", "--entitlements", "-", file],
+    { env, timeout: 10000, maxBuffer: 1024 * 1024, encoding: "utf8" });
+  return `${result.stdout || ""}\n${result.stderr || ""}`;
+}
+// Whether MacLauncher's graphics layer can attach to the game's process. The
+// layer attaches through DYLD_INSERT_LIBRARIES, so the signature of the loader
+// the game runs from decides: dyld ignores DYLD variables for the hardened
+// runtime without allow-dyld-environment-variables. Each loader file is read
+// once; a signature that cannot be read counts as attachable.
+const layerFacts = new Map();
+function graphicsLayerAttachable(install, { readSignature = codesignOutput } = {}) {
+  let loader, identity;
+  try {
+    loader = gameLoader(install);
+    if (!loader) return true;
+    const stat = fs.statSync(loader, { bigint: true });
+    identity = [stat.dev, stat.ino, stat.size, stat.mtimeNs].join(":");
+  } catch { return true; }
+  const known = layerFacts.get(loader);
+  if (known?.identity === identity) return known.attachable;
+  const facts = require("../../shared/runtime/native-injection").parseSignature(readSignature(loader));
+  const attachable = facts.flags === null || !(facts.flags & 0x10000) || facts.allowDyld;
+  if (layerFacts.size >= 64) layerFacts.delete(layerFacts.keys().next().value);
+  layerFacts.set(loader, { identity, attachable });
+  return attachable;
+}
 async function prepareLoaderView(engine, viewRoot, install, signal, source) {
   const wineRoot = path.join(viewRoot, "wine"), dllRoot = path.join(wineRoot, "lib", "wine");
   const layout = wineLayout(install), bin = path.join(wineRoot, "bin"), unix = path.join(dllRoot, layout.unixName);
@@ -457,5 +493,5 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath };
 }
 
-module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, publisherSigned, keepBundleLoader, gameBundleInfo, prepareGraphicsView, capabilitiesFor,
+module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, publisherSigned, graphicsLayerAttachable, gameLoader, keepBundleLoader, gameBundleInfo, prepareGraphicsView, capabilitiesFor,
   __test: { capabilitiesFor, ownDirectory, prepareLoaderView, CORE_DLLS } };

@@ -8,7 +8,10 @@ const caches = new WeakMap();
 function parseSignature(output) {
   output = String(output || "");
   const match = output.match(/flags=0x([a-f0-9]+)/i), flags = match ? parseInt(match[1], 16) : null;
-  const entitlement = name => new RegExp(`<key>\\s*${name.replace(/\./g, "\\.")}\\s*</key>\\s*<true\\s*/>`, "i").test(output);
+  // `--entitlements :-` prints the XML blob; `--entitlements -` prints the
+  // DER entitlements that current macOS enforces as [Key]/[Value] lines.
+  const entitlement = name => { const key = name.replace(/\./g, "\\.");
+    return new RegExp(`<key>\\s*${key}\\s*</key>\\s*<true\\s*/>`, "i").test(output) || new RegExp(`\\[Key\\]\\s*${key}\\s*\\[Value\\]\\s*\\[Bool\\]\\s*true`, "i").test(output); };
   const team = /^TeamIdentifier=(.+)$/m.exec(output)?.[1]?.trim();
   return {flags, unsigned: /code object is not signed at all/i.test(output), teamIdentifier: team && team !== "not set" ? team : null,
     allowDyld: entitlement("com.apple.security.cs.allow-dyld-environment-variables"),

@@ -562,6 +562,21 @@ test("a copy that cannot be made keeps the original launch, without the processo
   assert.equal(context.launchedPath(f.executable), f.executable);
 });
 
+test("a runtime whose game process refuses the layer gets no private copy and starts without the processor", async t => {
+  const f = launcherFixture(t), released = [];
+  const reason = "The Wine loader that runs the game is signed with the hardened runtime, which ignores DYLD graphics libraries.";
+  t.mock.method(NativeApplication, "prepareCopy", async () => assert.fail("a copy cannot change the process that runs the game"));
+  t.mock.method(NativeApplication, "releaseCopy", async (directory, unit) => { released.push([directory, unit]); return true; });
+  const context = f.launcher.getGameLaunchContext(f.entry(true), {});
+  await context.spawnDetachedChecked(f.executable, [], { cwd: path.dirname(f.executable), env: {}, graphicsUnavailable: reason });
+  assert.equal(f.spawned[0].command, f.executable);
+  assert.equal(Object.hasOwn(f.spawned[0].options, "graphicsUnavailable"), false);
+  assert.equal(Object.hasOwn(f.spawned[0].options.env, "RESHADE_EFFECT_PLAN"), false);
+  assert.equal(context.graphicsPreparationFailure.reason, reason);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(released, [[f.directory, f.app]], "a copy left by an earlier launch is released");
+});
+
 test("Play with graphics off runs the original and removes a copy it no longer needs", async t => {
   const f = launcherFixture(t), released = [];
   t.mock.method(NativeApplication, "prepareCopy", async () => assert.fail("Graphics off never prepares a copy"));
