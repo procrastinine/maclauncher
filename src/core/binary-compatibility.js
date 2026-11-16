@@ -2,6 +2,7 @@
 const {peMachineCode}=require('./binary-arch');
 // This table applies to measured binaries, independently of publisher names.
 function acceptsBinary(processHost, guestArch, integration, binary) {
+  processHost=normalizeHostArchitecture(processHost);
   if(binary.format==='macho') return typeof processHost==='string'&&binary.architectures?.includes(processHost)
     ? {accepted:true} : {accepted:false,reason:`Host library has no ${processHost} Mach-O slice.`};
   if(binary.format==='pe') {
@@ -11,4 +12,5 @@ function acceptsBinary(processHost, guestArch, integration, binary) {
   }
   return {accepted:false,reason:`No ${binary.format} integration is selected for this process.`};
 }
-module.exports={acceptsBinary};
+const normalizeHostArchitecture=value=>({x64:'x86_64',aarch64:'arm64',x86:'i386'})[value]||value;
+module.exports={acceptsBinary,normalizeHostArchitecture};

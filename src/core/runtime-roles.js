@@ -12,7 +12,7 @@ function badges(build,host={}){return [...new Set((build?.files||build?.binaries
 function execution(build,host={}){
  if(build?.execution)return build.execution.startsWith('fex')?'fex':build.execution;
  const images=(build?.files||build?.binaries||[]).filter(b=>b.format==='macho'&&(b.cpuSlices||b.architectures||[]).length);
- const hardware=host.hardwareArch||host.hostArch;if(!images.length||!hardware)return undefined;
+ const hardware=require('./binary-compatibility').normalizeHostArchitecture(host.hardwareArch||host.hostArch);if(!images.length||!hardware)return undefined;
  if(images.every(b=>(b.cpuSlices||b.architectures).includes(hardware)))return 'native';
  if(hardware==='arm64'&&images.every(b=>(b.cpuSlices||b.architectures).includes('x86_64')))return 'rosetta';
  return undefined;

@@ -1,6 +1,6 @@
 'use strict';
 const {getKind}=require('./component-kinds');
-const {acceptsBinary}=require('./binary-compatibility');
+const {acceptsBinary,normalizeHostArchitecture}=require('./binary-compatibility');
 const {selectLogicalLibraries,fileProvides}=require('./logical-libraries');
 const {normalizeChoice}=require('./runtime-roles');
 const provides=b=>[...(getKind(b.kind)?.provides||[]),...(b.interfaces?.provides||[]),...(b.binaries||[]).flatMap(fileProvides)];
@@ -9,6 +9,7 @@ const requires=b=>(b.interfaces?.requires||[]).filter(token=>!token.startsWith('
 const versionAtLeast=(a,b)=>{const x=String(a||'').split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++)if((x[i]||0)!==(y[i]||0))return(x[i]||0)>(y[i]||0);return true;};
 const roleFor=(token,kind)=>token.startsWith('api:d3d')?token.slice(4):token==='api:dxgi'?'dxgi':({'vulkan-driver':'vulkan-driver',media:'video',nvapi:'nvapi',ngx:'ngx'})[kind]||kind;
 function resolvePlan({target,choices={},builds=[],sources=[],system={},environment={},capabilities={},scene={}}={}){
+ system={...system,hostArch:normalizeHostArchitecture(system.hostArch)};
  const excluded=[],failures=[],fallBacks=[],sourceById=new Map(sources.map(s=>[s.id,s]));
  const report=(b,reason)=>{if(!excluded.some(e=>e.build===b.id&&e.reason===reason))excluded.push({kind:b.kind,source:b.source,build:b.id,reason});return reason;};
  const systemHas=token=>token.startsWith('macos>=')?Boolean(system.macOS)&&versionAtLeast(system.macOS,token.slice(7)):(system.provides||[]).includes(token)||token===`cpu:${system.hostArch}`;
