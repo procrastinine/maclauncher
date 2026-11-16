@@ -24,6 +24,6 @@ export const SCENE_AOV_INPUTS: readonly SceneAovInput[];
 export const SCENE_INPUTS: readonly SceneInput[];
 export function sceneInputNames(requirements?: unknown): SceneInput[];
 export function sceneInputRequirements(requirements?: unknown): SceneInputRequirements;
-export function sceneInputAvailable(name:SceneInput,inputs?:Record<string,unknown>|null):boolean;
+export function sceneInputAvailable(name:SceneInput,inputs?:Record<string,unknown>|null,options?:{kind?:string}):boolean;
 export function sceneInputLabel(name:SceneInput):string;
 export function coordinateTransform(node?: {kind?: string; method?: string} | null): "identity" | "scale" | "unknown";

@@ -275,7 +275,7 @@ export type GameGraphicsSettings = { spatialShader?: GameReShadeSettings | null;
   spatialMultiplier: number | null; spatialSharpness: number; ls1Mode: "quality" | "performance"; frameGeneration: "off" | "lsfg" | "metalfx" | "fsr3" | "xess"; frameMultiplier: number;
   framePacing: "fixed" | "adaptive"; targetFps: number; smoothCadence: boolean;
   lsfgMode: "quality" | "performance"; lsfgFp16: boolean; lsfgFlowScale: number; keepStaticContent?: boolean; modelVersion: string | null };
-export type GraphicsInputs = { cameraProjection: boolean; source: string; methods: string[]; requiresDownload?: boolean;
+export type GraphicsInputs = { cameraProjection: boolean; generationCamera?: boolean; source: string; methods: string[]; requiresDownload?: boolean;
   nativeVideo?: boolean; shaderBindingsNextLaunch?: boolean;
   nativeSpatialMethods?: string[]; nativeSpatialMethodLabels?: Record<string, string>;
   sourceResolution?: false | { heights: boolean; multipliers: number[]; percentages?:boolean;processing?:boolean;control?: string; live?: boolean; methods?: string[]; methodLabels?: Record<string, string>; filterExclusiveWithTemporal?: boolean }; spatialBindingsNextLaunch?: boolean;

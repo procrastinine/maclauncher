@@ -503,3 +503,49 @@ test("the Vulkan DLSS route takes the camera from the game's own Streamline inte
   fs.writeFileSync(f.target, pe(names));
   assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true }), null);
 });
+
+test("Unreal Engine's Streamline plugin without sl.dlss gives frame generation the late camera with -slforcetagging and temporal rows none", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "streamline-unreal-"));t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const Temporal = require("../src/modules/crossover/temporal");
+  const gameRoot = path.join(root, "game"), plugin = path.join(gameRoot, "Engine/Plugins/Runtime/Nvidia/Streamline/Binaries/ThirdParty/Win64");
+  const exe = path.join(gameRoot, "FSD/Binaries/Win64/FSD-Win64-Shipping.exe");fs.mkdirSync(path.dirname(exe), { recursive: true });fs.mkdirSync(plugin, { recursive: true });
+  const bytes = pe();bytes.writeUInt16LE(2, 0x96);bytes.writeUInt16LE(3, 0x98 + 68);fs.writeFileSync(exe, bytes);
+  const api = ["slEvaluateFeature", "slGetNewFrameToken", "slInit", "slSetConstants", "slShutdown"];
+  fs.writeFileSync(path.join(plugin, "sl.interposer.dll"), pe(api));fs.writeFileSync(path.join(plugin, "sl.dlss_g.dll"), pe(["slGetPluginFunction"]));
+  const runtimeData = { crossover: { sourceRoot: gameRoot, windowsExecutablePath: exe, executableArchitecture: "x86_64", detectionComplete: true } };
+  const effects = video => ({ effects: { schema: 2, mode: "advanced", enabled: true, video } });
+  const anr = { id: "frames", kind: "frame-generation", enabled: true, method: "anr", settings: { frameMultiplier: 2 } };
+  const entry = { gamePath: gameRoot, runtimeData, ...effects([anr]) };
+  // The plugin sets each frame's constants after its own DLSS evaluation: only presentation-time generation can use them.
+  const plan = Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true });
+  assert.equal(plan.kind, "vulkan-camera");assert.equal(plan.lateCamera, true);
+  assert.equal(plan.inputs.cameraProjection, false);assert.equal(plan.inputs.generationCamera, true);assert.deepEqual(plan.inputs.methods, []);
+  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: false }), null);
+  assert.deepEqual(Temporal.cameraArguments(entry, {}, plan), ["-slforcetagging"]);
+  assert.deepEqual(Temporal.cameraArguments({ ...entry, ...effects([{ id: "frames", kind: "frame-generation", enabled: true, method: "metalfx", settings: { frameMultiplier: 2 } }]) }, {}, plan), ["-slforcetagging"]);
+  // Temporal rows need the camera at the evaluation; they, and plans without a generation camera row, keep the game's arguments.
+  for (const other of [effects([{ id: "scene", kind: "temporal", enabled: true, method: "fsr2", settings: {} }]), effects([{ ...anr, enabled: false }]),
+    effects([{ id: "frames", kind: "frame-generation", enabled: true, method: "lsfg", settings: {} }]), { effects: { ...effects([anr]).effects, enabled: false } }, {}])
+    assert.deepEqual(Temporal.cameraArguments({ ...entry, effects: undefined, ...other }, {}, plan), []);
+  // The argument is never repeated when the game's settings or the command line already give it.
+  assert.deepEqual(Temporal.cameraArguments(entry, { runtimeSettings: { arguments: ["-dx12", "-SLForceTagging"] } }, plan), []);
+  assert.deepEqual(Temporal.cameraArguments(entry, { gameArguments: ["-slforcetagging"] }, plan), []);
+  // Streamline's DLSS plugin beside the interposer gives the camera at the evaluation, without the argument.
+  fs.writeFileSync(path.join(plugin, "sl.dlss.dll"), pe(["slGetPluginFunction"]));
+  const sdk = Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true });
+  assert.equal(sdk.lateCamera, undefined);assert.equal(sdk.inputs.cameraProjection, true);assert.deepEqual(Temporal.cameraArguments(entry, {}, sdk), []);
+  fs.unlinkSync(path.join(plugin, "sl.dlss.dll"));
+  // An interposer elsewhere gives neither the route nor the argument.
+  fs.rmSync(path.join(gameRoot, "Engine"), { recursive: true });const moved = path.join(gameRoot, "Streamline");fs.mkdirSync(moved);
+  fs.writeFileSync(path.join(moved, "sl.interposer.dll"), pe(api));
+  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true }), null);assert.deepEqual(Temporal.cameraArguments(entry, {}, null), []);
+});
+
+test("a camera supplied after the evaluation admits frame generation rows only", async () => {
+  const { sceneInputAvailable } = await import("../src/modules/shared/effects/operation-contracts.mjs");
+  const late = { depth: true, motionVectors: true, cameraProjection: false, generationCamera: true };
+  assert.equal(sceneInputAvailable("camera", late, { kind: "frame-generation" }), true);
+  assert.equal(sceneInputAvailable("camera", late, { kind: "temporal" }), false);
+  assert.equal(sceneInputAvailable("camera", late), false);
+  assert.equal(sceneInputAvailable("camera", { cameraProjection: true }, { kind: "temporal" }), true);
+});

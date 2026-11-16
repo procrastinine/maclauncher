@@ -14,8 +14,11 @@ export function sceneInputRequirements(requirements){
   return {depth:false,motion:false,...Object.fromEntries(FRAME_INPUTS.filter(name=>names.includes(name)).map(name=>[name,true])),
     ...(sceneAovs.length?{sceneAovs}:{})};
 }
-export function sceneInputAvailable(name,inputs={}){
+// A source may supply the camera only after its frame's evaluation (generationCamera): frame generation at
+// presentation can use it, temporal upscaling at the evaluation cannot.
+export function sceneInputAvailable(name,inputs={},{kind}={}){
   if(SCENE_AOV_INPUTS.includes(name))return inputs?.sceneAovAPI===1&&Array.isArray(inputs.sceneAovs)&&inputs.sceneAovs.includes(name);
+  if(name==="camera"&&kind==="frame-generation"&&inputs?.generationCamera===true)return true;
   const key=({motion:"motionVectors",camera:"cameraProjection"})[name]||name;
   return inputs?.[key]===true;
 }

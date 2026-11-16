@@ -161,7 +161,7 @@ function catalog({ reshadeState = {}, graphicsCapabilities = {}, graphicsInputs 
       const scene=kind==="temporal"||operation?.scene===true;
       const matrices=operation?.matrices===true,camera=operation?.camera===true;
       const sceneRequirements=scene?["depth","motion",...(matrices?["viewMatrix","projectionMatrix"]:camera?["camera"]:[]),...(operation?.requires||[])]:[];
-      const pendingInputs=sceneRequirements.filter(key=>!sceneInputAvailable(key,graphicsInputs));
+      const pendingInputs=sceneRequirements.filter(key=>!sceneInputAvailable(key,graphicsInputs,{kind}));
       const xess=kind==="frame-generation"?xessGenerationProvider:xessProvider;
       const hardwareReason = ["metalfx","metalfx-denoised","metalfx-image"].includes(method) ? require("../reshade/hardware-support").operationReason(support.hardware,
         method==="metalfx-denoised"?"denoised":kind==="frame-generation"?"interpolation":kind==="temporal"?"temporal":"spatial") : null;

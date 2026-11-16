@@ -153,22 +153,50 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
       inputs };
   } catch { return null; }
 }
+// Unreal Engine's NVIDIA Streamline plugin keeps the interposer here. Its
+// DLSS Super Resolution runs through Unreal Engine's own NGX DLSS plugin,
+// outside slEvaluateFeature, and the plugin sets each frame's Streamline
+// constants after that evaluation, only while DLSS Frame Generation runs or
+// with -slforcetagging.
+const UNREAL_STREAMLINE = "Engine/Plugins/Runtime/Nvidia/Streamline/Binaries/ThirdParty/Win64";
+const unrealStreamline = (match, sourcePath) => path.relative(match.sourceRoot, path.dirname(sourcePath)).split(path.sep).join("/") === UNREAL_STREAMLINE;
 // The camera on the Vulkan DLSS route (vulkan-dlss.js) comes from the game's
 // own Streamline interposer. The selected NGX core captures the camera of the
 // game's Streamline constants in process and adds it to that evaluation's
 // frame, so the interposer stays the game's signed file and nothing in the
 // game folder is replaced. The route forwards without a setting, so the camera
-// needs none either, and no DXMT library is involved.
+// needs none either, and no DXMT library is involved. With Streamline's DLSS
+// plugin the core selects the camera inside slEvaluateFeature. In Unreal
+// Engine's Streamline plugin layout without it, the camera arrives after each
+// evaluation: the core passes it to that frame's frame generation at
+// presentation (generationCamera), and temporal upscaling receives none.
 function resolveVulkanCameraPlan(entry, context = {}, { settings = context.runtimeSettings || {}, forwarding = false } = {}) {
   try {
     if (!forwarding) return null;
     const match = Detection.cachedWindowsExecutable(entry);if (!match) return null;
     const executable = settings.executable ? path.resolve(match.sourceRoot, settings.executable) : match.windowsExecutablePath;
     if (!Detection.inside(match.sourceRoot, executable)) return null;
-    if (!libraries(match, executable).some(sourcePath => libraryAdapter({ sourcePath }) === Streamline && Streamline.interposer(sourcePath) && Streamline.dlssPlugin(sourcePath))) return null;
-    const route = { source: "streamline", depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true, methods: ["fsr2", "fsr3"] };
-    return { kind: "vulkan-camera", sourceRoot: match.sourceRoot, inputs: { ...route, routes: [route] } };
+    const interposers = libraries(match, executable).filter(sourcePath => libraryAdapter({ sourcePath }) === Streamline && Streamline.interposer(sourcePath));
+    if (interposers.some(sourcePath => Streamline.dlssPlugin(sourcePath))) {
+      const route = { source: "streamline", depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true, methods: ["fsr2", "fsr3"] };
+      return { kind: "vulkan-camera", sourceRoot: match.sourceRoot, inputs: { ...route, routes: [route] } };
+    }
+    if (!interposers.some(sourcePath => unrealStreamline(match, sourcePath))) return null;
+    const route = { source: "streamline", depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: false, generationCamera: true, methods: [] };
+    return { kind: "vulkan-camera", sourceRoot: match.sourceRoot, lateCamera: true, inputs: { ...route, routes: [route] } };
   } catch { return null; }
+}
+// The game arguments that the camera needs: Unreal Engine's -slforcetagging,
+// only on its late-camera route and only when an enabled frame-generation row
+// of the saved plan consumes the camera. Every other launch keeps the game's
+// own arguments.
+function cameraArguments(entry, context = {}, vulkanCamera, { settings = context.runtimeSettings || {} } = {}) {
+  try {
+    if (vulkanCamera?.lateCamera !== true) return [];
+    const given = [...(Array.isArray(settings.arguments) ? settings.arguments : []), ...(Array.isArray(context.gameArguments) ? context.gameArguments : [])];
+    if (given.some(value => String(value).toLowerCase() === "-slforcetagging")) return [];
+    return require("../../shared/effects/scene-demand").generationCamera(entry) ? ["-slforcetagging"] : [];
+  } catch { return []; }
 }
 function restoreLibraries(libraries, gameRoot, cause, logger) {
   const failures = [];
@@ -312,5 +340,5 @@ function requirements(entry, context, options = {}) {
   const scene = once.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings).ready && resolveScenePlan(entry, context, { root: options.root });
   return [...camera, ...(scene?.requirements || [])];
 }
-module.exports = { FILES, rendererFiles,adapter, payload, libraries, libraryAdapter, matchingSupport, resolvePlan, resolveVulkanCameraPlan, sceneSourceInputs, prepareGame, restoreGame, environment, rendererFile,
+module.exports = { FILES, rendererFiles,adapter, payload, libraries, libraryAdapter, matchingSupport, resolvePlan, resolveVulkanCameraPlan, cameraArguments, sceneSourceInputs, prepareGame, restoreGame, environment, rendererFile,
   requirements, sceneLibraries, sceneDemand, resolveScenePlan, restoreLibraries };

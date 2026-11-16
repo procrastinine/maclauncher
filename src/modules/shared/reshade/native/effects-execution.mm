@@ -17,6 +17,7 @@
 #include "runtime-status.hpp"
 #include "scene-destination.hpp"
 #include "temporal-frame-policy.hpp"
+#include "late-camera.hpp"
 #include "generation-timeline.hpp"
 #include "presentation-hold.hpp"
 #include "depth-resample.hpp"
@@ -842,6 +843,21 @@ ShaderResult EffectExecution::bindSceneImage(id<MTLCommandBuffer>commands,id<MTL
         else if(NSUInteger width=0,height=0;sceneUILayerSize(source->frame.frameId,width,height)&&(width!=colour.width||height!=colour.height))reportInterfaceLayer("unavailable: the interface layer is "+std::to_string(width)+"x"+std::to_string(height)+" and the scene image is "+std::to_string(colour.width)+"x"+std::to_string(colour.height));}
     bindMetalFxGenerationResources(actual,source->frame);normalized=std::move(result);return {true,{}};
 }catch(const std::exception&error){return {false,error.what()};}}
+// A scene without a camera takes the one its game supplied after this frame's evaluation (late-camera.hpp), matched
+// by the evaluation's own jitter offset in the raw scene. Generation only; each outcome is logged once.
+static void attachLateCamera(RSTemporalFrame&actual,const RSTemporalFrame&raw){
+    if(raw.flags&RS_TEMPORAL_CAMERA_VALID)return;RSTemporalCamera camera{};
+    const auto result=late_camera::take(late_camera::mapped(),raw.jitterX,raw.jitterY,(raw.flags&RS_TEMPORAL_DEPTH_REVERSED)!=0,camera);
+    static std::atomic<unsigned>reported{0};const unsigned bit=1u<<unsigned(result);
+    if(result!=late_camera::NoMailbox&&!(reported.fetch_or(bit)&bit)){
+        static const char*const reasons[]={"bound","","no camera record has this frame's jitter offset","the matching record is not one of the two newest",
+            "several records have this frame's jitter offset","the record's depth direction differs","the frame has no jitter offset"};
+        nativeLog(result==late_camera::Bound?"Late camera on a generation scene: near "+std::to_string(camera.nearPlane)+((camera.flags&RS_TEMPORAL_DEPTH_INFINITE)?" far infinite":" far "+std::to_string(camera.farPlane))+" fov "+std::to_string(camera.verticalFov)
+            :std::string("No late camera on a generation scene: ")+reasons[unsigned(result)]);}
+    if(result!=late_camera::Bound)return;
+    actual.flags=(actual.flags&~uint32_t(RS_TEMPORAL_DEPTH_INFINITE))|RS_TEMPORAL_CAMERA_VALID|(camera.flags&RS_TEMPORAL_DEPTH_INFINITE);
+    actual.nearPlane=camera.nearPlane;actual.farPlane=camera.farPlane;actual.verticalFov=camera.verticalFov;
+}
 ShaderResult EffectExecution::bindGenerationScene(id<MTLCommandBuffer>commands,size_t index,id<MTLTexture>colour,const std::shared_ptr<const EffectSceneLease>&lease,FrameOrigin origin,id<MTLTexture>copiedFrom){try{
     if(index>=impl->stages.size())return {false,"The generation stage is unavailable"};const auto&stage=impl->stages[index];if(!stage.encoder->requiresScene())return {true,{}};
     auto scratch=impl->acquire(commands);if(!scratch||(!lease&&!scratch->scene))return {false,"This real generation endpoint has no matching scene lease"};
@@ -851,6 +867,7 @@ ShaderResult EffectExecution::bindGenerationScene(id<MTLCommandBuffer>commands,s
     auto actual=impl->normalizeScene(*scratch,commands,source,colour,colour,jittered,false,false,true,attachments,1,GuideAll,rawGuides);const auto aovs=temporalSceneAovs(actual);actual.owner=stage.state.get();if(aovs&&bindSceneAovLease(actual,aovs)!=RS_TEMPORAL_OK)return {false,"The generation endpoint attachments could not be retained"};
     bindMetalFxGenerationResources(actual,source,copiedFrom);
     if(auto matrices=sceneMatricesForImage(source,lease?lease->matrices:temporalSceneMatrices(source),jittered,origin==FrameOrigin::BottomLeft);matrices&&!temporalSceneMatrices(actual))rsBindTemporalSceneMatrices(&actual,&*matrices);
+    attachLateCamera(actual,rawGuides?*rawGuides:source);
     actual.method=RS_TEMPORAL_OFF;actual.reserved=0;
     if(nativeConfig().diagnostics.enabled){static std::atomic<unsigned>reported{0};if(reported.fetch_add(1,std::memory_order_relaxed)<64)nativeLog("Generation scene request stageOwner="+std::to_string(reinterpret_cast<uintptr_t>(stage.state.get()))+" commands="+std::to_string(reinterpret_cast<uintptr_t>((__bridge void*)commands))+" scene="+std::to_string(actual.frameId)+" sourceOwner="+std::to_string(reinterpret_cast<uintptr_t>(source.owner))+" flags="+std::to_string(actual.flags)+" reset="+std::to_string(bool(actual.flags&RS_TEMPORAL_RESET)));}
     stage.encoder->setScene(actual);stage.encoder->setSceneColorJitter(jittered);stage.encoder->setSceneOrigin(origin);return {true,{}};

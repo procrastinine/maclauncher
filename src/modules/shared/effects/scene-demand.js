@@ -30,4 +30,12 @@ function sceneDemand(entry, context = {}, {root, graphicsHost, graphicsArchitect
   return [...inputs];
 }
 
-module.exports = { sceneDemand };
+// Whether an enabled frame-generation row of the saved plan consumes the camera.
+function generationCamera(entry) {
+  const plan = require("./plan.mjs").salvage(entry?.effects).plan;
+  if (!plan || plan.enabled === false) return false;
+  return plan.video.some(node => node.enabled && node.kind === "frame-generation" &&
+    Contracts.GENERATION[node.method]?.scene === true && Contracts.GENERATION[node.method]?.camera === true);
+}
+
+module.exports = { sceneDemand, generationCamera };
