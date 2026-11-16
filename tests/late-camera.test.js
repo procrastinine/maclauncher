@@ -17,7 +17,12 @@ test('generation scenes take the late camera before their provider reads the sce
  // The raw scene keeps the evaluation's own jitter offset; normalized views may scale or clear it.
  assert.match(source,/const auto&raw=rawGuides\?\*rawGuides:source;/);
  assert.match(source,/else attachLateCamera\(actual,raw\);/);
- assert.match(source,/return \{false,"Needs matching renderer camera inputs"\};\n\s*actual\.method=RS_TEMPORAL_OFF;actual\.reserved=0;stage\.encoder->setScene\(actual\);/);
+ // Diagnostic logging may occur between binding validation and provider intake.
+ const start=source.indexOf('ShaderResult EffectExecution::bindGenerationScene(');
+ const rejected=source.indexOf('return {false,"Needs matching renderer camera inputs"};',start);
+ const reset=source.indexOf('actual.method=RS_TEMPORAL_OFF;actual.reserved=0;',rejected);
+ const intake=source.indexOf('stage.encoder->setScene(actual);',reset);
+ assert.ok(start>=0&&rejected>start&&reset>rejected&&intake>reset,'camera validation precedes provider intake');
  assert.match(source,/if\(raw\.flags&RS_TEMPORAL_CAMERA_VALID\)return;/);
 });
 test('a generation row that needs a camera admits a scene whose camera arrives late, then declines a frame without one',()=>{

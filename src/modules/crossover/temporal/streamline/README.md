@@ -53,22 +53,6 @@ plugin. `../index.js` `resolveVulkanCameraPlan` then declares camera projection
 whenever the route forwards, without a setting, and the game starts from its
 own folder.
 
-Unreal Engine's Streamline plugin layout
-(`Engine/Plugins/Runtime/Nvidia/Streamline/Binaries/ThirdParty/Win64`) without
-`sl.dlss.dll` sets each frame's constants after that frame's direct NGX
-evaluation, and only with `-slforcetagging`. `resolveVulkanCameraPlan` marks
-that route `lateCamera` and declares `generationCamera` instead of camera
-projection, and `cameraArguments` adds the argument only when an enabled frame
-generation row consumes the camera. The NGX core matches the constants to the
-evaluation they follow by its jitter offset and writes the camera, with that
-evaluation's own offset, to `effect-plan.temporal-camera` beside the effect
-plan. The effect runtime creates that file while an enabled frame-generation
-row consumes the camera and removes it otherwise; the NGX core only maps an
-existing file. After the first record, a frame-generation row that needs a
-camera admits a scene without one, and the generation stage gives the frame
-its own record at presentation or does not generate it (`late-camera.hpp`);
-temporal upscaling receives no camera there.
-
 ## DXMT and D3DMetal
 
 On DXMT and D3DMetal, DLSS through Streamline runs without a camera. DXMT's
