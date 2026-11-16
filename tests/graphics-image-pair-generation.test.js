@@ -118,3 +118,19 @@ test("G3: optional image-pair frameworks have no eager link or Objective-C class
   assert.match(source, /dlopen\("\/System\/Library\/Frameworks\/VideoToolbox.framework\/VideoToolbox",RTLD_LAZY/);
   assert.doesNotMatch(source, /\[(?:VNGenerateOpticalFlowRequest|VNImageRequestHandler|VTLowLatencyFrameInterpolationConfiguration|VTFrameProcessor(?:Frame)?) (?:alloc|new|maximum)/);
 });
+
+test("existing scene and image-pair phase contracts remain unchanged beside ANR", () => {
+  const phases={metalfx:["midpoint",2],fsr3:["midpoint",2],xess:["midpoint",2],lsfg:["explicit",5],
+    "mlx-interpolation":["explicit",5],rife:["explicit",5],"vt-interpolation":["explicit",4],
+    "metalfx-image":["midpoint",2],"vision-flow":["explicit",5],auto:["explicit",5],anr:["explicit",5]};
+  const graphicsCapabilities={frameGeneration:true,frameGenerationMethods:Object.keys(phases),providerGenerationMethods:Object.keys(phases)};
+  for(const source of ["native-metal","godot","dxmt","ngx","fidelityfx","explicit-frame-api"]){
+    const rows=Plan.catalog({graphicsCapabilities,graphicsInputs:{source,depth:true,motionVectors:true,cameraProjection:true,viewMatrix:true,projectionMatrix:true},graphicsSettings:{frameMultiplier:5},xessGenerationProvider:{available:true}});
+    for(const [method,[phase,maximum]]of Object.entries(phases)){
+      const row=rows.find(r=>r.id==="frame-generation:"+method);assert.ok(row,source+" "+method);
+      assert.equal(row.outputContract.phases,phase,source+" "+method);
+      assert.equal(row.outputContract.maximumMultiplier,maximum,source+" "+method);
+      assert.equal(row.template.settings.frameMultiplier,phase==="midpoint"||["mlx-interpolation","rife"].includes(method)?2:5,source+" "+method);
+    }
+  }
+});

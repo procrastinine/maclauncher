@@ -170,7 +170,7 @@ function catalog({ reshadeState = {}, graphicsCapabilities = {}, graphicsInputs 
       const reason = runtimeReason || (method==="xess"&&xess?.available!==true?xess?.reason||"Install the Intel XeSS runtime and a compatible GPU compute host.":null) || (requiredModel && !model ? "Compatible Lossless Scaling models are required." : null);
       const category = method.startsWith("metalfx") ? "MetalFX" : method==="xess"?"Intel XeSS":method==="anr"?"Apex Neural Rendering":/^fsr\d$/.test(method) ? "AMD FidelityFX" : ["ls1", "lsfg"].includes(method) ? "Lossless Scaling" :
         ["vt-interpolation","vision-flow","auto"].includes(method) ? "macOS frameworks" : "Standard filters";
-      const midpoint=operation?.maximumMultiplier===2;
+      const midpoint=method!=="anr"&&(scene||operation?.maximumMultiplier===2);
       rows.push({ id: kind + ":" + method, kind, label: method === "downsample" ? "Downsample" : support.spatialMethodLabels?.[method] || METHODS[method]?.label || (method.startsWith("libplacebo:") ? require("./presentation.mjs").libplaceboFilterLabel(method.slice(11)) : method),
         group: resize ? "Resize" : "Temporal", category,
         ...(["ls1","lsfg","anr"].includes(method)?{traits:{neural:true}}:{}),
