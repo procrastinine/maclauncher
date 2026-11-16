@@ -25,5 +25,8 @@ inline constexpr bool generationUsesImagePairs(std::string_view method)noexcept{
 // The provider's color boundary is 8-bit SDR, entered through a color island.
 inline constexpr bool generationUsesSDRColor(std::string_view method)noexcept{const auto*info=generationMethodInfo(method);return info&&info->sdr;}
 inline constexpr bool generationAcceptsMultiplier(std::string_view method,unsigned multiplier)noexcept{const auto*info=generationMethodInfo(method);return info&&multiplier<32&&(info->multipliers>>multiplier&1u);}
+// Native MetalFX interpolation preserves its caller's raw color domain;
+// learned/SDK providers requiring a declared encoding cannot use this entry.
+inline bool generationPreservesUnspecifiedColor(std::string_view method)noexcept{return method=="metalfx";}
 inline constexpr std::array<std::string_view,3>automaticGenerationCandidates{"vt-interpolation","metalfx-image","vision-flow"};
 }

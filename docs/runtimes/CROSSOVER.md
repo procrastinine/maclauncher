@@ -157,7 +157,7 @@ The same DXMT conditions apply to MacLauncher's automatic adaptation of in-game 
 
 Game frame-generation calls are separate from shared Frame generation rows. The vkd3d-proton NGX core reports DLSS-G unsupported, and the FidelityFX API adapter forwards the game's frame-generation calls to its original library. D3DMetal retains its native MetalFX interpolation; observing an interpolator does not turn it into a real-frame scene producer. [Windows frame-generation inputs](../graphics/INPUTS_AND_ADAPTERS.md#windows-frame-generation-inputs) describes these routes and their presentation ownership.
 
-A game that calls MetalFX frame interpolation through its translator can supply its real color pair and scene inputs to an enabled shared Frame generation row. A compatible 2× row writes the midpoint output requested by that call; the translator keeps its existing presentation schedule. Missing producer color metadata or unsupported provider inputs retain the original interpolation. This same input path serves native MetalFX applications and does not change NGX feature advertisement.
+A game that calls MetalFX frame interpolation through its translator can supply its real color pair and scene inputs to an enabled shared Frame generation row. A compatible 2× row writes the midpoint output requested by that call; the translator keeps its existing presentation schedule. Unsupported provider inputs retain the original interpolation. MetalFX preserves the native color domain; another provider that requires an explicit encoding retains the original call when that metadata is absent. This same input path serves native MetalFX applications and does not change NGX feature advertisement.
 
 ### FidelityFX API adapter
 

@@ -5,7 +5,7 @@
 #include "scene-matrices.hpp"
 #include "scene-destination.hpp"
 namespace macfx {
-enum class Metal4ImageProvenance {Real,SyntheticUnpaired};
+enum class Metal4ImageProvenance {Real,SyntheticUnpaired,SyntheticCallerInterval};
 struct Metal4OriginalOperation {
  std::function<ShaderResult(id)>record;
  std::function<bool()>omit;

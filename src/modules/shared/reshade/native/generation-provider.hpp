@@ -31,6 +31,7 @@ public:
  // Caller-owned interpolation: exact real pair and requested phases, with no
  // presenter, submission or implicit replacement of the previous endpoint.
  virtual bool acceptsExplicitIntervals()const noexcept{return true;}
+ virtual bool acceptsUnspecifiedColor()const noexcept{return generationPreservesUnspecifiedColor(method());}
  // Most providers use verified contiguous real-endpoint history. Providers
  // overriding this consume the explicit previous texture directly.
  virtual bool usesExplicitPreviousImage()const noexcept{return false;}

@@ -98,7 +98,7 @@ struct InterpolatorState {
 };
 struct InterpolatorPreparation {
  unsigned inputW=0,inputH=0,outputW=0,outputH=0;
- MTLPixelFormat color=MTLPixelFormatInvalid,depth=MTLPixelFormatInvalid,motion=MTLPixelFormatInvalid;
+ MTLPixelFormat color=MTLPixelFormatInvalid,depth=MTLPixelFormatInvalid,motion=MTLPixelFormatInvalid,ui=MTLPixelFormatInvalid;
  std::shared_ptr<InterpolatorState>value;std::string error;std::atomic<bool>done{false},cancelled{false};
  std::vector<uint64_t>contract;InterpolatorUI uiMode=InterpolatorUI::None;MTLTextureUsage sourceUsage=0,hudUsage=0;
  std::shared_ptr<const MetalFxScalerFrame>scaler;MetalFxDistortionField distortion;
@@ -184,7 +184,7 @@ class MetalGeneration final:public GenerationEncoder {
     }
    }
   }
-  if(intervalUI){if(intervalUI.device!=device||intervalUI.width!=source.width||intervalUI.height!=source.height||intervalUI.pixelFormat!=source.pixelFormat||intervalUI.textureType!=MTLTextureType2D||intervalUI.sampleCount!=1||intervalUI.framebufferOnly)return "The native UI texture must match the complete caller color image";inputs.color=source;inputs.ui=intervalUI;inputs.uiMode=intervalUIComposited?InterpolatorUI::Composited:InterpolatorUI::NativeSeparate;}
+  if(intervalUI){if(intervalUI.device!=device||intervalUI.width!=source.width||intervalUI.height!=source.height||intervalUI.textureType!=MTLTextureType2D||intervalUI.sampleCount!=1||intervalUI.framebufferOnly)return "The native UI texture must cover the complete caller color image";inputs.color=source;inputs.ui=intervalUI;inputs.uiMode=intervalUIComposited?InterpolatorUI::Composited:InterpolatorUI::NativeSeparate;}
   inputs.frame=actual;inputs.depth=depth;inputs.motion=motion;
   if(@available(macOS 27.0,*))if(sceneResources&&sceneResources->distortion.texture&&sceneResources->distortion.texture.width==source.width&&sceneResources->distortion.texture.height==source.height)inputs.distortion=sceneResources->distortion;
   auto&key=inputs.contract;key={uint64_t(reinterpret_cast<uintptr_t>((__bridge void*)commands.commandQueue)),depth.width,depth.height,actual.renderWidth,actual.renderHeight,source.width,source.height,uint64_t(source.pixelFormat),uint64_t(depth.pixelFormat),uint64_t(motion.pixelFormat),actual.depthX,actual.depthY,actual.motionX,actual.motionY,actual.outputX,actual.outputY,uint64_t(bool(inputs.matrices)),uint64_t(inputs.perspective),uint64_t(inputs.uiMode),uint64_t(sceneOrigin),actual.flags&uint32_t(RS_TEMPORAL_DEPTH_REVERSED),sceneAovs?sceneAovs->value.epoch:0,sceneAovs?sceneAovs->value.imageRevision:0,inputs.matrices?inputs.matrices->flags:0,source.usage,inputs.color.usage,uint64_t(inputs.ui.pixelFormat),inputs.ui.usage,uint64_t(inputs.uiFlipY)};
@@ -214,7 +214,7 @@ class MetalGeneration final:public GenerationEncoder {
   auto request=std::make_shared<InterpolatorPreparation>();
   request->optionalLink=existing&&(state->retryLink&&bool(inputs.scaler)||state->retryUI&&inputs.uiMode==InterpolatorUI::Separate);
   request->retryUI=existing&&state->retryUI;
-  request->inputW=unsigned(inputs.depth.width);request->inputH=unsigned(inputs.depth.height);request->outputW=unsigned(source.width);request->outputH=unsigned(source.height);request->contract=inputs.contract;request->uiMode=inputs.uiMode;
+  request->inputW=unsigned(inputs.depth.width);request->inputH=unsigned(inputs.depth.height);request->outputW=unsigned(source.width);request->outputH=unsigned(source.height);request->ui=inputs.uiMode==InterpolatorUI::Separate?source.pixelFormat:inputs.ui.pixelFormat;request->contract=inputs.contract;request->uiMode=inputs.uiMode;
   request->color=source.pixelFormat;request->depth=inputs.depth.pixelFormat;request->motion=inputs.motion.pixelFormat;
   request->scaler=inputs.scaler;request->distortion=inputs.distortion;
   request->sourceUsage=inputs.ui.usage;request->hudUsage=inputs.color.usage;
@@ -230,7 +230,7 @@ class MetalGeneration final:public GenerationEncoder {
     request->retryLink=bool(request->scaler)&&!linked;
     if(request->optionalLink&&request->retryLink){request->done.store(true,std::memory_order_release);return;}
     descriptor.scaler=linked;
-    if(request->uiMode!=InterpolatorUI::None)descriptor.uiTextureFormat=request->color;
+    if(request->uiMode!=InterpolatorUI::None)descriptor.uiTextureFormat=request->ui;
     // Completion-owned external snapshots remain authoritative even on SDKs
     // that can manage mutable previous-color storage internally.
     bool distortion=false;

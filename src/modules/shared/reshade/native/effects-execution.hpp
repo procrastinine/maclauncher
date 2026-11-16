@@ -129,6 +129,9 @@ struct EffectExecutionSelection {
 };
 struct EffectPreparationNotice {std::string revision,contract;uint64_t sequence=0;};
 using EffectPreparationObserver=std::function<void(const EffectPreparationNotice&)>;
+// Canonical row-to-provider configuration, shared by graph preparation and
+// caller-owned intervals whose native color domain stays unspecified.
+GraphicsConfig effectRowGraphics(const EffectPlanNode&);
 class EffectPlanExecutor {
     struct Impl;
     std::unique_ptr<Impl> impl;

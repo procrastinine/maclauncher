@@ -74,7 +74,7 @@ ShaderResult ColorIsland::enter(id<MTLCommandBuffer>commands,id<MTLTexture>sourc
 ShaderResult ColorIsland::leave(id<MTLCommandBuffer>commands,id<MTLTexture>source,id<MTLTexture>target,uint64_t frameId,id<MTLTexture>alpha){ColorConversion c;c.source=impl->provider;c.target=impl->source;c.frameId=frameId;c.alphaSource=alpha;if(impl->preserveOpaqueStorage&&c.target.alpha==ColorAlpha::Opaque)c.target.alpha=ColorAlpha::Straight;return impl->encoder.encode(commands,source,target,c);}
 namespace {
 class Generation final:public GenerationEncoder {
-    std::shared_ptr<GenerationEncoder>provider;std::shared_ptr<ColorIsland>island,intervalIsland;ImageColorDescription description;std::mutex mutex;RSTemporalFrame scene{};bool hasScene=false,sdr;unsigned capacity=0;
+    std::shared_ptr<GenerationEncoder>provider;std::shared_ptr<ColorIsland>island,intervalIsland;ImageColorDescription description;std::mutex mutex;RSTemporalFrame scene{};bool hasScene=false,sdr;unsigned capacity=0;id<MTLTexture>intervalUI=nil;
     RSTemporalFrame convertedScene(id<MTLCommandBuffer>commands,id<MTLTexture>color)const{auto value=scene;value.commandBuffer=(__bridge void*)commands;value.color=(__bridge void*)color;if(sdr)value.flags&=~RS_TEMPORAL_HDR;if(auto matrices=temporalSceneMatrices(scene);matrices&&!temporalSceneMatrices(value))rsBindTemporalSceneMatrices(&value,&*matrices);return value;}
     bool identity(id<MTLTexture>source)const{return !sdr&&source.pixelFormat==island->providerFormat()&&sameImageColorDescription(description,island->providerColor());}
 public:
@@ -100,13 +100,14 @@ public:
     }
     bool acceptsExplicitIntervals()const noexcept override{return provider->acceptsExplicitIntervals();}
     bool usesExplicitPreviousImage()const noexcept override{return provider->usesExplicitPreviousImage();}
-    ShaderResult setIntervalUI(id<MTLTexture>ui,bool composited,float aspect)override{if(ui&&!identity(ui))return {false,"The raw caller UI texture needs an explicit color conversion contract"};return provider->setIntervalUI(ui,composited,aspect);}
+    ShaderResult setIntervalUI(id<MTLTexture>ui,bool composited,float aspect)override{std::lock_guard guard(mutex);intervalUI=ui;return provider->setIntervalUI(ui,composited,aspect);}
     GenerationResult encodeInterval(id<MTLCommandBuffer>commands,id<MTLTexture>previous,id<MTLTexture>source,const std::vector<id<MTLTexture>>&outputs,uint64_t sequence,const InterpolationPlan&phases)override{
         if(!provider->usesExplicitPreviousImage())return GenerationEncoder::encodeInterval(commands,previous,source,outputs,sequence,phases);
         std::lock_guard lock(mutex);GenerationResult result;
         if(!provider->acceptsExplicitIntervals()){result.reason="The selected provider cannot use the caller's explicit real pair";return result;}
         try{
             if(identity(source)&&identity(previous)){if(hasScene){provider->setScene(scene);hasScene=false;}return provider->encodeInterval(commands,previous,source,outputs,sequence,phases);}
+            if(intervalUI){result.reason="The raw caller UI texture cannot cross a color-converted interval without an explicit UI color contract";return result;}
             if(outputs.size()>capacity&&capacity){result.reason="The caller interval exceeds its prepared phase capacity";return result;}
             auto current=island->acquire(commands,source.width,source.height,source.width,source.height,unsigned(outputs.size()));
             if(!intervalIsland){const auto&target=island->providerColor();intervalIsland=std::make_shared<ColorIsland>(source.device,description,sdr,target.referenceWhite,target.primaries);const auto ready=intervalIsland->prepare(previous.pixelFormat);if(!ready.encoded){intervalIsland.reset();result.reason=ready.reason;return result;}}

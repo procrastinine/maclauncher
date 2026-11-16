@@ -31,6 +31,7 @@
 #include <array>
 #include <cmath>
 #include <memory>
+#include <exception>
 #include <mutex>
 #include <unordered_map>
 #include <cstdio>
@@ -678,7 +679,7 @@ extern "C" void rsReleaseTemporalOwner(void *key){
     std::shared_ptr<macfx::Metal4SdkHistory>sdkHistory;
     unsigned imageKind;
     std::shared_ptr<macfx::SdkInterpolationProcessor>sdkInterval;
-    std::mutex sdkIntervalMutex;
+    std::mutex sdkIntervalMutex;uint64_t sdkIntervalFrame;
 }
 @end
 @implementation MLTemporalOwner
@@ -694,15 +695,21 @@ IMP originalEncode(id object){Class cls=object_getClass(object);const unsigned c
 void invokeOriginal(id scaler,SEL selector,id commands,IMP implementation,bool reset){
     commands=macfx::Metal4ClassicBridge::recordingTarget(commands);
     if(!reset){reinterpret_cast<void(*)(id,SEL,id)>(implementation)(scaler,selector,commands);return;}
-    if(@available(macOS 26.0,*))if([scaler respondsToSelector:@selector(shouldResetHistory)]){id<MTLFXTemporalDenoisedScalerBase>s=scaler;const BOOL previous=s.shouldResetHistory;s.shouldResetHistory=YES;reinterpret_cast<void(*)(id,SEL,id)>(implementation)(scaler,selector,commands);s.shouldResetHistory=previous;return;}
-    id<MTLFXTemporalScalerBase>s=scaler;const BOOL previous=s.reset;s.reset=YES;reinterpret_cast<void(*)(id,SEL,id)>(implementation)(scaler,selector,commands);s.reset=previous;
+    if(@available(macOS 26.0,*))if([scaler respondsToSelector:@selector(shouldResetHistory)]){id<MTLFXTemporalDenoisedScalerBase>s=scaler;const BOOL previous=s.shouldResetHistory;s.shouldResetHistory=YES;@try{reinterpret_cast<void(*)(id,SEL,id)>(implementation)(scaler,selector,commands);}@finally{s.shouldResetHistory=previous;}return;}
+    id<MTLFXTemporalScalerBase>s=scaler;const BOOL previous=s.reset;s.reset=YES;@try{reinterpret_cast<void(*)(id,SEL,id)>(implementation)(scaler,selector,commands);}@finally{s.reset=previous;}
 }
 void reportMetal4(MLTemporalOwner*state,const std::string&prefix,const macfx::ShaderResult&result){if(result.encoded){state->lastMetal4Reason.clear();state->reported=false;return;}if(state->lastMetal4Reason!=result.reason){macfx::nativeLog(prefix+result.reason);state->lastMetal4Reason=result.reason;}state->reported=true;}
 struct Metal4OriginalFrame {
- id scaler;SEL selector;IMP implementation;MLTemporalOwner*owner;std::shared_ptr<macfx::Metal4SdkHistory>history;std::shared_ptr<macfx::Metal4SdkHistory::Ticket>ticket;bool recorded=false;
- Metal4OriginalFrame(id value,SEL call,IMP original,MLTemporalOwner*state):scaler(value),selector(call),implementation(original),owner(state){if(state->kind&&!state->imageKind){if(!state->sdkHistory)state->sdkHistory=std::make_shared<macfx::Metal4SdkHistory>();history=state->sdkHistory;bool reset=state->originalReset;if(state->denoised){if(@available(macOS 26.0,*))reset=reset||[(id<MTLFXTemporalDenoisedScalerBase>)value shouldResetHistory];}else reset=reset||[(id<MTLFXTemporalScalerBase>)value reset];ticket=history->begin(reset);}}
- macfx::ShaderResult record(id commands){invokeOriginal(scaler,selector,commands,implementation,ticket?ticket->reset:owner->originalReset);recorded=true;owner->originalReset=false;return {true,{}};}
- void fallback(id commands){if(!recorded)record(commands);if(history)history->original(ticket);}
+ id scaler;SEL selector;IMP implementation;MLTemporalOwner*owner;std::shared_ptr<macfx::Metal4SdkHistory>history;std::shared_ptr<macfx::Metal4SdkHistory::Ticket>ticket;bool recorded=false,succeeded=false,delegated=false;std::exception_ptr failure;NSException*nativeFailure=nil;
+ Metal4OriginalFrame(id value,SEL call,IMP original,MLTemporalOwner*state):scaler(value),selector(call),implementation(original),owner(state){if(state->kind&&(!state->imageKind||(state->imageKind==2&&(state->sdkHistory||macfx::effectPlanDemands(macfx::PlanDemandGeneration))))){if(!state->sdkHistory)state->sdkHistory=std::make_shared<macfx::Metal4SdkHistory>();history=state->sdkHistory;bool reset=state->originalReset;if(state->denoised||state->imageKind==2){if(@available(macOS 26.0,*))reset=reset||[(id<MTLFXTemporalDenoisedScalerBase>)value shouldResetHistory];}else reset=reset||[(id<MTLFXTemporalScalerBase>)value reset];ticket=history->begin(reset);}}
+ macfx::ShaderResult record(id commands){
+  recorded=true;
+  try{@try{invokeOriginal(scaler,selector,commands,implementation,ticket?ticket->reset:owner->originalReset);}@catch(NSException*error){nativeFailure=error;@throw;}}
+  catch(...){if(!nativeFailure)failure=std::current_exception();owner->originalReset=true;if(history)history->abandoned(ticket);throw;}
+  succeeded=true;owner->originalReset=false;return {true,{}};
+ }
+ void rethrowOriginalFailure(){if(recorded&&!succeeded){if(nativeFailure)@throw nativeFailure;if(failure)std::rethrow_exception(failure);}}
+ void fallback(id commands){rethrowOriginalFailure();if(delegated)return;if(!recorded)record(commands);if(history)history->original(ticket);if(owner->imageKind==2&&!macfx::effectPlanDemands(macfx::PlanDemandGeneration))owner->sdkHistory.reset();}
  macfx::Metal4OriginalOperation operation(){auto h=history;auto t=ticket;return {[this](id commands){return record(commands);},[h,t]{return !h||h->omit(t);},[h,t]{if(h)h->original(t);},[h,t]{if(h)h->abandoned(t);},[h,t]{return !h||h->mayOmit(t);}};}
 };
 void encodeDenoisedTemporal(id scaler,SEL selector,id<MTLCommandBuffer>commands,IMP original,MLTemporalOwner*state){
@@ -736,19 +743,22 @@ void encodeDenoisedTemporal(id scaler,SEL selector,id<MTLCommandBuffer>commands,
  }catch(const std::exception&error){if(state->kind)sdk.fallback(commands);else if(!originalRecorded)invokeOriginal(scaler,selector,commands,original,true);macfx::nativeLog(std::string("Original denoised scaler retained: ")+error.what());}}@catch(NSException*error){if(state->kind)sdk.fallback(commands);else if(!originalRecorded)invokeOriginal(scaler,selector,commands,original,true);macfx::nativeLog(std::string("Original denoised scaler retained: ")+(error.reason.UTF8String?:"Metal rejected the optional scene"));}}}else invokeOriginal(scaler,selector,commands,original,false);
 }
 void encodeMetal4Image(id scaler,SEL selector,id commands,IMP original,MLTemporalOwner*state){
- Metal4OriginalFrame sdk(scaler,selector,original,state);if(state->imageKind==2||!macfx::effectPlanRequested())sdk.fallback(commands);
+ Metal4OriginalFrame sdk(scaler,selector,original,state);if(!macfx::effectPlanRequested())sdk.fallback(commands);
  if(state->imageKind==2&&state->sdkInterval&&!macfx::effectPlanDemands(macfx::PlanDemandGeneration)){std::unique_lock guard(state->sdkIntervalMutex,std::try_to_lock);if(guard&&state->sdkInterval){auto retired=std::move(state->sdkInterval);static auto queue=dispatch_queue_create("org.maclauncher.graphics.sdk-interval.retire",DISPATCH_QUEUE_SERIAL);dispatch_async(queue,^{(void)retired;});}}
  if(!macfx::effectPlanRequested())return;
+ bool callerIntervalOwned=false;
  if(state->imageKind==2&&macfx::effectPlanDemands(macfx::PlanDemandGeneration)){
   std::unique_lock guard(state->sdkIntervalMutex,std::try_to_lock);if(guard){@try{try{
    if(!state->sdkInterval)state->sdkInterval=std::make_shared<macfx::SdkInterpolationProcessor>();
-   macfx::MetalFxImageInputs pair;auto captured=macfx::captureMetalFxImageInputs(scaler,macfx::MetalFxImageKind::Interpolation,commands,(__bridge void*)state,++state->frame,pair);
-   if(captured.encoded){auto lookup=pair.frame;lookup.depth=(__bridge void*)pair.depth;lookup.motion=(__bridge void*)pair.motion;std::shared_ptr<const macfx::SceneAovLease>metadata;void*owner=nullptr;macfx::peekTemporalAovsForTextures(lookup,metadata,owner);if(metadata){pair.frame.frameId=metadata->value.frameId;pair.matrices.frameId=pair.frame.frameId;}pair.frame.commandBufferKind=1;bool owned=false;const auto result=state->sdkInterval->encodeMetal4(commands,pair,metadata,&owned);if(result.encoded&&owned)return;}
+   macfx::MetalFxImageInputs pair;auto captured=macfx::captureMetalFxImageInputs(scaler,macfx::MetalFxImageKind::Interpolation,commands,(__bridge void*)state,++state->sdkIntervalFrame,pair);
+   if(captured.encoded){auto lookup=pair.frame;lookup.depth=(__bridge void*)pair.depth;lookup.motion=(__bridge void*)pair.motion;std::shared_ptr<const macfx::SceneAovLease>metadata;void*owner=nullptr;macfx::peekTemporalAovsForTextures(lookup,metadata,owner);if(metadata){pair.frame.frameId=metadata->value.frameId;pair.matrices.frameId=pair.frame.frameId;}pair.frame.commandBufferKind=1;bool owned=false;const auto result=state->sdkInterval->encodeMetal4(commands,pair,metadata,&owned,sdk.operation(),&sdk.recorded);sdk.delegated=result.encoded;callerIntervalOwned=result.encoded&&owned;}
   }catch(const std::exception&e){macfx::nativeLog(std::string("Original Metal 4 caller interval retained: ")+e.what());}}@catch(NSException*){}}}
+ sdk.rethrowOriginalFailure();
+ if(state->imageKind==2&&!sdk.recorded)sdk.fallback(commands);
  @autoreleasepool{@try{try{macfx::MetalFxImageInputs inputs;auto kind=state->imageKind==1?macfx::MetalFxImageKind::Spatial:macfx::MetalFxImageKind::Interpolation;auto captured=macfx::captureMetalFxImageInputs(scaler,kind,commands,(__bridge void*)state,++state->frame,inputs);if(!captured.encoded){if(!state->reported)macfx::nativeLog("Original Metal 4 SDK image retained: "+captured.reason);state->reported=true;sdk.fallback(commands);return;}
  auto lookup=inputs.frame;lookup.depth=(__bridge void*)inputs.depth;lookup.motion=(__bridge void*)inputs.motion;std::shared_ptr<const macfx::SceneAovLease>metadata;if(macfx::takeTemporalAovsForTextures(lookup,metadata)!=RS_TEMPORAL_OK||!metadata){if(!state->reported)macfx::nativeLog("Original Metal 4 SDK image retained: needs the exact source color/frame description");state->reported=true;sdk.fallback(commands);return;}lookup.frameId=metadata->value.frameId;if(state->imageKind!=2)inputs.frame.frameId=metadata->value.frameId;inputs.frame.commandBufferKind=1;const double now=CACurrentMediaTime();if(!(inputs.frame.frameTimeMs>0)){inputs.frame.frameTimeMs=float(std::clamp((state->previousTime?now-state->previousTime:1./60)*1000.,.001,1000.));state->previousTime=now;}
  auto matrices=macfx::takeTemporalMatricesForTextures(lookup);if(!matrices&&inputs.matricesValid){inputs.matrices.frameId=lookup.frameId;matrices=inputs.matrices;}auto destination=macfx::takeTemporalSceneDestination(lookup);
- if(!state->metal4)state->metal4=std::make_shared<macfx::Metal4SceneIngress>(((__bridge id<MTLTexture>)inputs.frame.color).device);auto result=state->metal4->encode(commands,inputs.frame,metadata,matrices,destination,inputs.fence,state->imageKind==2?macfx::Metal4ImageProvenance::SyntheticUnpaired:macfx::Metal4ImageProvenance::Real,state->imageKind==2?macfx::Metal4OriginalOperation{}:sdk.operation(),state->imageKind==2?nullptr:&sdk.recorded,now);if(!result.encoded)sdk.fallback(commands);if(!result.encoded&&!state->reported){macfx::nativeLog("Original Metal 4 SDK image retained: "+(inputs.sceneReason.empty()?result.reason:inputs.sceneReason+"; "+result.reason));state->reported=true;}if(result.encoded)state->reported=false;
+ if(!state->metal4)state->metal4=std::make_shared<macfx::Metal4SceneIngress>(((__bridge id<MTLTexture>)inputs.frame.color).device);auto result=state->metal4->encode(commands,inputs.frame,metadata,matrices,destination,inputs.fence,state->imageKind==2?(callerIntervalOwned?macfx::Metal4ImageProvenance::SyntheticCallerInterval:macfx::Metal4ImageProvenance::SyntheticUnpaired):macfx::Metal4ImageProvenance::Real,state->imageKind==2?macfx::Metal4OriginalOperation{}:sdk.operation(),state->imageKind==2?nullptr:&sdk.recorded,now);if(!result.encoded)sdk.fallback(commands);if(!result.encoded&&!state->reported){macfx::nativeLog("Original Metal 4 SDK image retained: "+(inputs.sceneReason.empty()?result.reason:inputs.sceneReason+"; "+result.reason));state->reported=true;}if(result.encoded)state->reported=false;
  }catch(const std::exception&e){sdk.fallback(commands);macfx::nativeLog(std::string("Original Metal 4 SDK image retained: ")+e.what());}}@catch(NSException*e){sdk.fallback(commands);macfx::nativeLog(std::string("Original Metal 4 SDK image retained: ")+(e.reason.UTF8String?:"Invalid SDK input metadata"));}}
 }
 // Diagnostics: the ordered replacement's own work in the game's command buffer

@@ -2,6 +2,7 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "effects-execution.hpp"
 #include "generation-timeline.hpp"
+#include "metal4-scene-ingress.hpp"
 #include "image-pair-analysis.hpp"
 #include "runtime-status.hpp"
 #include <functional>
@@ -15,9 +16,9 @@ class SdkInterpolationProcessor {
 public:
  SdkInterpolationProcessor();~SdkInterpolationProcessor();
  ShaderResult encode(const MetalFxImageInputs&,const std::shared_ptr<const SceneAovLease>&,bool*recorded=nullptr,std::function<ShaderResult()>*completion=nullptr);
- // Original native output is already recorded; publish a replacement only
- // after the observed Metal 4 submission and successful classic completion.
- ShaderResult encodeMetal4(id logical,const MetalFxImageInputs&,const std::shared_ptr<const SceneAovLease>&,bool*owned=nullptr);
+ // Retain the isolated original recording as fallback. Omit it only after
+ // successful shared work and the observed SDK history authorizes omission.
+ ShaderResult encodeMetal4(id logical,const MetalFxImageInputs&,const std::shared_ptr<const SceneAovLease>&,bool*owned=nullptr,Metal4OriginalOperation={},bool*originalEncoded=nullptr);
 };
 struct GenerationSequenceInput {
  id<MTLCommandBuffer>commands=nil;id<MTLTexture>source=nil;
