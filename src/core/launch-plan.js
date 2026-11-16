@@ -1,140 +1,89 @@
 'use strict';
-const {getKind} = require('./component-kinds');
-const {peMachineCode}=require('./binary-arch');
+const {getKind}=require('./component-kinds');
+const {acceptsBinary}=require('./binary-compatibility');
+const {selectLogicalLibraries,fileProvides}=require('./logical-libraries');
+const {normalizeChoice}=require('./runtime-roles');
+const provides=b=>[...(getKind(b.kind)?.provides||[]),...(b.interfaces?.provides||[]),...(b.binaries||[]).flatMap(fileProvides)];
+// Kind requirements are never admission policy. Every dependency belongs to a build.
+const requires=b=>b.interfaces?.requires||[];
+const versionAtLeast=(a,b)=>{const x=String(a||'').split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++)if((x[i]||0)!==(y[i]||0))return(x[i]||0)>(y[i]||0);return true;};
+const roleFor=(token,kind)=>token.startsWith('api:d3d')?token.slice(4):token==='api:dxgi'?'dxgi':({'vulkan-driver':'vulkan-driver',media:'video',nvapi:'nvapi',ngx:'ngx'})[kind]||kind;
+function resolvePlan({target,choices={},builds=[],sources=[],system={},environment={},capabilities={},scene={}}={}){
+ const excluded=[],failures=[],fallBacks=[],sourceById=new Map(sources.map(s=>[s.id,s]));
+ const report=(b,reason)=>{if(!excluded.some(e=>e.build===b.id&&e.reason===reason))excluded.push({kind:b.kind,source:b.source,build:b.id,reason});return reason;};
+ const systemHas=token=>token.startsWith('macos>=')?Boolean(system.macOS)&&versionAtLeast(system.macOS,token.slice(7)):(system.provides||[]).includes(token)||token===`cpu:${system.hostArch}`;
+ const sourceOf=b=>sourceById.get(b.source)||{};
+ function choice(role,kind){return normalizeChoice(choices[role]??choices[kind],{builds,sources});}
+ function explicitMatches(b,value){return value==='automatic'||value==='inherit'||value===`build:${b.id}`||b.aliases?.some(a=>value===`build:${a}`)||value===`source:${b.source}`||value===`source:${sourceOf(b).manager?.engine}`;}
+ function issue(b){if(!getKind(b.kind))return 'Unknown component kind.';if(b.available===false)return b.unavailableReason||'This build is unavailable.';if(!Array.isArray(b.binaries)||(!b.binaries.length&&b.kind!=='cpu-translator'))return 'Measured binary facts are unavailable.';return null;}
+ const selectedHas=(state,token)=>systemHas(token)||[...state.values()].some(row=>provides(row.build).includes(token)||row.tokens?.includes(token));
+ function ordered(candidates,role,context,state){const wine=[...state.values()].find(x=>x.build.kind==='wine')?.build,source=sourceOf(wine||{}),automatic=source.automatic?.[role]||[];
+  const positions=new Map();automatic.forEach((entry,index)=>{entry=typeof entry==='string'?{embed:entry}:entry;if(entry.requires?.some(t=>!selectedHas(state,t)))return;const when=entry.when;if(when?.setting){const equal=environment[when.setting]===when.equals;if(when.not?equal:!equal)return;}if(when?.selected&&![...state.values()].some(row=>row.role===when.selected.role&&row.build.engine===when.selected.engine))return;positions.set(entry.embed,index);});
+  return [...candidates].sort((a,b)=>{const rank=x=>positions.has(x.id)?positions.get(x.id):positions.has(x.id.split(':').pop())?positions.get(x.id.split(':').pop()):1e6;const ar=rank(a),br=rank(b);if(ar!==br)return ar-br;if(a.installed!==b.installed)return a.installed?-1:1;const ao=sourceOf(a).order??a.order??1e6,bo=sourceOf(b).order??b.order??1e6;if(ao!==bo)return ao-bo;if(a.source===b.source){const av=String(a.version),bv=String(b.version);if(av!==bv)return av.localeCompare(bv,undefined,{numeric:true})*-1;}if(context.integration==='arm64ec'){const native=x=>x.binaries.some(f=>f.format==='pe'&&['arm64ec','arm64x'].includes(f.machine));if(native(a)!==native(b))return native(a)?-1:1;}return 0;});
+ }
+ function select(b,context,needed,role){const problem=issue(b);if(problem)return{reason:problem};return selectLogicalLibraries({build:b,hostArch:context.host,guestArch:context.guest,integration:context.integration,needed,libraries:target?.libraries?.[role],infrastructure:b.kind==='cpu-translator'&&context.cpuGuest===true});}
+ function* solve(tokens,state,context,trail=new Set()){
+  if(!tokens.length){yield state;return;}const [token,...rest]=tokens;
+  if(selectedHas(state,token)){yield* solve(rest,state,context,trail);return;}if(trail.has(token))return;const nextTrail=new Set(trail).add(token);
+  const all=builds.filter(b=>provides(b).includes(token)&&b.kind!=='wine');
+  const requested=choice(roleFor(token,all[0]?.kind),all[0]?.kind);
+  const ranked=ordered(all,roleFor(token,all[0]?.kind),context,state);
+  if(requested!=='automatic'&&requested!=='inherit')ranked.sort((a,b)=>Number(explicitMatches(b,requested))-Number(explicitMatches(a,requested)));
+  for(const candidate of ranked){
+   const role=roleFor(token,candidate.kind),value=choice(role,candidate.kind),explicit=value!=='automatic'&&value!=='inherit';
+   const wanted=all.filter(b=>explicitMatches(b,value));
 
-// This table applies to measured binaries, independently of publisher names.
-function acceptsBinary(processHost, guestArch, integration, binary) {
-  if(binary.format==='macho') return typeof processHost==='string'&&binary.architectures?.includes(processHost)
-    ? {accepted:true} : {accepted:false,reason:`Host library has no ${processHost} Mach-O slice.`};
-  if(binary.format==='pe') {
-    const nativeHybrid=integration==='arm64ec' && guestArch==='x86_64' && ['arm64ec','arm64x'].includes(binary.machine);
-    if(peMachineCode(guestArch)&&peMachineCode(binary.machine)&&(binary.machine===guestArch || nativeHybrid)) return {accepted:true};
-    return {accepted:false,reason:`PE ${binary.machine} cannot load in ${guestArch} (${integration}).`};
+   if(candidate.kind==='cpu-translator'&&[...state.values()].some(row=>row.build.kind==='cpu-translator'&&row.role.startsWith('cpu.')&&row.build.id!==candidate.id)){report(candidate,'Another build already fills this CPU translation role.');continue;}
+   if(state.has(role)&&state.get(role).build.id!==candidate.id){report(candidate,'Another build already fills this role.');continue;}
+   if(candidate.parent&&![...state.values()].some(x=>x.build.id===candidate.parent)){report(candidate,'The required parent build is not selected.');continue;}
+   const parts=select(candidate,context,[token],role);if(parts.reason||parts.accepted===false){report(candidate,parts.reason);continue;}
+   const next=new Map(state);next.set(role,{role,build:candidate,binaries:parts.binaries});
+   let found=false;for(const dependencies of solve(requires(candidate),next,context,nextTrail))for(const complete of solve(rest,dependencies,context,trail)){found=true;yield complete;}
+   if(!found)report(candidate,'A required interface or capability is unavailable.');
   }
-  return {accepted:false,reason:`No ${binary.format} integration is selected for this process.`};
+ }
+ function* translator(format,arch,host,integration,state,context){
+  const role=format==='macho'?'cpu.host':`cpu.${arch}`;
+  for(const b of builds.filter(b=>b.kind==='cpu-translator')){
+   const problem=issue(b);if(problem){report(b,problem);continue;}
+   if(!explicitMatches(b,choice(role,b.kind)))continue;
+   if(b.parent&&![...state.values()].some(x=>x.build.id===b.parent)){report(b,'The required parent build is not selected.');continue;}
+   const reaches=(b.reach||[]).filter(r=>r.guestFormat===format&&r.guestArch===arch&&r.hostArch===host&&(!integration||r.integration===integration)&&(!r.guestOS||r.guestOS===(format==='pe'?'windows':'darwin'))&&(!r.hostPlatform||r.hostPlatform===(system.platform||'darwin')));
+   if(!reaches.length){report(b,`No declared ${format}/${arch} reach for ${host}.`);continue;}
+   for(const reach of reaches){if(format==='macho'&&(!system.rosettaAvailable||reach.integration!=='process')){report(b,'Rosetta is unavailable for this macOS process.');continue;}
+    const ctx={...context,integration:reach.integration,cpuGuest:format==='pe'},parts=select(b,ctx,[],role);if(parts.reason||parts.accepted===false){report(b,parts.reason);continue;}
+    const next=new Map(state);next.set(role,{role,build:b,binaries:parts.binaries,reach});
+    for(const complete of solve([...requires(b),...(reach.requires||[])],next,ctx))yield{state:complete,integration:reach.integration,build:b};
+   }
+  }
+ }
+ function result(state,context,process,targetExecution){
+  // A final closure check prevents a dependency from being lost during assignment.
+  for(const row of state.values())for(const token of [...requires(row.build),...(row.reach?.requires||[])])if(!selectedHas(state,token))return null;
+  const merged=new Map();for(const row of state.values()){let c=merged.get(row.build.id);if(!c){c={kind:row.build.kind,source:row.build.source,build:row.build.id,installed:row.build.installed===true,measured:row.build.measured!==false,adapter:getKind(row.build.kind).adapter,binaries:[],roles:[]};merged.set(row.build.id,c);}c.roles.push(row.role);for(const b of row.binaries||[])if(!c.binaries.some(f=>f.path===b.path))c.binaries.push({...structuredClone(b),execution:b.format==='macho'?context.execution:b.format==='pe'&&['arm64ec','arm64x','arm64'].includes(b.machine)&&context.host==='arm64'?'native':context.guestTranslator&&b.machine==='x86_64'?`fex(${context.guestTranslator.id})`:context.execution});}
+  const components=[...merged.values()].map(c=>{const executions=[...new Set(c.binaries.map(b=>b.execution))];return{...c,...(executions.length===1?{execution:executions[0]}:{})};});
+  const roles=[...state.values()].filter(r=>!r.role.startsWith('dependency:')).map(row=>{const saved=choice(row.role,row.build.kind),fallback=!explicitMatches(row.build,saved)&&saved!=='automatic'&&saved!=='inherit'?{role:row.role,chosen:saved,used:row.build.id,reason:'Saved selection is unavailable or incompatible.'}:null;if(fallback)fallBacks.push(fallback);return{id:row.role,value:choices[row.role]??choices[row.build.kind]??'automatic',used:{...row.build,binaries:components.find(c=>c.build===row.build.id).binaries,execution:components.find(c=>c.build===row.build.id).execution},fallback};});
+  const selectedIds=new Set(components.map(c=>c.build)),provisional=components.some(c=>!c.installed||!c.measured);
+  const sameScene=scene.final&&scene.hudless&&['frame','pass','geometry','origin','colorDomain'].every(key=>scene.final[key]!==undefined&&JSON.stringify(scene.final[key])===JSON.stringify(scene.hudless[key]));
+  return{satisfied:true,provisional,target:{guestArch:context.guest,execution:targetExecution},components,roles,processes:[process],downloads:components.filter(c=>!c.installed).map(c=>c.build),fallbacks:fallBacks,excluded:excluded.filter(e=>!selectedIds.has(e.build)),unsatisfied:[],graphics:{derivedUiFromFinalHudless:{enabled:capabilities.derivedUiFromFinalHudless===true&&Boolean(sameScene),reason:'UI derived from final and HUD-less color'}}};
+ }
+ const targetBinary=target?.binaries?.find(b=>b.format==='pe')||target?.binaries?.find(b=>b.format==='macho');
+ if(!targetBinary)return{satisfied:false,components:[],processes:[],downloads:[],excluded,unsatisfied:['A measured executable target is required.']};
+ if(targetBinary.format==='macho'){
+  const hosts=[system.hostArch,...targetBinary.architectures.filter(a=>a!==system.hostArch)].filter(a=>targetBinary.architectures.includes(a));
+  for(const host of hosts){const execution=host===system.hostArch?'native':'rosetta';if(execution==='rosetta'&&!(host==='x86_64'&&system.hostArch==='arm64'))continue;const context={host,guest:host,integration:'native',execution};const routes=execution==='native'?[{state:new Map()}]:translator('macho',host,system.hostArch,'process',new Map(),context);for(const route of routes)for(const state of solve(target.requires||[],route.state,context)){const plan=result(state,context,{build:target.id||'target',hostArch:host,guestArch:host,integration:'native',execution},execution);if(plan)return plan;}}
+ }else{
+  const guest=targetBinary.machine;
+  for(const wine of builds.filter(b=>b.kind==='wine')){if(!explicitMatches(wine,choice('wine','wine')))continue;const problem=issue(wine);if(problem){report(wine,problem);continue;}
+   const hosts=[...new Set(wine.binaries.filter(b=>b.format==='macho').flatMap(b=>b.architectures))].sort((a,b)=>(b===system.hostArch?1:0)-(a===system.hostArch?1:0));
+   for(const host of hosts){if(host!==system.hostArch&&!(host==='x86_64'&&system.hostArch==='arm64'))continue;const execution=host===system.hostArch?'native':'rosetta',context={host,guest,integration:'native',execution};const parts=select(wine,context,[],'wine');if(parts.reason){report(wine,parts.reason);continue;}const initial=new Map([['wine',{role:'wine',build:wine,binaries:parts.binaries}]]),hostRoutes=execution==='native'?[{state:initial}]:translator('macho',host,system.hostArch,'process',initial,context);
+    for(const hostRoute of hostRoutes){const native=host==='x86_64'&&['x86_64','i386'].includes(guest)||host==='arm64'&&guest==='arm64',guestRoutes=native?[{state:hostRoute.state,integration:'native'}]:translator('pe',guest,host,null,hostRoute.state,context);let reached=false;
+     for(const route of guestRoutes){reached=true;const ctx={...context,integration:route.integration,guestTranslator:route.build};for(const state of solve([...(target.requires||[]),...requires(wine)],route.state,ctx)){const plan=result(state,ctx,{build:wine.id,hostArch:host,guestArch:guest,integration:ctx.integration,execution},route.build?`fex(${route.build.id})`:execution);if(plan)return plan;}}
+     if(!reached)report(wine,'The guest requires an unavailable CPU translator.');
+    }
+   }
+  }
+ }
+ failures.push('No complete execution plan satisfies the selected sources and capabilities.');return{satisfied:false,components:[],roles:[],processes:[],downloads:[],excluded,unsatisfied:failures};
 }
-const provides=b=>[...(getKind(b.kind)?.provides||[]),...(b.interfaces?.provides||[])];
-const requires=b=>[...(getKind(b.kind)?.requires||[]),...(b.interfaces?.requires||[])];
-const versionParts=v=>String(v||'').split('.').map(n=>Number(n)||0);
-function versionAtLeast(actual,minimum) {const a=versionParts(actual),b=versionParts(minimum);for(let i=0;i<Math.max(a.length,b.length);i++){if((a[i]||0)!==(b[i]||0))return(a[i]||0)>(b[i]||0);}return true;}
-
-/** Resolve measured builds. Input order carries the catalog/default preference. */
-function resolvePlan({target,choices={},builds=[],system={}}={}) {
-  const excluded=[],unsatisfied=[],seen=new Set();
-  function exclude(build,reason) {const row={kind:build.kind,source:build.source,build:build.id,reason},key=JSON.stringify(row);if(!seen.has(key)){seen.add(key);excluded.push(row);}return reason;}
-  const chosenByUser=b=>!choices[b.kind] || choices[b.kind]==='automatic' || choices[b.kind]===b.source;
-  const usable=b=>{
-    if(!getKind(b.kind))return 'Unknown component kind.';
-    if(b.available===false)return b.unavailableReason||'This build is unavailable.';
-    if(!Array.isArray(b.binaries))return 'Measured binary facts are unavailable.';
-    if(!chosenByUser(b))return 'Another source is selected for this kind.';
-    return null;
-  };
-  function systemHas(token) {
-    if(token.startsWith('macos>='))return /^\d+(?:\.\d+){0,2}$/.test(system.macOS||'')&&/^\d+(?:\.\d+){0,2}$/.test(token.slice(7))&&versionAtLeast(system.macOS,token.slice(7));
-    return (system.provides||[]).includes(token);
-  }
-  function copy(state){return new Map(state);}
-  function checked(build,host,guest,integration) {
-    const issue=usable(build);if(issue)return issue;
-    if(!build.binaries.length && build.kind!=='cpu-translator')return 'Measured binary facts are unavailable.';
-    for(const binary of build.binaries){const check=acceptsBinary(host,guest,integration,binary);if(!check.accepted)return check.reason;}
-    return null;
-  }
-  function* solve(tokens,state,context,trail=new Set()) {
-    if(!tokens.length){yield state;return;}
-    const [token,...rest]=tokens;
-    if(systemHas(token)||[...state.values()].some(b=>provides(b).includes(token))){yield* solve(rest,state,context,trail);return;}
-    if(trail.has(token))return;
-    const nextTrail=new Set(trail);nextTrail.add(token);
-    const candidates=builds.filter(b=>provides(b).includes(token)).sort((a,b)=>{
-      if(context.integration!=='arm64ec')return 0;
-      const native=b=>b.binaries?.some(f=>f.format==='pe'&&['arm64ec','arm64x'].includes(f.machine))?1:0;
-      return native(b)-native(a);
-    });
-    for(const candidate of candidates) {
-      if(state.has(candidate.kind) && state.get(candidate.kind).id!==candidate.id){exclude(candidate,'Another build already fills this kind.');continue;}
-      const issue=checked(candidate,context.host,context.guest,context.integration);if(issue){exclude(candidate,issue);continue;}
-      let resolved=false;
-      for(const dependencies of solve(requires(candidate),copy(state),context,nextTrail)){
-        if(dependencies.has(candidate.kind)&&dependencies.get(candidate.kind).id!==candidate.id)continue;
-        if(candidate.parent && ![...dependencies.values()].some(b=>b.id===candidate.parent)){exclude(candidate,'The required parent build is not selected.');continue;}
-        const next=copy(dependencies);next.set(candidate.kind,candidate);
-        for(const complete of solve(rest,next,context,trail)){resolved=true;yield complete;}
-      }
-      if(!resolved)exclude(candidate,'A required interface or capability is unavailable.');
-    }
-  }
-  const satisfyAll=(tokens,state,context)=>solve(tokens,state,context).next().value||null;
-  function* translators(format,arch,host,integration,state,context) {
-    for(const candidate of builds.filter(b=>b.kind==='cpu-translator')) {
-      const issue=usable(candidate);if(issue){exclude(candidate,issue);continue;}
-      const reaches=candidate.reach?.filter(r=>r.guestFormat===format&&r.guestArch===arch&&r.hostArch===host&&(!integration||r.integration===integration))||[];
-      if(!reaches.length){exclude(candidate,`No declared ${format}/${arch} reach for ${host}.`);continue;}
-      for(const reach of reaches){
-      if(reach&&Object.keys(reach).some(key=>!['guestFormat','guestArch','hostArch','integration','requires'].includes(key))){exclude(candidate,'The translator reach contains unsupported constraints.');continue;}
-      if(format==='macho' && (!system.rosettaAvailable||reach.integration!=='process')){exclude(candidate,'Rosetta is unavailable for this macOS process.');continue;}
-      const ctx={...context,integration:reach.integration};
-      const binaryIssue=checked(candidate,ctx.host,ctx.guest,ctx.integration);if(binaryIssue){exclude(candidate,binaryIssue);continue;}
-      let reached=false;
-      for(const next of solve([...requires(candidate),...(reach.requires||[])],copy(state),ctx)){
-        if(candidate.parent&&![...next.values()].some(build=>build.id===candidate.parent)){exclude(candidate,'The required parent build is not selected.');continue;}
-        reached=true;next.set(candidate.kind,candidate);yield {state:next,integration:reach.integration,build:candidate};
-      }
-      if(!reached)exclude(candidate,'The translator requires an unavailable host interface.');
-      }
-    }
-  }
-
-  const guest=target?.binaries?.find(b=>b.format==='pe')?.machine;
-  if(!guest)return {satisfied:false,components:[],processes:[],downloads:[],excluded,unsatisfied:['A measured Windows target is required.']};
-  for(const process of builds.filter(b=>b.kind==='wine')) {
-    const issue=usable(process);if(issue){exclude(process,issue);continue;}
-    const hosts=[...new Set(process.binaries.filter(b=>b.format==='macho').flatMap(b=>b.architectures||[]))];
-    const ordered=[system.hostArch,...hosts.filter(a=>a!==system.hostArch)].filter(a=>hosts.includes(a));
-    for(const host of ordered) {
-      const hostIssue=process.binaries.filter(b=>b.format==='macho').map(b=>acceptsBinary(host,guest,'native',b)).find(result=>!result.accepted);
-      if(hostIssue){exclude(process,hostIssue.reason);continue;}
-      if(![system.hostArch,'x86_64'].includes(host) || host==='x86_64' && !['arm64','x86_64'].includes(system.hostArch)){exclude(process,`Cannot start a ${host} macOS process on ${system.hostArch}.`);continue;}
-      const initial=new Map([['wine',process]]),processExecution=host===system.hostArch?'native':'rosetta';
-      const hostRoutes=host===system.hostArch?[{state:initial}]:translators('macho',host,system.hostArch,'process',initial,{host,guest,integration:'native'});
-      let foundHost=false;
-      for(const hostRoute of hostRoutes){
-        foundHost=true;
-        const native=host==='x86_64'&&['x86_64','i386'].includes(guest)||host==='arm64'&&guest==='arm64';
-        const guestRoutes=native?[{state:hostRoute.state,integration:'native',build:null}]:translators('pe',guest,host,null,hostRoute.state,{host,guest,integration:'native'});
-        let foundGuest=false;
-        for(const guestRoute of guestRoutes){
-          foundGuest=true;
-          let state=guestRoute.state;const integration=guestRoute.integration,guestTranslation=guestRoute.build;
-          const context={host,guest,integration};
-          const needs=[...(target.requires||[]),...requires(process)];
-          for(const [kind,source] of Object.entries(choices))if(source&&source!=='automatic'&&kind!=='wine'&&kind!=='cpu-translator'){
-            const explicit=builds.filter(b=>b.kind===kind&&b.source===source);
-            if(!explicit.length){const reason=`The selected ${kind} source ${source} is unavailable.`;if(!unsatisfied.includes(reason))unsatisfied.push(reason);state=null;break;}
-            const token=provides(explicit[0])[0];if(token)needs.push(token);else{state=null;break;}
-          }
-          if(state)state=satisfyAll(needs,state,context);
-          if(!state){exclude(process,'The selected components have unsatisfied capabilities.');continue;}
-          for(const candidate of builds){const problem=checked(candidate,host,guest,integration);if(problem)exclude(candidate,problem);}
-          const components=[...state.values()].map(b=>{
-            const binaries=b.binaries.map(binary=>({...structuredClone(binary),execution:binary.format==='macho'?processExecution:
-              binary.format==='pe'&&binary.machine==='x86_64'&&guestTranslation?`fex(${guestTranslation.id})`:processExecution}));
-            const executions=[...new Set(binaries.map(binary=>binary.execution))];
-            return {kind:b.kind,source:b.source,build:b.id,installed:b.installed===true,
-              ...(b.kind==='wine'?{execution:processExecution}:executions.length===1?{execution:executions[0]}:{}),
-              binaries,adapter:getKind(b.kind).adapter};
-          });
-          const selectedIds=new Set(components.map(component=>component.build));
-          return {satisfied:true,target:{guestArch:guest,execution:guestTranslation?`fex(${guestTranslation.id})`:processExecution},components,processes:[{build:process.id,hostArch:host,guestArch:guest,integration,execution:processExecution}],downloads:components.filter(b=>!b.installed).map(b=>b.build),excluded:excluded.filter(row=>!selectedIds.has(row.build)),unsatisfied};
-        }
-        if(!foundGuest)exclude(process,'The guest requires an unavailable CPU translator.');
-      }
-      if(!foundHost)exclude(process,'The host process requires an unavailable CPU translator.');
-    }
-  }
-  if(choices.wine&&choices.wine!=='automatic'&&!builds.some(build=>build.kind==='wine'&&build.source===choices.wine))unsatisfied.push(`The selected Wine source ${choices.wine} is unavailable.`);
-  unsatisfied.push('No complete execution plan satisfies the selected sources and capabilities.');
-  return {satisfied:false,components:[],processes:[],downloads:[],excluded,unsatisfied};
-}
-module.exports={acceptsBinary,resolvePlan};
+module.exports={acceptsBinary,resolvePlan,selectLogicalLibraries};
