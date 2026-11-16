@@ -9,7 +9,7 @@ function orderedDownloads(plan,builds){
 }
 async function prepareRuntimePlan({readInventory,context={},confirmInstall=context.confirmRuntimeInstall,installBuild,application,apply=applyPlan,resolve=resolvePlan}={}){
  if(typeof readInventory!=='function')throw new TypeError('Fresh runtime inventory is required.');
- const attempted=new Set();let previous;
+ const attempted=new Set();let previous,approved=false;
  for(;;){
   context.signal?.throwIfAborted();
   const inventory=await readInventory({previous});
@@ -23,15 +23,16 @@ async function prepareRuntimePlan({readInventory,context={},confirmInstall=conte
   }
   const downloads=orderedDownloads(plan,inventory.builds);
   if(!downloads.length||downloads.some(build=>attempted.has(build.id)))throw new Error('Installation did not produce a fresh fully measured execution plan.');
-  const first=downloads[0],source=inventory.sources?.find(source=>source.id===first.source),manager=(inventory.managers||[]).find(manager=>manager.id===(first.legacy?.managerId||source?.manager?.id||first.source));
+  const first=downloads[0],source=inventory.sources?.find(source=>source.id===(first.sourceId||first.source)),manager=(inventory.managers||[]).find(manager=>manager.id===(first.legacy?.managerId||source?.manager?.id||first.source));
   const request={managerId:manager?.id||source?.manager?.id||first.source,version:first.version,label:first.label||source?.label||manager?.label||first.id,requiresDownload:true,
-   bytes:first.bytes,companions:downloads.slice(1).map(build=>({label:build.label||inventory.sources?.find(source=>source.id===build.source)?.label||build.id,versionLabel:build.version,bytes:build.bytes}))};
-  const consent=typeof confirmInstall==='function'?await confirmInstall(request):false;
+   bytes:first.bytes,companions:downloads.slice(1).map(build=>({label:build.label||inventory.sources?.find(source=>source.id===(build.sourceId||build.source))?.label||build.id,versionLabel:build.version,bytes:build.bytes}))};
+  const consent=approved||typeof confirmInstall==='function'&&await confirmInstall(request);
   if(consent!==true&&consent?.approved!==true)return{plan,inventory,cancelled:true,application:null};
-  const install=installBuild||require('../../runtime-sources/install').installBuild;
+  approved=true;
+  const install=installBuild||(options=>require('../../runtime-sources/install').installBuild(options,{installExact:require('./install-exact').installExactBackend}));
   for(const build of downloads){
    context.signal?.throwIfAborted();
-   const declaration=inventory.sources?.find(source=>source.id===build.source),owner=(inventory.managers||[]).find(manager=>manager.id===(build.legacy?.managerId||declaration?.manager?.id||build.source));
+   const declaration=inventory.sources?.find(source=>source.id===(build.sourceId||build.source)),owner=(inventory.managers||[]).find(manager=>manager.id===(build.legacy?.managerId||declaration?.manager?.id||build.source));
    if(!owner)throw new Error(`The selected runtime manager for ${build.id} is unavailable.`);
    await install({build,source:declaration,manager:owner,context,installOptions:{...(build.legacy?.installOptions||{}),...(declaration?.manager?.sectionId?{sectionId:declaration.manager.sectionId}:{}),version:build.version,exactVersion:true}});
    attempted.add(build.id);

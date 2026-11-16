@@ -3,25 +3,10 @@
   "kind": "wine",
   "label": "CrossOver",
   "order": 200,
-  "labels": {
-    "source": "CrossOver",
-    "automatic": "CrossOver's automatic choice",
-    "environment": "Bottle setting",
-    "environmentName": "CrossOver bottle"
+  "upstream": {
+    "app": "/Applications/CrossOver.app"
   },
-  "discover": {
-    "type": "local-app"
-  },
-  "verify": [],
-  "layout": {
-    "type": "local-app",
-    "entry": "Contents/SharedSupport/CrossOver/bin/wine",
-    "paths": [
-      "/Applications/CrossOver.app",
-      "~/Applications/CrossOver.app"
-    ]
-  },
-  "embeds": [
+  "included": [
     {
       "id": "crossover-dxmt",
       "kind": "d3d-translator",
@@ -31,12 +16,6 @@
           "name": "dxmt"
         }
       ],
-      "interfaces": {
-        "requires": [
-          "macos>=14.0",
-          "wine:winemetal"
-        ]
-      },
       "engine": "dxmt",
       "label": "DXMT"
     },
@@ -49,9 +28,6 @@
           "name": "dxvk"
         }
       ],
-      "interfaces": {
-        "requires": []
-      },
       "engine": "dxvk",
       "label": "DXVK"
     },
@@ -64,12 +40,6 @@
           "name": "d3dmetal"
         }
       ],
-      "interfaces": {
-        "requires": [
-          "macos>=14.0",
-          "gpu:apple-physical"
-        ]
-      },
       "engine": "d3dmetal",
       "label": "D3DMetal"
     },
@@ -82,9 +52,6 @@
           "name": "moltenvk"
         }
       ],
-      "interfaces": {
-        "requires": []
-      },
       "engine": "moltenvk",
       "label": "MoltenVK"
     },
@@ -117,35 +84,5 @@
       ],
       "label": "WineD3D"
     }
-  ],
-  "license": "Proprietary; Wine LGPL-2.1-or-later",
-  "credits": {
-    "url": "https://www.codeweavers.com/crossover"
-  },
-  "manager": {
-    "id": "crossover",
-    "memberOrder": 0,
-    "sectionLabel": "CrossOver",
-    "tabLabel": "CrossOver",
-    "category": "compatibility"
-  },
-  "wine": {
-    "invocation": "crossover",
-    "prefixModel": "bottleTemplate",
-    "downloads": false,
-    "environmentKind": "crossover-bottle",
-    "ownComponents": true,
-    "graphicsSelector": true,
-    "vulkanLibrarySelector": true
-  },
-  "selector": {
-    "type": "environment",
-    "key": "CX_GRAPHICS_BACKEND",
-    "automatic": "auto"
-  },
-  "interfaces": {
-    "provides": [
-      "wine:dllpath-overlay"
-    ]
-  }
+  ]
 }

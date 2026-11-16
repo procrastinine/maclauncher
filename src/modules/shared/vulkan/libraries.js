@@ -22,13 +22,13 @@ function inspect(file, { architecture = process.arch, macOSVersion = systemVersi
 // matched by platform word and archive type; other Apple platforms and debug
 // files are not the macOS library.
 function moltenvkAsset(assets) {
-  const candidates = (assets || []).filter(item => MoltenVKSource.assets.some(rule=>new RegExp(rule.match).test(item?.name||'')));
+  const candidates = (assets || []).filter(item => Object.values(MoltenVKSource.upstream.assets).some(pattern=>new RegExp(pattern,'i').test(item?.name||'')));
   return candidates.find(item => item.name === "MoltenVK-macos.tar") || candidates.find(item => /mac|osx|darwin|universal/i.test(item.name)) ||
     candidates.find(item => /(?:^|[-_.])all(?:[-_.]|$)/i.test(item.name));
 }
 // Every MoltenVK release with a macOS package; its macOS floor is read from the
 // library at installation.
-const moltenvk = Upstream.github({ repository: MoltenVKSource.discover.repo, allArchitectures: true, recognize: release => {
+const moltenvk = Upstream.github({ repository: MoltenVKSource.upstream.github, allArchitectures: true, recognize: release => {
   const version = String(release.tag_name || "").replace(/^v(?=\d)/, ""), asset = moltenvkAsset(release.assets);
   return asset ? { version, label: "MoltenVK " + version, assets: [asset] } : { version, installReason: "This release has no macOS package." };
 } });

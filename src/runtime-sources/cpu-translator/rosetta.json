@@ -3,27 +3,7 @@
   "kind": "cpu-translator",
   "label": "Rosetta",
   "order": 0,
-  "discover": {
-    "type": "system",
-    "component": "rosetta"
-  },
-  "verify": [],
-  "layout": {
-    "type": "local-app",
-    "paths": []
-  },
-  "reach": [
-    {
-      "guestFormat": "macho",
-      "guestArch": "x86_64",
-      "guestOS": "darwin",
-      "hostPlatform": "darwin",
-      "hostArch": "arm64",
-      "integration": "process"
-    }
-  ],
-  "license": "Apple system software license",
-  "credits": {
-    "url": "https://support.apple.com/102527"
+  "upstream": {
+    "app": ""
   }
 }

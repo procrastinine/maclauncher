@@ -3,40 +3,8 @@
   "kind": "d3d-translator",
   "label": "MacLauncher DXVK",
   "order": 2.5,
-  "manager": {
-    "id": "dxvk",
-    "engine": "dxvk",
-    "sectionId": "builds",
-    "sectionLabel": "MacLauncher DXVK",
-    "memberOrder": 2.5
+  "upstream": {
+    "builds": "dxvk"
   },
-  "discover": {
-    "type": "builds-catalog",
-    "catalog": "https://github.com/procrastinine/maclauncher-builds"
-  },
-  "assets": [
-    {
-      "match": ".*",
-      "declares": {
-        "pe": [
-          "i386",
-          "x86_64"
-        ]
-      },
-      "interfaces": {
-        "requires": [
-          "api:vulkan"
-        ]
-      }
-    }
-  ],
-  "verify": [],
-  "layout": {
-    "type": "archive",
-    "entry": "x64/d3d11.dll"
-  },
-  "license": "Zlib",
-  "credits": {
-    "url": "https://github.com/doitsujin/dxvk"
-  }
+  "vulkan": true
 }

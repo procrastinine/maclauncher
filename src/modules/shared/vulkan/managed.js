@@ -5,8 +5,8 @@ const { createProjectBuildManager } = require("../runtime/project-build-manager"
 const { withDescription } = require("../runtime/pinned-native-manager");
 const {createSourceBackedManager}=require("../../../runtime-sources/manager");
 const driverAdapter=require("../../../runtime-adapters/vulkan-driver");
-const source=require("../../../runtime-sources/vulkan-driver/maclauncher-kosmickrisp.json");
-const sceneSource=require("../../../runtime-sources/vulkan-driver/maclauncher-moltenvk-scene.json");
+const source=Object.assign(require("../../../runtime-sources/vulkan-driver/maclauncher-kosmickrisp.json"),{"manager":{"id":"maclauncher-kosmickrisp","engine":"kosmickrisp","sectionId":"builds","sectionLabel":"MacLauncher KosmicKrisp","memberOrder":22,"formerIds":["vulkan-kosmickrisp-gles32"]},"layout":{"type":"archive"},"credits":{"url":"https://gitlab.freedesktop.org/mesa/mesa"},"discover":{"type":"builds-catalog","catalog":"https://github.com/procrastinine/maclauncher-builds"}});
+const sceneSource=Object.assign(require("../../../runtime-sources/vulkan-driver/maclauncher-moltenvk-scene.json"),{"manager":{"id":"vulkan-moltenvk-scene","engine":"moltenvk","sectionId":"builds","sectionLabel":"MoltenVK scene support","memberOrder":25},"layout":{"type":"archive"},"credits":{"url":"https://github.com/KhronosGroup/MoltenVK"},"discover":{"type":"builds-catalog","catalog":"https://github.com/procrastinine/maclauncher-builds"}});
 const repository=new URL(source.discover.catalog).pathname.slice(1);
 
 const projectId=source.manager.id;

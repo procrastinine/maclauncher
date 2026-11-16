@@ -3,23 +3,14 @@
   "kind": "wine",
   "label": "Sikarugir",
   "order": 201,
-  "labels": {
-    "source": "Sikarugir Template",
-    "automatic": "Sikarugir's automatic choice",
-    "environment": "Wrapper setting",
-    "environmentName": "Sikarugir wrapper"
+  "upstream": {
+    "github": "Sikarugir-App/Engines",
+    "assets": {
+      "x86_64": "^(?!.*(?:^|[-_.])(?:linux|windows|win(?:32|64)|android|ios|riscv[0-9]*|aarch64|debug|symbols?|dsym)(?:[-_.]|$))WS(?<wrapper>[0-9]+)WineSikarugir(?<version>(?:10\\.(?:0_(?:[89]|[1-9][0-9]+)|[1-9][0-9]*(?:_[0-9]+)?)|11\\.(?:0_[1-9][0-9]*|[1-9][0-9]*(?:_[0-9]+)?)|(?:1[2-9]|[2-9][0-9]|[1-9][0-9]{2,})\\.[0-9]+(?:_[0-9]+)?))(?:[-_.][A-Za-z][\\w.-]*)?\\.(?:tar\\.(?:xz|gz|bz2|zst)|t[gx]z|tar|zip|pkg)$"
+    },
+    "prereleases": true
   },
-  "discover": {
-    "type": "github-releases",
-    "repo": "Sikarugir-App/Engines",
-    "includePrereleases": true
-  },
-  "verify": [],
-  "layout": {
-    "type": "archive",
-    "entry": "wswine.bundle/bin/wine"
-  },
-  "embeds": [
+  "included": [
     {
       "id": "sikarugir-dxmt",
       "kind": "d3d-translator",
@@ -29,12 +20,6 @@
           "name": "dxmt"
         }
       ],
-      "interfaces": {
-        "requires": [
-          "macos>=14.0",
-          "wine:winemetal"
-        ]
-      },
       "engine": "dxmt",
       "label": "DXMT"
     },
@@ -47,9 +32,6 @@
           "name": "dxvk"
         }
       ],
-      "interfaces": {
-        "requires": []
-      },
       "engine": "dxvk",
       "label": "DXVK"
     },
@@ -62,9 +44,6 @@
           "name": "dxvk3"
         }
       ],
-      "interfaces": {
-        "requires": []
-      },
       "engine": "dxvk",
       "label": "DXVK"
     },
@@ -77,9 +56,6 @@
           "name": "d9vk"
         }
       ],
-      "interfaces": {
-        "requires": []
-      },
       "engine": "dxvk",
       "label": "D9VK"
     },
@@ -92,12 +68,6 @@
           "name": "d3dmetal"
         }
       ],
-      "interfaces": {
-        "requires": [
-          "macos>=14.0",
-          "gpu:apple-physical"
-        ]
-      },
       "engine": "d3dmetal",
       "label": "D3DMetal"
     },
@@ -110,9 +80,6 @@
           "name": "cnc_ddraw"
         }
       ],
-      "interfaces": {
-        "requires": []
-      },
       "engine": "cnc_ddraw",
       "label": "CNC-DDraw"
     },
@@ -135,9 +102,6 @@
           "optional": true
         }
       ],
-      "interfaces": {
-        "requires": []
-      },
       "engine": "moltenvk",
       "label": "MoltenVK"
     },
@@ -160,13 +124,6 @@
           "optional": true
         }
       ],
-      "interfaces": {
-        "requires": [
-          "macos>=26.0",
-          "metal:4",
-          "gpu:apple-physical"
-        ]
-      },
       "engine": "kosmickrisp",
       "label": "KosmicKrisp"
     },
@@ -210,101 +167,5 @@
       ],
       "label": "WineD3D"
     }
-  ],
-  "license": "LGPL-2.1-or-later",
-  "credits": {
-    "url": "https://github.com/Sikarugir-App/Engines"
-  },
-  "manager": {
-    "id": "sikarugir",
-    "memberOrder": 0,
-    "sectionLabel": "Sikarugir",
-    "tabLabel": "Sikarugir",
-    "category": "compatibility"
-  },
-  "wine": {
-    "invocation": "wine",
-    "prefixModel": "windowsVersion",
-    "downloads": true,
-    "environmentKind": "sikarugir-wrapper",
-    "directDraw": true,
-    "graphicsSelector": false,
-    "vulkanLibrarySelector": false
-  },
-  "assets": [
-    {
-      "match": "^(?!.*(?:^|[-_.])(?:linux|windows|win(?:32|64)|android|ios|riscv[0-9]*|aarch64|debug|symbols?|dsym)(?:[-_.]|$))WS(?<wrapper>[0-9]+)WineSikarugir(?<version>(?:10\\.(?:0_(?:[89]|[1-9][0-9]+)|[1-9][0-9]*(?:_[0-9]+)?)|11\\.(?:0_[1-9][0-9]*|[1-9][0-9]*(?:_[0-9]+)?)|(?:1[2-9]|[2-9][0-9]|[1-9][0-9]{2,})\\.[0-9]+(?:_[0-9]+)?))(?:[-_.][A-Za-z][\\w.-]*)?\\.(?:tar\\.(?:xz|gz|bz2|zst)|t[gx]z|tar|zip|pkg)$",
-      "declares": {
-        "macho": [
-          "x86_64"
-        ]
-      }
-    }
-  ],
-  "automatic": {
-    "vulkan-driver": [
-      "sikarugir-kosmickrisp",
-      "sikarugir-moltenvk"
-    ],
-    "d3d-renderer": [
-      "sikarugir-dxmt",
-      "sikarugir-wined3d"
-    ],
-    "d3d9": [
-      {
-        "embed": "sikarugir-d9vk",
-        "when": {
-          "setting": "d9vk",
-          "not": true,
-          "equals": false,
-          "selected": {
-            "role": "vulkan-driver",
-            "engine": "kosmickrisp"
-          }
-        }
-      },
-      "sikarugir-wined3d"
-    ],
-    "d3d8": [
-      {
-        "embed": "sikarugir-d9vk",
-        "when": {
-          "setting": "d9vk",
-          "not": true,
-          "equals": false,
-          "selected": {
-            "role": "vulkan-driver",
-            "engine": "kosmickrisp"
-          }
-        }
-      },
-      "sikarugir-wined3d"
-    ],
-    "legacy.dxvk": [
-      {
-        "embed": "sikarugir-dxvk3",
-        "when": {
-          "selected": {
-            "role": "vulkan-driver",
-            "engine": "kosmickrisp"
-          }
-        }
-      },
-      {
-        "embed": "sikarugir-dxvk",
-        "when": {
-          "not": true,
-          "selected": {
-            "role": "vulkan-driver",
-            "engine": "kosmickrisp"
-          }
-        }
-      }
-    ]
-  },
-  "interfaces": {
-    "provides": [
-      "wine:dllpath-overlay"
-    ]
-  }
+  ]
 }

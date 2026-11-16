@@ -84,14 +84,13 @@ function bridgeParts(manifest) {
 function buildRecord({ source, install, id = source.id + ':' + install.version, version = install.version,
   measure = require('../runtime-sources/installed-build').measureBuild }) {
   const parts = bridgeParts(install.manifest), files = [...new Set(parts.map(part => part.path))];
-  const declaration = source.assets.length === 1 ? source.assets[0] : source.assets.find(rule =>
+  const declaration = Object.entries(source.upstream.assets||{}).map(([intendedCPU,match])=>({intendedCPU,match})).find(rule =>
     new RegExp(rule.match).test(install.catalogEntry?.asset?.filename || ''));
   const build = measure({ source, root: install.root, files, declares: declaration?.declares,
     id, version, provenance: install.sourceIdentity || {} });
   const floor = install.manifest.minimumMacOS;
   return { ...build, root: install.root, measured: true, parts,
-    ...(floor ? { minimumMacOS: floor, interfaces: { ...build.interfaces,
-      requires: [...new Set([...(build.interfaces?.requires || []), 'macos>=' + floor])] } } : {}) };
+    ...(floor ? {minimumMacOS:floor}: {}) };
 }
 function listBuilds({ manager, sources, context = {} }) {
   const source = sources[0], result = [], installed = manager.core.listInstalled(context.userDataDir);
@@ -109,12 +108,12 @@ function listBuilds({ manager, sources, context = {} }) {
   }
   for (const pin of manager.core.listDiscoveredCatalog({ userDataDir: context.userDataDir })) {
     if (installed.some(row => row.version === pin.version)) continue;
-    const declaration = source.assets.find(rule => new RegExp(rule.match).test(pin.asset?.filename || pin.asset?.name || ''));
-    if (declaration) {
+    const declaration = Object.entries(source.upstream.assets||{}).map(([intendedCPU,match])=>({intendedCPU,match})).find(rule => new RegExp(rule.match).test(pin.asset?.filename || pin.asset?.name || ''));
+    if (declaration || source.upstream.builds) {
       const { projectAvailableBuild } = require('../runtime-sources/available-build');
       const offer = projectAvailableBuild({ source, asset: declaration, id: source.id + ':' + pin.version,
         version: pin.version, bytes: pin.asset?.bytes, provenance: { catalogEntry: pin } });
-      if (pin.minimumMacOS) offer.interfaces.requires = [...new Set([...offer.interfaces.requires, 'macos>=' + pin.minimumMacOS])];
+      if (pin.minimumMacOS) offer.minimumMacOS=pin.minimumMacOS;
       if (pin.installReason) Object.assign(offer, { available: false, unavailableReason: pin.installReason });
       result.push(offer);
     }

@@ -22,8 +22,9 @@ const COMPONENTS = Object.freeze(['d3d-renderer', 'vulkan-driver', 'd3d12', 'vid
 const sourceDeclarations = require('../../../runtime-sources').loadSources();
 const engineKinds = new Map(sourceDeclarations.flatMap(source => [
   ...(source.manager?.engine ? [[source.manager.engine, source.kind]] : []),
-  ...(source.embeds || []).filter(embed => embed.engine).map(embed => [embed.engine, embed.kind])
+  ...(source.included || []).filter(embed => embed.engine).map(embed => [embed.engine, embed.kind])
 ]));
+for(const [engine,kind]of Object.entries({dxmt:'d3d-translator',dxvk:'d3d-translator',d8vk:'d3d-translator',d9vk:'d3d-translator','vkd3d-proton':'d3d-translator',vkd3d:'d3d-translator',d3dmetal:'d3d-translator',gstreamer:'media',moltenvk:'vulkan-driver',kosmickrisp:'vulkan-driver'}))engineKinds.set(engine,kind);
 const ENGINES = Object.freeze([...engineKinds.keys()]);
 const FORMS = Object.freeze(['builtin', 'native', 'icd', 'dylib']);
 

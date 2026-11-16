@@ -36,10 +36,12 @@ async function launch(plan, context, {processes = require('../modules/shared/run
 
 // Selection and process architecture have already been resolved by core.
 function apply({environment = {}}) { return {environment: {...environment}}; }
+const existingWine = {"sikarugir":{"manager":{"id":"sikarugir","memberOrder":0,"sectionLabel":"Sikarugir","tabLabel":"Sikarugir","category":"compatibility"},"layout":{"type":"archive","entry":"wswine.bundle/bin/wine"},"labels":{"source":"Sikarugir Template","automatic":"Sikarugir's automatic choice","environment":"Wrapper setting","environmentName":"Sikarugir wrapper"},"wine":{"invocation":"wine","prefixModel":"windowsVersion","downloads":true,"environmentKind":"sikarugir-wrapper","directDraw":true,"graphicsSelector":false,"vulkanLibrarySelector":false}},"winecx":{"manager":{"id":"winecx","memberOrder":0,"sectionLabel":"WineCX","tabLabel":"WineCX","category":"compatibility"},"layout":{"type":"archive","entry":"Libraries/Wine/bin/wine"},"labels":{"source":"WineCX","automatic":"WineCX's automatic choice"},"wine":{"invocation":"wine","prefixModel":"windowsVersion","downloads":true,"graphicsSelector":false}},"crossover":{"manager":{"id":"crossover","memberOrder":0,"sectionLabel":"CrossOver","tabLabel":"CrossOver","category":"compatibility"},"layout":{"type":"local-app","entry":"Contents/SharedSupport/CrossOver/bin/wine","paths":["/Applications/CrossOver.app","~/Applications/CrossOver.app"]},"labels":{"source":"CrossOver","automatic":"CrossOver's automatic choice","environment":"Bottle setting","environmentName":"CrossOver bottle"},"wine":{"invocation":"crossover","prefixModel":"bottleTemplate","downloads":false,"environmentKind":"crossover-bottle","ownComponents":true,"graphicsSelector":true,"vulkanLibrarySelector":true},"selector":{"type":"environment","key":"CX_GRAPHICS_BACKEND","automatic":"auto"}}};
 function definition(id) {
   const value = require('../runtime-sources').loadSources().find(source => source.kind === 'wine' && source.id === id);
   if (!value) throw new Error('Unknown Wine source: ' + id);
-  return value;
+  const upstream=value.upstream||{};
+  return {...value,...existingWine[id],assets:Object.entries(upstream.assets||{}).map(([intendedCPU,match])=>({match,intendedCPU})),discover:{type:upstream.github?'github-releases':'local-app',repo:upstream.github,includePrereleases:upstream.prereleases}};
 }
 function descriptor(id, transport) {
   const data = definition(id), wine = data.wine || {};
@@ -84,15 +86,13 @@ function resolvePart(source, install, part) {
 // Canonical parent inventory projection. Callers inspect these paths and take
 // the maximum measured floor; this helper returns source-declared facts only.
 function embeddedComponent(install, {sourceId, engine}) {
-  const source=definition(sourceId), embed=source.embeds.find(embed=>embed.engine===engine);
+  const source=definition(sourceId), embed=source.included.find(embed=>embed.engine===engine);
   if (!embed) return null;
   const parts=embed.parts.map(part=>({...part,path:resolvePart(source,install,part)}));
-  const floors=(embed.interfaces?.requires || []).filter(token=>token.startsWith('macos>=')).map(token=>token.slice(7));
-  return {source,embed,root:parts[0]?.path,parts,interfaces:embed.interfaces || {},
-    minimumMacOS:floors.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).at(-1) || null};
+  return {source,embed,root:parts[0]?.path,parts};
 }
 function nativeLibraries(source, install) {
-  const media=source.embeds.find(embed=>embed.kind==='media'), driver=source.embeds.find(embed=>embed.kind==='vulkan-driver');
+  const media=source.included.find(embed=>embed.kind==='media'), driver=source.included.find(embed=>embed.kind==='vulkan-driver');
   const parts=Object.fromEntries(media.parts.map(part=>[part.name,resolvePart(source,install,part)]));
   const library=path.dirname(resolvePart(source,install,driver.parts[0]));
   const lib=path.dirname(parts.core), framework=parts.framework && path.dirname(parts.framework);
@@ -102,7 +102,15 @@ function nativeLibraries(source, install) {
 function includedTranslators(source, install, add, context = {}) {
   const root = installationRoot(source, install), warnings = context.warnings || [];
   const resolve = part => resolvePart(source,install,part);
-  for (const embed of source.embeds || []) {
+  if(!context.requestedEngine && source.id==='sikarugir') {
+    const driver=source.included.find(item=>item.kind==='vulkan-driver');
+    const icd=driver?.parts.find(part=>part.name==='icd');
+    const directory=icd&&path.dirname(resolve(icd));
+    if(directory&&fs.existsSync(directory))for(const name of fs.readdirSync(directory).filter(name=>name.endsWith('.json'))){
+      try{JSON.parse(fs.readFileSync(path.join(directory,name),'utf8'));}catch(error){warnings.push(error.message);}
+    }
+  }
+  for (const embed of source.included || []) {
     if (embed.engine === 'wined3d' || context.requestedEngine && context.requestedEngine !== embed.engine) continue;
     const parts = Object.fromEntries(embed.parts.map(part => [part.name || 'component', resolve(part)]));
     let primary = embed.kind === 'media' ? parts.plugins : resolve(embed.parts[0]);
@@ -141,7 +149,7 @@ function includedTranslators(source, install, add, context = {}) {
 }
 
 function supportFacts(id) {
-  const source=definition(id), embeds=source.embeds || [];
+  const source=definition(id), embeds=source.included || [];
   const renderers=embeds.filter(embed=>embed.kind==='d3d-translator' && embed.engine!=='wined3d');
   const rendererPath=path.posix.dirname(renderers[0].parts[0].path), support=rendererPath.split('/')[0];
   const relative=value=>path.posix.relative(support,value);
@@ -149,7 +157,7 @@ function supportFacts(id) {
   const media=embeds.find(embed=>embed.kind==='media');
   return {root:support, relativePaths:{frameworks:relative(path.posix.dirname(rendererPath)),renderers:relative(rendererPath),vulkan:relative(path.posix.dirname(icd.path))},
     media:Object.fromEntries(media.parts.map(part=>[part.name,relative(part.path)])),
-    minimumMacOS:Object.fromEntries(embeds.flatMap(embed=>{const floors=(embed.interfaces?.requires||[]).filter(value=>value.startsWith('macos>=')).map(value=>value.slice(7));return floors.length?[[embed.engine,[...floors.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).at(-1).split('.'),'0','0'].slice(0,3).join('.')]]:[];}))};
+    minimumMacOS:{}};
 }
 // One storage/status path for managed Wine sources. Publisher modules supply
 // only release recognition, extraction and sealed payload transport hooks.
@@ -241,7 +249,7 @@ function createBackend({source, dependencies = {}}) {
 }
 function listBuilds({manager,sources,context={}}) {
   if (context.builds) {
-    const sourceIds=new Set(sources.flatMap(source=>[source.id,...(source.embeds || []).map(embed=>embed.id)]));
+    const sourceIds=new Set(sources.flatMap(source=>[source.id,...(source.included || []).map(embed=>embed.id)]));
     return context.builds.filter(build=>sourceIds.has(build.source));
   }
   const builds=[];
@@ -252,10 +260,9 @@ function listBuilds({manager,sources,context={}}) {
       const executable=row.graphicsExecutablePath || row.executablePath;
       const architectures=row.architectures || [];
       const binaries=executable && root && architectures.length ? [{path:path.relative(root,executable),format:'macho',architectures:[...architectures]}] : [];
-      builds.push({id:source.id+':'+row.version,source:source.id,kind:'wine',version:row.version,installed:true,measured:binaries.length>0,binaries,
+      builds.push({id:source.id+':'+row.version,sourceId:source.id,source:source.id,kind:'wine',version:row.version,installed:true,measured:binaries.length>0,binaries,
         root,label:row.versionLabel || source.label,order:source.order,
         parts:[...(executable && root ? [{path:path.relative(root,executable),name:'executable'}] : []),...(row.serverPath && root ? [{path:path.relative(root,row.serverPath),name:'server',optional:true}] : [])],
-        interfaces:{provides:source.interfaces?.provides || [],requires:[...(source.interfaces?.requires || []),...(row.minimumMacOS?['macos>='+row.minimumMacOS]:[])]},
         ...(source.selector?{selector:source.selector}:{}),...(source.automatic?{automatic:source.automatic}:{}),labels:source.labels,
         ...(row.ready===false?{available:false,unavailableReason:row.reason || row.error || 'Wine installation is unavailable.'}:{}),
         aliases:[row.version],provenance:{reader:'existing Wine installation metadata',archiveSha256:row.archiveSha256}});
@@ -267,7 +274,7 @@ function listBuilds({manager,sources,context={}}) {
       if (!asset) continue;
       const offer=require('../runtime-sources/available-build').projectAvailableBuild({source,asset,id:source.id+':'+pin.version,version:pin.version,
         bytes:pin.downloadBytes || pin.asset.bytes,provenance:{upstreamRevision:pin.upstreamRevision,assetUrl:pin.asset.url}});
-      if (pin.minimumMacOS) offer.interfaces.requires.push('macos>='+pin.minimumMacOS);
+      if (pin.minimumMacOS) offer.minimumMacOS=pin.minimumMacOS;
       builds.push({...offer,label:pin.versionLabel || source.label,order:source.order,
         ...(pin.installReason?{available:false,unavailableReason:pin.installReason}:{}),aliases:[pin.version]});
     }

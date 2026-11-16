@@ -1,61 +1,14 @@
 {
   "id": "template-dxmt",
   "kind": "d3d-translator",
-  "label": "Sikarugir Template",
+  "label": "Sikarugir Template (template-dxmt)",
   "order": 1,
-  "manager": {
-    "id": "sikarugir-graphics-bridge",
-    "sectionId": "template",
-    "engine": "dxmt",
-    "memberOrder": 0,
-    "sectionLabel": "DXMT",
-    "formerIds": [
-      "crossover-graphics-bridge"
-    ]
-  },
-  "discover": {
-    "type": "github-releases",
-    "repo": "Sikarugir-App/Template",
-    "includePrereleases": true,
-    "component": "dxmt"
-  },
-  "assets": [
-    {
-      "match": "^[Tt][Ee][Mm][Pp][Ll][Aa][Tt][Ee]-.*\\.(?:[zZ][iI][pP]|[tT][aA][rR]\\.[gG][zZ]|[tT][gG][zZ]|[tT][aA][rR]\\.[xX][zZ]|[tT][aA][rR]\\.[zZ][sS][tT]|[tT][xX][zZ]|[tT][aA][rR]\\.[bB][zZ]2|[tT][bB][zZ]2|[dD][mM][gG]|[tT][aA][rR]|[pP][kK][gG])$",
-      "declares": {
-        "pe": [
-          "i386",
-          "x86_64"
-        ]
-      },
-      "parts": [
-        {
-          "path": "dxmt",
-          "name": "component-root",
-          "optional": true
-        }
-      ]
-    }
-  ],
-  "verify": [
-    {
-      "type": "github-asset-digest"
-    }
-  ],
-  "layout": {
-    "type": "archive"
-  },
-  "interfaces": {
-    "requires": [
-      "api:metal",
-      "macos>=14.0"
-    ]
-  },
-  "labels": {
-    "source": "Sikarugir Template"
-  },
-  "license": "LGPL-2.1-or-later",
-  "credits": {
-    "url": "https://github.com/Sikarugir-App/Template"
+  "upstream": {
+    "github": "Sikarugir-App/Template",
+    "assets": {
+      "i386": "^[Tt][Ee][Mm][Pp][Ll][Aa][Tt][Ee]-.*\\.(?:[zZ][iI][pP]|[tT][aA][rR]\\.[gG][zZ]|[tT][gG][zZ]|[tT][aA][rR]\\.[xX][zZ]|[tT][aA][rR]\\.[zZ][sS][tT]|[tT][xX][zZ]|[tT][aA][rR]\\.[bB][zZ]2|[tT][bB][zZ]2|[dD][mM][gG]|[tT][aA][rR]|[pP][kK][gG])$",
+      "x86_64": "^[Tt][Ee][Mm][Pp][Ll][Aa][Tt][Ee]-.*\\.(?:[zZ][iI][pP]|[tT][aA][rR]\\.[gG][zZ]|[tT][gG][zZ]|[tT][aA][rR]\\.[xX][zZ]|[tT][aA][rR]\\.[zZ][sS][tT]|[tT][xX][zZ]|[tT][aA][rR]\\.[bB][zZ]2|[tT][bB][zZ]2|[dD][mM][gG]|[tT][aA][rR]|[pP][kK][gG])$"
+    },
+    "prereleases": true
   }
 }

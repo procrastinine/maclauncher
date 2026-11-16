@@ -3,7 +3,7 @@ const fs = require('node:fs'), path = require('node:path');
 const {inspectBinary, machoMagic} = require('../core/binary-arch');
 const {throwIfAborted} = require('../modules/shared/runtime/download-utils');
 const Upstream = require('../modules/shared/runtime/upstream');
-const {hashFile} = require('../modules/shared/runtime/pinned-native-manager');
+const {fileDigest} = require('../modules/shared/runtime/verified-identity');
 
 function within(base, candidate) {
   const relative = path.relative(base, candidate);
@@ -45,8 +45,14 @@ function checkCPU(binaries, intended) {
     throw new Error('Runtime CPU mismatch: asset intended ' + intended + '; measured ' + cpus.join(', ') + '.');
 }
 async function publisherVerification(asset, archive, selected, signal, dependencies) {
-  const sha256 = hashFile(archive), digest = Upstream.readDigest(asset.sha256 || asset.digest, asset.sha256 ? 'sha256' : undefined);
-  if (digest && hashFile(archive, digest.algorithm) !== digest.value) throw new Error('The runtime archive does not match its publisher digest.');
+  const sha256 = fileDigest(archive).sha256, digest = Upstream.readDigest(asset.sha256 || asset.digest, asset.sha256 ? 'sha256' : undefined);
+  let publishedHash = sha256;
+  if (digest && digest.algorithm !== 'sha256') {
+    const hash = require('node:crypto').createHash(digest.algorithm);
+    for await (const bytes of fs.createReadStream(archive)) { throwIfAborted(signal); hash.update(bytes); }
+    publishedHash = hash.digest('hex');
+  }
+  if (digest && publishedHash !== digest.value) throw new Error('The runtime archive does not match its publisher digest.');
   const filename = asset.filename || asset.name, sidecars = selected.verificationFiles || [];
   const checksum = sidecars.find(file => (file.filename || file.name) === filename + '.sha256') ||
     sidecars.find(file => /^(?:sha256sums?(?:[.]txt)?|checksums[.]txt)$/i.test(file.filename || file.name || ''));

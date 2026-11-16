@@ -3,56 +3,12 @@
   "kind": "vulkan-driver",
   "label": "MoltenVK",
   "order": 20,
-  "manager": {
-    "id": "vulkan-moltenvk",
-    "sectionId": "default",
-    "engine": "moltenvk",
-    "memberOrder": 20,
-    "sectionLabel": "MoltenVK"
-  },
-  "discover": {
-    "type": "github-releases",
-    "repo": "KhronosGroup/MoltenVK",
-    "includePrereleases": true
-  },
-  "assets": [
-    {
-      "match": "^(?!.*(?:^|[-_.])(?:[iI][oO][sS]|[tT][vV][oO][sS]|[vV][iI][sS][iI][oO][nN][oO][sS]|[xX][rR][oO][sS]|[wW][aA][tT][cC][hH][oO][sS]|[lL][iI][nN][uU][xX]|[wW][iI][nN][dD][oO][wW][sS]|[rR][iI][sS][cC][vV]\\d*|[dD][eE][bB][uU][gG]|[sS][yY][mM][bB][oO][lL][sS]?|[dD][sS][yY][mM])(?:[-_.]|$))[mM][oO][lL][tT][eE][nN][vV][kK].*\\.(?:[tT][aA][rR](?:\\.(?:[gG][zZ]|[xX][zZ]|[bB][zZ]2))?|[tT][gG][zZ]|[tT][xX][zZ]|[zZ][iI][pP])$",
-      "declares": {
-        "macho": [
-          "arm64",
-          "x86_64"
-        ]
-      },
-      "parts": [
-        {
-          "path": "moltenvk",
-          "name": "component-root",
-          "optional": true
-        }
-      ]
-    }
-  ],
-  "verify": [
-    {
-      "type": "github-asset-digest"
-    }
-  ],
-  "layout": {
-    "type": "archive",
-    "entry": "libMoltenVK.dylib"
-  },
-  "interfaces": {
-    "provides": [
-      "api:vulkan",
-      "vulkan:1.0"
-    ]
-  },
-  "labels": {
-    "source": "MoltenVK"
-  },
-  "license": "Apache-2.0",
-  "credits": {
-    "url": "https://github.com/KhronosGroup/MoltenVK"
+  "upstream": {
+    "github": "KhronosGroup/MoltenVK",
+    "assets": {
+      "arm64": "^(?!.*(?:^|[-_.])(?:[iI][oO][sS]|[tT][vV][oO][sS]|[vV][iI][sS][iI][oO][nN][oO][sS]|[xX][rR][oO][sS]|[wW][aA][tT][cC][hH][oO][sS]|[lL][iI][nN][uU][xX]|[wW][iI][nN][dD][oO][wW][sS]|[rR][iI][sS][cC][vV]\\d*|[dD][eE][bB][uU][gG]|[sS][yY][mM][bB][oO][lL][sS]?|[dD][sS][yY][mM])(?:[-_.]|$))[mM][oO][lL][tT][eE][nN][vV][kK].*\\.(?:[tT][aA][rR](?:\\.(?:[gG][zZ]|[xX][zZ]|[bB][zZ]2))?|[tT][gG][zZ]|[tT][xX][zZ]|[zZ][iI][pP])$",
+      "x86_64": "^(?!.*(?:^|[-_.])(?:[iI][oO][sS]|[tT][vV][oO][sS]|[vV][iI][sS][iI][oO][nN][oO][sS]|[xX][rR][oO][sS]|[wW][aA][tT][cC][hH][oO][sS]|[lL][iI][nN][uU][xX]|[wW][iI][nN][dD][oO][wW][sS]|[rR][iI][sS][cC][vV]\\d*|[dD][eE][bB][uU][gG]|[sS][yY][mM][bB][oO][lL][sS]?|[dD][sS][yY][mM])(?:[-_.]|$))[mM][oO][lL][tT][eE][nN][vV][kK].*\\.(?:[tT][aA][rR](?:\\.(?:[gG][zZ]|[xX][zZ]|[bB][zZ]2))?|[tT][gG][zZ]|[tT][xX][zZ]|[zZ][iI][pP])$"
+    },
+    "prereleases": true
   }
 }

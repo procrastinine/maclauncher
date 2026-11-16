@@ -16,7 +16,7 @@ function listBuilds({manager,sources,context={},projectAvailableBuild}={}) {
   const selected=manager.resolveSelection(null,context.settings||{},context.userDataDir,{version:row.version,verification:'status'});
   if(!selected.ready||!selected.install)continue;
   const install=selected.install,pin=install.catalogEntry||row.catalogEntry||{};
-  const source=sources.find(s=>s.manager.sectionId===pin.catalogSourceId)||sources[0];
+  const source=sources.find(s=>s.manager?.sectionId===pin.catalogSourceId)||sources[0];
   const {root,files}=filesFor(install),id=source.id+':'+row.version;
   try {
    if(!files.length)throw new Error('The installed graphics build has no measured binary inventory.');
@@ -28,16 +28,16 @@ function listBuilds({manager,sources,context={},projectAvailableBuild}={}) {
    for(const file of files){const binary=require('../core/binary-arch').inspectBinary(file);for(const arch of binary.format==='macho'?binary.architectures:[binary.machine]){aggregate[binary.format]||=[];if(!aggregate[binary.format].includes(arch))aggregate[binary.format].push(arch);}}
    const declares=install.declares||install.installationMetadata?.declares||aggregate;
    const build=measureBuild({source,root,files:files.map(file=>path.relative(root,file)),declares,id,version:row.version,provenance:install.sourceIdentity||{}});
-   result.push({...build,root,measured:true,engine:source.manager.engine,interfaces:{provides:[...(source.interfaces?.provides||[]),...(declaration?.interfaces?.provides||[])],requires:[...(source.interfaces?.requires||[]),...(declaration?.interfaces?.requires||[])]},
+   result.push({...build,root,measured:true,engine:manager.translatorEngine||manager.translator?.engine,
     legacy:{managerId:manager.id,version:row.version,defaultVersion:context.settings?.runtimes?.[manager.id]?.defaultVersion}});
   }catch(error){result.push({id,source:source.id,kind:source.kind,version:row.version,installed:true,measured:false,binaries:[],available:false,unavailableReason:error.message});}
  }
  const pins=manager.core.listDiscoveredCatalog?.({userDataDir:context.userDataDir})||[];
  for(const pin of pins) {
   if(installed.some(row=>row.version===pin.version))continue;
-  const source=sources.find(s=>s.manager.sectionId===pin.catalogSourceId)||sources[0];
-  const asset=source.assets?.find(rule=>new RegExp(rule.match).test(pin.asset?.filename||pin.asset?.name||''));
-  if(asset) {
+  const source=sources.find(s=>s.manager?.sectionId===pin.catalogSourceId)||sources[0];
+  const asset=Object.entries(source.upstream?.assets||{}).map(([intendedCPU,match])=>({intendedCPU,match})).find(rule=>new RegExp(rule.match,'i').test(pin.asset?.filename||pin.asset?.name||''));
+  if(asset||source.upstream?.builds) {
    const project=projectAvailableBuild||require('../runtime-sources/available-build').projectAvailableBuild;
    result.push(project({source,asset,id:source.id+':'+pin.version,version:pin.version,bytes:pin.asset?.bytes,
     provenance:{managerId:manager.id,catalogEntry:pin}}));

@@ -3,8 +3,8 @@ const Upstream = require("../../../shared/runtime/upstream");
 const { versionAtLeast } = require("../../../shared/runtime/bundled-native");
 const { ARCHIVE } = require("./archive");
 
-const SOURCE = require('../../../../runtime-sources/wine/sikarugir.json');
-const SOURCE_URL = 'https://github.com/' + SOURCE.discover.repo + '/releases';
+const SOURCE = Object.assign(require('../../../../runtime-sources/wine/sikarugir.json'),{"manager":{"id":"sikarugir","memberOrder":0,"sectionLabel":"Sikarugir","tabLabel":"Sikarugir","category":"compatibility"},"layout":{"type":"archive","entry":"wswine.bundle/bin/wine"},"labels":{"source":"Sikarugir Template","automatic":"Sikarugir's automatic choice","environment":"Wrapper setting","environmentName":"Sikarugir wrapper"},"credits":{"url":"https://github.com/Sikarugir-App/Engines"},"discover":{"type":"github-releases"}});
+const SOURCE_URL = 'https://github.com/' + SOURCE.upstream.github + '/releases';
 
 // Asset names follow upstream: any WSnn wrapper generation, an optional
 // platform suffix and any archive the extractor reads. Files for other
@@ -22,7 +22,7 @@ function parseTemplateName(name) {
 // Wine engines from 10.0_8 on, except the first 11.0 build. The WSnn number
 // names the wrapper generation the engine was built for.
 function parseEngineName(name) {
-  const match = new RegExp(SOURCE.assets[0].match, 'i').exec(String(name || ''));
+  const match = new RegExp(Object.values(SOURCE.upstream.assets)[0], 'i').exec(String(name || ''));
   if (!match) return null;
   const version = match.groups.version, [base, revisionText] = version.split('_'), [major,minor] = base.split('.').map(Number), revision=Number(revisionText||0);
   if (![major,minor,revision].every(Number.isSafeInteger)) return null;
@@ -43,7 +43,7 @@ function archives(release, parse) {
 }
 // Engines are assets of the Engines releases, support libraries assets of the
 // Template releases. The rolling release tag is not a Wine version.
-const engines = Upstream.github({ repository: SOURCE.discover.repo, prerelease: SOURCE.discover.includePrereleases, allArchitectures: true,
+const engines = Upstream.github({ repository: SOURCE.upstream.github, prerelease: SOURCE.upstream.prereleases, allArchitectures: true,
   recognize: release => archives(release, parseEngineName) });
 const templates = Upstream.github({ repository: "Sikarugir-App/Template", prerelease: true, allArchitectures: true,
   recognize: release => archives(release, parseTemplateName) });

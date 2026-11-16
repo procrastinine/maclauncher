@@ -62,6 +62,7 @@ function createSourceBackend({id, source, sources = source ? [source] : [], depe
     return version + '-' + crypto.createHash('sha256').update(build.id).digest('hex').slice(0, 24);
   };
   const installDirectory = (userDataDir, build) => path.join(root(userDataDir), storageVersion(build));
+  const matchesVersion = (item, version) => item.version === version || storageVersion(item.build || item) === version;
   const normalizeSettings = settings => ({...settings, defaultVersion: typeof settings?.defaultVersion === 'string' ? settings.defaultVersion : null});
 
   function available(offer) {
@@ -86,7 +87,9 @@ function createSourceBackend({id, source, sources = source ? [source] : [], depe
     const binaries = measured.binaries.map(binary => ({...binary, ...inspectBinary(path.join(payloadRoot, binary.path))}));
     if (JSON.stringify(binaries) !== JSON.stringify(measured.binaries)) throw new Error('The installed runtime binary measurements changed.');
     const build = decorate({...measured, root: payloadRoot}, declaration);
+    const architectures = [...new Set(binaries.flatMap(binary => binary.format === 'macho' ? binary.architectures : []))];
     return {version: build.version, buildId: build.id, installDir: directory, root: payloadRoot, payloadRoot,
+      ...(architectures.length ? {architectures, architecture: architectures.length > 1 ? 'universal' : architectures[0] === 'x86_64' ? 'x64' : architectures[0]} : {}),
             ...(record.installationMetadata.executableRelative ? {executablePath: path.join(payloadRoot, record.installationMetadata.executableRelative)} : {}),
       ready: true, source: declaration.id, sourceId: declaration.id, build,
       installationMetadata: record.installationMetadata, catalogEntry: record.catalogEntry, archiveSha256: record.archiveSha256};
@@ -137,13 +140,15 @@ function createSourceBackend({id, source, sources = source ? [source] : [], depe
     const stateFor = declaration => {
       const rows = declaration ? offers.filter(offer => offer.sourceId === declaration.id) : offers;
       const copies = declaration ? installed.filter(item => item.source === declaration.id) : installed;
-      const versions = [...new Set(rows.map(item => item.version))], status = declaration ? states[declaration.id]
+      const versions = rows.map(storageVersion), status = declaration ? states[declaration.id]
         : Object.values(states).find(state => state.status === 'error');
-      const requirements = Object.fromEntries(rows.map(item => [item.version, {requiresDownload: !copies.some(copy => copy.ready && copy.buildId === item.id),
+      const requirements = Object.fromEntries(rows.map(item => [storageVersion(item), {requiresDownload: !copies.some(copy => copy.ready && copy.buildId === item.id),
         requiresBuild: false, available: copies.some(copy => copy.ready && copy.buildId === item.id), installLabel: 'Install',
+        ...(item.intendedCPU ? {architecture: item.intendedCPU === 'x86_64' ? 'x64' : item.intendedCPU} : {}),
         ...(item.prerelease ? {prerelease: true} : {})}]));
       return {supportsDefault: true, defaultVersion: settings.defaultVersion, defaultSource: settings.defaultVersion ? 'saved' : 'manager',
-        installed: copies, installing: null, variants: [], versionLabels: Object.fromEntries([...versions, ...copies.map(copy => copy.version)].map(version => [version, version])),
+        installed: copies.map(copy => ({...copy, version: storageVersion(copy.build)})), installing: null, variants: [],
+        versionLabels: Object.fromEntries([...rows.map(item => [storageVersion(item), item.version]), ...copies.map(copy => [storageVersion(copy.build), copy.version])]),
         catalog: {status: status?.status || (snapshot ? 'success' : 'idle'), fetchedAt: snapshot?.fetchedAt || null, error: status?.error || null,
           versions, installableVersions: versions, installable: rows.length > 0, buildableVersions: [], versionRequirements: requirements,
           sourceUrl: declaration ? sourceUrl(declaration) : sourceUrl(sources[0]), sourceStates: structuredClone(states),
@@ -178,35 +183,43 @@ function createSourceBackend({id, source, sources = source ? [source] : [], depe
 
   const execute = (...args) => (dependencies.execute || require('node:util').promisify(require('node:child_process').execFile))(...args);
   async function extract(archive, destination, signal) {
-    if (dependencies.extractArchive) return dependencies.extractArchive(archive, destination, signal);
-    if (/\.zip$/i.test(archive) && (dependencies.platform || process.platform) === 'darwin')
+    let result;
+    if (dependencies.extractArchive) result = await dependencies.extractArchive(archive, destination, signal);
+    else if (/\.zip$/i.test(archive) && (dependencies.platform || process.platform) === 'darwin')
       await execute('/usr/bin/ditto', ['-x', '-k', archive, destination], {signal, timeout: 600000, maxBuffer: 1024 * 1024});
     else await require('../modules/shared/runtime/safe-archive').extractArchive(archive, destination, signal);
-    return {root: destination};
+    if (result?.root) return result;
+    let payload = destination;
+    for (let depth = 0; depth < 32 && !payload.endsWith('.app'); depth++) {
+      const members = fs.readdirSync(payload, {withFileTypes: true});
+      if (members.length !== 1 || !members[0].isDirectory()) break;
+      payload = path.join(payload, members[0].name);
+    }
+    return {root: payload};
   }
 
   async function installRuntime(options = {}) {
-    const {userDataDir, version, buildId, signal} = options;
-    if (typeof version !== 'string' || !version || version === 'auto') throw new Error('An exact selected runtime version is required.');
+    const {userDataDir, version: requestedVersion, buildId, signal} = options;
+    if (typeof requestedVersion !== 'string' || !requestedVersion || requestedVersion === 'auto') throw new Error('An exact selected runtime version is required.');
     if (options.replace) throw new Error('Managed source installations are immutable.');
     throwIfAborted(signal);
-    const retained = installations(userDataDir).filter(item => item.version === version && (!buildId || item.buildId === buildId) &&
+    const retained = installations(userDataDir).filter(item => matchesVersion(item, requestedVersion) && (!buildId || item.buildId === buildId) &&
       (!options.sectionId || sectionId(byId.get(item.sourceId)) === options.sectionId));
-    if (retained.length === 1 && buildId) {
+    if (retained.length === 1 && (buildId || storageVersion(retained[0].build) === requestedVersion)) {
       if (!retained[0].ready) throw new Error(retained[0].error || 'The immutable installed runtime changed.');
-      return retained[0];
+      return {...retained[0], version: requestedVersion};
     }
     let offers = cached(userDataDir)?.entries || [];
-    if (!offers.some(item => item.version === version && (!buildId || item.id === buildId))) {
+    if (!offers.some(item => matchesVersion(item, requestedVersion) && (!buildId || item.id === buildId))) {
       await refreshCatalog(options); offers = cached(userDataDir)?.entries || [];
     }
-    const matches = offers.filter(item => item.version === version && (!buildId || item.id === buildId) &&
+    const matches = offers.filter(item => matchesVersion(item, requestedVersion) && (!buildId || item.id === buildId) &&
       (!options.sectionId || sectionId(byId.get(item.sourceId)) === options.sectionId));
     if (matches.length !== 1) throw new Error('An exact unambiguous cached runtime build is required; no other version was selected.');
-    const offer = matches[0], declaration = byId.get(offer.sourceId), build = available(offer), directory = installDirectory(userDataDir, build);
-    if (fs.lstatSync(directory, {throwIfNoEntry: false})) return readInstallation(directory);
+    const offer = matches[0], version = offer.version, declaration = byId.get(offer.sourceId), build = available(offer), directory = installDirectory(userDataDir, build);
+    if (fs.lstatSync(directory, {throwIfNoEntry: false})) return {...readInstallation(directory), version: requestedVersion};
     const key = directory;
-    if (pending.has(key)) return pending.get(key);
+    if (pending.has(key)) return {...await pending.get(key), version: requestedVersion};
     const operation = runDownloadTask(options.downloads, buildRuntimeDownloadMeta({managerId: id, sectionId: sectionId(declaration),
       label: declaration.label, version, dedupeKey: 'runtime:' + id + ':' + build.id}), async task => {
       const signals = [signal, task.signal].filter(Boolean), combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
@@ -243,12 +256,12 @@ function createSourceBackend({id, source, sources = source ? [source] : [], depe
       return result.installed;
     }, {onProgress: options.onProgress});
     pending.set(key, operation);
-    try { return await operation; } finally { pending.delete(key); }
+    try { return {...await operation, version: requestedVersion}; } finally { pending.delete(key); }
   }
 
   function resolveSelection(_entry, _settings, userDataDir, options = {}) {
-    const matches = installations(userDataDir).filter(item => item.version === options.version && (!options.buildId || item.buildId === options.buildId));
-    if (matches.length === 1 && matches[0].ready) return {version: options.version, ready: true, install: matches[0], requiresDownload: false};
+    const matches = installations(userDataDir).filter(item => matchesVersion(item, options.version) && (!options.buildId || item.buildId === options.buildId));
+    if (matches.length === 1 && matches[0].ready) return {version: options.version, ready: true, install: {...matches[0], version: options.version}, requiresDownload: false};
     return {version: options.version || null, ready: false, install: null, requiresDownload: true,
       reason: matches.length > 1 ? 'An exact runtime build identity is required.' : matches[0]?.error || 'The selected runtime build is not installed.'};
   }

@@ -3,51 +3,11 @@
   "kind": "nvapi",
   "label": "DXVK-NVAPI",
   "order": 5,
-  "manager": {
-    "id": "dxvk-nvapi",
-    "sectionId": "default",
-    "engine": "nvapi",
-    "memberOrder": 5,
-    "sectionLabel": "DXVK-NVAPI"
-  },
-  "discover": {
-    "type": "github-releases",
-    "repo": "jp7677/dxvk-nvapi",
-    "includePrereleases": true
-  },
-  "assets": [
-    {
-      "match": ".*\\.(?:[zZ][iI][pP]|[tT][aA][rR]\\.[gG][zZ]|[tT][gG][zZ]|[tT][aA][rR]\\.[xX][zZ]|[tT][aA][rR]\\.[zZ][sS][tT]|[tT][xX][zZ]|[tT][aA][rR]\\.[bB][zZ]2|[tT][bB][zZ]2|[dD][mM][gG]|[tT][aA][rR]|[pP][kK][gG])$",
-      "declares": {
-        "pe": [
-          "x86_64"
-        ]
-      },
-      "parts": [
-        {
-          "path": "nvapi",
-          "name": "component-root",
-          "optional": true
-        }
-      ]
-    }
-  ],
-  "verify": [
-    {
-      "type": "github-asset-digest"
-    }
-  ],
-  "layout": {
-    "type": "archive"
-  },
-  "interfaces": {
-    "requires": []
-  },
-  "labels": {
-    "source": "DXVK-NVAPI"
-  },
-  "license": "MIT",
-  "credits": {
-    "url": "https://github.com/jp7677/dxvk-nvapi"
+  "upstream": {
+    "github": "jp7677/dxvk-nvapi",
+    "assets": {
+      "x86_64": ".*\\.(?:[zZ][iI][pP]|[tT][aA][rR]\\.[gG][zZ]|[tT][gG][zZ]|[tT][aA][rR]\\.[xX][zZ]|[tT][aA][rR]\\.[zZ][sS][tT]|[tT][xX][zZ]|[tT][aA][rR]\\.[bB][zZ]2|[tT][bB][zZ]2|[dD][mM][gG]|[tT][aA][rR]|[pP][kK][gG])$"
+    },
+    "prereleases": true
   }
 }

@@ -3,26 +3,13 @@
   "kind": "wine",
   "label": "WineCX",
   "order": 202,
-  "labels": {
-    "source": "WineCX",
-    "automatic": "WineCX's automatic choice"
-  },
-  "discover": {
-    "type": "github-releases",
-    "repo": "dappermint/winecx-gptk",
-    "tag": "(?:^|[^\\d.])v?(?<version>[0-9]+\\.[0-9]+(?:\\.[0-9]+)?)$"
-  },
-  "verify": [
-    {
-      "type": "sums-file",
-      "match": ".*\\.sha256$"
+  "upstream": {
+    "github": "dappermint/winecx-gptk",
+    "assets": {
+      "x86_64": "\\.(?:tar\\.(?:xz|gz|bz2|zst)|t[gx]z|tar|zip|pkg)$"
     }
-  ],
-  "layout": {
-    "type": "archive",
-    "entry": "Libraries/Wine/bin/wine"
   },
-  "embeds": [
+  "included": [
     {
       "id": "winecx-dxmt",
       "kind": "d3d-translator",
@@ -32,12 +19,6 @@
           "name": "dxmt"
         }
       ],
-      "interfaces": {
-        "requires": [
-          "macos>=14.0",
-          "wine:winemetal"
-        ]
-      },
       "engine": "dxmt",
       "label": "DXMT"
     },
@@ -50,9 +31,6 @@
           "name": "dxvk"
         }
       ],
-      "interfaces": {
-        "requires": []
-      },
       "engine": "dxvk",
       "label": "DXVK"
     },
@@ -65,9 +43,6 @@
           "name": "moltenvk"
         }
       ],
-      "interfaces": {
-        "requires": []
-      },
       "engine": "moltenvk",
       "label": "MoltenVK"
     },
@@ -100,47 +75,5 @@
       ],
       "label": "WineD3D"
     }
-  ],
-  "license": "LGPL-2.1-or-later",
-  "credits": {
-    "url": "https://github.com/dappermint/winecx-gptk"
-  },
-  "manager": {
-    "id": "winecx",
-    "memberOrder": 0,
-    "sectionLabel": "WineCX",
-    "tabLabel": "WineCX",
-    "category": "compatibility"
-  },
-  "wine": {
-    "invocation": "wine",
-    "prefixModel": "windowsVersion",
-    "downloads": true,
-    "graphicsSelector": false
-  },
-  "assets": [
-    {
-      "match": "\\.(?:tar\\.(?:xz|gz|bz2|zst)|t[gx]z|tar|zip|pkg)$",
-      "declares": {
-        "macho": [
-          "x86_64"
-        ]
-      }
-    }
-  ],
-  "automatic": {
-    "d3d-renderer": [
-      "winecx-dxmt",
-      "winecx-wined3d"
-    ],
-    "vulkan-driver": [
-      "winecx-moltenvk"
-    ],
-    "legacy.dxvk": []
-  },
-  "interfaces": {
-    "provides": [
-      "wine:dllpath-overlay"
-    ]
-  }
+  ]
 }

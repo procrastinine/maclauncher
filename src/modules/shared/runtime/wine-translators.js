@@ -26,7 +26,7 @@ function includedTranslators(install, runtime, { engine: requestedEngine, descri
       if (!value) return;
       // A supplied version is the reader's fallback; the component's own version text precedes it.
       value = Pairing.completeSets({ ...value, included: true, id: `included:${component}:${extra.templateComponent || engine}`, ...extra, version: value.version });
-      const embed=wine.source?.embeds?.find(embed=>embed.engine===engine&&(!extra.templateComponent||embed.parts.some(part=>part.name===extra.templateComponent)));
+      const embed=wine.source?.included?.find(embed=>embed.engine===engine&&(!extra.templateComponent||embed.parts.some(part=>part.name===extra.templateComponent)));
       if(embed){value.sourceId=embed.id;value.embedId=embed.id;}
       if (!value.version && wine.includedVersion) value.version = wine.includedVersion(engine, layout, Description);
       result.push(value);
