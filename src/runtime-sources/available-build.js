@@ -5,7 +5,7 @@ const {validateSource,validateBuild}=require('./schema');
 function projectAvailableBuild({source,asset,id,version,bytes,provenance={},parent}={}){
  validateSource(source);
  if(!asset?.declares)throw new TypeError('An available build requires the matched asset declaration.');
- return validateBuild({id,source:source.id,kind:source.kind,version,installed:false,measured:false,binaries:[],declares:structuredClone(asset.declares),
+ return validateBuild({id,source:source.id,kind:source.kind,version,label:source.label,installed:false,measured:false,binaries:[],declares:structuredClone(asset.declares),
   interfaces:{provides:[...(source.interfaces?.provides||[]),...(asset.interfaces?.provides||[])],requires:[...(source.interfaces?.requires||[]),...(asset.interfaces?.requires||[])]},
   ...(asset.reach||source.reach?{reach:structuredClone(asset.reach||source.reach)}:{}),...(parent?{parent}:{}),...(bytes!==undefined?{bytes}:{}),
   ...(source.manager?.engine?{engine:source.manager.engine}:{}),provenance:structuredClone(provenance)});

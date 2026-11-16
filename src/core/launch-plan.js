@@ -5,7 +5,7 @@ const {selectLogicalLibraries,fileProvides}=require('./logical-libraries');
 const {normalizeChoice}=require('./runtime-roles');
 const provides=b=>[...(getKind(b.kind)?.provides||[]),...(b.interfaces?.provides||[]),...(b.binaries||[]).flatMap(fileProvides)];
 // Kind requirements are never admission policy. Every dependency belongs to a build.
-const requires=b=>b.interfaces?.requires||[];
+const requires=b=>(b.interfaces?.requires||[]).filter(token=>!token.startsWith('license:'));
 const versionAtLeast=(a,b)=>{const x=String(a||'').split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++)if((x[i]||0)!==(y[i]||0))return(x[i]||0)>(y[i]||0);return true;};
 const roleFor=(token,kind)=>token.startsWith('api:d3d')?token.slice(4):token==='api:dxgi'?'dxgi':({'vulkan-driver':'vulkan-driver',media:'video',nvapi:'nvapi',ngx:'ngx'})[kind]||kind;
 function resolvePlan({target,choices={},builds=[],sources=[],system={},environment={},capabilities={},scene={}}={}){
@@ -30,7 +30,7 @@ function resolvePlan({target,choices={},builds=[],sources=[],system={},environme
   return selectLogicalLibraries({build:b,hostArch:context.host,guestArch:context.guest,integration:context.integration,needed,libraries:target?.libraries?.[role],infrastructure:b.kind==='cpu-translator'&&context.cpuGuest===true});}
  function* solve(tokens,state,context,trail=new Set()){
   if(!tokens.length){yield state;return;}const [token,...rest]=tokens;
-  if(selectedHas(state,token)){yield* solve(rest,state,context,trail);return;}if(trail.has(token))return;const nextTrail=new Set(trail).add(token);
+  if(token.startsWith('license:')||selectedHas(state,token)){yield* solve(rest,state,context,trail);return;}if(trail.has(token))return;const nextTrail=new Set(trail).add(token);
   const wine=[...state.values()].find(row=>row.role==='wine')?.build,source=sourceOf(wine||{}),delegatedRole=token.startsWith('api:d3d')?token.slice(4):null;
   if(delegatedRole&&source.selector&&choice(delegatedRole,'d3d-translator')==='automatic'){
    const next=new Map(state);next.set(delegatedRole,{role:delegatedRole,build:wine,binaries:[],tokens:[token],delegated:{key:source.selector.key,value:source.selector.automatic,reason:`decided by ${source.label} at launch`}});yield* solve(rest,next,context,trail);return;
@@ -74,7 +74,7 @@ function resolvePlan({target,choices={},builds=[],sources=[],system={},environme
  }
  function result(state,context,process,targetExecution){
   // A final closure check prevents a dependency from being lost during assignment.
-  for(const row of state.values())for(const token of [...requires(row.build),...(row.reach?.requires||[])])if(!selectedHas(state,token))return null;
+  for(const row of state.values())for(const token of [...requires(row.build),...(row.reach?.requires||[])])if(!token.startsWith('license:')&&!selectedHas(state,token))return null;
   const merged=new Map();for(const row of state.values()){let c=merged.get(row.build.id);if(!c){c={kind:row.build.kind,source:row.build.source,build:row.build.id,installed:row.build.installed===true,measured:row.build.measured!==false,adapter:getKind(row.build.kind).adapter,binaries:[],roles:[],capabilitiesPending:[]};merged.set(row.build.id,c);}c.roles.push(row.role);c.capabilitiesPending.push(...(row.capabilitiesPending||[]));for(const b of row.binaries||[])if(!c.binaries.some(f=>f.path===b.path))c.binaries.push({...structuredClone(b),execution:b.format==='macho'?context.execution:b.format==='pe'&&['arm64ec','arm64x','arm64'].includes(b.machine)&&context.host==='arm64'?'native':context.guestTranslator&&b.machine==='x86_64'?`fex(${context.guestTranslator.id})`:context.execution});}
   const components=[...merged.values()].map(c=>{const executions=[...new Set(c.binaries.map(b=>b.execution))];return{...c,...(executions.length===1?{execution:executions[0]}:{})};});
   const roles=[...state.values()].filter(r=>!r.role.startsWith('dependency:')).map(row=>{const saved=choice(row.role,row.build.kind),fallback=!explicitMatches(row.build,saved)&&saved!=='automatic'&&saved!=='inherit'?{role:row.role,chosen:saved,used:row.build.id,reason:'Saved selection is unavailable or incompatible.'}:null;if(fallback)fallBacks.push(fallback);return{id:row.role,...(row.capabilitiesPending?{capabilitiesPending:row.capabilitiesPending}:{}),value:choices[row.role]??choices[row.build.kind]??'automatic',...(row.delegated?{delegated:row.delegated}:{}),used:{...row.build,...(row.delegated?{label:row.delegated.reason}:{}),binaries:components.find(c=>c.build===row.build.id).binaries,execution:components.find(c=>c.build===row.build.id).execution},fallback};});

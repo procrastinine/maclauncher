@@ -2,7 +2,7 @@
 const path=require('node:path');
 const {acceptsBinary}=require('./binary-compatibility');
 function logicalName(binary){return binary.logicalName||(binary.format==='pe'?path.basename(binary.path||'').toLowerCase():binary.installName||path.basename(binary.path||''));}
-function fileProvides(binary){const name=path.basename(binary.path||'').toLowerCase();const map={'d3d8.dll':'d3d8','d3d9.dll':'d3d9','d3d10.dll':'d3d10','d3d10core.dll':'d3d10','d3d11.dll':'d3d11','d3d12.dll':'d3d12','dxgi.dll':'dxgi','ddraw.dll':'ddraw'};return map[name]?[`api:${map[name]}`]:[];}
+function fileProvides(binary){const name=path.basename(binary.path||'').toLowerCase();const map={'d3d8.dll':'d3d8','d3d9.dll':'d3d9','d3d10.dll':'d3d10','d3d10_1.dll':'d3d10','d3d10core.dll':'d3d10','d3d11.dll':'d3d11','d3d12.dll':'d3d12','dxgi.dll':'dxgi','ddraw.dll':'ddraw'};return map[name]?[`api:${map[name]}`]:[];}
 function selectLogicalLibraries({build,hostArch,guestArch,integration='native',needed=[],libraries,infrastructure=false}={}){
  let inventory=build.binaries||[];
  if(infrastructure){
