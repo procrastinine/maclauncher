@@ -51,6 +51,12 @@ int main() {
   publish(m, .1f, .2f, 5, ue);auto &held = m.slot[(m.published - 1) % slots];held.sequence += 1;
   assert(take(&m, .1f, .2f, true, out) == NoRecord);checks++;held.sequence += 1;
   assert(take(&m, .1f, .2f, true, out) == Bound);checks++;
+  // preparation reads the newest record with the scene's depth direction, whatever its jitter offset
+  assert(!newest(nullptr, true, out) && !out.size);checks++;
+  RSTemporalCamera finite = ue;finite.flags = RS_TEMPORAL_DEPTH_REVERSED;finite.nearPlane = 5.f;finite.farPlane = 2000.f;
+  publish(m, .4f, .3f, 6, finite);
+  assert(newest(&m, true, out) && out.nearPlane == 5.f && out.farPlane == 2000.f);checks++;
+  assert(!newest(&m, false, out) && !out.size);checks++;
   // admission when the scene is received: only after the NGX core has published a record
   Mailbox empty{};
   assert(!pending(nullptr) && !pending(&empty));checks++;

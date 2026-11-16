@@ -9,7 +9,7 @@ test('a camera set after its frame\'s evaluation binds only to that frame by its
  const binary=path.join(directory,'check');
  const build=spawnSync('xcrun',['clang++','-std=c++17','-Wall','-Wextra','-Werror','-I'+path.join(reshade,'native'),'-I'+directory,path.join(__dirname,'native/late-camera.cpp'),'-o',binary],{encoding:'utf8'});
  assert.ifError(build.error);assert.equal(build.status,0,build.stderr);
- const run=spawnSync(binary,[],{encoding:'utf8'});assert.ifError(run.error);assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/late-camera: pass 20/);
+ const run=spawnSync(binary,[],{encoding:'utf8'});assert.ifError(run.error);assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/late-camera: pass 23/);
 });
 test('generation scenes take the late camera before their provider reads the scene',()=>{
  const source=fs.readFileSync(path.join(reshade,'native/effects-execution.mm'),'utf8');
@@ -63,4 +63,14 @@ test('a late scene keyed by its frame\'s owner and id gives that frame\'s genera
  // the record's camera, with the scene's depth direction, before the camera file
  assert.match(source,/const bool lateCamera=late&&late->camera&&!\(raw\.flags&RS_TEMPORAL_CAMERA_VALID\)&&bool\(late->cameraFlags&RS_TEMPORAL_DEPTH_REVERSED\)==bool\(raw\.flags&RS_TEMPORAL_DEPTH_REVERSED\);/);
  assert.match(source,/else attachLateCamera\(actual,raw\);/);
+});
+
+test('preparing a generation stage for a scene whose camera arrives late takes the newest late camera, so the provider can check its camera inputs', () => {
+ const source=fs.readFileSync(path.join(reshade,'native/effects-execution.mm'),'utf8'),header=fs.readFileSync(path.join(reshade,'native/late-camera.hpp'),'utf8');
+ assert.match(header,/inline bool newest\(const Mailbox \*mailbox, bool reversed, RSTemporalCamera &out\)/);
+ // The probe that the provider prepares with takes the newest camera with the scene's depth direction; frames still bind their own.
+ assert.match(source,/rsBindTemporalSceneMatrices\(&probe,&\*matrices\);if\(generationRequiresCamera\(node\.method\)\)prepareLateCamera\(probe,rawGuides\?\*rawGuides:\*temporal\);\}/);
+ assert.match(source,/static void prepareLateCamera\(RSTemporalFrame&probe,const RSTemporalFrame&raw\)\{\n\s*if\(raw\.flags&RS_TEMPORAL_CAMERA_VALID\)return;/);
+ assert.match(source,/newestLateSceneCamera\(raw\.owner,reversed\)[\s\S]{0,200}late_camera::newest\(late_camera::mapped\(\),reversed,camera\)/);
+ assert.match(source,/Generation preparation takes the newest late camera from the /);
 });

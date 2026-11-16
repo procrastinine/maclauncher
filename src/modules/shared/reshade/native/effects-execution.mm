@@ -856,6 +856,7 @@ ShaderResult EffectExecution::bindSceneImage(id<MTLCommandBuffer>commands,id<MTL
 struct LateScene {void*owner=nullptr;uint64_t frameId=0;bool camera=false;uint32_t cameraFlags=0;float nearPlane=0,farPlane=0,verticalFov=0;std::array<id<MTLTexture>,2>images{};std::array<RSSceneAovImage,2>regions{};};
 std::mutex lateSceneLock;std::deque<LateScene>lateScenes;
 std::optional<LateScene>lateScene(void*owner,uint64_t frameId){if(!owner||!frameId)return std::nullopt;std::lock_guard guard(lateSceneLock);for(auto i=lateScenes.rbegin();i!=lateScenes.rend();++i)if(i->owner==owner&&i->frameId==frameId)return *i;return std::nullopt;}
+std::optional<LateScene>newestLateSceneCamera(void*owner,bool reversed){if(!owner)return std::nullopt;std::lock_guard guard(lateSceneLock);for(auto i=lateScenes.rbegin();i!=lateScenes.rend();++i)if(i->owner==owner&&i->camera&&bool(i->cameraFlags&RS_TEMPORAL_DEPTH_REVERSED)==reversed)return *i;return std::nullopt;}
 void rememberLateScene(LateScene next){std::lock_guard guard(lateSceneLock);const auto found=std::find_if(lateScenes.begin(),lateScenes.end(),[&](const auto&s){return s.owner==next.owner&&s.frameId==next.frameId;});
     if(found!=lateScenes.end()){for(unsigned i=0;i<2;++i)if(!next.images[i]){next.images[i]=found->images[i];next.regions[i]=found->regions[i];}if(!next.camera&&found->camera){next.camera=true;next.cameraFlags=found->cameraFlags;next.nearPlane=found->nearPlane;next.farPlane=found->farPlane;next.verticalFov=found->verticalFov;}lateScenes.erase(found);}
     lateScenes.push_back(std::move(next));while(lateScenes.size()>8)lateScenes.pop_front();}
@@ -883,6 +884,20 @@ static void attachLateCamera(RSTemporalFrame&actual,const RSTemporalFrame&raw){
     if(result!=late_camera::Bound)return;
     actual.flags=(actual.flags&~uint32_t(RS_TEMPORAL_DEPTH_INFINITE))|RS_TEMPORAL_CAMERA_VALID|(camera.flags&RS_TEMPORAL_DEPTH_INFINITE);
     actual.nearPlane=camera.nearPlane;actual.farPlane=camera.farPlane;actual.verticalFov=camera.verticalFov;
+}
+// Preparing a generation stage for a scene whose camera arrives after its evaluation: the newest late camera with the
+// scene's depth direction (a late scene record of the scene's owner, then the camera file) stands in, so the provider
+// checks and sizes its camera inputs. Each frame still binds only its own camera at its generation stage.
+static void prepareLateCamera(RSTemporalFrame&probe,const RSTemporalFrame&raw){
+    if(raw.flags&RS_TEMPORAL_CAMERA_VALID)return;const bool reversed=(raw.flags&RS_TEMPORAL_DEPTH_REVERSED)!=0;
+    uint32_t flags=0;float nearPlane=0,farPlane=0,verticalFov=0;const char*from=nullptr;RSTemporalCamera camera{};
+    if(const auto late=newestLateSceneCamera(raw.owner,reversed)){flags=late->cameraFlags;nearPlane=late->nearPlane;farPlane=late->farPlane;verticalFov=late->verticalFov;from="late scene";}
+    else if(late_camera::newest(late_camera::mapped(),reversed,camera)){flags=camera.flags;nearPlane=camera.nearPlane;farPlane=camera.farPlane;verticalFov=camera.verticalFov;from="camera file";}
+    static std::atomic<unsigned>reported{0};const unsigned bit=from?1u:2u;
+    if(!(reported.fetch_or(bit)&bit))nativeLog(from?std::string("Generation preparation takes the newest late camera from the ")+from+": near "+std::to_string(nearPlane)+((flags&RS_TEMPORAL_DEPTH_INFINITE)?" far infinite":" far "+std::to_string(farPlane))
+        :std::string("Generation preparation has no late camera with the scene's depth direction"));
+    if(!from)return;
+    probe.flags=(probe.flags&~uint32_t(RS_TEMPORAL_DEPTH_INFINITE))|RS_TEMPORAL_CAMERA_VALID|(flags&RS_TEMPORAL_DEPTH_INFINITE);probe.nearPlane=nearPlane;probe.farPlane=farPlane;probe.verticalFov=verticalFov;
 }
 ShaderResult EffectExecution::bindGenerationScene(id<MTLCommandBuffer>commands,size_t index,id<MTLTexture>colour,const std::shared_ptr<const EffectSceneLease>&lease,FrameOrigin origin,id<MTLTexture>copiedFrom){try{
     if(index>=impl->stages.size())return {false,"The generation stage is unavailable"};const auto&stage=impl->stages[index];if(!stage.encoder->requiresScene())return {true,{}};
@@ -1626,7 +1641,7 @@ EffectExecutionSelection EffectPlanExecutor::buildSnapshot(const ShaderFrame &in
                     next->sceneRequired=true;
                 }
                 auto probe=temporal?*temporal:RSTemporalFrame{};int probeOwner=0;
-                if(temporal&&generator->requiresScene()){probe=next->normalizeScene(*sceneScratch,validation,*temporal,current,current,sceneColourJittered,true,false,false,{},1,GuideAll,rawGuides);probe.owner=&probeOwner;if(auto matrices=sceneMatricesForImage(*temporal,sceneMatrices,sceneColourJittered,frame.origin==FrameOrigin::BottomLeft))rsBindTemporalSceneMatrices(&probe,&*matrices);}
+                if(temporal&&generator->requiresScene()){probe=next->normalizeScene(*sceneScratch,validation,*temporal,current,current,sceneColourJittered,true,false,false,{},1,GuideAll,rawGuides);probe.owner=&probeOwner;if(auto matrices=sceneMatricesForImage(*temporal,sceneMatrices,sceneColourJittered,frame.origin==FrameOrigin::BottomLeft))rsBindTemporalSceneMatrices(&probe,&*matrices);if(generationRequiresCamera(node.method))prepareLateCamera(probe,rawGuides?*rawGuides:*temporal);}
                 struct ProbeBinding {void*owner;~ProbeBinding(){if(owner)rsReleaseTemporalSceneMatrices(owner);}}probeBinding{temporal?probe.owner:nullptr};
                 if(!reusedGenerator)generator->setSceneOrigin(frame.origin);
                 ShaderResult ready;if(reusedGenerator)ready=generator->preparationStatus();else{const auto prepared=generator->prepare(validation,current,temporal&&generator->requiresScene()?&probe:nullptr);ready={prepared.encoded,prepared.reason,prepared.busy};}

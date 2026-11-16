@@ -13,6 +13,7 @@
 // A generation stage takes a camera only for a scene without one, from one of the two newest records, when that
 // record's jitter offset equals the scene's bit for bit, is nonzero, and no other record carries the same offset,
 // and when the depth direction agrees. A jitter sequence that repeats within three frames therefore never binds.
+// Preparing such a stage reads the newest record with the scene's depth direction (newest).
 // Temporal upscaling needs the camera at the evaluation and never uses this record.
 #include <atomic>
 #include <chrono>
@@ -104,6 +105,25 @@ inline Result take(const Mailbox *mailbox, float jitterX, float jitterY, bool re
     return DepthDirection;
   out = found.camera;
   return Bound;
+}
+
+// The newest complete record whose depth direction is reversed or not. Preparing a generation stage reads it to check
+// and size the provider's camera inputs before any frame reaches that stage; a frame still binds only its own record
+// (take).
+inline bool newest(const Mailbox *mailbox, bool reversed, RSTemporalCamera &out) {
+  out = {};
+  if (!published(mailbox))
+    return false;
+  uint64_t best = 0;
+  for (uint32_t i = 0; i < slots; ++i) {
+    Slot record{};
+    if (!read(mailbox->slot[i], record) || record.camera.size != sizeof(RSTemporalCamera) || record.publication <= best ||
+        bool(record.camera.flags & RS_TEMPORAL_DEPTH_REVERSED) != reversed)
+      continue;
+    best = record.publication;
+    out = record.camera;
+  }
+  return best != 0;
 }
 
 // The file beside RESHADE_EFFECT_PLAN, mapped read-only; null until the file exists with its full size. A missing
