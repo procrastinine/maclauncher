@@ -36,6 +36,8 @@ A native MetalFX interpolation call can also supply its real frame pair and scen
 
 Some DLSS games also supply full camera transforms and tagged HUD-less/UI images. Compatible Vulkan translators can carry matching inputs to the shared processor, where each provider uses only the data whose meaning and lifetime are declared.
 
+In Godot games, a scene generator such as ANR receives the game's 2D interface as a separate layer. MacLauncher draws the interface a second time into an internal transparent layer only while such a row is on, so generated frames move the 3D scene while menus, labels and gauges stay in place instead of doubling. The [Godot reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/SHARED_PROCESSING.md#godot) has the details.
+
 A game API such as DLSS, FidelityFX or XeSS supplies inputs independently of the selected generator. The same generator can serve native and translated games when their scene producers provide the data it needs. A game's own frame-generation plugin can also control presentation, so its generated output is not treated as another real frame. The [input reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/INPUTS_AND_ADAPTERS.md#windows-frame-generation-inputs) describes the Windows API routes and their limits.
 
 ## Two kinds of generators
