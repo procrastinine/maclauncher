@@ -59,6 +59,9 @@ test("development branding preserves the original installation and caches a matc
   const info = await parsePlistFile(path.join(app, "Contents", "Info.plist"));
   assert.equal(info.CFBundleName, "MacLauncher");
   assert.equal(info.CFBundleDisplayName, "MacLauncher");
+  // Game Mode follows the games categories; the launcher itself is not a game.
+  assert.equal(info.LSApplicationCategoryType, "public.app-category.entertainment");
+  assert.equal(require("../package.json").build.mac.category, info.LSApplicationCategoryType);
   assert.ok(info.CFBundleDocumentTypes.some(row => row.CFBundleTypeExtensions.includes("exe") && row.LSHandlerRank === "Owner"));
   assert.ok(info.CFBundleDocumentTypes.some(row => row.CFBundleTypeExtensions.includes("glsl") && row.LSHandlerRank === "Alternate"));
   assert.ok(info.CFBundleDocumentTypes.some(row => row.CFBundleTypeExtensions.includes("dlssmodel") && row.LSTypeIsPackage === true));
