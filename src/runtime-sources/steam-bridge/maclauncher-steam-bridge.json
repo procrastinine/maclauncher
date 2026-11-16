@@ -40,7 +40,9 @@
     "provides": [
       "steam:client"
     ],
-    "requires": []
+    "requires": [
+      "wine:dllpath-overlay"
+    ]
   },
   "license": "LGPL-2.1",
   "credits": {

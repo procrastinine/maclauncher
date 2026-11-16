@@ -13,6 +13,9 @@ const ClientStart = require('../../shared/runtime/steamworks/client-start');
 const { readGameAppId } = require('../../shared/runtime/steamworks/app-id');
 const Components = require('./steam-client-components');
 const Adapter = require('../../../runtime-adapters/steam-bridge');
+const { selectLogicalLibraries } = require('../../../core/logical-libraries');
+const { peArchitecture } = require('../../../core/binary-arch');
+const { requiredMachine } = require('../../shared/runtime/binary-compatibility');
 const id = source.manager.id;
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
 function identify(entry) {
@@ -137,7 +140,7 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
       detail: `Connects ${name} to the Steam client for Mac. Downloads ${downloads('the Steam client bridge')}${starts}.${replacement}\n\nWithout Steam, ${name} runs without the Steam client ${until}`,
       companionDetail: `Connecting to Steam also downloads ${downloads(`the Steam client bridge${version ? ` ${version}` : ''}`)}${starts}.${replacement} Without it, ${name} runs without Steam ${until}` }];
   }
-  async function prepare(entry, context, { installation, prefixPath, architecture, environment } = {}) {
+  async function prepare(entry, context, { installation, prefixPath, architecture, environment, integration = 'native' } = {}) {
     const game = identifyGame(entry), native = discoverClient();
     if (!game || !native || skipped(context.userDataDir).includes(String(game.appId))) return null;
     const current = installed(context.userDataDir), components = Components.current(context.userDataDir);
@@ -145,22 +148,25 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     try {
       await context.useSteamClient?.(true); // Canonical startup consent and local IPC policy.
       if (isRunning() !== true) return null;
-      const layout = wineLayout(installation), nativeArch = layout.architecture === 'arm64' ? 'aarch64' : layout.architecture;
-      const descriptor = current.manifest.steamBridge, pe = architecture === 'x86' || architecture === 'i386' ? 'i386' : 'x86_64';
-      if (!descriptor.native[nativeArch] || !descriptor.windows[pe]) return null;
+      const layout = wineLayout(installation);
+      const build = Adapter.buildRecord({ source, install: current, measure: dependencies.measureBuild });
+      const admitted = selectLogicalLibraries({ build, hostArch: layout.architecture,
+        guestArch: peArchitecture(requiredMachine(architecture)), integration,
+        libraries: ['lsteamclient.dll', 'mlsteam-bootstrap.dll', 'steam.exe'] });
+      if (!admitted.accepted) return null;
       await context.useRuntime?.({ managerId: id, version: current.version, sourcePath: current.installDir });
       Bundled.verifyPayload(current.root, current.declaration, current.resolveDependency);
-      const source = relative => {
+      const packageFile = relative => {
         Bundled.relativeFile(relative);
         const file = path.resolve(current.root, relative);
         if (!inside(fs.realpathSync(current.root), fs.realpathSync(file))) throw new Error('Steam bridge file escaped its managed package.');
         return file;
       };
-      const parts = { native: source(descriptor.native[nativeArch]),
-        builtin: source(descriptor.windows[pe].builtin), bootstrap: source(descriptor.windows[pe].bootstrap),
-        helper: source(descriptor.windows[pe].helper),
-        clients: Object.fromEntries(Object.entries(descriptor.clientEnvironment).filter(([abi]) => components.clients[abi]).map(([abi, name]) =>
-          [name, path.join(components.root, components.clients[abi])])) };
+      const descriptor = current.manifest.steamBridge;
+      const clients = Object.fromEntries(Object.entries(descriptor.clientEnvironment).filter(([abi]) => components.clients[abi]).map(([abi, name]) =>
+        [name, path.join(components.root, components.clients[abi])]));
+      const parts = Adapter.projectParts({ build, binaries: admitted.binaries, clients });
+      for (const name of ['native', 'builtin', 'bootstrap', 'helper']) parts[name] = packageFile(path.relative(current.root, parts[name]));
       return Adapter.apply({ build: { root: current.root, version: current.version }, parts, environment,
         parameters: { appId: game.appId, clientRoot: native, home: os.homedir(), prefixPath } });
     } catch (error) { if (context.signal?.aborted) throw error; return null; }

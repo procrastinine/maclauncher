@@ -81,20 +81,24 @@ function bridgeParts(manifest) {
   return [...Object.values(descriptor.native).map(file => ({ name: 'native', path: file })),
     ...Object.values(descriptor.windows).flatMap(parts => Object.entries(parts).map(([name, file]) => ({ name, path: file })))];
 }
+function buildRecord({ source, install, id = source.id + ':' + install.version, version = install.version,
+  measure = require('../runtime-sources/installed-build').measureBuild }) {
+  const parts = bridgeParts(install.manifest), files = [...new Set(parts.map(part => part.path))];
+  const declaration = source.assets.length === 1 ? source.assets[0] : source.assets.find(rule =>
+    new RegExp(rule.match).test(install.catalogEntry?.asset?.filename || ''));
+  const build = measure({ source, root: install.root, files, declares: declaration?.declares,
+    id, version, provenance: install.sourceIdentity || {} });
+  return { ...build, root: install.root, measured: true, parts };
+}
 function listBuilds({ manager, sources, context = {} }) {
   const source = sources[0], result = [], installed = manager.core.listInstalled(context.userDataDir);
-  const { measureBuild } = require('../runtime-sources/installed-build');
   for (const row of installed) {
     const selection = manager.resolveSelection(null, context.settings || {}, context.userDataDir,
       { version: row.version, verification: 'status' });
     if (!selection?.ready || !selection.install) continue;
     const install = selection.install, id = source.id + ':' + row.version;
     try {
-      const parts = bridgeParts(install.manifest), files = [...new Set(parts.map(part => part.path))];
-      const declarations = (source.assets.length === 1 ? source.assets[0] : source.assets.find(rule => new RegExp(rule.match).test(install.catalogEntry?.asset?.filename || row.catalogEntry?.asset?.filename || '')))?.declares;
-      const build = measureBuild({ source, root: install.root, files, declares: declarations,
-        id, version: row.version, provenance: install.sourceIdentity || {} });
-      result.push({ ...build, root: install.root, measured: true, parts });
+      result.push(buildRecord({ source, install, id, version: row.version }));
     } catch (error) {
       result.push({ id, source: source.id, kind: source.kind, version: row.version, installed: true, measured: false,
         binaries: [], available: false, unavailableReason: error.message });
@@ -109,6 +113,21 @@ function listBuilds({ manager, sources, context = {} }) {
   }
   return result;
 }
+// Semantic names come from the package manifest. Only the core's admitted
+// binaries can become launch parts; this projection makes no CPU decisions.
+function projectParts({ build, binaries, clients = {} }) {
+  const absolute = file => path.isAbsolute(file) ? file : path.resolve(build.root, file);
+  const admitted = new Set(binaries.map(binary => absolute(binary.path)));
+  const result = { clients };
+  for (const name of ['native', 'builtin', 'bootstrap', 'helper']) {
+    const matches = [...new Set((build.parts || []).filter(part => part.name === name)
+      .map(part => absolute(part.path)).filter(file => admitted.has(file)))];
+    if (matches.length !== 1) throw new Error('The Steam bridge plan has an unavailable or ambiguous ' + name + ' part.');
+    result[name] = matches[0];
+  }
+  return result;
+}
+
 // Valve client acquisition shares the Steam bridge kind's consented backend.
 const clientComponents = (() => {
 const fs = require('node:fs');
@@ -257,4 +276,4 @@ async function install({ userDataDir, signal, onProgress, resolved } = {}) {
 return { current, status, lastDownload, install, remove, resolveManifest, MANIFEST };
 
 })();
-module.exports = { apply, windowsPath, windowsArguments, createBackend, bridgeParts, listBuilds, clientComponents };
+module.exports = { apply, windowsPath, windowsArguments, createBackend, bridgeParts, buildRecord, listBuilds, projectParts, clientComponents };
