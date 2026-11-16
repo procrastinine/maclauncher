@@ -17,6 +17,7 @@ function loadSources(root=__dirname) {
    sources.push(source);
   }
  }
+ const labels=new Set();for(const source of sources){const key=source.kind+':'+source.label;if(labels.has(key))throw new TypeError('Runtime source labels must be unique within a kind.');labels.add(key);}
  return sources;
 }
 module.exports={loadSources};
