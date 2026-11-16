@@ -30,6 +30,79 @@ var source_checked_bytes := ""
 var source_last_status := ""
 var source_status_key: Array = []
 var source_control_error := ""
+var canvas_layers: Array[WeakRef] = []
+
+# The interface of one presented window, drawn a second time into a
+# transparent layer while the shared graphics runtime asks for it: a scene
+# frame-generation row is enabled. The core derives the HUD-less image from the
+# final image and this layer, so generated frames move the scene but not the
+# interface. Without that demand no layer, canvas attachment or extra draw
+# exists, and the game's nodes, drawing and input are never changed.
+class UILayer extends RefCounted:
+	var target: WeakRef
+	var viewport: SubViewport
+	var canvases := {}
+	var texture := 0
+
+	func _init(window: Viewport) -> void:
+		target = weakref(window)
+
+	func update(demand_source: Object, layers: Array[WeakRef] = []) -> void:
+		var window := target.get_ref() as Viewport
+		if demand_source == null or not demand_source.has_method("ui_layer_demand") or int(demand_source.ui_layer_demand()) == 0 or window == null or not window.is_inside_tree():
+			detach()
+			return
+		if viewport == null:
+			viewport = SubViewport.new()
+			viewport.name = "MacLauncherUILayer"
+			viewport.transparent_bg = true
+			viewport.disable_3d = true
+			viewport.gui_disable_input = true
+			viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+			viewport.world_2d = window.world_2d
+			window.add_child(viewport, false, Node.INTERNAL_MODE_BACK)
+		var size := Vector2i(window.get_texture().get_size())
+		if size.x > 0 and size.y > 0 and viewport.size != size:
+			viewport.size = size
+		if viewport.world_2d != window.world_2d:
+			viewport.world_2d = window.world_2d
+		viewport.global_canvas_transform = window.get_final_transform()
+		viewport.canvas_transform = window.canvas_transform
+		var rid := viewport.get_viewport_rid()
+		var current := {}
+		for reference in layers:
+			var layer := reference.get_ref() as CanvasLayer
+			if layer == null or not layer.is_inside_tree():
+				continue
+			var owner_viewport: Viewport = layer.custom_viewport if layer.custom_viewport != null else layer.get_viewport()
+			if owner_viewport != window:
+				continue
+			var canvas := layer.get_canvas()
+			if not canvases.has(canvas):
+				RenderingServer.viewport_attach_canvas(rid, canvas)
+			RenderingServer.viewport_set_canvas_stacking(rid, canvas, layer.layer, layer.get_index())
+			RenderingServer.viewport_set_canvas_transform(rid, canvas, layer.get_final_transform())
+			current[canvas] = true
+		for canvas in canvases.keys():
+			if not current.has(canvas):
+				RenderingServer.viewport_remove_canvas(rid, canvas)
+		canvases = current
+		var rendered := RenderingServer.texture_get_rd_texture(viewport.get_texture().get_rid())
+		var device := RenderingServer.get_rendering_device()
+		texture = device.get_driver_resource(RenderingDevice.DRIVER_RESOURCE_TEXTURE, rendered, 0) if device != null and rendered.is_valid() else 0
+
+	func detach() -> void:
+		texture = 0
+		if viewport == null:
+			return
+		var rid := viewport.get_viewport_rid()
+		for canvas in canvases.keys():
+			RenderingServer.viewport_remove_canvas(rid, canvas)
+		canvases.clear()
+		if viewport.get_parent() != null:
+			viewport.get_parent().remove_child(viewport)
+		viewport.queue_free()
+		viewport = null
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -305,13 +378,17 @@ func _track_tree(node: Node) -> void:
 		_track_tree(child)
 
 func _track(node: Node) -> void:
-	if node is Viewport:
+	if node is CanvasLayer:
+		canvas_layers.append(weakref(node))
+	elif node is Viewport:
 		viewports.append(weakref(node))
 	elif node is WorldEnvironment:
 		environments.append(weakref(node))
 
 func _untrack(node: Node) -> void:
-	if node is Viewport:
+	if node is CanvasLayer:
+		canvas_layers = canvas_layers.filter(func(reference: WeakRef): return reference.get_ref() != node and reference.get_ref() != null)
+	elif node is Viewport:
 		viewports = viewports.filter(func(reference: WeakRef): return reference.get_ref() != node and reference.get_ref() != null)
 	elif node is WorldEnvironment:
 		environments = environments.filter(func(reference: WeakRef): return reference.get_ref() != node and reference.get_ref() != null)
@@ -324,6 +401,7 @@ func _inherited_compositor(camera: Camera3D) -> Compositor:
 	return null
 
 func _restore(binding: Dictionary) -> void:
+	binding.ui.detach()
 	if binding.has("aov"):
 		binding.aov.retire()
 		retired_aovs.append(binding.aov)
@@ -384,6 +462,7 @@ func _process(_delta: float) -> void:
 		var old: Dictionary = bindings.get(key, {})
 		if not old.is_empty() and old.camera.get_ref() == camera and camera.compositor == old.installed and (old.original != null or old.inherited == _inherited_compositor(camera)):
 			old.effect.bridge.bind_window(native_window)
+			old.ui.update(old.effect.bridge, canvas_layers)
 			if old.has("aov"):
 				old.aov.configure_demand()
 			# Preserve changes made by the game to its render scale.
@@ -404,9 +483,11 @@ func _process(_delta: float) -> void:
 		var effect = effect_script.new()
 		effect.viewport_id = key
 		effect.bridge.bind_window(native_window)
+		var ui := UILayer.new(viewport)
+		effect.ui_layer = ui
 		bindings[key] = {"camera": weakref(camera), "viewport": reference, "original": original,
 			"installed": installed, "mode": viewport.scaling_3d_mode, "inherited": inherited,
-			"effects": [], "effect": effect, "next_effect_check": now + 250}
+			"effects": [], "effect": effect, "ui": ui, "next_effect_check": now + 250}
 		if aov_script != null:
 			var aov = aov_script.new()
 			aov.bridge = effect.bridge
@@ -418,6 +499,7 @@ func _process(_delta: float) -> void:
 		_sync_effects(bindings[key], true)
 		camera.compositor = installed
 		viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_METALFX_TEMPORAL
+		ui.update(effect.bridge, canvas_layers)
 	for key in bindings.keys():
 		if not active.has(key):
 			_restore(bindings[key])

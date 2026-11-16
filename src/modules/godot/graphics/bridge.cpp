@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <dlfcn.h>
+#include <iterator>
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -37,6 +38,9 @@ decltype(&rsGetSceneAovDemand) readAovDemand;
 decltype(&rsSetTemporalSceneCopyBoundary) setSceneCopy;
 decltype(&rsClearTemporalSceneCopyBoundaries) clearSceneCopies;
 decltype(&rsSceneCopyBoundaryAPI) sceneCopyAPI;
+decltype(&rsGetSceneUILayerDemand) readUILayerDemand;
+decltype(&rsSetSceneUILayerForFrame) setUILayer;
+decltype(&rsClearSceneUILayers) clearUILayers;
 bool needsScene(){return readDemand?readDemand(1)!=0:readMethod&&readMethod()!=0;}
 GDExtensionClassLibraryPtr library;
 GDExtensionInterfaceStringNameNewWithUtf8Chars nameNew;
@@ -79,7 +83,7 @@ struct Bridge {
     RSTemporalCamera sceneCamera{};
     std::array<uintptr_t,3>matrixTextures{},cameraTextures{};
     std::atomic<uintptr_t> nativeWindow{0};
-    ~Bridge() { if (clearCamera) clearCamera(this); if(clearDestination)clearDestination(this);if(clearAovs)clearAovs(this);if(clearSceneCopies)clearSceneCopies(this); }
+    ~Bridge() { if (clearCamera) clearCamera(this); if(clearDestination)clearDestination(this);if(clearAovs)clearAovs(this);if(clearSceneCopies)clearSceneCopies(this);if(clearUILayers)clearUILayers(this); }
 };
 GDExtensionObjectPtr create(void *) {
     Name base("RefCounted"), name(className);
@@ -88,7 +92,7 @@ GDExtensionObjectPtr create(void *) {
     return object;
 }
 void freeInstance(void *, GDExtensionClassInstancePtr instance) { delete static_cast<Bridge *>(instance); }
-enum Operation { Available, Method, Clear, Submit, NeedsScene, Matrices, Destination, Window, AovDemand, AovAcquire, AovRelease, Aovs, AovRetire, AovIdle, AovResume, SceneCopy, ClearSceneCopy, StageCamera, StageMatrices, SceneCopyAvailable, AovSlotIdle };
+enum Operation { Available, Method, Clear, Submit, NeedsScene, Matrices, Destination, Window, AovDemand, AovAcquire, AovRelease, Aovs, AovRetire, AovIdle, AovResume, SceneCopy, ClearSceneCopy, StageCamera, StageMatrices, SceneCopyAvailable, AovSlotIdle, UILayerDemand, UILayer, OperationCount };
 constexpr std::array<GDExtensionVariantType, 9> argumentTypes = {
     GDEXTENSION_VARIANT_TYPE_INT, GDEXTENSION_VARIANT_TYPE_INT, GDEXTENSION_VARIANT_TYPE_INT,
     GDEXTENSION_VARIANT_TYPE_FLOAT, GDEXTENSION_VARIANT_TYPE_FLOAT, GDEXTENSION_VARIANT_TYPE_FLOAT,
@@ -181,8 +185,12 @@ bool submitAovs(Bridge*owner,const std::array<int64_t,13>&v,double exposure,bool
     if(result==RS_TEMPORAL_OK){lease.release();return true;}
     {std::lock_guard<std::mutex>guard(owner->aovPool->mutex);--owner->aovPool->slots[slot].users;}return false;
 }
-unsigned argumentCount(Operation op){return op==Submit||op==StageCamera?argumentTypes.size():op==Matrices||op==StageMatrices?36:op==Destination?4:op==Window||op==AovRelease||op==AovSlotIdle?1:op==Aovs?14:op==SceneCopy?15:0;}
-GDExtensionVariantType argumentType(Operation op,unsigned i){return op==Destination||op==Window||op==AovRelease||op==AovSlotIdle?GDEXTENSION_VARIANT_TYPE_INT:op==Aovs||op==SceneCopy?(i<13?GDEXTENSION_VARIANT_TYPE_INT:GDEXTENSION_VARIANT_TYPE_FLOAT):op==Matrices||op==StageMatrices?(i<4?GDEXTENSION_VARIANT_TYPE_INT:GDEXTENSION_VARIANT_TYPE_FLOAT):argumentTypes[i];}
+// The interface layer of one presented frame (scene-aovs.h). Godot draws it
+// only while the core asks for it; the texture is Godot's own render target.
+int64_t uiLayerDemand(){return readUILayerDemand?int64_t(readUILayerDemand(1)):0;}
+bool submitUILayer(Bridge*owner,int64_t texture,int64_t frameId){return owner&&setUILayer&&texture&&frameId>0&&setUILayer(owner,reinterpret_cast<void*>(uintptr_t(texture)),uint64_t(frameId))==RS_TEMPORAL_OK;}
+unsigned argumentCount(Operation op){return op==Submit||op==StageCamera?argumentTypes.size():op==Matrices||op==StageMatrices?36:op==Destination?4:op==Window||op==AovRelease||op==AovSlotIdle?1:op==UILayer?2:op==Aovs?14:op==SceneCopy?15:0;}
+GDExtensionVariantType argumentType(Operation op,unsigned i){return op==Destination||op==Window||op==AovRelease||op==AovSlotIdle||op==UILayer?GDEXTENSION_VARIANT_TYPE_INT:op==Aovs||op==SceneCopy?(i<13?GDEXTENSION_VARIANT_TYPE_INT:GDEXTENSION_VARIANT_TYPE_FLOAT):op==Matrices||op==StageMatrices?(i<4?GDEXTENSION_VARIANT_TYPE_INT:GDEXTENSION_VARIANT_TYPE_FLOAT):argumentTypes[i];}
 void call(void *operation, GDExtensionClassInstancePtr instance, const GDExtensionConstVariantPtr *args,
           GDExtensionInt count, GDExtensionVariantPtr output, GDExtensionCallError *error) {
     const auto op = Operation(uintptr_t(operation));
@@ -191,7 +199,9 @@ void call(void *operation, GDExtensionClassInstancePtr instance, const GDExtensi
     if (count != expected) { newNil(output); error->error = count < expected ? GDEXTENSION_CALL_ERROR_TOO_FEW_ARGUMENTS : GDEXTENSION_CALL_ERROR_TOO_MANY_ARGUMENTS; error->expected = expected; return; }
     if (op == Method) { int64_t value = readMethod ? readMethod() : 0; fromType(GDEXTENSION_VARIANT_TYPE_INT)(output, &value); return; }
     if (op == NeedsScene) { GDExtensionBool value=needsScene();fromType(GDEXTENSION_VARIANT_TYPE_BOOL)(output,&value);return; }
+    if (op == UILayerDemand) { int64_t value=uiLayerDemand();fromType(GDEXTENSION_VARIANT_TYPE_INT)(output,&value);return; }
     auto owner = static_cast<Bridge *>(instance);
+    if(op==UILayer){std::array<int64_t,2>values{};for(unsigned i=0;i<values.size();++i){if(variantType(args[i])!=GDEXTENSION_VARIANT_TYPE_INT){newNil(output);error->error=GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT;error->argument=i;error->expected=GDEXTENSION_VARIANT_TYPE_INT;return;}toType(GDEXTENSION_VARIANT_TYPE_INT)(&values[i],const_cast<void*>(args[i]));}GDExtensionBool value=submitUILayer(owner,values[0],values[1]);fromType(GDEXTENSION_VARIANT_TYPE_BOOL)(output,&value);return;}
     if(op==AovSlotIdle){if(variantType(args[0])!=GDEXTENSION_VARIANT_TYPE_INT){newNil(output);error->error=GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT;error->argument=0;error->expected=GDEXTENSION_VARIANT_TYPE_INT;return;}int64_t index=0;toType(GDEXTENSION_VARIANT_TYPE_INT)(&index,const_cast<void*>(args[0]));GDExtensionBool value=aovSlotIdle(owner,index);fromType(GDEXTENSION_VARIANT_TYPE_BOOL)(output,&value);return;}
     if(op==SceneCopyAvailable){GDExtensionBool value=setSceneCopy&&clearSceneCopies&&sceneCopyAPI&&sceneCopyAPI()==1&&owner->nativeWindow.load(std::memory_order_acquire);fromType(GDEXTENSION_VARIANT_TYPE_BOOL)(output,&value);return;}
     if(op==ClearSceneCopy){if(clearSceneCopies)clearSceneCopies(owner);GDExtensionBool value=true;fromType(GDEXTENSION_VARIANT_TYPE_BOOL)(output,&value);return;}
@@ -201,7 +211,7 @@ void call(void *operation, GDExtensionClassInstancePtr instance, const GDExtensi
     if(op==Window){if(variantType(args[0])!=GDEXTENSION_VARIANT_TYPE_INT){newNil(output);error->error=GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT;error->argument=0;error->expected=GDEXTENSION_VARIANT_TYPE_INT;return;}int64_t value=0;toType(GDEXTENSION_VARIANT_TYPE_INT)(&value,const_cast<void*>(args[0]));owner->nativeWindow.store(uintptr_t(value),std::memory_order_release);GDExtensionBool result=true;fromType(GDEXTENSION_VARIANT_TYPE_BOOL)(output,&result);return;}
     if(op==Destination){std::array<int64_t,4>values{};for(unsigned i=0;i<values.size();++i){if(variantType(args[i])!=GDEXTENSION_VARIANT_TYPE_INT){newNil(output);error->error=GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT;error->argument=i;error->expected=GDEXTENSION_VARIANT_TYPE_INT;return;}toType(GDEXTENSION_VARIANT_TYPE_INT)(&values[i],const_cast<void*>(args[i]));}GDExtensionBool result=submitDestination(owner,values);fromType(GDEXTENSION_VARIANT_TYPE_BOOL)(output,&result);return;}
     if(op==Matrices||op==StageMatrices){std::array<int64_t,4>identities{};std::array<double,32>values{};for(unsigned i=0;i<36;++i){const auto type=i<4?GDEXTENSION_VARIANT_TYPE_INT:GDEXTENSION_VARIANT_TYPE_FLOAT;const auto actual=variantType(args[i]);if(actual!=type&&!(type==GDEXTENSION_VARIANT_TYPE_FLOAT&&actual==GDEXTENSION_VARIANT_TYPE_INT)){newNil(output);error->error=GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT;error->argument=i;error->expected=type;return;}if(i<4)toType(type)(&identities[i],const_cast<void*>(args[i]));else toType(type)(&values[i-4],const_cast<void*>(args[i]));}GDExtensionBool value=submitMatrices(owner,identities,values,op==Matrices);fromType(GDEXTENSION_VARIANT_TYPE_BOOL)(output,&value);return;}
-    if (op == Clear) { if (clearCamera) clearCamera(owner);if(clearDestination)clearDestination(owner);if(clearAovs)clearAovs(owner);if(clearSceneCopies)clearSceneCopies(owner); newNil(output); return; }
+    if (op == Clear) { if (clearCamera) clearCamera(owner);if(clearDestination)clearDestination(owner);if(clearAovs)clearAovs(owner);if(clearSceneCopies)clearSceneCopies(owner);if(clearUILayers)clearUILayers(owner); newNil(output); return; }
     GDExtensionBool result = setCamera && clearCamera && readMethod;
     if (op == Submit||op==StageCamera) {
         std::array<int64_t, 9> integers{}; std::array<double, 9> numbers{};
@@ -224,13 +234,15 @@ void ptrcall(void *operation, GDExtensionClassInstancePtr instance, const GDExte
     if(op==ClearSceneCopy){if(clearSceneCopies)clearSceneCopies(owner);*static_cast<GDExtensionBool*>(output)=true;return;}
     if (op == Method) { *static_cast<int64_t *>(output) = readMethod ? readMethod() : 0; return; }
     if (op == NeedsScene) { *static_cast<GDExtensionBool *>(output)=needsScene();return; }
+    if (op == UILayerDemand) { *static_cast<int64_t *>(output)=uiLayerDemand();return; }
+    if (op == UILayer) { *static_cast<GDExtensionBool *>(output)=submitUILayer(owner,*static_cast<const int64_t*>(args[0]),*static_cast<const int64_t*>(args[1]));return; }
     if(op==AovRetire||op==AovIdle||op==AovResume){*static_cast<GDExtensionBool*>(output)=op==AovRetire?retireAovs(owner):op==AovResume?resumeAovs(owner):aovIdle(owner);return;}
     if(op==AovDemand||op==AovAcquire){*static_cast<int64_t*>(output)=op==AovDemand?(readAovDemand?readAovDemand(1):0):aovAcquire(owner);return;}
     if(op==AovRelease||op==Aovs||op==SceneCopy){std::array<int64_t,13>values{};std::array<double,2>numbers{1,0};for(unsigned i=0;i<argumentCount(op);++i)if(i<13)values[i]=*static_cast<const int64_t*>(args[i]);else numbers[i-13]=*static_cast<const double*>(args[i]);*static_cast<GDExtensionBool*>(output)=op==AovRelease?aovRelease(owner,values[0]):submitAovs(owner,values,numbers[0],op==SceneCopy,numbers[1]);return;}
     if(op==Window){owner->nativeWindow.store(uintptr_t(*static_cast<const int64_t*>(args[0])),std::memory_order_release);*static_cast<GDExtensionBool*>(output)=true;return;}
     if(op==Destination){std::array<int64_t,4>values{};for(unsigned i=0;i<values.size();++i)values[i]=*static_cast<const int64_t*>(args[i]);*static_cast<GDExtensionBool*>(output)=submitDestination(owner,values);return;}
     if(op==Matrices||op==StageMatrices){std::array<int64_t,4>identities{};std::array<double,32>values{};for(unsigned i=0;i<36;++i)if(i<4)identities[i]=*static_cast<const int64_t*>(args[i]);else values[i-4]=*static_cast<const double*>(args[i]);*static_cast<GDExtensionBool*>(output)=submitMatrices(owner,identities,values,op==Matrices);return;}
-    if (op == Clear) { if (clearCamera) clearCamera(owner);if(clearDestination)clearDestination(owner);if(clearAovs)clearAovs(owner);if(clearSceneCopies)clearSceneCopies(owner); return; }
+    if (op == Clear) { if (clearCamera) clearCamera(owner);if(clearDestination)clearDestination(owner);if(clearAovs)clearAovs(owner);if(clearSceneCopies)clearSceneCopies(owner);if(clearUILayers)clearUILayers(owner); return; }
     bool result = setCamera && clearCamera && readMethod;
     if (op == Submit||op==StageCamera) {
         std::array<int64_t, 9> integers{}; std::array<double, 9> numbers{};
@@ -257,13 +269,17 @@ void initialize(void *, GDExtensionInitializationLevel level) {
     setSceneCopy=reinterpret_cast<decltype(setSceneCopy)>(dlsym(RTLD_DEFAULT,"rsSetTemporalSceneCopyBoundary"));
     clearSceneCopies=reinterpret_cast<decltype(clearSceneCopies)>(dlsym(RTLD_DEFAULT,"rsClearTemporalSceneCopyBoundaries"));
     sceneCopyAPI=reinterpret_cast<decltype(sceneCopyAPI)>(dlsym(RTLD_DEFAULT,"rsSceneCopyBoundaryAPI"));
+    readUILayerDemand=reinterpret_cast<decltype(readUILayerDemand)>(dlsym(RTLD_DEFAULT,"rsGetSceneUILayerDemand"));
+    setUILayer=reinterpret_cast<decltype(setUILayer)>(dlsym(RTLD_DEFAULT,"rsSetSceneUILayerForFrame"));
+    clearUILayers=reinterpret_cast<decltype(clearUILayers)>(dlsym(RTLD_DEFAULT,"rsClearSceneUILayers"));
     Name name(className), parent("RefCounted"), empty(""); String emptyString("");
     GDExtensionClassCreationInfo2 creation{}; creation.is_exposed = true; creation.create_instance_func = create; creation.free_instance_func = freeInstance;
     registerClass(library, name.value, parent.value, &creation);
-    const char *names[] = {"available", "method", "clear", "submit", "needs_scene", "submit_matrices", "submit_destination", "bind_window", "aov_demand", "acquire_aov_slot", "release_aov_slot", "submit_aovs", "retire_aovs", "aovs_idle", "resume_aovs", "submit_scene_copy", "clear_scene_copy", "stage", "stage_matrices", "scene_copy_available", "aov_slot_idle"};
-    for (unsigned op = 0; op < 21; ++op) {
+    const char *names[] = {"available", "method", "clear", "submit", "needs_scene", "submit_matrices", "submit_destination", "bind_window", "aov_demand", "acquire_aov_slot", "release_aov_slot", "submit_aovs", "retire_aovs", "aovs_idle", "resume_aovs", "submit_scene_copy", "clear_scene_copy", "stage", "stage_matrices", "scene_copy_available", "aov_slot_idle", "ui_layer_demand", "submit_ui_layer"};
+    static_assert(std::size(names) == OperationCount, "Every operation has one method name");
+    for (unsigned op = 0; op < OperationCount; ++op) {
         Name method(names[op]);
-        GDExtensionPropertyInfo result{op == Method||op==AovDemand||op==AovAcquire ? GDEXTENSION_VARIANT_TYPE_INT : GDEXTENSION_VARIANT_TYPE_BOOL, empty.value, empty.value, 0, emptyString.value, 6};
+        GDExtensionPropertyInfo result{op == Method||op==AovDemand||op==AovAcquire||op==UILayerDemand ? GDEXTENSION_VARIANT_TYPE_INT : GDEXTENSION_VARIANT_TYPE_BOOL, empty.value, empty.value, 0, emptyString.value, 6};
         std::array<GDExtensionPropertyInfo, 36> args{}; std::array<GDExtensionClassMethodArgumentMetadata, 36> metadata{};
         const unsigned count=argumentCount(Operation(op));
         for (unsigned i = 0; i < count; ++i) args[i] = {argumentType(Operation(op),i), empty.value, empty.value, 0, emptyString.value, 6};

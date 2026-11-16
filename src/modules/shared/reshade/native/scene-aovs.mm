@@ -4,7 +4,9 @@
 #include "image-color.hpp"
 #include "temporal-controls.hpp"
 #include "metalfx-denoised.hpp"
+#include "generation-methods.hpp"
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <deque>
@@ -103,7 +105,28 @@ extern "C" int rsSetTemporalAovsForTexturesObserved(void*owner,void*color,void*d
  for(auto&r:pending){if(r.owner&&(!r.color||r.hasDepth&&!r.depth||r.hasMotion&&!r.motion))r={};if(!r.owner){if(!free)free=&r;continue;}if(r.color==c&&r.depth==d&&r.motion==m){r.blocked=true;recount();return RS_TEMPORAL_BUSY;}}
  if(!free)return RS_TEMPORAL_BUSY;if(observer)lease->retirement=*observer;if(hudPair(*lease))lease->composedColor=c;free->owner=owner;free->color=c;free->depth=d;free->motion=m;free->hasDepth=bool(d);free->hasMotion=bool(m);free->lease=std::move(lease);recount();return RS_TEMPORAL_OK;
  }catch(...){return RS_TEMPORAL_INVALID;}}
+namespace {
+// One interface layer per presented producer frame. Lookup is by that frame's
+// identity, the device and the exact size; the layer never outlives its texture.
+struct UILayer {void*owner=nullptr;__weak id<MTLTexture>texture;uint64_t frameId=0;};
+std::mutex uiLock;std::array<UILayer,8>uiLayers;unsigned uiNext=0;
+bool uiFormat(MTLPixelFormat f){return f==MTLPixelFormatRGBA8Unorm||f==MTLPixelFormatRGBA8Unorm_sRGB||f==MTLPixelFormatBGRA8Unorm||f==MTLPixelFormatBGRA8Unorm_sRGB;}
+}
+extern "C" uint32_t rsSceneUILayerAPI(void){return 1;}
+// Only providers that receive the renderer scene read the shared HUD pair.
+extern "C" uint32_t rsGetSceneUILayerDemand(uint32_t version){
+ if(version!=1||!macfx::effectPlanRequested()||!macfx::effectPlanDemands(macfx::PlanDemandGeneration))return 0;const auto plan=macfx::currentEffectPlan();if(!plan)return 0;
+ for(const auto&node:plan->nodes)if(node.enabled&&node.kind=="frame-generation"&&macfx::generationRequiresScene(node.method))return 1;return 0;}
+extern "C" int rsSetSceneUILayerForFrame(void*owner,void*ui,uint64_t frameId){
+ auto texture=(__bridge id<MTLTexture>)ui;if(!owner||!frameId||!readable(texture)||!uiFormat(texture.pixelFormat))return RS_TEMPORAL_INVALID;
+ std::lock_guard guard(uiLock);for(auto&layer:uiLayers)if(layer.owner==owner&&layer.frameId==frameId){layer.texture=texture;return RS_TEMPORAL_OK;}
+ uiLayers[uiNext]={owner,texture,frameId};uiNext=(uiNext+1)%uiLayers.size();return RS_TEMPORAL_OK;}
+extern "C" void rsClearSceneUILayers(void*owner){if(!owner)return;std::lock_guard guard(uiLock);for(auto&layer:uiLayers)if(layer.owner==owner)layer={};}
 namespace macfx {
+id<MTLTexture>sceneUILayer(uint64_t frameId,id<MTLDevice>device,NSUInteger width,NSUInteger height){
+ if(!frameId)return nil;std::lock_guard guard(uiLock);id<MTLTexture>found=nil;
+ for(const auto&layer:uiLayers){id<MTLTexture>texture=layer.texture;if(layer.owner&&layer.frameId==frameId&&texture&&texture.device==device&&texture.width==width&&texture.height==height){if(found&&found!=texture)return nil;found=texture;}}
+ return found;}
 std::optional<RSSceneAovs>validatedSceneAovs(const RSSceneAovs&input,id<MTLDevice>device){if(input.size!=sizeof(input)||input.version!=1)return {};const auto value=sanitizeHud(input,device);return valid(value,device)?std::optional<RSSceneAovs>(value):std::nullopt;}
 std::shared_ptr<SceneAovLease>captureSceneAovs(const RSSceneAovs&input,id<MTLDevice>device){const auto value=validatedSceneAovs(input,device);return value?capture(*value,device):nullptr;}
 SceneAovLease::~SceneAovLease(){if(retirement.retired){const auto observer=retirement;const auto frame=value.frameId,view=value.viewId,epoch=value.epoch;dispatch_async(retirementQueue(),^{observer.retired(observer.context,frame,view,epoch);});}}

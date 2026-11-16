@@ -32,6 +32,7 @@
 #include "metalfx-denoised.hpp"
 #include "metalfx-generation-resources.hpp"
 #include "recorded-scene.h"
+#include "hud-split.hpp"
 #include <dlfcn.h>
 #include <filesystem>
 #include <mutex>
@@ -321,7 +322,31 @@ ShaderResult sceneShaderCall(const std::shared_ptr<ShaderNode>&node,const std::s
 
 }
 struct EffectSceneGuideHistory {struct Sample{uint64_t id=0;float x=0,y=0;unsigned width=0,height=0;};std::mutex mutex;Sample latest,previous;uint64_t qualityEpoch=1,qualityContent=0;};
-struct EffectSceneLease {bool resolvedColor=false;RSTemporalFrame frame{};id<MTLTexture>color=nil,output=nil;std::array<id<MTLTexture>,5>guides{};std::optional<RSSceneMatrices>matrices;std::shared_ptr<const SceneAovLease>aovs;std::shared_ptr<void>storage;std::shared_ptr<const EffectSceneLease>upstream;const EffectSceneLease*guideSource=nullptr;std::shared_ptr<EffectSceneGuideHistory>guideHistory;};
+struct EffectSceneLease {bool resolvedColor=false;RSTemporalFrame frame{};id<MTLTexture>color=nil,output=nil;std::array<id<MTLTexture>,5>guides{};std::optional<RSSceneMatrices>matrices;std::shared_ptr<const SceneAovLease>aovs;std::shared_ptr<void>storage;std::shared_ptr<const EffectSceneLease>upstream;const EffectSceneLease*guideSource=nullptr;std::shared_ptr<EffectSceneGuideHistory>guideHistory;
+    // The producer's interface layer for this final image, copied when the
+    // final image was associated with its scene (scene-aovs.h UI layer).
+    std::shared_ptr<HudSplitImages>interfaceLayer;};
+// Reports each change of the interface layer split state once.
+void reportInterfaceLayer(const std::string&state){static std::mutex mutex;static std::string last;std::lock_guard guard(mutex);if(state==last)return;last=state;nativeLog("Interface layer split: "+state);}
+// HUD-less colour and the premultiplied overlay derived from the actual
+// generation image, published through the shared HUD pair every scene
+// generation provider reads. The pair belongs to this exact image.
+std::shared_ptr<const SceneAovLease>interfaceLayerAttachments(id<MTLCommandBuffer>commands,id<MTLTexture>colour,const std::shared_ptr<HudSplitImages>&images,const std::shared_ptr<const SceneAovLease>&base,const RSTemporalFrame&source,const ImageColorDescription&color,FrameOrigin origin){
+    if(!images||base&&(base->value.images[RS_SCENE_AOV_HUDLESS_COLOR].texture||base->value.images[RS_SCENE_AOV_UI_COLOR_ALPHA].texture))return base;
+    std::string reason;if(!HudSplitEncoder::forDevice(commands.device)->split(commands,colour,*images,reason)){reportInterfaceLayer("unavailable: "+reason);return base;}
+    RSSceneAovs packet{};if(base)packet=base->value;else{packet.size=sizeof(packet);packet.version=RS_SCENE_AOV_ABI_VERSION;packet.frameId=source.frameId;packet.viewId=1;packet.epoch=1;packet.color=writeImageColor(color);packet.preExposure=1;packet.pass=packet.colorPass=RS_SCENE_AOV_TEMPORAL_INPUT;}
+    if(!packet.colorPass){reportInterfaceLayer("unavailable: the renderer attachments name no colour pass");return base;}
+    auto overlay=color;overlay.alpha=ColorAlpha::Premultiplied;packet.hudlessColor=writeImageColor(color);packet.uiColor=writeImageColor(overlay);
+    const auto attachment=[&](id<MTLTexture>texture){RSSceneAovImage a{};a.texture=(__bridge void*)texture;a.width=uint32_t(texture.width);a.height=uint32_t(texture.height);a.encoding=RS_SCENE_AOV_COLOR;a.space=RS_SCENE_AOV_SPACE_NONE;a.origin=unsigned(origin);a.scale=1;a.pass=packet.colorPass;return a;};
+    packet.images[RS_SCENE_AOV_HUDLESS_COLOR]=attachment(images->hudless);packet.images[RS_SCENE_AOV_UI_COLOR_ALPHA]=attachment(images->ui);
+    auto lease=captureSceneAovs(packet,commands.device);
+    if(!lease||!lease->value.images[RS_SCENE_AOV_HUDLESS_COLOR].texture){reportInterfaceLayer("unavailable: the HUD pair was not accepted");return base;}
+    lease->upstream=base;lease->composedColor=colour;lease->composedX=lease->composedY=0;lease->composedWidth=uint32_t(colour.width);lease->composedHeight=uint32_t(colour.height);lease->composedRegionKnown=true;
+    images->leased.store(true,std::memory_order_release);
+    lease->retirement={sizeof(RSSceneAovRetirement),1,new std::shared_ptr<HudSplitImages>(images),[](void*context,uint64_t,uint64_t,uint64_t){std::unique_ptr<std::shared_ptr<HudSplitImages>>done(static_cast<std::shared_ptr<HudSplitImages>*>(context));(*done)->leased.store(false,std::memory_order_release);}};
+    reportInterfaceLayer("active "+std::to_string(colour.width)+"x"+std::to_string(colour.height));
+    return lease;
+}
 const RSTemporalFrame&rawSceneGuides(const std::shared_ptr<const EffectSceneLease>&lease){return lease->guideSource?lease->guideSource->frame:lease->frame;}
 std::optional<RSTemporalFrame>retainedSceneFrame(const std::shared_ptr<const EffectSceneLease>&lease){return lease?std::optional<RSTemporalFrame>(lease->frame):std::nullopt;}
 struct EffectExecution::Impl {
@@ -790,13 +815,16 @@ ShaderResult EffectExecution::bindSceneImage(id<MTLCommandBuffer>commands,id<MTL
     result->matrices=sceneMatricesForImage(source->frame,source->matrices,jittered,origin==FrameOrigin::BottomLeft);
     if(result->matrices&&rsBindTemporalSceneMatrices(&actual,&*result->matrices)!=RS_TEMPORAL_OK)return {false,"The final image camera matrices could not be retained"};
     if(source->aovs){if(bindSceneAovLease(actual,source->aovs)!=RS_TEMPORAL_OK)return {false,"The final image attachments could not be retained"};result->aovs=temporalSceneAovs(actual);}
+    result->interfaceLayer=source->interfaceLayer;
+    if(rsGetSceneUILayerDemand(1)){if(auto layer=sceneUILayer(source->frame.frameId,commands.device,colour.width,colour.height)){if(auto copied=HudSplitEncoder::forDevice(commands.device)->snapshot(commands,layer))result->interfaceLayer=std::move(copied);else reportInterfaceLayer("unavailable: the interface layer could not be copied");}}
     bindMetalFxGenerationResources(actual,source->frame);normalized=std::move(result);return {true,{}};
 }catch(const std::exception&error){return {false,error.what()};}}
 ShaderResult EffectExecution::bindGenerationScene(id<MTLCommandBuffer>commands,size_t index,id<MTLTexture>colour,const std::shared_ptr<const EffectSceneLease>&lease,FrameOrigin origin,id<MTLTexture>copiedFrom){try{
     if(index>=impl->stages.size())return {false,"The generation stage is unavailable"};const auto&stage=impl->stages[index];if(!stage.encoder->requiresScene())return {true,{}};
     auto scratch=impl->acquire(commands);if(!scratch||(!lease&&!scratch->scene))return {false,"This real generation endpoint has no matching scene lease"};
     const auto&source=lease?lease->frame:*scratch->scene;const auto rawGuides=lease?&rawSceneGuides(lease):scratch->guideLease?&rawSceneGuides(scratch->guideLease):nullptr;const bool jittered=!replacesTemporal()&&!(lease?lease->resolvedColor:scratch->resolvedColor)&&source.method==RS_TEMPORAL_OFF;
-    const auto attachments=lease?copiedFrom?copiedSceneAovLease(lease->aovs,copiedFrom,colour):lease->aovs:nullptr;
+    auto attachments=lease?copiedFrom?copiedSceneAovLease(lease->aovs,copiedFrom,colour):lease->aovs:nullptr;
+    if(lease&&lease->interfaceLayer)attachments=interfaceLayerAttachments(commands,colour,lease->interfaceLayer,attachments,source,impl->colorDescription,origin);
     auto actual=impl->normalizeScene(*scratch,commands,source,colour,colour,jittered,false,false,true,attachments,1,GuideAll,rawGuides);const auto aovs=temporalSceneAovs(actual);actual.owner=stage.state.get();if(aovs&&bindSceneAovLease(actual,aovs)!=RS_TEMPORAL_OK)return {false,"The generation endpoint attachments could not be retained"};
     bindMetalFxGenerationResources(actual,source,copiedFrom);
     if(auto matrices=sceneMatricesForImage(source,lease?lease->matrices:temporalSceneMatrices(source),jittered,origin==FrameOrigin::BottomLeft);matrices&&!temporalSceneMatrices(actual))rsBindTemporalSceneMatrices(&actual,&*matrices);

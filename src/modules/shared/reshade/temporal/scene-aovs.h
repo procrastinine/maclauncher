@@ -114,6 +114,19 @@ int rsSetTemporalAovsForTexturesObserved(void *owner,void *color,void *depth,voi
 uint32_t rsSceneAovAPI(void);
 // Bit N requests attachment slot N, only for actual selected consumers.
 uint32_t rsGetSceneAovDemand(uint32_t version);
+// A producer that draws its interface as a separate layer for each presented
+// frame registers it here. The layer is premultiplied color and alpha in the
+// final image's own encoding, the same size and orientation, so that
+// final = ui + hudless * (1 - ui.alpha). The core derives the HUD-less color
+// from the final image and passes both as the shared UI_COLOR_ALPHA and
+// HUDLESS_COLOR pair to every frame-generation provider that reads them.
+// Demand is nonzero only while such a generation row is enabled; producers
+// draw and register no layer otherwise. The texture must stay unchanged until
+// the producer's next frame is submitted.
+uint32_t rsSceneUILayerAPI(void);
+uint32_t rsGetSceneUILayerDemand(uint32_t version);
+int rsSetSceneUILayerForFrame(void *owner,void *ui,uint64_t frameId);
+void rsClearSceneUILayers(void *owner);
 #ifdef __cplusplus
 }
 static_assert(sizeof(RSSceneAovImage)==56,"Scene AOV image ABI1 must be 56 bytes");

@@ -6,6 +6,9 @@ var frame_id := 0
 var previous_time := 0
 var aov_capture: CompositorEffect
 var frame_time_ms := 0.0
+# The window's interface layer (autoload.gd UILayer); its texture is zero
+# unless the shared runtime asked for one.
+var ui_layer: RefCounted
 
 func _init() -> void:
 	effect_callback_type = EFFECT_CALLBACK_TYPE_POST_TRANSPARENT
@@ -73,6 +76,9 @@ func register_scene(buffers: RenderSceneBuffersRD, scene: RenderSceneData, desti
 
 	if destination:
 		bridge.submit_destination(color_native, depth_native, motion_native, frame_id)
+		var ui_texture: int = ui_layer.texture if ui_layer != null else 0
+		if ui_texture != 0 and bridge.has_method("submit_ui_layer"):
+			bridge.submit_ui_layer(ui_texture, frame_id)
 	return true
 
 func _perspective_camera(projection: Projection) -> PackedFloat32Array:

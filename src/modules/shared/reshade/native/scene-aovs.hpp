@@ -39,6 +39,9 @@ int peekTemporalAovsForTextures(const RSTemporalFrame&,std::shared_ptr<const Sce
 // A derived full-viewport color retains the original attachment UV domain.
 // The caller copies this lease before the producer command completes.
 int bindSceneAovLease(const RSTemporalFrame&,const std::shared_ptr<const SceneAovLease>&);
+// The producer's interface layer for this presented frame, or nil when none
+// (or more than one ambiguous layer) matches the device and exact size.
+id<MTLTexture>sceneUILayer(uint64_t frameId,id<MTLDevice>,NSUInteger width,NSUInteger height);
 // Only for an already-recorded full-image, same-format byte copy. It cannot
 // authorize a split after a shader, color conversion, crop or other transform.
 std::shared_ptr<const SceneAovLease>copiedSceneAovLease(const std::shared_ptr<const SceneAovLease>&,id<MTLTexture>source,id<MTLTexture>target);
