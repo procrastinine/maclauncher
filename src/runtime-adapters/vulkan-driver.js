@@ -29,4 +29,4 @@ function apply({build={},parts={},environment={},parameters={}}={}) {
  }
  return {environment:env,library,driver,icd};
 }
-module.exports={apply};
+module.exports={apply,listBuilds:require('./graphics-builds').listBuilds};

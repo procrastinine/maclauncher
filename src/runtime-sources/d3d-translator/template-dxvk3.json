@@ -1,0 +1,68 @@
+{
+  "id": "template-dxvk3",
+  "kind": "d3d-translator",
+  "label": "Sikarugir Template · dxvk3",
+  "order": 6,
+  "manager": {
+    "id": "translator-dxvk",
+    "sectionId": "template-dxvk3",
+    "engine": "dxvk",
+    "memberOrder": 2,
+    "sectionLabel": "DXVK",
+    "category": "template"
+  },
+  "discover": {
+    "type": "github-releases",
+    "repo": "Sikarugir-App/Template",
+    "includePrereleases": true,
+    "component": "dxvk3"
+  },
+  "assets": [
+    {
+      "match": "^[Tt][Ee][Mm][Pp][Ll][Aa][Tt][Ee]-.*\\.(?:[zZ][iI][pP]|[tT][aA][rR]\\.[gG][zZ]|[tT][gG][zZ]|[tT][aA][rR]\\.[xX][zZ]|[tT][aA][rR]\\.[zZ][sS][tT]|[tT][xX][zZ]|[tT][aA][rR]\\.[bB][zZ]2|[tT][bB][zZ]2|[dD][mM][gG]|[tT][aA][rR]|[pP][kK][gG])$",
+      "declares": {
+        "pe": [
+          "i386",
+          "x86_64"
+        ]
+      },
+      "parts": [
+        {
+          "path": "dxvk",
+          "name": "component-root",
+          "optional": true
+        },
+        {
+          "path": "dxvk3",
+          "name": "component-root",
+          "optional": true
+        },
+        {
+          "path": "d9vk",
+          "name": "component-root",
+          "optional": true
+        }
+      ]
+    }
+  ],
+  "verify": [
+    {
+      "type": "github-asset-digest"
+    }
+  ],
+  "layout": {
+    "type": "archive"
+  },
+  "interfaces": {
+    "requires": [
+      "api:vulkan"
+    ]
+  },
+  "labels": {
+    "source": "Sikarugir Template"
+  },
+  "license": "Zlib",
+  "credits": {
+    "url": "https://github.com/Sikarugir-App/Template"
+  }
+}

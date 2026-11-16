@@ -1,0 +1,58 @@
+{
+  "id": "d8vk-upstream",
+  "kind": "d3d-translator",
+  "label": "D8VK",
+  "order": 3,
+  "manager": {
+    "id": "translator-dxvk",
+    "sectionId": "d8vk",
+    "engine": "d8vk",
+    "memberOrder": 2,
+    "sectionLabel": "DXVK",
+    "category": "upstream"
+  },
+  "discover": {
+    "type": "github-releases",
+    "repo": "AlpyneDreams/d8vk",
+    "includePrereleases": true,
+    "component": null
+  },
+  "assets": [
+    {
+      "match": ".*\\.(?:[zZ][iI][pP]|[tT][aA][rR]\\.[gG][zZ]|[tT][gG][zZ]|[tT][aA][rR]\\.[xX][zZ]|[tT][aA][rR]\\.[zZ][sS][tT]|[tT][xX][zZ]|[tT][aA][rR]\\.[bB][zZ]2|[tT][bB][zZ]2|[dD][mM][gG]|[tT][aA][rR]|[pP][kK][gG])$",
+      "declares": {
+        "pe": [
+          "i386",
+          "x86_64"
+        ]
+      },
+      "parts": [
+        {
+          "path": "d8vk",
+          "name": "component-root",
+          "optional": true
+        }
+      ]
+    }
+  ],
+  "verify": [
+    {
+      "type": "github-asset-digest"
+    }
+  ],
+  "layout": {
+    "type": "archive"
+  },
+  "interfaces": {
+    "requires": [
+      "api:vulkan"
+    ]
+  },
+  "labels": {
+    "source": "D8VK"
+  },
+  "license": "Zlib",
+  "credits": {
+    "url": "https://github.com/AlpyneDreams/d8vk"
+  }
+}

@@ -3,18 +3,22 @@ const execute = require("node:util").promisify(require("node:child_process").exe
 const Bundled = require("../runtime/bundled-native");
 const { createProjectBuildManager } = require("../runtime/project-build-manager");
 const { withDescription } = require("../runtime/pinned-native-manager");
-const repository = "procrastinine/maclauncher-builds";
+const {createSourceBackedManager}=require("../../../runtime-sources/manager");
+const driverAdapter=require("../../../runtime-adapters/vulkan-driver");
+const source=require("../../../runtime-sources/vulkan-driver/maclauncher-kosmickrisp.json");
+const sceneSource=require("../../../runtime-sources/vulkan-driver/maclauncher-moltenvk-scene.json");
+const repository=new URL(source.discover.catalog).pathname.slice(1);
 
-const projectId = "maclauncher-kosmickrisp";
+const projectId=source.manager.id;
 // Installations and catalog releases published under the earlier ID stay
 // readable in place; core/backcompat/kosmickrisp-rename.js moves saved data.
-const formerIds = ["vulkan-kosmickrisp-gles32"];
+const formerIds=source.manager.formerIds;
 const selectionId = "kosmickrisp:maclauncher";
 const prefix = projectId + ":";
 
 function createManager(dependencies = {}) {
   const manager = createProjectBuildManager({ projectId, formerIds, versionCompatibility: () => true, // Vulkan versions of this managed driver project are interchangeable; consumers check required capabilities.
-    label: "MacLauncher KosmicKrisp", repository, sourceLabel: "Source", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
+    label: source.label, repository, sourceLabel: "Source", upstreamUrl: source.credits.url, nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
@@ -27,8 +31,8 @@ function createManager(dependencies = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
-  return { ...manager, formerIds, translatorEngine: "kosmickrisp", distributionRequired: false,
-    ui: { groupId: "vulkan-drivers", sectionLabel: manager.label, memberOrder: 22, management: "managed", hostFeature: "METAL4" } };
+  return createSourceBackedManager({source,adapter:driverAdapter,backend:{ ...manager, formerIds, translatorEngine: source.manager.engine, distributionRequired: false,
+    ui: { groupId: "vulkan-drivers", sectionLabel: manager.label, memberOrder: 22, management: "managed", hostFeature: "METAL4" } }});
 }
 
 function createProvider(manager) {
@@ -62,7 +66,7 @@ function createProvider(manager) {
 }
 
 const manager = createManager();
-const sceneProjectId = "vulkan-moltenvk-scene", sceneSelectionId = "moltenvk:maclauncher-scene";
+const sceneProjectId=sceneSource.manager.id,sceneSelectionId="moltenvk:maclauncher-scene";
 function sceneDescriptor(manifest) {
   const provider = manifest.provider, library = manifest.files?.find(file => file.path === "libMoltenVK-scene.dylib");
   if (Bundled.isManagedDeclaration(manifest)) return provider || {};
@@ -76,8 +80,8 @@ function sceneDescriptor(manifest) {
   return provider;
 }
 function createSceneManager(dependencies = {}) {
-  const result = createProjectBuildManager({ projectId: sceneProjectId, label: "MoltenVK scene support",
-    repository, sourceLabel: "Source", upstreamUrl: "https://github.com/KhronosGroup/MoltenVK", nativeLibrary: true,
+  const result = createProjectBuildManager({ projectId: sceneProjectId, label: sceneSource.label,
+    repository, sourceLabel: "Source", upstreamUrl: sceneSource.credits.url, nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
       Bundled.validateRuntimeManifest(manifest, { managerId: sceneProjectId, version: record.version, arch: record.arch });
@@ -87,9 +91,9 @@ function createSceneManager(dependencies = {}) {
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       await Bundled.verifySignatures(selected.root, selected.declaration, { signal });
     }, dependencies });
-  return { ...withDescription(result, "A MoltenVK build that records a Windows game's Vulkan scene for temporal upscaling and frame generation, beside the selected Vulkan driver."),
+  return createSourceBackedManager({source:sceneSource,adapter:driverAdapter,backend:{ ...withDescription(result, "A MoltenVK build that records a Windows game's Vulkan scene for temporal upscaling and frame generation, beside the selected Vulkan driver."),
     translatorEngine: "moltenvk", distributionRequired: false,
-    ui: { groupId: "vulkan-drivers", sectionLabel: "MoltenVK scene support", memberOrder: 25, management: "managed" } };
+    ui: { groupId: "vulkan-drivers", sectionLabel: sceneSource.label, memberOrder: sceneSource.manager.memberOrder, management: "managed" } }});
 }
 function createSceneProvider(selectedManager) {
   function selected(version, context, verification) {

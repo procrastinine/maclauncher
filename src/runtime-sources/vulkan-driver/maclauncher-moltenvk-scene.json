@@ -1,0 +1,67 @@
+{
+  "id": "maclauncher-moltenvk-scene",
+  "kind": "vulkan-driver",
+  "label": "MoltenVK scene support",
+  "order": 25,
+  "manager": {
+    "id": "vulkan-moltenvk-scene",
+    "engine": "moltenvk",
+    "sectionId": "builds",
+    "sectionLabel": "MoltenVK scene support",
+    "memberOrder": 25
+  },
+  "discover": {
+    "type": "builds-catalog",
+    "catalog": "https://github.com/procrastinine/maclauncher-builds"
+  },
+  "assets": [
+    {
+      "match": ".*(?:arm64|aarch64).*",
+      "declares": {
+        "macho": [
+          "arm64"
+        ]
+      },
+      "interfaces": {
+        "requires": []
+      }
+    },
+    {
+      "match": ".*(?:x64|x86_64).*",
+      "declares": {
+        "macho": [
+          "x86_64"
+        ]
+      },
+      "interfaces": {
+        "requires": []
+      }
+    },
+    {
+      "match": ".*universal.*",
+      "declares": {
+        "macho": [
+          "arm64",
+          "x86_64"
+        ]
+      },
+      "interfaces": {
+        "requires": []
+      }
+    }
+  ],
+  "verify": [],
+  "layout": {
+    "type": "archive"
+  },
+  "license": "MIT",
+  "credits": {
+    "url": "https://github.com/KhronosGroup/MoltenVK"
+  },
+  "interfaces": {
+    "provides": [
+      "api:vulkan",
+      "vulkan:1.0"
+    ]
+  }
+}

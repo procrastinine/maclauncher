@@ -1,0 +1,36 @@
+{
+  "id": "apple-gptk",
+  "kind": "d3d-translator",
+  "label": "Apple Game Porting Toolkit",
+  "order": 0,
+  "manager": {
+    "id": "translator-d3dmetal",
+    "engine": "d3dmetal",
+    "sectionId": "apple",
+    "sectionLabel": "D3DMetal",
+    "memberOrder": 1
+  },
+  "discover": {
+    "type": "local-app",
+    "paths": []
+  },
+  "verify": [],
+  "layout": {
+    "type": "local-app",
+    "paths": []
+  },
+  "interfaces": {
+    "requires": [
+      "api:metal",
+      "macos>=14.0",
+      "gpu:apple-physical"
+    ]
+  },
+  "labels": {
+    "source": "Apple Game Porting Toolkit"
+  },
+  "license": "LicenseRef-Apple-GPTK",
+  "credits": {
+    "url": "https://developer.apple.com/games/game-porting-toolkit/"
+  }
+}

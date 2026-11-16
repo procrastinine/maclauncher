@@ -7,8 +7,10 @@ const { readMachOLoadCommands, assertSystemLibraryClosure } = require("../runtim
 const { systemVersionSync, versionAtLeast } = require("../runtime/bundled-native");
 const Custom = require("../runtime/custom-runtime");
 const run = promisify(execFile);
+const MoltenVKSource=require('../../../runtime-sources/vulkan-driver/khronos-moltenvk.json');
+const {createSourceBackedManager}=require('../../../runtime-sources/manager');
 const definitions = {
-  moltenvk: { label: "MoltenVK", sourceName: "MoltenVK", sourceDescription: "MoltenVK releases published by KhronosGroup/MoltenVK.", library: "libMoltenVK.dylib", source: "https://github.com/KhronosGroup/MoltenVK/releases" },
+  moltenvk: { label: MoltenVKSource.label, sourceName: MoltenVKSource.labels.source, library: MoltenVKSource.layout.entry, source: MoltenVKSource.credits.url+'/releases' },
   kosmickrisp: { label: "KosmicKrisp", sourceName: "KosmicKrisp (LWJGL build)", sourceDescription: "KosmicKrisp Vulkan drivers published by LWJGL.", library: "libvulkan_kosmickrisp.dylib", source: "https://www.lwjgl.org/browse/release" }
 };
 
@@ -19,16 +21,14 @@ function inspect(file, { architecture = process.arch, macOSVersion = systemVersi
 // The macOS package keeps its current name. A renamed or repackaged one is
 // matched by platform word and archive type; other Apple platforms and debug
 // files are not the macOS library.
-const MOLTENVK_ARCHIVE = /^MoltenVK.*\.(?:tar(?:\.(?:gz|xz|bz2))?|tgz|txz|zip)$/i;
-const OTHER_PLATFORM = /(?:^|[-_.])(?:ios|tvos|visionos|xros|watchos|linux|windows|riscv\d*|debug|symbols?|dsym)(?:[-_.]|$)/i;
 function moltenvkAsset(assets) {
-  const candidates = (assets || []).filter(item => MOLTENVK_ARCHIVE.test(item?.name || "") && !OTHER_PLATFORM.test(item.name));
+  const candidates = (assets || []).filter(item => MoltenVKSource.assets.some(rule=>new RegExp(rule.match).test(item?.name||'')));
   return candidates.find(item => item.name === "MoltenVK-macos.tar") || candidates.find(item => /mac|osx|darwin|universal/i.test(item.name)) ||
     candidates.find(item => /(?:^|[-_.])all(?:[-_.]|$)/i.test(item.name));
 }
 // Every MoltenVK release with a macOS package; its macOS floor is read from the
 // library at installation.
-const moltenvk = Upstream.github({ repository: "KhronosGroup/MoltenVK", allArchitectures: true, recognize: release => {
+const moltenvk = Upstream.github({ repository: MoltenVKSource.discover.repo, allArchitectures: true, recognize: release => {
   const version = String(release.tag_name || "").replace(/^v(?=\d)/, ""), asset = moltenvkAsset(release.assets);
   return asset ? { version, label: "MoltenVK " + version, assets: [asset] } : { version, installReason: "This release has no macOS package." };
 } });
@@ -122,6 +122,7 @@ function createManager(backend, dependencies = {}) {
      id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source, sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription,
     nativeLibrary: true,
     ...(backend === "kosmickrisp" ? { formatVersionLabel: (pin, installed) => pin ? [installed?.translator?.version, `LWJGL package ${pin.upstreamTag || pin.version}`].filter(Boolean).join(" · ") : undefined } : {}),
+    ...(backend==='moltenvk'?{verifyArtifact:options=>require('../../../runtime-adapters/publisher-verification').verifyPublisher(MoltenVKSource,options)}:{}),
     inspectRuntime(options) {
       const metadata = options.runtimeInstallationMetadata;
       if (metadata?.translator) {
@@ -190,7 +191,8 @@ function createManager(backend, dependencies = {}) {
         macosFloor: descriptions.map(item => item.macosFloor).filter(Boolean).sort(require("../runtime/translator-description").compareVersions).at(-1) || null };
       return { ...inspected, translator, translatorRoot: translator.root };
   } });
-  return Component.withIncludedReferences(result);
+  const backendManager=Component.withIncludedReferences(result);
+  return backend==='moltenvk'?createSourceBackedManager({source:MoltenVKSource,adapter:require('../../../runtime-adapters/vulkan-driver'),backend:backendManager}):backendManager;
 }
 const managers = Object.keys(definitions).map(backend => createManager(backend));
 module.exports = { managers, definitions, createManager, inspect, moltenvkAsset, findFile, sources: { moltenvk, kosmickrisp }, loaderSource };

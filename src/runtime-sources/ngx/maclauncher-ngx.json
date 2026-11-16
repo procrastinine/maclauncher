@@ -1,0 +1,41 @@
+{
+  "id": "maclauncher-ngx",
+  "kind": "ngx",
+  "label": "Vulkan DLSS forwarding",
+  "order": 6,
+  "manager": {
+    "id": "vkd3d-proton",
+    "engine": "vkd3d-proton",
+    "sectionId": "builds",
+    "sectionLabel": "Vulkan DLSS forwarding",
+    "memberOrder": 6
+  },
+  "discover": {
+    "type": "builds-catalog",
+    "catalog": "https://github.com/procrastinine/maclauncher-builds"
+  },
+  "assets": [
+    {
+      "match": ".*",
+      "declares": {
+        "pe": [
+          "x86_64"
+        ]
+      },
+      "interfaces": {
+        "requires": [
+          "api:vulkan"
+        ]
+      }
+    }
+  ],
+  "verify": [],
+  "layout": {
+    "type": "archive",
+    "entry": "x64/nvngx.dll"
+  },
+  "license": "LGPL-2.1-or-later AND MIT",
+  "credits": {
+    "url": "https://github.com/metalsharp/VKD3D-Proton-MacOS"
+  }
+}

@@ -9,8 +9,10 @@ const Requirements = require("../runtime/feature-requirements");
 const Host = require("../runtime/host-capabilities");
 
 function unavailableReason(backend, dependencies) {
-  if (backend !== "kosmickrisp" && backend !== managed.projectId) return null;
-  const support = Requirements.requirementSupport(Requirements.METAL4, dependencies.hostCapabilities || Host.getHostCapabilities());
+  const source=require('../../../runtime-sources').loadSources().find(source=>source.kind==='vulkan-driver'&&(source.manager.engine===backend||source.manager.id===backend));
+  const requirements=source&&require('../../../runtime-sources/requirements').feature(source);
+  if(!requirements)return null;
+  const support = Requirements.requirementSupport(requirements, dependencies.hostCapabilities || Host.getHostCapabilities());
   return support.supported === false ? support.reason : null;
 }
 // The Intel KosmicKrisp offer names its build. Settings entries share their
@@ -227,9 +229,9 @@ function kosmicKrispOffer(context, dependencies = {}) {
 }
 function environment(selection, directory) {
   if (!selection) return {};
-  const env = { KL_MVK_DYLIB: selection.library };
-  if (selection.backend === "kosmickrisp") Object.assign(env, driverEnvironment(selection, directory));
-  return env;
+  return require('../../../runtime-adapters/vulkan-driver').apply({build:{root:selection.root},parts:selection,
+    parameters:{directory,apiVersion:apiVersion(selection),driverEnvironment:selection.library!==selection.driver,
+      environmentBindings:{KL_MVK_DYLIB:'library'}}}).environment;
 }
 // Every route that points the Vulkan loader at a driver writes its manifest
 // here. A driver's own ICD manifest is used as published. A driver without one,
@@ -237,16 +239,17 @@ function environment(selection, directory) {
 // driver's Vulkan API version from that manifest, and a 1.0 declaration hides
 // KosmicKrisp's Vulkan 1.1+ features (for example shaderDrawParameters) from
 // DXVK, so KosmicKrisp is declared as Vulkan 1.4.
-function driverEnvironment({ driver, icd, backend }, directory) {
-  const apiVersion = backend === 'kosmickrisp' ? '1.4.0' : '1.0.0';
-  const descriptor = icd ? JSON.parse(fs.readFileSync(icd, 'utf8')) : { file_format_version: '1.0.0', ICD: { api_version: apiVersion } };
-  driver ||= icd && path.resolve(path.dirname(icd), descriptor.ICD.library_path);
-  if (!path.isAbsolute(driver || '') || !fs.statSync(driver).isFile()) throw new Error('The selected Vulkan driver is missing.');
-  descriptor.ICD = { ...descriptor.ICD, library_path: driver, is_portability_driver: false };
-  const file = path.join(directory, 'vulkan-icd.json');
-  const text = JSON.stringify(descriptor) + '\n';
-  if (!fs.existsSync(file) || fs.lstatSync(file).isSymbolicLink() || fs.readFileSync(file, 'utf8') !== text)
-    require('../writable-input').atomicWrite(file, text, { root: directory });
-  return { VK_DRIVER_FILES: file, VK_ICD_FILENAMES: file };
+function apiVersion(selection) {
+  if(selection.apiVersion)return selection.apiVersion;
+  const source=require('../../../runtime-sources').loadSources().find(source=>source.kind==='vulkan-driver'&&source.manager.engine===selection.backend);
+  const token=source?.interfaces?.provides?.find(token=>token.startsWith('vulkan:'));
+  if(!token)return undefined;
+  const parts=token.slice(7).split('.');while(parts.length<3)parts.push('0');return parts.join('.');
+}
+function driverEnvironment(selection, directory) {
+  const descriptor=selection.icd&&JSON.parse(fs.readFileSync(selection.icd,'utf8'));
+  const driver=selection.driver||(selection.icd&&path.resolve(path.dirname(selection.icd),descriptor.ICD.library_path));
+  return require('../../../runtime-adapters/vulkan-driver').apply({build:{root:selection.root},parts:{...selection,driver},
+    parameters:{directory,apiVersion:apiVersion(selection)}}).environment;
 }
 module.exports = { installed, choices, resolve, requirements, kosmicKrispOffer, environment, driverEnvironment };

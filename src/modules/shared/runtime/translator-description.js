@@ -19,7 +19,12 @@ function copyDescription(value) {
 // Ordinary runtime managers expose these descriptions through their installed
 // records. Paths refer to installed files, never to a second translator cache.
 const COMPONENTS = Object.freeze(['d3d-renderer', 'vulkan-driver', 'd3d12', 'video']);
-const ENGINES = Object.freeze(['d3dmetal', 'dxmt', 'dxvk', 'wined3d', 'moltenvk', 'kosmickrisp', 'vkd3d-proton', 'gstreamer']);
+const sourceDeclarations = require('../../../runtime-sources').loadSources();
+const engineKinds = new Map(sourceDeclarations.flatMap(source => [
+  ...(source.manager?.engine ? [[source.manager.engine, source.kind]] : []),
+  ...(source.embeds || []).filter(embed => embed.engine).map(embed => [embed.engine, embed.kind])
+]));
+const ENGINES = Object.freeze([...engineKinds.keys()]);
 const FORMS = Object.freeze(['builtin', 'native', 'icd', 'dylib']);
 
 /**
@@ -204,7 +209,9 @@ function inspectDescription(root, { engine, source, version, component, id, apis
     }
   }
   visit(root);
-  component ||= ['moltenvk', 'kosmickrisp'].includes(engine) ? 'vulkan-driver' : engine === 'vkd3d-proton' ? 'd3d12' : engine === 'gstreamer' ? 'video' : 'd3d-renderer';
+  const kind = engineKinds.get(engine), observedApis = apisForFiles(files);
+  component ||= kind === 'vulkan-driver' ? 'vulkan-driver' : kind === 'media' ? 'video'
+    : observedApis.includes('Direct3D 12') && !observedApis.some(api => ['Direct3D 8','Direct3D 9','Direct3D 10','Direct3D 10.1','Direct3D 11'].includes(api)) ? 'd3d12' : 'd3d-renderer';
   form ||= component === 'vulkan-driver' ? 'icd' : component === 'video' ? 'dylib' : 'builtin';
   const pe = files.find(file => file.format === 'pe');
   if (component !== 'vulkan-driver' && component !== 'video') form = pe?.form || form;

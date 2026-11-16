@@ -1,0 +1,57 @@
+{
+  "id": "vkd3d-proton-upstream",
+  "kind": "d3d-translator",
+  "label": "vkd3d-proton",
+  "order": 0,
+  "manager": {
+    "id": "translator-vkd3d-proton",
+    "sectionId": "upstream",
+    "engine": "vkd3d-proton",
+    "memberOrder": 3,
+    "sectionLabel": "vkd3d-proton"
+  },
+  "discover": {
+    "type": "github-releases",
+    "repo": "HansKristian-Work/vkd3d-proton",
+    "includePrereleases": true,
+    "component": null
+  },
+  "assets": [
+    {
+      "match": ".*\\.(?:[zZ][iI][pP]|[tT][aA][rR]\\.[gG][zZ]|[tT][gG][zZ]|[tT][aA][rR]\\.[xX][zZ]|[tT][aA][rR]\\.[zZ][sS][tT]|[tT][xX][zZ]|[tT][aA][rR]\\.[bB][zZ]2|[tT][bB][zZ]2|[dD][mM][gG]|[tT][aA][rR]|[pP][kK][gG])$",
+      "declares": {
+        "pe": [
+          "i386",
+          "x86_64"
+        ]
+      },
+      "parts": [
+        {
+          "path": "vkd3d-proton",
+          "name": "component-root",
+          "optional": true
+        }
+      ]
+    }
+  ],
+  "verify": [
+    {
+      "type": "github-asset-digest"
+    }
+  ],
+  "layout": {
+    "type": "archive"
+  },
+  "interfaces": {
+    "requires": [
+      "api:vulkan"
+    ]
+  },
+  "labels": {
+    "source": "vkd3d-proton"
+  },
+  "license": "LGPL-2.1-or-later",
+  "credits": {
+    "url": "https://github.com/HansKristian-Work/vkd3d-proton"
+  }
+}

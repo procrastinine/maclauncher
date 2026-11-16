@@ -7,6 +7,9 @@ const { createPinnedNativeManager, upstreamPins, withDescription } = require('..
 const { createProjectBuildManager } = require('../../shared/runtime/project-build-manager');
 const Upstream = require('../../shared/runtime/upstream');
 const { archiveFormat } = require('../../shared/runtime/release-files');
+const {createSourceBackedManager}=require('../../../runtime-sources/manager');
+const NVAPI_SOURCE=require('../../../runtime-sources/nvapi/dxvk-nvapi.json');
+const NGX_SOURCE=require('../../../runtime-sources/ngx/maclauncher-ngx.json');
 
 // Resolve ordinary managed packages. Refresh/consented Install owns network I/O.
 function findLibrary(root, name, inspect = readPeExports) {
@@ -27,31 +30,35 @@ function findLibrary(root, name, inspect = readPeExports) {
   return matches[0];
 }
 function createManagers(dependencies = {}) {
-  const source = Upstream.github({ repository: 'jp7677/dxvk-nvapi', allArchitectures: true,
+  const source = Upstream.github({ repository: NVAPI_SOURCE.discover.repo, allArchitectures: true,
     recognize: release => (release.assets || []).filter(asset => archiveFormat(asset.name)).map(asset => ({
       version: release.tag_name.replace(/^v/, ''), architecture: 'universal', assets: [asset]
     })) });
-  const nvapi = createPinnedNativeManager({ id: 'dxvk-nvapi', label: 'DXVK-NVAPI', nativeLibrary: true, customRuntime: false,
-    sourceUrl: 'https://github.com/jp7677/dxvk-nvapi/releases', upstreamUrl: 'https://github.com/jp7677/dxvk-nvapi',
+  const nvapi = createPinnedNativeManager({ id: NVAPI_SOURCE.manager.id, label: NVAPI_SOURCE.label, nativeLibrary: true, customRuntime: false,
+    sourceUrl: NVAPI_SOURCE.credits.url+'/releases', upstreamUrl: NVAPI_SOURCE.credits.url,
     discoverCatalog: async options => upstreamPins(await source.discover(options)),
+    verifyArtifact:options=>require('../../../runtime-adapters/publisher-verification').verifyPublisher(NVAPI_SOURCE,options),
     resolveExecutable(root) { const file = findLibrary(root, 'nvapi64.dll'); if (!file) throw Error('The DXVK-NVAPI package has no unique x64 library.'); return file; },
     inspectRuntime({ runtimePath, runtimeVersion, upstreamRevision }) {
       if (readPeExports(runtimePath)?.machine !== 0x8664) throw Error('DXVK-NVAPI requires its x64 Windows library.');
       return { executablePath: runtimePath, architectures: ['x86_64'], runtimeVersion, upstreamRevision, needsRosetta: false };
     }, dependencies });
-  const ngx = createProjectBuildManager({ projectId: 'vkd3d-proton', label: 'Vulkan DLSS forwarding', nativeLibrary: true,
-    repository: 'procrastinine/maclauncher-builds', upstreamUrl: 'https://github.com/metalsharp/VKD3D-Proton-MacOS',
-    manifestRelative: 'manifest.json', sourceRelative: 'source.json', executableRelative: 'x64/nvngx.dll',
+  const ngx = createProjectBuildManager({ projectId: NGX_SOURCE.manager.id, label: NGX_SOURCE.label, nativeLibrary: true,
+    repository: new URL(NGX_SOURCE.discover.catalog).pathname.slice(1), upstreamUrl: NGX_SOURCE.credits.url,
+    manifestRelative: 'manifest.json', sourceRelative: 'source.json', executableRelative: NGX_SOURCE.layout.entry,
     async verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); },
     inspectRuntime({ runtimePath }) { if (readPeExports(runtimePath)?.machine !== 0x8664) throw Error('The NGX core requires x64.'); return { executablePath: runtimePath, architectures: ['x86_64'], needsRosetta: false }; }, dependencies });
-  ngx.translatorEngine='vkd3d-proton'; // The managed package also supplies its matched carrier producer as a normal translator choice.
+  ngx.translatorEngine=NGX_SOURCE.manager.engine;
   // Both rows sit beside DXVK and vkd3d-proton in DirectX → Vulkan.
   const info = {
     'dxvk-nvapi': "DXVK-NVAPI's nvapi64.dll. It presents an NVIDIA adapter to a Windows game that uses DXVK, so that the game's DLSS integration can start. Play offers it, after consent, with Vulkan DLSS forwarding.",
     'vkd3d-proton': "The NGX core, nvngx.dll, from MacLauncher Builds' VKD3D-Proton-MacOS package. It forwards a Windows game's DLSS inputs to the selected Vulkan driver's temporal carrier. Play offers it, after consent, with DXVK-NVAPI."
   };
-  return [nvapi, ngx].map((manager, index) => ({ ...withDescription(manager, info[manager.id]), distributionRequired: false,
-    ui: { groupId: 'directx-vulkan', sectionLabel: manager.label, memberOrder: 5 + index, management: 'managed' } }));
+  return [nvapi, ngx].map((manager, index) => {
+    const source=[NVAPI_SOURCE,NGX_SOURCE][index];
+    return createSourceBackedManager({source,adapter:require('../../../runtime-adapters/'+source.kind),backend:{...withDescription(manager, info[manager.id]),distributionRequired:false,
+      ui:{sectionLabel:manager.label,memberOrder:source.manager.memberOrder,management:'managed'}}});
+  });
 }
 const managers = createManagers();
 const carrierFiles=new Map();
