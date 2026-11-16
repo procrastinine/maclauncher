@@ -149,6 +149,8 @@ test("the view's DXMT runtime folder links the runtime's files and holds the lay
   assert.match(read("src/modules/crossover/sources/wine-graphics.js"), /\.\.\.\(runtimeLibraryRoot \? \{ DXMT_RUNTIME_DIR: runtimeLibraryRoot \} : \{\}\)/);
   assert.match(read("src/modules/crossover/sources/wine-launch.js"), /graphics\.inProcessGraphics && environment\.DYLD_INSERT_LIBRARIES\) environment\.MACLAUNCHER_GRAPHICS_LIBRARIES = environment\.DYLD_INSERT_LIBRARIES/);
   assert.match(read("src/core/launcher.js"), /if \(graphicsInProcess === true\) \{releaseCopy\(target\);return original;\}/);
+  // An instrumented launch (processAdapter) checks graphics again; 0542 made a private copy there when the second check lost the route.
+  assert.match(read("src/core/launcher.js"), /const graphicsTarget = Object\.fromEntries\(\["graphicsExecutable", "graphicsUnavailable", "graphicsInProcess"\]/);
   assert.match(read("src/modules/shared/reshade/native/CMakeLists.txt"), /add_library\(maclauncher-winemetal SHARED src\/winemetal-layer\.c\)/);
   assert.match(read("src/modules/shared/reshade/native/winemetal-runtime.tbd"), /install-name:\s+'@loader_path\/winemetal-runtime\.so'/);
 });

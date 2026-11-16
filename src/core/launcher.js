@@ -596,7 +596,10 @@ function createLauncher({
       }
       options = { ...options, env: await context.applyGameEnvironment(options?.env, { gameArguments: options?.gameArguments, needsRosetta }),
         networkIsolation: context.networkAllowed === false, networkSteamClient: context.steamClientConnection === true };
-      const graphicsTarget = Object.hasOwn(options, "graphicsExecutable") ? {graphicsExecutable: options.graphicsExecutable} : {};
+      // The adapter's launch checks graphics again for the same program, with
+      // the same route facts that the plan gave the first check.
+      const graphicsTarget = Object.fromEntries(["graphicsExecutable", "graphicsUnavailable", "graphicsInProcess"]
+        .filter(key => Object.hasOwn(options, key)).map(key => [key, options[key]]));
       ({ command: cmd, args, options } = await preflightGameGraphics(cmd, args, options));
       context.signal?.throwIfAborted();
       // Instrumentation wraps the same final handoff used by Play and the CLI.
