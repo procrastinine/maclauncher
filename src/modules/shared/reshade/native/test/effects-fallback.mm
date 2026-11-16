@@ -22,6 +22,7 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <mutex>
 #include <optional>
 #include <thread>
 #include <unistd.h>
@@ -41,6 +42,11 @@ bool shaderBusy=false;unsigned afterBusyCalls=0;
 void *lastShaderTarget=nullptr;
 std::atomic<bool> delayedPrepareStarted=false,releaseDelayedPrepare=false,delayedPrepareFinished=false;
 uint32_t temporalProbeStatus=RS_TEMPORAL_OK,temporalEncodeStatus=RS_TEMPORAL_FAILED;
+// A pending temporal row's readiness query re-sends the frame its provider
+// was first asked to prepare. Weak references record that frame's objects
+// without keeping them alive; each later query must still find every one.
+std::mutex pendingMutex;bool trackPending=false,pendingRecorded=false;unsigned pendingQueries=0;
+std::chrono::steady_clock::time_point pendingSince;__weak id pendingObjects[3];
 void stamp(macfx::ShaderFrame &frame,uint64_t id){
     expectedFrameId=frame.frameId=id;frame.timeMs=id*12.5;frame.frameTimeMs=12.5f;
     frame.origin=expectedOrigin;frame.color=expectedColor;frame.opaqueDisplay=expectedOpaque;
@@ -113,13 +119,13 @@ std::vector<unsigned char> readPixels(id<MTLTexture> output){std::vector<unsigne
 void verify(id<MTLTexture> output,unsigned alpha=64,unsigned red=140,bool gradient=true){const auto pixels=readPixels(output);for(unsigned i=0;i<pixels.size();i+=4)assert(pixels[i+1]==255&&pixels[i+2]==red&&pixels[i+3]==alpha);if(gradient)assert(pixels[0]<=20&&pixels[(output.height-1)*output.width*4]>=100);}
 // Poll the production nonblocking preparation seam. Each observation owns a
 // fresh unsubmitted buffer; no pending candidate is ever encoded or committed.
-macfx::EffectExecutionSelection prepared(macfx::EffectPlanExecutor &executor,const macfx::ShaderFrame &frame,bool presentation=false,const RSTemporalFrame *temporal=nullptr,macfx::ImageColorSpace color=macfx::ImageColorSpace::LegacySDR){
+macfx::EffectExecutionSelection prepared(macfx::EffectPlanExecutor &executor,const macfx::ShaderFrame &frame,bool presentation=false,const RSTemporalFrame *temporal=nullptr,macfx::ImageColorSpace color=macfx::ImageColorSpace::LegacySDR,const macfx::ImageColorDescription *description=nullptr){
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(8);
     for(;;){@autoreleasepool{
         auto observation=frame;observation.commands=[frame.commands.commandQueue commandBuffer];assert(observation.commands);
         auto scene=temporal?std::optional<RSTemporalFrame>(*temporal):std::nullopt;
         if(scene)scene->commandBuffer=(__bridge void*)observation.commands;
-        auto selected=executor.prepareWithColor(observation,presentation,scene?&*scene:nullptr,color);
+        auto selected=description?executor.prepareWithColorDescription(observation,presentation,scene?&*scene:nullptr,color,*description):executor.prepareWithColor(observation,presentation,scene?&*scene:nullptr,color);
         assert(observation.commands.status<MTLCommandBufferStatusCommitted);
         if(!selected.preparing)return selected;
         if(std::chrono::steady_clock::now()>=deadline){std::fprintf(stderr,"Async preparation timed out: %s\n",selected.error.c_str());std::_Exit(1);}
@@ -521,6 +527,27 @@ int temporalFallback(NSString *directory,NSString *path,id<MTLDevice> device,id<
     [window close];
     assert([[NSFileManager defaultManager]removeItemAtPath:directory error:nil]);std::puts("ordered temporal fallback: missing/unavailable scene row isolated, live replacement adopted with that row bypassed, partial failure overwritten, downstream pixels/extent/frame metadata preserved, typed shader/temporal busy kept previous image and recovered, renderer receipts ran each row once per final image through a scene, two refused frames and the scene stopping");return 0;
 }
+// A busy resource-only probe stores the temporal row's frame in the pending
+// snapshot's readiness query. With canonical linear opaque color no color
+// island owns the row's images: the frame alone names the build's scene copy
+// and row output. They outlive the build for every later query, then the row
+// adopts.
+int pendingTemporalLifetime(NSString *directory,NSString *path,id<MTLDevice> device,id<MTLCommandQueue> queue){
+    temporalFixture=true;temporalProbeStatus=RS_TEMPORAL_BUSY;temporalEncodeStatus=RS_TEMPORAL_OK;{std::lock_guard guard(pendingMutex);trackPending=true;}
+    auto descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA16Float width:8 height:8 mipmapped:NO];
+    descriptor.storageMode=MTLStorageModeShared;descriptor.usage=MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite|MTLTextureUsageRenderTarget;
+    auto input=[device newTextureWithDescriptor:descriptor];descriptor.width=descriptor.height=16;auto output=[device newTextureWithDescriptor:descriptor];assert(input&&output);
+    publishNodes(path,@"a",@[@{@"id":@"scene",@"kind":@"temporal",@"enabled":@YES,@"method":@"fsr2",@"settings":@{}}]);
+    auto commands=[queue commandBuffer];macfx::ShaderFrame frame{commands,input,output};stamp(frame,1);
+    RSTemporalFrame scene{};scene.size=sizeof(scene);scene.version=1;scene.commandBuffer=(__bridge void*)commands;scene.color=(__bridge void*)input;scene.output=(__bridge void*)output;scene.frameId=frame.frameId;scene.frameTimeMs=frame.frameTimeMs;scene.renderWidth=scene.renderHeight=8;scene.outputWidth=scene.outputHeight=16;
+    auto linear=macfx::describeImageColor(macfx::ImageColorSpace::LinearSRGB);linear.alpha=macfx::ColorAlpha::Opaque;
+    macfx::EffectPlanExecutor executor;const auto selected=prepared(executor,frame,true,&scene,macfx::ImageColorSpace::LinearSRGB,&linear);
+    unsigned queries;{std::lock_guard guard(pendingMutex);queries=pendingQueries;assert(pendingRecorded&&!trackPending);}
+    if(!selected.execution||!selected.execution->hasTemporal()||!queries)std::fprintf(stderr,"pending temporal row: execution=%d temporal=%d queries=%u error=%s\n",int(bool(selected.execution)),int(selected.execution&&selected.execution->hasTemporal()),queries,selected.error.c_str());
+    assert(selected.execution&&selected.execution->hasTemporal()&&queries);
+    assert([[NSFileManager defaultManager]removeItemAtPath:directory error:nil]);
+    std::printf("pending temporal row: %u readiness queries found the stored frame's command buffer, scene copy and output alive, then the row was adopted\n",queries);return 0;
+}
 }
 namespace macfx {std::shared_ptr<ShaderNode> makeShaderNode(const ShaderSpec &spec){auto value=std::make_shared<Shader>(spec.selection.file);lastShader[spec.selection.file]=value;++shaderCreates[spec.selection.file];if(capturedShaders)capturedShaders->push_back(value);return value;}}
 // The executor reaches providers through macfx::prepareTemporalProvider (the
@@ -710,6 +737,12 @@ int packedFloatScene(NSString *path,id<MTLDevice> device,id<MTLCommandQueue> que
 static int controlledTemporal(const RSTemporalFrame *frame,RSTemporalResult *result,bool probe){
     assert(frame&&result&&frame->owner&&frame->commandBuffer&&frame->color&&frame->output);assert(frame->frameId==expectedFrameId&&frame->frameTimeMs==12.5f);
     assert(frame->renderWidth==8&&frame->renderHeight==8&&frame->outputWidth==16&&frame->outputHeight==16&&!frame->depth&&!frame->motion);
+    if(probe){std::lock_guard guard(pendingMutex);if(trackPending){
+        const std::array<void*,3> named{frame->commandBuffer,frame->color,frame->output};const char *labels[]={"command buffer","color","output"};
+        if(!pendingRecorded){for(size_t i=0;i<named.size();++i)pendingObjects[i]=(__bridge id)named[i];pendingRecorded=true;pendingSince=std::chrono::steady_clock::now();}
+        else{for(size_t i=0;i<named.size();++i)if(!pendingObjects[i]){std::fprintf(stderr,"pending temporal query %u: the stored frame's %s was released\n",pendingQueries+1,labels[i]);assert(pendingObjects[i]);}
+            ++pendingQueries;if(std::chrono::steady_clock::now()-pendingSince>=std::chrono::milliseconds(100)){trackPending=false;temporalProbeStatus=RS_TEMPORAL_OK;}}
+    }}
     const auto status=probe?temporalProbeStatus:temporalEncodeStatus;if(probe)++temporalProbeCalls;else ++temporalCalls;
     result->status=status;result->encoded=status==RS_TEMPORAL_OK;
     std::snprintf(result->reason,sizeof(result->reason),"Controlled temporal %s",status==RS_TEMPORAL_BUSY?"busy":status==RS_TEMPORAL_UNAVAILABLE?"initialization failure":"encode failure");
@@ -747,11 +780,12 @@ int main(int argc,char **argv){@autoreleasepool{
     phase.argv[1]=phase.argv[0];argc=phase.argc-1;argv=phase.argv+1;
     const bool generation=argc==3&&!std::strcmp(argv[1],"--generation-geometry");
     const bool fsr=argc==2&&!std::strcmp(argv[1],"--fsr-scratch");
-    assert(argc==1||generation||fsr||(argc==2&&(!std::strcmp(argv[1],"--temporal-fallback")||!std::strcmp(argv[1],"--packed-float-scene")||!std::strcmp(argv[1],"--memory-color-fallback")||!std::strcmp(argv[1],"--candidate-geometry")||!std::strcmp(argv[1],"--origin-contract")||!std::strcmp(argv[1],"--scene-generation"))));
+    assert(argc==1||generation||fsr||(argc==2&&(!std::strcmp(argv[1],"--temporal-fallback")||!std::strcmp(argv[1],"--pending-temporal-lifetime")||!std::strcmp(argv[1],"--packed-float-scene")||!std::strcmp(argv[1],"--memory-color-fallback")||!std::strcmp(argv[1],"--candidate-geometry")||!std::strcmp(argv[1],"--origin-contract")||!std::strcmp(argv[1],"--scene-generation"))));
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(generation||fsr?30:10)*NSEC_PER_SEC),dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{std::fputs("Ordered fallback check timed out\n",stderr);std::_Exit(2);});
     auto device=MTLCreateSystemDefaultDevice();auto queue=[device newCommandQueue];assert(device&&queue);
     if(generation)return generationGeometry(directory,path,device,queue,@(argv[2]));
     if(argc==2&&!std::strcmp(argv[1],"--temporal-fallback"))return temporalFallback(directory,path,device,queue);
+    if(argc==2&&!std::strcmp(argv[1],"--pending-temporal-lifetime"))return pendingTemporalLifetime(directory,path,device,queue);
     if(argc==2&&!std::strcmp(argv[1],"--packed-float-scene"))return packedFloatScene(path,device,queue);
     if(fsr)return fsrScratch(directory,path,device,queue);
     auto d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:32 height:24 mipmapped:NO];d.storageMode=MTLStorageModeShared;d.usage=MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite|MTLTextureUsageRenderTarget;
