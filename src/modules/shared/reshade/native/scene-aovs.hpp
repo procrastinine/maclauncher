@@ -42,6 +42,9 @@ int bindSceneAovLease(const RSTemporalFrame&,const std::shared_ptr<const SceneAo
 // The producer's interface layer for this presented frame, or nil when none
 // (or more than one ambiguous layer) matches the device and exact size.
 id<MTLTexture>sceneUILayer(uint64_t frameId,id<MTLDevice>,NSUInteger width,NSUInteger height);
+// The size of a layer registered for the frame, whatever its size or device,
+// so a layer that does not match the scene image can be reported.
+bool sceneUILayerSize(uint64_t frameId,NSUInteger&width,NSUInteger&height);
 // Only for an already-recorded full-image, same-format byte copy. It cannot
 // authorize a split after a shader, color conversion, crop or other transform.
 std::shared_ptr<const SceneAovLease>copiedSceneAovLease(const std::shared_ptr<const SceneAovLease>&,id<MTLTexture>source,id<MTLTexture>target);

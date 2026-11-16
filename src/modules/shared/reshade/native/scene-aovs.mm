@@ -127,6 +127,11 @@ id<MTLTexture>sceneUILayer(uint64_t frameId,id<MTLDevice>device,NSUInteger width
  if(!frameId)return nil;std::lock_guard guard(uiLock);id<MTLTexture>found=nil;
  for(const auto&layer:uiLayers){id<MTLTexture>texture=layer.texture;if(layer.owner&&layer.frameId==frameId&&texture&&texture.device==device&&texture.width==width&&texture.height==height){if(found&&found!=texture)return nil;found=texture;}}
  return found;}
+bool sceneUILayerSize(uint64_t frameId,NSUInteger&width,NSUInteger&height){
+ if(!frameId)return false;std::lock_guard guard(uiLock);
+ for(const auto&layer:uiLayers){id<MTLTexture>texture=layer.texture;if(layer.owner&&layer.frameId==frameId&&texture){width=texture.width;height=texture.height;return true;}}
+ return false;
+}
 std::optional<RSSceneAovs>validatedSceneAovs(const RSSceneAovs&input,id<MTLDevice>device){if(input.size!=sizeof(input)||input.version!=1)return {};const auto value=sanitizeHud(input,device);return valid(value,device)?std::optional<RSSceneAovs>(value):std::nullopt;}
 std::shared_ptr<SceneAovLease>captureSceneAovs(const RSSceneAovs&input,id<MTLDevice>device){const auto value=validatedSceneAovs(input,device);return value?capture(*value,device):nullptr;}
 SceneAovLease::~SceneAovLease(){if(retirement.retired){const auto observer=retirement;const auto frame=value.frameId,view=value.viewId,epoch=value.epoch;dispatch_async(retirementQueue(),^{observer.retired(observer.context,frame,view,epoch);});}}

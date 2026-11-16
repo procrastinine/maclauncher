@@ -816,7 +816,8 @@ ShaderResult EffectExecution::bindSceneImage(id<MTLCommandBuffer>commands,id<MTL
     if(result->matrices&&rsBindTemporalSceneMatrices(&actual,&*result->matrices)!=RS_TEMPORAL_OK)return {false,"The final image camera matrices could not be retained"};
     if(source->aovs){if(bindSceneAovLease(actual,source->aovs)!=RS_TEMPORAL_OK)return {false,"The final image attachments could not be retained"};result->aovs=temporalSceneAovs(actual);}
     result->interfaceLayer=source->interfaceLayer;
-    if(rsGetSceneUILayerDemand(1)){if(auto layer=sceneUILayer(source->frame.frameId,commands.device,colour.width,colour.height)){if(auto copied=HudSplitEncoder::forDevice(commands.device)->snapshot(commands,layer))result->interfaceLayer=std::move(copied);else reportInterfaceLayer("unavailable: the interface layer could not be copied");}}
+    if(rsGetSceneUILayerDemand(1)){if(auto layer=sceneUILayer(source->frame.frameId,commands.device,colour.width,colour.height)){if(auto copied=HudSplitEncoder::forDevice(commands.device)->snapshot(commands,layer))result->interfaceLayer=std::move(copied);else reportInterfaceLayer("unavailable: the interface layer could not be copied");}
+        else if(NSUInteger width=0,height=0;sceneUILayerSize(source->frame.frameId,width,height)&&(width!=colour.width||height!=colour.height))reportInterfaceLayer("unavailable: the interface layer is "+std::to_string(width)+"x"+std::to_string(height)+" and the scene image is "+std::to_string(colour.width)+"x"+std::to_string(colour.height));}
     bindMetalFxGenerationResources(actual,source->frame);normalized=std::move(result);return {true,{}};
 }catch(const std::exception&error){return {false,error.what()};}}
 ShaderResult EffectExecution::bindGenerationScene(id<MTLCommandBuffer>commands,size_t index,id<MTLTexture>colour,const std::shared_ptr<const EffectSceneLease>&lease,FrameOrigin origin,id<MTLTexture>copiedFrom){try{
