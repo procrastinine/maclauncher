@@ -577,6 +577,23 @@ test("a runtime whose game process refuses the layer gets no private copy and st
   assert.deepEqual(released, [[f.directory, f.app]], "a copy left by an earlier launch is released");
 });
 
+test("an instrumented launch keeps a runtime's in-process graphics route and makes no private copy", async t => {
+  // 0542: MetalSharp Wine loads the layer inside the game's process; the process adapter's second
+  // graphics check lost that route, took the DYLD route again and copied the Wine launcher.
+  const f = launcherFixture(t), copies = [], handoffs = [];
+  t.mock.method(NativeApplication, "prepareCopy", async request => { copies.push(request.unit); throw new Error("no copy for an in-process route"); });
+  t.mock.method(NativeApplication, "releaseCopy", async () => true);
+  const context = f.launcher.getGameLaunchContext(f.entry(true), {}, {
+    processAdapter: (command, args, options, translation, launch) => { handoffs.push(command); return launch(command, args, options, translation); } });
+  await context.spawnDetachedChecked(f.executable, [], { cwd: path.dirname(f.executable), env: {}, graphicsInProcess: true });
+  assert.deepEqual(handoffs, [f.executable]);
+  assert.deepEqual(copies, []);
+  assert.equal(f.spawned[0].command, f.executable);
+  assert.equal(Object.hasOwn(f.spawned[0].options, "graphicsInProcess"), false);
+  assert.equal(f.spawned[0].options.env.RESHADE_EFFECT_PLAN, "/owned/plan");
+  assert.equal(context.graphicsPreparationFailure, undefined);
+});
+
 test("Play with graphics off runs the original and removes a copy it no longer needs", async t => {
   const f = launcherFixture(t), released = [];
   t.mock.method(NativeApplication, "prepareCopy", async () => assert.fail("Graphics off never prepares a copy"));
