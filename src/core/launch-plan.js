@@ -25,10 +25,18 @@ function resolvePlan({target,choices={},builds=[],sources=[],system={},environme
  function* solve(tokens,state,context,trail=new Set()){
   if(!tokens.length){yield state;return;}const [token,...rest]=tokens;
   if(selectedHas(state,token)){yield* solve(rest,state,context,trail);return;}if(trail.has(token))return;const nextTrail=new Set(trail).add(token);
+  const wine=[...state.values()].find(row=>row.role==='wine')?.build,source=sourceOf(wine||{}),delegatedRole=token.startsWith('api:d3d')?token.slice(4):null;
+  if(delegatedRole&&source.selector&&choice(delegatedRole,'d3d-translator')==='automatic'){
+   const next=new Map(state);next.set(delegatedRole,{role:delegatedRole,build:wine,binaries:[],tokens:[token],delegated:{key:source.selector.key,value:source.selector.automatic,reason:`decided by ${source.label} at launch`}});yield* solve(rest,next,context,trail);return;
+  }
   const all=builds.filter(b=>provides(b).includes(token)&&b.kind!=='wine');
   const requested=choice(roleFor(token,all[0]?.kind),all[0]?.kind);
   const ranked=ordered(all,roleFor(token,all[0]?.kind),context,state);
-  if(requested!=='automatic'&&requested!=='inherit')ranked.sort((a,b)=>Number(explicitMatches(b,requested))-Number(explicitMatches(a,requested)));
+  if(requested!=='automatic'&&requested!=='inherit'){
+   const original=builds.find(b=>explicitMatches(b,requested)),wine=[...state.values()].find(row=>row.build.kind==='wine')?.build;
+   const rank=b=>explicitMatches(b,requested)?0:original?.engine&&b.engine===original.engine&&b.parent===wine?.id?1:2;
+   ranked.sort((a,b)=>rank(a)-rank(b));
+  }
   for(const candidate of ranked){
    const role=roleFor(token,candidate.kind),value=choice(role,candidate.kind),explicit=value!=='automatic'&&value!=='inherit';
    const wanted=all.filter(b=>explicitMatches(b,value));
@@ -50,7 +58,7 @@ function resolvePlan({target,choices={},builds=[],sources=[],system={},environme
    if(b.parent&&![...state.values()].some(x=>x.build.id===b.parent)){report(b,'The required parent build is not selected.');continue;}
    const reaches=(b.reach||[]).filter(r=>r.guestFormat===format&&r.guestArch===arch&&r.hostArch===host&&(!integration||r.integration===integration)&&(!r.guestOS||r.guestOS===(format==='pe'?'windows':'darwin'))&&(!r.hostPlatform||r.hostPlatform===(system.platform||'darwin')));
    if(!reaches.length){report(b,`No declared ${format}/${arch} reach for ${host}.`);continue;}
-   for(const reach of reaches){if(format==='macho'&&(!system.rosettaAvailable||reach.integration!=='process')){report(b,'Rosetta is unavailable for this macOS process.');continue;}
+   for(const reach of reaches){if(Object.keys(reach).some(key=>!['guestFormat','guestArch','guestOS','hostPlatform','hostArch','integration','requires'].includes(key))){report(b,'The translator reach contains unsupported constraints.');continue;}if(format==='macho'&&(!system.rosettaAvailable||reach.integration!=='process')){report(b,'Rosetta is unavailable for this macOS process.');continue;}
     const ctx={...context,integration:reach.integration,cpuGuest:format==='pe'},parts=select(b,ctx,[],role);if(parts.reason||parts.accepted===false){report(b,parts.reason);continue;}
     const next=new Map(state);next.set(role,{role,build:b,binaries:parts.binaries,reach});
     for(const complete of solve([...requires(b),...(reach.requires||[])],next,ctx))yield{state:complete,integration:reach.integration,build:b};
@@ -62,7 +70,7 @@ function resolvePlan({target,choices={},builds=[],sources=[],system={},environme
   for(const row of state.values())for(const token of [...requires(row.build),...(row.reach?.requires||[])])if(!selectedHas(state,token))return null;
   const merged=new Map();for(const row of state.values()){let c=merged.get(row.build.id);if(!c){c={kind:row.build.kind,source:row.build.source,build:row.build.id,installed:row.build.installed===true,measured:row.build.measured!==false,adapter:getKind(row.build.kind).adapter,binaries:[],roles:[]};merged.set(row.build.id,c);}c.roles.push(row.role);for(const b of row.binaries||[])if(!c.binaries.some(f=>f.path===b.path))c.binaries.push({...structuredClone(b),execution:b.format==='macho'?context.execution:b.format==='pe'&&['arm64ec','arm64x','arm64'].includes(b.machine)&&context.host==='arm64'?'native':context.guestTranslator&&b.machine==='x86_64'?`fex(${context.guestTranslator.id})`:context.execution});}
   const components=[...merged.values()].map(c=>{const executions=[...new Set(c.binaries.map(b=>b.execution))];return{...c,...(executions.length===1?{execution:executions[0]}:{})};});
-  const roles=[...state.values()].filter(r=>!r.role.startsWith('dependency:')).map(row=>{const saved=choice(row.role,row.build.kind),fallback=!explicitMatches(row.build,saved)&&saved!=='automatic'&&saved!=='inherit'?{role:row.role,chosen:saved,used:row.build.id,reason:'Saved selection is unavailable or incompatible.'}:null;if(fallback)fallBacks.push(fallback);return{id:row.role,value:choices[row.role]??choices[row.build.kind]??'automatic',used:{...row.build,binaries:components.find(c=>c.build===row.build.id).binaries,execution:components.find(c=>c.build===row.build.id).execution},fallback};});
+  const roles=[...state.values()].filter(r=>!r.role.startsWith('dependency:')).map(row=>{const saved=choice(row.role,row.build.kind),fallback=!explicitMatches(row.build,saved)&&saved!=='automatic'&&saved!=='inherit'?{role:row.role,chosen:saved,used:row.build.id,reason:'Saved selection is unavailable or incompatible.'}:null;if(fallback)fallBacks.push(fallback);return{id:row.role,value:choices[row.role]??choices[row.build.kind]??'automatic',...(row.delegated?{delegated:row.delegated}:{}),used:{...row.build,...(row.delegated?{label:row.delegated.reason}:{}),binaries:components.find(c=>c.build===row.build.id).binaries,execution:components.find(c=>c.build===row.build.id).execution},fallback};});
   const selectedIds=new Set(components.map(c=>c.build)),provisional=components.some(c=>!c.installed||!c.measured);
   const sameScene=scene.final&&scene.hudless&&['frame','pass','geometry','origin','colorDomain'].every(key=>scene.final[key]!==undefined&&JSON.stringify(scene.final[key])===JSON.stringify(scene.hudless[key]));
   return{satisfied:true,provisional,target:{guestArch:context.guest,execution:targetExecution},components,roles,processes:[process],downloads:components.filter(c=>!c.installed).map(c=>c.build),fallbacks:fallBacks,excluded:excluded.filter(e=>!selectedIds.has(e.build)),unsatisfied:[],graphics:{derivedUiFromFinalHudless:{enabled:capabilities.derivedUiFromFinalHudless===true&&Boolean(sameScene),reason:'UI derived from final and HUD-less color'}}};

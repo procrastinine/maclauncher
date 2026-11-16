@@ -4,7 +4,21 @@ const {acceptsBinary}=require('./binary-compatibility');
 function logicalName(binary){return binary.logicalName||(binary.format==='pe'?path.basename(binary.path||'').toLowerCase():binary.installName||path.basename(binary.path||''));}
 function fileProvides(binary){const name=path.basename(binary.path||'').toLowerCase();const map={'d3d8.dll':'d3d8','d3d9.dll':'d3d9','d3d10.dll':'d3d10','d3d10core.dll':'d3d10','d3d11.dll':'d3d11','d3d12.dll':'d3d12','dxgi.dll':'dxgi','ddraw.dll':'ddraw'};return map[name]?[`api:${map[name]}`]:[];}
 function selectLogicalLibraries({build,hostArch,guestArch,integration='native',needed=[],libraries,infrastructure=false}={}){
- const groups=new Map();for(const binary of build.binaries||[]){const key=binary.format+':'+logicalName(binary);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(binary);}
+ let inventory=build.binaries||[];
+ if(infrastructure){
+  const supported=machine=>integration==='wow64'?machine==='arm64':['arm64ec','arm64x'].includes(machine);
+  const pe=inventory.filter(binary=>binary.format==='pe'),selected=pe.filter(binary=>supported(binary.machine));
+  const other=pe.filter(binary=>!supported(binary.machine));
+  if(selected.length&&other.length){
+   const knownOther=other.every(binary=>(build.reach||[]).some(reach=>reach.integration!==integration&&(reach.integration==='wow64'?binary.machine==='arm64':['arm64ec','arm64x'].includes(binary.machine))));
+   if(knownOther){
+    const stem=binary=>path.basename(binary.path||'').replace(/\.(?:dll|so)$/i,'').toLowerCase();
+    const unused=new Set(other.map(stem)),required=new Set(selected.map(stem));
+    inventory=inventory.filter(binary=>binary.format==='pe'?supported(binary.machine):!unused.has(stem(binary))||required.has(stem(binary)));
+   }
+  }
+ }
+ const groups=new Map();for(const binary of inventory){const key=binary.format+':'+logicalName(binary);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(binary);}
  const binaries=[],excluded=[];
  for(const alternatives of groups.values()){
   const first=alternatives[0],name=logicalName(first),apis=fileProvides(first);
