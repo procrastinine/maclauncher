@@ -34,7 +34,7 @@ function normalizeRuntimeVersion(input) {
 function projectInstall(row) {
   if (!row) return null;
   const executablePath = row.executablePath || row.runtimePath;
-  return { ...row, channel: CHANNEL_STABLE, appPath: path.dirname(path.dirname(path.dirname(executablePath))), executablePath,
+  return { ...row, ready: row.ready !== false, requiresRosetta: row.needsRosetta === true, channel: CHANNEL_STABLE, appPath: path.dirname(path.dirname(path.dirname(executablePath))), executablePath,
     bundleVersionNormalized: normalizeLoveVersion(row.version), source: "MacLauncher Builds" };
 }
 function listProjectInstalled(userDataDir) {
