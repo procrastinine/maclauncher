@@ -30,12 +30,3 @@ async function verifySumsFile({ archiveSha256, checksum, filename, signal, label
   return { verified: true, archiveSha256, identity: `publisher-sha256-file:${listed}` };
 }
 module.exports={readChecksum,verifySumsFile};
-
-async function verifySource({source,asset,archiveSha256,verificationFiles=[],signal},dependencies={}){
- const receipts=[],digest=Upstream.readDigest(asset?.digest||asset?.sha256,'sha256');
- if(digest){if(digest.value!==archiveSha256)throw new Error('The archive does not match its publisher SHA-256.');receipts.push({verified:true,sha256:digest.value});}
- const sums=verificationFiles.filter(file=>/(?:sha256|checksums|sums)(?:[._-]|$)/i.test(file.name||file.filename||''));
- if(sums.length===1)receipts.push(await verifySumsFile({archiveSha256,checksum:sums[0],filename:asset.name||asset.filename,signal,label:source.label},dependencies));
- return {verified:true,receipts};
-}
-module.exports.verifySource=verifySource;

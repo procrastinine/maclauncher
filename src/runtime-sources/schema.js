@@ -1,6 +1,5 @@
 'use strict';
 const {getKind}=require('../core/component-kinds');
-const FORMATS={macho:['i386','x86_64','arm','arm64'],pe:['i386','x86_64','arm64','arm64ec','arm64x'],elf:['x86','x86_64','arm','aarch64']};
 function object(value,name){if(!value||typeof value!=='object'||Array.isArray(value))throw new TypeError(name+' must be an object.');}
 function validateSource(source){
  object(source,'Runtime source');
@@ -20,4 +19,4 @@ function validateDeclared(intended,binaries){
  const normalize=cpu=>({x64:'x86_64',aarch64:'arm64',x86:'i386'})[cpu]||cpu;
  if(measured.length&&cpus.length&&!cpus.some(cpu=>measured.map(normalize).includes(normalize(cpu))))throw new Error('Runtime architecture mismatch: intended '+cpus.join(', ')+'; measured '+measured.join(', '));return true;
 }
-module.exports={FORMATS,validateSource,validateBuild,validateDeclared};
+module.exports={validateSource,validateBuild,validateDeclared};

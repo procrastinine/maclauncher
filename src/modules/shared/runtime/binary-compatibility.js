@@ -4,7 +4,7 @@ const { inspectMachOExportInfo } = require('./macho-exports');
 const { compareVersions } = require('./translator-description');
 const { wineLayout } = require('./wine-layout');
 const { binaryFiles } = require('./binary-files');
-const { acceptsBinary } = require('../../../core/launch-plan');
+const { acceptsBinary } = require('../../../core/binary-compatibility');
 const { peArchitecture, peMachineCode } = require('../../../core/binary-arch');
 
 // Per-installed-engine record, invalidated by file identity, never version.

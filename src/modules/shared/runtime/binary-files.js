@@ -1,6 +1,6 @@
 const fs = require('node:fs'), path = require('node:path');
 const { inspectFile } = require('./translator-description');
-const { acceptsBinary } = require('../../../core/launch-plan');
+const { acceptsBinary } = require('../../../core/binary-compatibility');
 const { peArchitecture } = require('../../../core/binary-arch');
 
 // Choose by actual machine/slices, independently of a publisher's folder names.
