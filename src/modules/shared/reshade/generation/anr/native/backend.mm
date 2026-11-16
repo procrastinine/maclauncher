@@ -1,7 +1,7 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "anr_runtime.h"
 #include "submission.h"
-#include "frame-camera.h"
+#include "frame_constants.hpp"
 #if __has_include("temporal-frame.h")
 #include "temporal-frame.h"
 #else
@@ -24,7 +24,7 @@ struct Context {
  RSGenerationOptions options{};id<MTLDevice>device;std::string helpers,root;std::mutex lock;std::shared_ptr<Prepared>prepared;
  unsigned width=0,height=0;bool history=false;uint64_t frame=0,submission=0;void*owner=nullptr;id<MTLCommandQueue>queue=nil;
  __weak id<MTLCommandBuffer>pending=nil;std::shared_ptr<std::atomic<unsigned>>completion;
- uint32_t transfer=~0u,bottomLeft=0;anr::DepthPlanes previous{};
+ uint32_t transfer=~0u,bottomLeft=0;anr::Camera previous{};
 };
 static int result(RSGenerationResult*r,int code,const std::string&reason){if(r){r->status=code;snprintf(r->reason,sizeof(r->reason),"%s",reason.c_str());}return code;}
 static std::string inspect(Context&c,const RSANRSubmission&s){
@@ -66,18 +66,18 @@ static int encodeImpl(void*opaque,const RSGenerationSubmission*input,RSGeneratio
  if(c.pending&&c.pending.status==MTLCommandBufferStatusError)c.history=false;
  if(b.count>4)return result(r,RS_GENERATION_INVALID,"ANR requires one to four timeline phases");
  float previous=0;for(unsigned i=0;i<b.count;i++){auto output=(__bridge id<MTLTexture>)b.outputs[i];if(!output||output.device!=c.device||output.width!=c.width||output.height!=c.height||!std::isfinite(b.phases[i])||b.phases[i]<=previous||b.phases[i]>=1)return result(r,RS_GENERATION_INVALID,"ANR requires matching outputs and ascending phases");previous=b.phases[i];}
- bool reset=!c.history||!c.completion||c.completion->load()!=MTLCommandBufferStatusCompleted||(c.submission&&b.sequence!=c.submission+1)||c.transfer!=b.transferFunction||c.bottomLeft!=s.bottomLeft||c.owner!=f.owner||c.queue!=commands.commandQueue||f.frameId<=c.frame||(f.flags&RS_TEMPORAL_RESET)||anr::depthPlanes(f).infinite!=c.previous.infinite;
+ bool reset=!c.history||!c.completion||c.completion->load()!=MTLCommandBufferStatusCompleted||(c.submission&&b.sequence!=c.submission+1)||c.transfer!=b.transferFunction||c.bottomLeft!=s.bottomLeft||c.owner!=f.owner||c.queue!=commands.commandQueue||f.frameId<=c.frame||(f.flags&RS_TEMPORAL_RESET)||anr::frameCamera(f).infinite!=c.previous.infinite;
  Inputs args{c.width,c.height,f.renderWidth,f.renderHeight,f.depthX,f.depthY,f.motionX,f.motionY,b.transferFunction,s.bottomLeft,s.ui?1u:0u,s.premultiplied,0,0,s.referenceWhite};
  auto srgb=[](id<MTLTexture>image){return image.pixelFormat==MTLPixelFormatRGBA8Unorm_sRGB||image.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB;};args.sourceSrgb=srgb((__bridge id<MTLTexture>)b.color);
  c.pending=commands;c.history=false;c.completion=std::make_shared<std::atomic<unsigned>>(MTLCommandBufferStatusNotEnqueued);auto completion=c.completion;
  [commands addCompletedHandler:^(id<MTLCommandBuffer>done){completion->store(unsigned(done.status));(void)p;}];
  auto pass=[&](id<MTLComputePipelineState>pipeline,const std::vector<id<MTLTexture>>&textures){auto e=[commands computeCommandEncoder];if(!e)throw std::runtime_error("ANR compute encoder unavailable");[e setComputePipelineState:pipeline];[e setBytes:&args length:sizeof(args) atIndex:0];for(unsigned i=0;i<textures.size();i++)[e setTexture:textures[i] atIndex:i];[e dispatchThreads:MTLSizeMake(c.width,c.height,1) threadsPerThreadgroup:MTLSizeMake(8,8,1)];[e endEncoding];};
  pass(((__bridge id<MTLTexture>)f.depth).pixelFormat==MTLPixelFormatDepth32Float?p->importDepth:p->import,{(__bridge id<MTLTexture>)b.color,(__bridge id<MTLTexture>)f.depth,(__bridge id<MTLTexture>)f.motion,p->color,p->depth,p->motion});
- uint8_t constants[204]{};const auto planes=anr::depthPlanes(f),prior=reset?planes:c.previous;float values[]={planes.nearPlane,planes.farPlane,prior.nearPlane,prior.farPlane,f.motionScaleX*c.width/f.renderWidth,f.motionScaleY*c.height/f.renderHeight,f.jitterX,s.bottomLeft?-f.jitterY:f.jitterY};memcpy(constants,values,sizeof(values));uint32_t flags=anr::frameFlags(f,!reset);memcpy(constants+32,&flags,4);uint32_t sizes[]={c.width,c.height,c.width,c.height};memcpy(constants+36,sizes,sizeof(sizes));
+ const auto camera=anr::frameCamera(f);uint8_t constants[anr::FrameBytes];anr::frameConstants(constants,camera,reset?camera:c.previous,f.motionScaleX*c.width/f.renderWidth,f.motionScaleY*c.height/f.renderHeight,f.jitterX,s.bottomLeft?-f.jitterY:f.jitterY,!reset,c.width,c.height);
  std::string error;p->runtime->set_frame_slot(0);if(reset&&!p->runtime->reset_history(commands,false,error))return result(r,RS_GENERATION_FAILED,error);
  if(!p->runtime->encode_pair_classic(commands,p->color,p->depth,p->motion,constants,sizeof(constants),error))return result(r,RS_GENERATION_FAILED,error);
  if(!reset)for(unsigned i=0;i<b.count;i++){if(!p->runtime->encode_interpolation_classic(commands,b.phases[i],p->generated,error))return result(r,RS_GENERATION_FAILED,error);args.outputSrgb=srgb((__bridge id<MTLTexture>)b.outputs[i]);pass(p->exportImage,{p->generated,(__bridge id<MTLTexture>)b.outputs[i],s.ui?(__bridge id<MTLTexture>)s.ui:p->color});}
- p->runtime->swap_history();c.history=true;c.frame=f.frameId;c.owner=f.owner;c.queue=commands.commandQueue;c.submission=b.sequence;c.transfer=b.transferFunction;c.bottomLeft=s.bottomLeft;c.previous=planes;r->encoded=1;r->ready=!reset;r->generated=reset?0:b.count;r->historyFrames=reset?1:2;r->sequence=b.sequence;return result(r,RS_GENERATION_OK,reset?"ANR history is warming":"");
+ p->runtime->swap_history();c.history=true;c.frame=f.frameId;c.owner=f.owner;c.queue=commands.commandQueue;c.submission=b.sequence;c.transfer=b.transferFunction;c.bottomLeft=s.bottomLeft;c.previous=camera;r->encoded=1;r->ready=!reset;r->generated=reset?0:b.count;r->historyFrames=reset?1:2;r->sequence=b.sequence;return result(r,RS_GENERATION_OK,reset?"ANR history is warming":"");
 }
 static int encode(void*opaque,const RSGenerationSubmission*input,RSGenerationResult*r){try{return encodeImpl(opaque,input,r);}catch(const std::exception&e){static_cast<Context*>(opaque)->history=false;return result(r,RS_GENERATION_FAILED,e.what());}}
 static void*create(const RSGenerationOptions*o,RSGenerationResult*r){if(!o||o->size<sizeof(*o)||o->version!=1||!o->device||!o->shaderDirectory){result(r,RS_GENERATION_INVALID,"Invalid ANR options");return nullptr;}const char*root=o->size>=sizeof(RSANROptions)?reinterpret_cast<const RSANROptions*>(o)->runtimeRoot:nullptr;if(!root||root[0]!='/'){result(r,RS_GENERATION_FAILED,"Install the Apex Neural Rendering runtime");return nullptr;}auto c=new Context;c->options=*o;c->device=(__bridge id<MTLDevice>)o->device;c->root=root;c->helpers=std::string(o->shaderDirectory)+"/helpers.metallib";return c;}
