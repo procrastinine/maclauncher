@@ -6,6 +6,8 @@ namespace macfx {
 enum class MetalFxImageKind { Spatial, Interpolation };
 struct MetalFxImageRegion { uint32_t x=0,y=0,width=0,height=0; };
 struct MetalFxImageInputs {
+ // Actual SDK output when a shared bridge records into private scratch.
+ id<MTLTexture>callerOutput=nil;
     RSTemporalFrame frame{};
     std::vector<id<MTLTexture>> retained;
     id<MTLFence> fence=nil;

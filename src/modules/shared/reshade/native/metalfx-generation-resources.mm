@@ -53,7 +53,7 @@ void classicEncode(id sdk,SEL selector,id commands){
    std::shared_ptr<const SceneAovLease>metadata;void*owner=nullptr;peekTemporalAovsForTextures(lookup,metadata,owner);
    if(metadata){inputs.frame.frameId=metadata->value.frameId;inputs.matrices.frameId=inputs.frame.frameId;}
    const auto result=interval->processor->encode(inputs,metadata);
-   if(!result.encoded&&runtimeStatusLeased()){auto plan=currentEffectPlan();if(plan)for(const auto&node:plan->nodes)if(node.enabled&&node.kind=="frame-generation"){RuntimeStatusEvent event;event.context=reinterpret_cast<uintptr_t>((__bridge void*)interval);event.phase=result.busy?RuntimeStatusPhase::Preparing:RuntimeStatusPhase::Bypassed;event.processing=true;event.frameId=inputs.frame.frameId;event.planRevision=plan->revision;event.stageId=node.id;event.requestedMethod=node.method;event.activeMethod="metalfx";event.reason=result.reason;observeRuntimeStatus(event);}}
+   if(!result.encoded)observeCallerIntervalFallback(inputs.frame,result);
    if(result.encoded)interval->originalReset=true;
    return result.encoded;
   }@catch(NSException*){return false;}

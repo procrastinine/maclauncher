@@ -1153,6 +1153,7 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
             if(source.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB||source.pixelFormat==MTLPixelFormatRGBA8Unorm_sRGB)
                 source=[source newTextureViewWithPixelFormat:source.pixelFormat==MTLPixelFormatBGRA8Unorm_sRGB?MTLPixelFormatBGRA8Unorm:MTLPixelFormatRGBA8Unorm];
             if(!source)throw std::runtime_error("Cannot read the game presentation texture");
+            if(macfx::effectPlanDemands(macfx::PlanDemandGeneration))macfx::copyCallerIntervalSource(metal.texture,source);
             auto result=presentation->submitDisplayFrame(buffer,source,0,sourceTime>0?sourceTime:CACurrentMediaTime(),metal.layer.opaque,captured?&depth:nullptr);
             if(result.encoded){macfx::observeTiming(buffer,timingScope,source.width,source.height);return;}
             if(result.busy)return;

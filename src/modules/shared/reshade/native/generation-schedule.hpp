@@ -7,7 +7,21 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <atomic>
+#include <cstdint>
+#include <string>
+#include <utility>
 namespace macfx {
+// An exact presented interval has one generation owner for this publication.
+// The SDK owner retains this claim; drawable acquisitions keep weak references.
+class CallerIntervalSourceOwnership {
+ std::atomic<bool>owned{false};
+public:
+ const uintptr_t source;const std::string revision,stage;
+ CallerIntervalSourceOwnership(uintptr_t key,std::string plan,std::string row):source(key),revision(std::move(plan)),stage(std::move(row)){}
+ void consume()noexcept{owned.store(true,std::memory_order_release);}
+ bool blocksPresenter(const std::string&plan)const noexcept{return owned.load(std::memory_order_acquire)&&revision==plan;}
+};
 // An SDK already owns the interval and presentation. Off does not inspect its
 // inputs; a declined or throwing optional replacement preserves one original
 // encode. Exceptions from the original are never retried.

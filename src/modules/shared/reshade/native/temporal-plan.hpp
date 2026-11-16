@@ -1,12 +1,19 @@
 #pragma once
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "effects-execution.hpp"
+#include "generation-schedule.hpp"
 #import <QuartzCore/CAMetalLayer.h>
 namespace macfx {
 class FrameCapture;
 // Registration is supplied by the original nextDrawable owner, never by
 // guessing render targets from their dimensions or their command queue.
 void registerTemporalDrawable(id<CAMetalDrawable>);
+// Exact current real/output drawable registrations of one source only;
+// no queue, extent or window guess. Each reservation is a new interval.
+std::shared_ptr<CallerIntervalSourceOwnership>reserveCallerIntervalSource(id<MTLTexture>current,id<MTLTexture>output,const std::shared_ptr<CallerIntervalSourceOwnership>&previous,const std::string&revision,const std::string&stage);
+std::shared_ptr<CallerIntervalSourceOwnership>callerIntervalSource(id<MTLTexture>);
+// Propagate only the adapter's actual completed-image copy/view provenance.
+void copyCallerIntervalSource(id<MTLTexture>from,id<MTLTexture>to);
 bool reserveTemporalOutput(id<MTLCommandBuffer>,id<MTLTexture>);
 // Explicit scene producers own the supplied output; a receipt still matches
 // only that exact output and its unsubmitted retaining command buffer.

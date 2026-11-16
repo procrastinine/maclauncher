@@ -10,9 +10,13 @@
 #include <algorithm>
 #include <mutex>
 #include <map>
-@interface RSMTemporalDrawable : NSObject { @public __weak id<CAMetalDrawable> drawable; }
+@interface RSMTemporalDrawable : NSObject { @public __weak id<CAMetalDrawable> drawable;std::weak_ptr<macfx::CallerIntervalSourceOwnership>interval; }
 @end
 @implementation RSMTemporalDrawable
+@end
+@interface RSMCallerIntervalSource : NSObject { @public std::weak_ptr<macfx::CallerIntervalSourceOwnership>claim; }
+@end
+@implementation RSMCallerIntervalSource
 @end
 struct TemporalRecord {
     id<MTLTexture> output;
@@ -27,7 +31,7 @@ struct TemporalRecord {
 @end
 namespace macfx {
 namespace {
-const char drawableKey=0,receiptsKey=0;
+const char drawableKey=0,receiptsKey=0,callerIntervalKey=0;
 id<MTLTexture> base(id<MTLTexture> image){for(unsigned i=0;i<8&&image.parentTexture;++i)image=image.parentTexture;return image;}
 RSMTemporalReceipts *receipts(id<MTLCommandBuffer> commands,bool create) {
     auto value=(RSMTemporalReceipts*)objc_getAssociatedObject(commands,&receiptsKey);
@@ -91,9 +95,21 @@ bool reserveExplicitTemporalOutput(id<MTLCommandBuffer>commands,id<MTLTexture>ou
     }
 }
 void registerTemporalDrawable(id<CAMetalDrawable> drawable) {
-    if(!drawable||!effectPlanDemands(PlanDemandTemporal))return;
+    if(!drawable||!effectPlanDemands(PlanDemandTemporal)&&!effectPlanDemands(PlanDemandGeneration))return;
     auto owner=[RSMTemporalDrawable new];owner->drawable=drawable;
     objc_setAssociatedObject(drawable.texture,&drawableKey,owner,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+namespace {
+RSMTemporalDrawable*callerRegistration(id<MTLTexture>image){if(!image)return nil;image=base(image);auto registration=(RSMTemporalDrawable*)objc_getAssociatedObject(image,&drawableKey);auto drawable=registration?registration->drawable:nil;return drawable&&drawable.texture==image?registration:nil;}
+}
+std::shared_ptr<CallerIntervalSourceOwnership>callerIntervalSource(id<MTLTexture>image){if(!image)return {};if(auto copy=(RSMCallerIntervalSource*)objc_getAssociatedObject(image,&callerIntervalKey))if(auto held=copy->claim.lock())return held;auto registration=callerRegistration(image);auto drawable=registration?registration->drawable:nil;auto layer=drawable.layer;if(!layer)return {};@synchronized(layer){return registration->interval.lock();}}
+void copyCallerIntervalSource(id<MTLTexture>from,id<MTLTexture>to){if(!to||from==to)return;auto claim=callerIntervalSource(from);if(!claim&&!objc_getAssociatedObject(to,&callerIntervalKey))return;auto holder=[RSMCallerIntervalSource new];holder->claim=claim;objc_setAssociatedObject(to,&callerIntervalKey,holder,OBJC_ASSOCIATION_RETAIN_NONATOMIC);}
+std::shared_ptr<CallerIntervalSourceOwnership>reserveCallerIntervalSource(id<MTLTexture>current,id<MTLTexture>output,const std::shared_ptr<CallerIntervalSourceOwnership>&previous,const std::string&revision,const std::string&stage){
+ auto a=callerRegistration(current),b=callerRegistration(output);if(!a||!b)return {};auto real=a->drawable,generated=b->drawable;auto layer=real.layer;if(!real||!generated||!layer||layer!=generated.layer)return {};
+ @synchronized(layer){auto holder=(RSMCallerIntervalSource*)objc_getAssociatedObject(layer,&callerIntervalKey);auto existing=holder?holder->claim.lock():nullptr;
+  if(existing&&existing!=previous)return {};
+  auto claim=std::make_shared<CallerIntervalSourceOwnership>(reinterpret_cast<uintptr_t>((__bridge void*)layer),revision,stage);if(!holder){holder=[RSMCallerIntervalSource new];objc_setAssociatedObject(layer,&callerIntervalKey,holder,OBJC_ASSOCIATION_RETAIN_NONATOMIC);}holder->claim=claim;a->interval=b->interval=claim;return claim;
+ }
 }
 bool reserveTemporalOutput(id<MTLCommandBuffer> commands,id<MTLTexture> output) {
     if(!commands||!output||commands.status>=MTLCommandBufferStatusCommitted||!commands.retainedReferences)return false;
