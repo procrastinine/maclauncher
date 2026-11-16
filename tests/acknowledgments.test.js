@@ -17,6 +17,7 @@ const projectPage = (project, source) => {
 test('every registered runtime manager has a linked upstream project in Credits', () => {
   const upstream = {
     ai5: 'https://github.com/nunuhara/ai5-sdl2',
+    anr: 'https://github.com/apex-compute/ANR',
     'apple-metal-toolchain': 'https://developer.apple.com/documentation/xcode/downloading-and-installing-additional-xcode-components',
     assetripper: 'https://github.com/AssetRipper/AssetRipper',
     'browser-woditor': 'https://frostyhowl.com/browser-woditor/',
@@ -137,6 +138,14 @@ test('every registered runtime manager has a linked upstream project in Credits'
   assert.equal(projectPage(project, project + '-other/releases'), false);
   assert.equal(projectPage(project, project + '/../other/releases'), false);
   assert.equal(projectPage(project, 'https://other.test/group/project/releases'), false);
+});
+
+test('ANR credits both the Apex model project and independent Metal runtime code', () => {
+  const source = require('../src/modules/shared/reshade/generation/anr/source.json');
+  assert.ok(allProjects.has(normalized('https://github.com/apex-compute/ANR')));
+  assert.ok(allProjects.has(normalized(source.repository)));
+  assert.ok(shared.some(item => projectPage(source.repository, item.url) && /ANR.*MIT/.test(item.label)),
+    'ANR runtime code retains its own MIT upstream attribution');
 });
 
 test('separate backend libraries and tools retain separate project links', () => {
