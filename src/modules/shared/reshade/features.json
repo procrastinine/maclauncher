@@ -3,6 +3,7 @@
   "graphics": {
     "sharedFrameEncoder": true,
     "hardwareQueryAPI": 1,
+    "vulkanFeatureQueryAPI": 1,
     "browserFrameAPI": 1,
     "windowSourceAPI": 2,
     "virtualWindowAPI": 1,

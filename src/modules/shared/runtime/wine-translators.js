@@ -110,6 +110,14 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
       }
       if (description.source?.runtime && description.source.runtime !== runtime && Sources().get(description.source.runtime)?.ownComponents) continue;
       const root = install.translatorRoot || install.payloadRoot || (install.installDir && path.join(install.installDir, install.installationMetadata?.translatorRelative || '')) || install.root;
+      // A driver installed before the graphics payload could measure it is
+      // measured once through its retained description.
+      if (description.component === 'vulkan-driver' && !description.vulkanFeatures && require('./vulkan-features').helper()) {
+        let measured;
+        try { measured = describe(install.translatorRoot || install.payloadRoot || install.root || install.installDir,
+          { engine: manager.translatorEngine || manager.translator.engine, version: install.versionLabel || install.version, source: manager.id })?.vulkanFeatures; } catch {}
+        if (measured) description = { ...description, vulkanFeatures: measured };
+      }
       const value = { ...description, id: `${manager.id}:${install.version}`, root, entryPoint: install.executablePath || description.entryPoint,
         aliases: [...(description.aliases || []), ...(manager.formerIds || []).map(id => `${id}:${install.version}`)],
         managerId: manager.id, settingsEngine: manager.translatorEngine || manager.translator?.engine, runtimeVersion: install.version, architecture: Architecture.recordArchitecture(install) || selection?.architecture,
@@ -117,6 +125,10 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
         files: description.files.map(file => ({ ...file, path: path.resolve(root, file.path) })) };
       const declaration=manager.sources?.find(source=>source.manager?.sectionId===value.sectionId)||manager.sources?.[0];
       if(declaration)value.sourceId=declaration.id;
+      // Vulkan features this translator release requires of the driver, from its source declaration.
+      const catalogSource = typeof description.source === 'object' ? description.source?.id : null;
+      const vulkanRequires = require('./vulkan-features').required(require('./translator-managers').sourceDeclaration(value.settingsEngine, catalogSource) || declaration, description.version);
+      if (vulkanRequires.length) value.vulkanRequires = vulkanRequires;
       choices.push(value);
       if (value.engine === 'd3dmetal') choices.push({ ...value, id: value.id + ':d3d12', component: 'd3d12' });
     }
@@ -387,15 +399,18 @@ function optionLists(install, runtime, context, dependencies = {}) {
     const files = plan.compatibility[item.id]?.files || plan.compatibility[item.id]?.inspectedFiles || item.files;
     return { ...item, files, ...(['d3d-renderer', 'd3d12'].includes(item.component) && files.some(file => file.format === 'pe') ? { apis: Roles.apisForFiles(files) } : {}) };
   });
+  // A Vulkan driver whose measured features lack one that a used translator requires is not offered.
+  const roles = plan.components.d3d11 ? plan : Plan.projectRoles(plan);
+  const vulkanRequires = [...new Set(Object.values(roles.components).flatMap(row => row?.used?.vulkanRequires || []))];
   const legacy = Object.fromEntries(Object.entries(SETTINGS).map(([component, key]) => {
-    const rows = Plan.options({ ...input, component, included: input.included.filter(item => !item.hiddenChoice) });
+    const rows = Plan.options({ ...input, component, included: input.included.filter(item => !item.hiddenChoice), vulkanRequires });
     if (!context.runtimeSettings?.[key]) {
       const current = rows.find(row => row.value === (plan.components[component].selected?.id || input.selections[component]));
       if (current) current.value = ''; // The unset control preserves its existing saved backend.
     }
     return [key + 'Options', rows];
   }));
-  return { ...legacy, ...Plan.apiOptions(plan.components.d3d11 ? plan : Plan.projectRoles(plan), { ...input,
+  return { ...legacy, ...Plan.apiOptions(roles, { ...input,
     selections: Object.fromEntries(Roles.DIRECT3D_ROLES.map(role => [role.id, context.runtimeSettings?.[role.settingsKey]])) }) };
 }
 // The settings and Wine installation that decide a translator plan. Rows

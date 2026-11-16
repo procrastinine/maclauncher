@@ -76,7 +76,10 @@ function displayText(value) { return String(value ?? '').replace(/[\s\x00-\x1f\x
 const DESCRIPTION_FORMAT = 3;
 function inspectionKey(root, options) {
   const { logger, userDataDir, signal, ...selection } = options;
-  return JSON.stringify([fs.realpathSync(root), selection, DESCRIPTION_FORMAT]);
+  // A Vulkan driver's description also holds the features the graphics
+  // payload's helper measured, so a new helper describes it once again.
+  const helper = engineKinds.get(selection.engine) === 'vulkan-driver' && require('./vulkan-features').helper();
+  return JSON.stringify([fs.realpathSync(root), selection, DESCRIPTION_FORMAT, ...(helper ? [helper.key] : [])]);
 }
 function unchangedInspection(entry) {
   return entry && Array.isArray(entry.observed) && entry.observed.length &&
@@ -267,8 +270,9 @@ function inspectDescription(root, { engine, source, version, component, id, apis
   })])];
   const floors = files.flatMap(file => file.macosFloor ? [file.macosFloor] : []);
   for (const warning of warnings) warn(logger, `[translators] ${warning}`);
+  const vulkanFeatures = component === 'vulkan-driver' ? require('./vulkan-features').measure(files) : undefined;
   const result = description({ id: id || `${engine}:${root}`, root, component, engine, source, version, apis, form, files,
-    warnings, ...(pluginDirectories === undefined ? {} : { pluginDirectories }),
+    warnings, ...(pluginDirectories === undefined ? {} : { pluginDirectories }), ...(vulkanFeatures ? { vulkanFeatures } : {}),
     macosFloor: floors.sort(compareVersions).at(-1) || null });
   if (!result.version && engine === 'gstreamer') result.version = require('./gstreamer-source').libraryVersion(result);
   return result;

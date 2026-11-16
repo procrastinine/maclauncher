@@ -224,4 +224,9 @@ function createManager(engine, { dependencies = {} } = {}) {
   for (const [key,value] of Object.entries(backend)) if (typeof value !== "function") facade[key] = value;
   return facade;
 }
-module.exports = { definitions, catalogSource, createManager, compatibleTranslatorVersion, assetName, templateName, catalogVersion, catalogDescription, versionLabel };
+// The source declaration that an installed catalog source comes from.
+function sourceDeclaration(engine, catalogSourceId) {
+  const id = catalogSourceId && Object.entries(presentation[engine] || {}).find(([, shown]) => shown.catalogId === catalogSourceId)?.[0];
+  return id && declaredSources.find(source => source.id === id) || null;
+}
+module.exports = { definitions, catalogSource, createManager, compatibleTranslatorVersion, assetName, templateName, catalogVersion, catalogDescription, versionLabel, sourceDeclaration };

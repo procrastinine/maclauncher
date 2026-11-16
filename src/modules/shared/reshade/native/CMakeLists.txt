@@ -219,6 +219,9 @@ set_source_files_properties(src/metalfx-denoised.mm PROPERTIES COMPILE_FLAGS "-f
 add_executable(maclauncher-graphics-hardware src/graphics-hardware.mm)
 set_source_files_properties(src/graphics-hardware.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 target_link_libraries(maclauncher-graphics-hardware PRIVATE "-framework Foundation" "-framework Metal" "-framework MetalFX")
+# Reads the Vulkan device features an installed Vulkan driver reports, through
+# the driver's ICD entry point and without a Vulkan loader.
+add_executable(maclauncher-vulkan-features src/vulkan-features.c)
 
 # Native fixtures are separate host-architecture executables under test/. They
 # keep assertions enabled and use the library's include directories. Their

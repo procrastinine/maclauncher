@@ -6,6 +6,7 @@ const Pairing = require('./translator-pairing');
 const { compareRuntimeVersions } = require('../../modules/shared/runtime/pinned-native-manager');
 const fs = require('node:fs'), path = require('node:path');
 const { fileDigest } = require('../../modules/shared/runtime/verified-identity');
+const VulkanFeatures = require('../../modules/shared/runtime/vulkan-features');
 // Labels and the graphics selector come from the Wine source's descriptor.
 const sourceOf = runtime => require('../../modules/crossover/sources').get(runtime);
 const usesSelector = plan => plan?.graphicsSelector ?? Boolean(sourceOf(plan?.runtime)?.graphicsSelector);
@@ -276,7 +277,9 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
   return plan;
 }
 function apiOptions(plan, { choices = [], included = [], environment = null, selections = {} } = {}) {
-  const result = {};
+  // A chosen or inherited Vulkan driver decides which translators it can run.
+  // The automatic choice pairs translators from Runtimes with a driver of its own.
+  const result = {}, driver = plan.components['vulkan-driver']?.used || null;
   const displayDescription = description => {
     if (!description) return description;
     const { files, unixImports, videoPreparation, ...display } = description;
@@ -298,7 +301,7 @@ function apiOptions(plan, { choices = [], included = [], environment = null, sel
     };
     const scope = item => JSON.stringify(affectedBy(item).map(other => [other.id, serves(item, other)]));
     const candidates = uniqueComponents([...included, ...choices].filter(item => (!item.hiddenChoice || item.id === current.selected?.id) &&
-      (item.id === current.selected?.id || offeredForm(item, plan.runtime, role)) &&
+      (item.id === current.selected?.id || offeredForm(item, plan.runtime, role) && !VulkanFeatures.lacks(driver, item.vulkanRequires)) &&
       (['d3d-renderer', 'd3d12'].includes(item.component) || item.apis?.some(api => Roles.DIRECT3D_ROLES.some(known => known.apis.includes(api)))) && serves(item, role)), role, current.selected, (a, b) => scope(a) === scope(b));
     for (const item of candidates) {
       const affected = affectedBy(item);
@@ -366,13 +369,13 @@ function fallbackWarnings(plan) {
     return `${row.selected ? label(row.selected) : UNAVAILABLE_CHOICE_LABEL}: ${String(message).replace(/[.!?]+\s*$/, '')}. Using ${row.used ? label(row.used) : sourceLabels(plan.runtime).automaticPhrase}.`;
   }))];
 }
-function options({ component, runtime = 'crossover', included = [], choices = [], environment = null, selections = {} } = {}) {
+function options({ component, runtime = 'crossover', included = [], choices = [], environment = null, selections = {}, vulkanRequires = [] } = {}) {
   const result = [];
   if (environment) result.push({ value: INHERIT, label: `${environment.label || sourceLabels(runtime).environment || 'Environment setting'}: ${label(environment.selections?.[component]) || 'Automatic'}` });
   result.push({ value: AUTOMATIC, label: sourceLabels(runtime).automatic });
   const selected = findChoice([...included, ...choices].filter(item => item.component === component), selections[component]);
   for (const item of uniqueComponents([...included, ...choices].filter(item => item.component === component &&
-    (item.id === selected?.id || offeredForm(item, runtime))), null, selected))
+    (item.id === selected?.id || offeredForm(item, runtime) && !VulkanFeatures.lacks(item, vulkanRequires))), null, selected))
     result.push({ value: item === selected ? selections[component] : item.id, label: label(item), apis: item.apis });
   return withOptionScopes(result);
 }

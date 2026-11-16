@@ -6,5 +6,8 @@
   "upstream": {
     "builds": "dxvk"
   },
-  "vulkan": true
+  "vulkan": true,
+  "vulkanFeatures": [
+    { "from": "2", "features": ["geometryShader"] }
+  ]
 }
