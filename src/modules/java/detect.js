@@ -1,3 +1,4 @@
+const BinaryArch = require('../../core/binary-arch');
 const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
@@ -193,15 +194,14 @@ function readClass(fd, entry) {
 
 function machOCpuTypes(head) {
   if (!head || head.length < 8) return null;
-  const magic = head.readUInt32BE(0);
-  if (magic === 0xcafebabe || magic === 0xcafebabf) {
-    const count = head.readUInt32BE(4);
-    const stride = magic === 0xcafebabf ? 32 : 20;
+  const format = BinaryArch.machoMagic(head.readUInt32BE(0));
+  if (format?.fat && !format.little) {
+    const container = BinaryArch.machoFatHeader(head), count = container.count, stride = container.stride;
     if (count < 1 || count > 32 || head.length < 8 + count * stride) return null;
-    return Array.from({ length: count }, (_, index) => head.readUInt32BE(8 + index * stride));
+    const table = head.subarray(8);
+    return Array.from({ length: count }, (_, index) => BinaryArch.machoFatEntry(table, index, container).cpu);
   }
-  if (magic === 0xfeedface || magic === 0xfeedfacf) return [head.readUInt32BE(4)];
-  if (magic === 0xcefaedfe || magic === 0xcffaedfe) return [head.readUInt32LE(4)];
+  if (format && !format.fat) return [BinaryArch.machoCpuType(head)];
   return null;
 }
 

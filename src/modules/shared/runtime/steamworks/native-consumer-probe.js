@@ -1,3 +1,4 @@
+const BinaryArch = require('../../../../core/binary-arch');
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -50,7 +51,7 @@ function reader(fd, size, budget) {
 function inspectPe(io) {
   const dos = io.read(0, 64), pe = dos.readUInt32LE(60), coff = io.read(pe, 24);
   if (coff.readUInt32LE(0) !== 0x4550) throw invalid("Invalid PE signature.");
-  const machine = coff.readUInt16LE(4), count = coff.readUInt16LE(6), optionalSize = coff.readUInt16LE(20);
+  const facts = BinaryArch.peHeaderFacts(coff), machine = facts.machineCode, count = facts.sectionCount, optionalSize = facts.optionalBytes;
   if (!count || count > 96 || optionalSize < 96 || optionalSize > 4096) throw invalid("Invalid PE import headers.");
   const optional = io.read(pe + 24, optionalSize), magic = optional.readUInt16LE(0);
   const directoryOffset = magic === 0x10b ? 96 : magic === 0x20b ? 112 : -1;
@@ -110,19 +111,17 @@ function inspectPe(io) {
     }
     if (!terminated) throw invalid("PE import directory has no bounded terminator.");
   }
-  const architecture = ({ 0x14c: "x86", 0x8664: "x86_64", 0xaa64: "arm64" })[machine] || "unknown";
+  const architecture = ['i386', 'x86_64', 'arm64'].includes(facts.declaredArchitecture) ? (facts.declaredArchitecture === 'i386' ? 'x86' : facts.declaredArchitecture) : 'unknown';
   return { format: "pe", architecture, architectures: [architecture], dependencies, steamDependencies };
 }
 function inspectMachOImage(io, base, length) {
-  const header = io.read(base, Math.min(32, length)), magic = header.readUInt32LE(0);
-  const little = magic === 0xfeedface || magic === 0xfeedfacf;
-  const big = magic === 0xcefaedfe || magic === 0xcffaedfe;
-  if (!little && !big) throw invalid("Invalid Mach-O slice header.");
-  const is64 = magic === 0xfeedfacf || magic === 0xcffaedfe, headerSize = is64 ? 32 : 28;
+  const header = io.read(base, Math.min(32, length)), format = BinaryArch.machoMagic(header.readUInt32BE(0));
+  if (!format || format.fat) throw invalid("Invalid Mach-O slice header.");
+  const little = format.little, is64 = format.wide, headerSize = format.headerSize;
   if (header.length < headerSize) throw invalid("Truncated Mach-O header.");
   const u32 = (bytes, offset) => little ? bytes.readUInt32LE(offset) : bytes.readUInt32BE(offset);
-  const cpu = u32(header, 4), commandCount = u32(header, 16), commandSize = u32(header, 20);
-  const architecture = ({ 7: "x86", 0x01000007: "x86_64", 12: "arm", 0x0100000c: "arm64" })[cpu] || "unknown";
+  const facts = BinaryArch.machoHeader(header), commandCount = facts.commandCount, commandSize = facts.commandBytes;
+  const architecture = ['i386', 'x86_64', 'arm', 'arm64'].includes(facts.architecture) ? (facts.architecture === 'i386' ? 'x86' : facts.architecture) : 'unknown';
   if (commandCount > 4096 || commandSize > 4 * 1024 * 1024 || headerSize + commandSize > length)
     throw invalid("Mach-O load commands exceed file-backed bounds.");
   const commands = io.read(base + headerSize, commandSize), dependencies = [], ordinals = [];
@@ -177,22 +176,20 @@ function inspectMachOImage(io, base, length) {
   return { architecture, dependencies, steamDependencies: steamDependencies.map(item => ({ ...item, symbols: [...new Set(item.symbols)] })) };
 }
 function inspectMachO(io, requested) {
-  const magic = io.read(0, 8).readUInt32BE(0), fat = [0xcafebabe, 0xcafebabf, 0xbebafeca, 0xbfbafeca].includes(magic);
+  const format = BinaryArch.machoMagic(io.read(0, 8).readUInt32BE(0)), fat = format?.fat;
   if (!fat) {
     const image = inspectMachOImage(io, 0, io.size);
     if (requested && image.architecture !== requested) throw invalid("Native consumer lacks the requested CPU slice.");
     return { format: "mach-o", architecture: image.architecture, architectures: [image.architecture], images: [image], ...image };
   }
-  const big = magic === 0xcafebabe || magic === 0xcafebabf, is64 = magic === 0xcafebabf || magic === 0xbfbafeca;
-  const header = io.read(0, 8), count = big ? header.readUInt32BE(4) : header.readUInt32LE(4);
+  const header = io.read(0, 8), container = BinaryArch.machoFatHeader(header), is64 = container.wide, count = container.count;
   if (!count || count > 32) throw invalid("Invalid universal Mach-O slice count.");
   const width = is64 ? 32 : 20, table = io.read(8, count * width), ranges = [], images = [];
-  const u32 = offset => big ? table.readUInt32BE(offset) : table.readUInt32LE(offset);
-  const u64 = offset => Number(big ? table.readBigUInt64BE(offset) : table.readBigUInt64LE(offset));
   const architectures = [];
   for (let index = 0; index < count; index++) {
-    const start = index * width, cpu = u32(start), architecture = ({ 7: "x86", 0x01000007: "x86_64", 12: "arm", 0x0100000c: "arm64" })[cpu] || "unknown";
-    const offset = is64 ? u64(start + 8) : u32(start + 8), size = is64 ? u64(start + 16) : u32(start + 12), align = u32(start + (is64 ? 24 : 16));
+    const entry = BinaryArch.machoFatEntry(table, index, container), name = BinaryArch.machoArchitecture(entry.cpu);
+    const architecture = ['i386', 'x86_64', 'arm', 'arm64'].includes(name) ? (name === 'i386' ? 'x86' : name) : 'unknown';
+    const { offset, size } = entry, align = entry.alignment;
     if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(size) || offset < 8 + table.length || size < 28 || offset > io.size - size || align > 31 || offset % 2 ** align ||
       ranges.some(range => offset < range.end && offset + size > range.start) || architectures.includes(architecture))
       throw invalid("Invalid or overlapping universal Mach-O slice.");

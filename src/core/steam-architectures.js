@@ -1,3 +1,4 @@
+const BinaryArch = require('./binary-arch');
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -86,21 +87,21 @@ function inspectMachOArchitecture(file) {
     fd = fs.openSync(file, "r");
     const read = (offset, length) => { if (!Number.isSafeInteger(offset) || offset < 0 || offset > stat.size - length) throw new Error("Invalid executable header."); const buffer = Buffer.alloc(length); if (fs.readSync(fd, buffer, 0, length, offset) !== length) throw new Error("Incomplete executable header."); return buffer; };
     const thin = offset => {
-      const header = read(offset, 28), magic = header.readUInt32BE(0), little = [0xcefaedfe, 0xcffaedfe].includes(magic);
-      if (![0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe].includes(magic)) return null;
-      const word = position => little ? header.readUInt32LE(position) : header.readUInt32BE(position);
-      if (word(12) !== 2) return null;
-      return ({ 7: "x86", 16777223: "x86_64", 16777228: "arm64", 18: "ppc", 16777234: "ppc64" })[word(4)] || null;
+      const header = read(offset, 28), format = BinaryArch.machoMagic(header.readUInt32BE(0));
+      if (!format || format.fat) return null;
+      const facts = BinaryArch.machoHeader(header);
+      if (facts.fileType !== 2) return null;
+      return ['i386', 'x86_64', 'arm64', 'ppc', 'ppc64'].includes(facts.architecture) ? (facts.architecture === 'i386' ? 'x86' : facts.architecture) : null;
     };
-    const header = read(0, 8), magic = header.readUInt32BE(0), fat = [0xcafebabe, 0xbebafeca, 0xcafebabf, 0xbfbafeca].includes(magic);
+    const header = read(0, 8), format = BinaryArch.machoMagic(header.readUInt32BE(0)), fat = format?.fat;
     const cpus = new Set();
     if (!fat) { const cpu = thin(0); if (cpu) cpus.add(cpu); }
     else {
-      const little = [0xbebafeca, 0xbfbafeca].includes(magic), wide = [0xcafebabf, 0xbfbafeca].includes(magic), count = little ? header.readUInt32LE(4) : header.readUInt32BE(4), stride = wide ? 32 : 20;
+      const container = BinaryArch.machoFatHeader(header), count = container.count, stride = container.stride;
       if (!count || count > 32) return null;
       const table = read(8, count * stride);
       for (let index = 0; index < count; index++) {
-        const start = index * stride, offset = wide ? Number(little ? table.readBigUInt64LE(start + 8) : table.readBigUInt64BE(start + 8)) : little ? table.readUInt32LE(start + 8) : table.readUInt32BE(start + 8);
+        const { offset } = BinaryArch.machoFatEntry(table, index, container);
         if (offset < 8 + count * stride) return null;
         const cpu = thin(offset); if (cpu) cpus.add(cpu);
       }

@@ -20,6 +20,7 @@ function machoMagic(magic) {
  const fat=new Map([[0xcafebabe,['BE',false]],[0xbebafeca,['LE',false]],[0xcafebabf,['BE',true]],[0xbfbafeca,['LE',true]]]).get(magic);
  return fat?{fat:true,endian:fat[0],little:fat[0]==='LE',wide:fat[1],stride:fat[1]?32:20}:null;
 }
+function machoCpuType(bytes) { const format=machoMagic(bytes.readUInt32BE(0));return format&&!format.fat?bytes[`readUInt32${format.endian}`](4):null; }
 function machoHeader(bytes) {
  const format=machoMagic(bytes.readUInt32BE(0));if(!format||format.fat)fail('unsupported Mach-O header');
  const word=offset=>bytes[`readUInt32${format.endian}`](offset),cpu=word(4);
@@ -146,4 +147,4 @@ function inspectBinary(file) {
 }
 function peArchitecture(machine) { return PE.get(machine) || null; }
 function peMachineCode(architecture) { return [...PE].find(([,name])=>name===architecture)?.[0] || null; }
-module.exports={parseBinary,inspectBinary,peArchitecture,peMachineCode,machoMagic,machoHeader,machoFatHeader,machoFatEntry,machoArchitecture,machoCpuCode,peHeaderFacts};
+module.exports={parseBinary,inspectBinary,peArchitecture,peMachineCode,machoMagic,machoHeader,machoFatHeader,machoFatEntry,machoArchitecture,machoCpuCode,machoCpuType,peHeaderFacts};
