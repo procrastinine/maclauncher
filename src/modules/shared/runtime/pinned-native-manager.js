@@ -1024,12 +1024,15 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       // An explicit version is a request; the saved default applies as a
       // default, so one that left the release list gives way after discovery.
       const requested = typeof options.version === "string" && options.version.trim() && options.version.trim() !== "auto" ? options.version : null;
+      if (options.exactVersion === true && !requested) throw new Error("An exact runtime installation requires a version.");
       const settings = options.settings?.runtimes ? options.settings : { runtimes: { [id]: options.settings } };
       // Install installs the saved default itself, not the installed version
       // that Play would use in its place.
       const chosen = () => {
         const selection = resolveSelection({}, settings, options.userDataDir, { version: requested });
-        return selection.preferredVersion ? resolveSelection({}, settings, options.userDataDir, { version: selection.preferredVersion }) : selection;
+        const selected = selection.preferredVersion ? resolveSelection({}, settings, options.userDataDir, { version: selection.preferredVersion }) : selection;
+        if (options.exactVersion === true && selected.version !== normalizeVersion(requested)) throw new Error("The exact runtime version is unavailable.");
+        return selected;
       };
       let selection = chosen();
       let version = selection.version;
@@ -1055,7 +1058,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
           // A cached row whose file the publisher has since removed reads the
           // current list once and installs what it now offers.
           return run(version).catch(async error => {
-            if (refreshed || ![404, 410].includes(error?.statusCode)) throw error;
+            if (options.exactVersion === true || refreshed || ![404, 410].includes(error?.statusCode)) throw error;
             await refreshCatalog({ userDataDir: options.userDataDir, logger: options.logger, signal, force: true });
             const current = chosen().version;
             if (!current || !entries.has(current)) throw error;
