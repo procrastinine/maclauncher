@@ -230,6 +230,7 @@ async function prepare(value, { root, userDataDir, signal, graphicsHost = null, 
     const current=library.read(userDataDir);
     const installed=current?.profiles.includes(settings.fsr4Profile)?current:await library.install({...modelContext,root,userDataDir,signal,fsr4Profile:settings.fsr4Profile});
     if(!installed?.profiles.includes(settings.fsr4Profile))throw unavailable('Import the selected FSR 4.1.2 model data in Runtimes.');
+    await modelContext.useRuntime?.({managerId:library.descriptor.managerId,sectionId:'default',version:library.descriptor.version,sourcePath:installed.directory});
     fsr4ModelEnvironment=library.environment(userDataDir,settings.fsr4Profile);
   }
   const required = [];
