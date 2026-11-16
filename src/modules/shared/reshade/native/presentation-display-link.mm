@@ -1,11 +1,14 @@
 #include "presentation-display-link.hpp"
 #include "presentation-refresh.hpp"
+#include "log.hpp"
 #import <AppKit/AppKit.h>
 #import <QuartzCore/CAMetalDisplayLink.h>
 #include <atomic>
 #include <mutex>
 #include <stdexcept>
 namespace {
+// The last screen rates read on the main thread. A new link starts with them until its own read arrives.
+std::atomic<unsigned> knownNominal{0},knownMaximum{0};
 struct DisplayLinkState {
     std::atomic<bool> paused{true},invalidated{false};std::atomic<uint32_t>display{0};
     macfx::PresentationDisplayLink::Update update;
@@ -16,6 +19,7 @@ API_AVAILABLE(macos(14.0))
 @interface MacFXPresentationDisplayLink : NSObject<CAMetalDisplayLinkDelegate>
 - (instancetype)initWithLayer:(CAMetalLayer*)layer state:(std::shared_ptr<DisplayLinkState>)state;
 - (void)applyState;
+- (void)observeScreens;
 - (void)applyDisplay;
 - (void)invalidate;
 - (void)retireLink;
@@ -24,14 +28,15 @@ API_AVAILABLE(macos(14.0))
     CAMetalDisplayLink *_link;std::shared_ptr<DisplayLinkState> _state;
     macfx::PresentationRefreshClock _clock;std::atomic<unsigned>_nominal,_maximum;
     std::atomic<uint64_t>_displayRevision;uint64_t _appliedRevision;
-    id _screenChanges;NSThread *_thread;
-    std::mutex _linkMutex;std::mutex _loopMutex;CFRunLoopRef _loop;
+    id _screenChanges;NSThread *_thread;double _created;
+    std::mutex _linkMutex;std::mutex _loopMutex;std::mutex _threadMutex;CFRunLoopRef _loop;
 }
 - (instancetype)initWithLayer:(CAMetalLayer*)layer state:(std::shared_ptr<DisplayLinkState>)state {
     if((self=[super init])){
         _state=std::move(state);_link=[[CAMetalDisplayLink alloc]initWithMetalLayer:layer];
         if(!_link)return nil;
-        _link.delegate=self;_link.preferredFrameLatency=1;_link.paused=YES;
+        _link.delegate=self;_link.preferredFrameLatency=1;_link.paused=YES;_created=CACurrentMediaTime();
+        if(const unsigned maximum=knownMaximum.load()){_nominal=knownNominal.load();_maximum=maximum;_displayRevision=1;}
     }return self;
 }
 - (void)postState {
@@ -48,7 +53,7 @@ API_AVAILABLE(macos(14.0))
     // The link follows its layer between screens. Permit the fastest connected
     // screen so moving a window cannot leave it capped by the old screen.
     for(NSScreen *screen in NSScreen.screens)maximum=std::max(maximum,unsigned(std::clamp<NSInteger>(screen.maximumFramesPerSecond,20,1000)));
-    _nominal=nominal;_maximum=maximum;++_displayRevision;[self postState];
+    _nominal=nominal;_maximum=maximum;knownNominal=nominal;knownMaximum=maximum;++_displayRevision;[self postState];
 }
 - (void)applyLoopState { // Display thread only.
     std::lock_guard lock(_linkMutex);
@@ -70,6 +75,7 @@ API_AVAILABLE(macos(14.0))
         {std::lock_guard lock(_loopMutex);_loop=(CFRunLoopRef)CFRetain(loop);}
         @try{try{
             [self applyLoopState];{std::lock_guard lock(_linkMutex);if(!_state->invalidated)[_link addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];}
+            macfx::nativeLog("Presentation display link runs on its own thread in the common run loop modes, "+std::to_string(int((CACurrentMediaTime()-_created)*1000))+" ms after it was created");
             while(!_state->invalidated){@autoreleasepool{CFRunLoopRunInMode(kCFRunLoopDefaultMode,1,true);}}
         }catch(const std::exception&){if(!_state->invalidated)_state->update(nil,0,0);}}
         @catch(NSException*){if(!_state->invalidated)_state->update(nil,0,0);}
@@ -78,14 +84,23 @@ API_AVAILABLE(macos(14.0))
         CFRunLoopSourceInvalidate(idle);CFRelease(idle);
     }
 }
-- (void)applyState { // Main thread; does not wait for rendering or a run loop.
-    if(_state->invalidated){[self invalidate];return;}
-    if(!_thread){
-        [self applyDisplay];__weak MacFXPresentationDisplayLink *weak=self;
-        _screenChanges=[NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidChangeScreenParametersNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*){[weak applyDisplay];}];
+- (void)applyState { // Any thread. Starting, pausing and resuming never wait for the application's main thread.
+    if(_state->invalidated){[self retireLink];[self postState];return;}
+    {std::lock_guard lock(_threadMutex);
+     if(!_thread){
+        __weak MacFXPresentationDisplayLink *weak=self;
         _thread=[[NSThread alloc]initWithBlock:^{MacFXPresentationDisplayLink *driver=weak;if(driver)[driver runDisplayLoop];}];
         _thread.name=@"MacLauncher presentation timing";_thread.qualityOfService=NSQualityOfServiceUserInteractive;[_thread start];
-    }else [self postState];
+        // Screen rates are read on the main thread. Until they arrive the link runs at its display's own rate.
+        dispatch_async(dispatch_get_main_queue(),^{[weak observeScreens];});
+        return; // The display thread applies the current state when it starts.
+     }}
+    [self postState];
+}
+- (void)observeScreens { // Main thread.
+    if(_state->invalidated||_screenChanges)return;
+    [self applyDisplay];__weak MacFXPresentationDisplayLink *weak=self;
+    _screenChanges=[NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidChangeScreenParametersNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification*){[weak applyDisplay];}];
 }
 - (void)retireLink {
     // Invalidation releases layer ownership before callers can use nextDrawable.
@@ -109,7 +124,7 @@ struct macfx::PresentationDisplayLink::Impl {
         if(@available(macOS 14.0,*))driver=[[MacFXPresentationDisplayLink alloc]initWithLayer:layer state:state];
         if(!driver)throw std::runtime_error("Metal display timing is unavailable");
     }
-    void apply(){id retained=driver;dispatch_async(dispatch_get_main_queue(),^{if(@available(macOS 14.0,*))[(MacFXPresentationDisplayLink*)retained applyState];});}
+    void apply(){if(@available(macOS 14.0,*))[(MacFXPresentationDisplayLink*)driver applyState];}
 };
 macfx::PresentationDisplayLink::PresentationDisplayLink(CAMetalLayer *layer,Update update):impl(std::make_unique<Impl>(layer,std::move(update))){}
 macfx::PresentationDisplayLink::~PresentationDisplayLink(){invalidate();}

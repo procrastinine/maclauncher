@@ -97,6 +97,12 @@ std::string legacyInputIdentity(const macfx::LivePacket&packet){
 struct macfx::FramePresenter::Impl:std::enable_shared_from_this<Impl>{
  CAMetalLayer*layer;void*owner;PresenterConfig config;ImageColorSpace colorSpace=ImageColorSpace::LegacySDR;ImageRetry frameRetry;id<MTLCommandQueue>queue,displayQueue;id<MTLRenderPipelineState>flipPipeline,motionPipeline;dispatch_queue_t worker;dispatch_source_t wakeup=nullptr;CVDisplayLinkRef link=nullptr;
  std::unique_ptr<PresentationDisplayLink>metalLink;std::atomic<bool>metalTiming{false};bool metalTimingUnavailable=false;std::atomic<uint64_t>timingEpoch{0};
+ // Display-link supply. Every image waits for a link drawable while Metal timing is active, so a link
+ // that stops supplying them while images are due is retired for layer drawables (linkSupplyTimeout).
+ static constexpr double linkSupplyTimeout=0.5;
+ std::atomic<double>linkStarted{0},linkSupplied{0};std::atomic<uint64_t>linkUpdatesAtStart{0};std::atomic<bool>linkRateReported{true};std::atomic<uint64_t>linkUpdates{0},linkAccepted{0},linkEmpty{0},linkStale{0},drawableSizeDrops{0};std::atomic<bool>drawableSizeReported{false},linkSizeReported{false};std::atomic<uint64_t>linkRetiredEpoch{0},linkSizeMismatches{0};
+ // A pump that has not finished for a second is reported once, with the step it reached.
+ std::atomic<double>pumpEnteredAt{0};std::atomic<int>pumpStep{0};std::atomic<bool>pumpStallReported{false};
  // Serializes link attachment/retirement with fallback layer acquisition.
  std::recursive_mutex drawableRouteMutex;
  std::mutex displayDrawableMutex;id<CAMetalDrawable>displayDrawable=nil;
@@ -243,21 +249,40 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   return displayQueue?:queue;
  }
  void retryPrivateQueue(){std::lock_guard lock(privateQueueMutex);privateQueueUnavailable.store(false);generationUnavailable=false;}
- void displayUpdate(uint64_t epoch,id<CAMetalDrawable> drawable,double target,unsigned rate){
-  if(stopping.load()||epoch!=timingEpoch||!metalTiming.load())return;
-  if(!drawable&&target==0){
-   const auto weak=weak_from_this();dispatch_async(worker,^{if(auto self=weak.lock()){
-    std::lock_guard serial(self->submission);if(self->stopping.load()||epoch!=self->timingEpoch)return;
+ // Retires Metal display timing for this presenter. start() then times presentation with a CVDisplayLink
+ // and acquires drawables from the layer.
+ void retireMetalTiming(uint64_t epoch){
+  const auto weak=weak_from_this();dispatch_async(worker,^{if(auto self=weak.lock()){
+   {std::lock_guard serial(self->submission);if(self->stopping.load()||epoch!=self->timingEpoch)return;
     std::lock_guard route(self->drawableRouteMutex);
     self->metalTimingUnavailable=true;self->metalTiming=false;++self->timingEpoch;
     if(self->metalLink){self->metalLink->invalidate();self->metalLink.reset();}
     {std::lock_guard lock(self->displayDrawableMutex);self->drawables.abandon(self->displayDrawable);self->displayDrawable=nil;}
-    self->start();
-   }});return;
-  }
+    // The delivery trace samples a new set of batches on the replacement route.
+    self->diagnosticAttempts=0;self->diagnosticReady=0;
+    self->start();}
+   self->schedule();
+  }});
+ }
+ std::string linkSupplyCounts()const{
+  return "updates="+std::to_string(linkUpdates.load())+" accepted="+std::to_string(linkAccepted.load())+" withoutDrawable="+std::to_string(linkEmpty.load())+
+   " stale="+std::to_string(linkStale.load())+" linkSizeMismatches="+std::to_string(linkSizeMismatches.load())+" imageSizeMismatches="+std::to_string(drawableSizeDrops.load());
+ }
+ void displayUpdate(uint64_t epoch,id<CAMetalDrawable> drawable,double target,unsigned rate){
+  const auto updates=linkUpdates.fetch_add(1,std::memory_order_relaxed)+1;
+  if(!linkRateReported.load(std::memory_order_relaxed)){const double since=CACurrentMediaTime()-linkStarted.load();
+   if(since>=1&&!linkRateReported.exchange(true))nativeLog("Presentation display link delivered "+std::to_string(updates-linkUpdatesAtStart.load())+" updates in the "+std::to_string(int(since*1000))+" ms after it started");}
+  if(stopping.load()||epoch!=timingEpoch||!metalTiming.load()){linkStale.fetch_add(1,std::memory_order_relaxed);return;}
+  if(!drawable&&target==0){retireMetalTiming(epoch);return;}
   if(std::isfinite(target)&&target>0)refreshTime.store(target);if(rate>=20&&rate<=1000)displayHz.store(rate);
   CAMetalLayer *output=layerSnapshot();if(!output)return;
-  {std::lock_guard lock(displayDrawableMutex);if(stopping.load()||epoch!=timingEpoch||!metalTiming.load())return;
+  // A link drawable that is not the layer's size cannot carry an image made for the layer; it does not count as supply.
+  if(drawable){const auto size=output.drawableSize;if(drawable.texture.width!=unsigned(size.width)||drawable.texture.height!=unsigned(size.height)){linkSizeMismatches.fetch_add(1,std::memory_order_relaxed);
+   if(!linkSizeReported.exchange(true))nativeLog("Presentation display link drawable "+std::to_string(drawable.texture.width)+"x"+std::to_string(drawable.texture.height)+" does not match the layer's "+std::to_string(unsigned(size.width))+"x"+std::to_string(unsigned(size.height)));
+   return;}}
+  {std::lock_guard lock(displayDrawableMutex);if(stopping.load()||epoch!=timingEpoch||!metalTiming.load()){linkStale.fetch_add(1,std::memory_order_relaxed);return;}
+   if(!drawable)linkEmpty.fetch_add(1,std::memory_order_relaxed);
+   else{linkSupplied.store(CACurrentMediaTime());if(linkAccepted.fetch_add(1,std::memory_order_relaxed)==0)nativeLog("Presentation display link supplied its first drawable "+std::to_string(int((CACurrentMediaTime()-linkStarted.load())*1000))+" ms after it started");}
    if(displayDrawable!=drawable){drawables.abandon(displayDrawable);displayDrawable=nil;displayDrawable=drawables.adopt(output,drawable);}}
   schedule();
  }
@@ -303,7 +328,9 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
       metalLink=std::make_unique<PresentationDisplayLink>(layer,[weak,epoch](id<CAMetalDrawable> drawable,double target,unsigned rate){if(auto self=weak.lock())self->displayUpdate(epoch,drawable,target,rate);});
       metalLink->setDisplay(currentDisplay);
      }
-     metalTiming=true;metalLink->resume();return true;
+     if(!metalTiming.exchange(true)){linkUpdatesAtStart.store(linkUpdates.load());linkStarted.store(CACurrentMediaTime());linkRateReported.store(false);
+      nativeLog("Presentation display link started for frame generation from thread "+std::to_string(pthread_mach_thread_np(pthread_self()))+(NSThread.isMainThread?" (main)":"")+"; it runs on its own thread in the common run loop modes");}
+     metalLink->resume();return true;
     }catch(const std::exception&){metalLink.reset();metalTiming=false;metalTimingUnavailable=true;}}
     @catch(NSException*){metalLink.reset();metalTiming=false;metalTimingUnavailable=true;}
     // Keep the existing timing route when the optional Metal driver is unavailable.
@@ -342,7 +369,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
  // A drawable or publication arriving during a pump must outlive its earlier
  // readiness snapshot, even when that pump parks its display-link timer.
  void finishPump(bool more=false){
-  pumpQueued.store(false);
+  pumpEnteredAt.store(0);pumpQueued.store(false);
   if(pumpRequested.exchange(false)||more)schedule();
  }
  void failWithoutLock(const std::string&reason){if(status.reason!=reason)nativeLog("Graphics presentation: "+reason);status.reason=reason;}
@@ -625,6 +652,8 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
  bool diagnosticLine(const std::shared_ptr<Batch>&batch){return deliveryDiagnostics&&batch&&batch->diagnostic&&batch->diagnosticLines.fetch_add(1,std::memory_order_relaxed)<32;}
  void deliveryDecision(const std::shared_ptr<Batch>&batch,const char*decision){if(diagnosticLine(batch))nativeLog(deliveryIdentity(batch)+" decision="+decision);}
  void publish(const std::shared_ptr<Batch>&batch,bool ready){
+   if(const double entered=pumpEnteredAt.load();entered>0&&CACurrentMediaTime()-entered>=1&&!pumpStallReported.exchange(true))
+    nativeLog("Presentation pump has not finished for "+std::to_string(int((CACurrentMediaTime()-entered)*1000))+" ms at step "+std::to_string(pumpStep.load())+" (1 selection, 2 drawable, 3 drawable returned, 4 command buffer, 5 final encode, 6 commit, 7 committed)");
    if(diagnosticLine(batch))nativeLog(deliveryIdentity(batch)+" event=source-completed providerReady="+std::to_string(ready)+" phases="+std::to_string(batch->phases.count));
    const bool sceneChecked=ready&&bool(batch->sceneCompletion);
    if(ready&&batch->sceneCompletion&&!batch->sceneCompletion().encoded)ready=false;
@@ -914,6 +943,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   }});return true;
  }
  void pump(){
+  pumpEnteredAt.store(CACurrentMediaTime());pumpStep.store(1,std::memory_order_relaxed);
   pumpRequested.store(false);
   if(outputIdleCut.load(std::memory_order_acquire)){std::unique_lock serial(submission,std::try_to_lock);if(serial.owns_lock())applyOutputIdleCut();}
   if(!outputVisible.load(std::memory_order_acquire)||outputIdleCut.load(std::memory_order_acquire)){
@@ -945,15 +975,24 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
    }
    {std::lock_guard<std::mutex>lock(mutex);if(holdActive&&!holdResuming)display.reset();}
    if(display&&display->batch->id==lastQueuedFrame&&display->generated==lastQueuedGenerated&&display->subframe==lastQueuedSubframe&&display->due<=lastQueuedTime)display.reset();
-   if(display){if(display->generated<0&&!display->batch->output.active())undeliveredReal=display->batch;auto drawable=outputDrawable(layer);if(!drawable){deliveryDecision(display->batch,"no-drawable-after-take");std::lock_guard<std::mutex>lock(mutex);++status.dropped;}else{const auto image=display->generated<0?display->batch->real:display->batch->generated.at(display->generated);if(drawable.texture.width!=display->batch->outputWidth||drawable.texture.height!=display->batch->outputHeight){std::lock_guard<std::mutex>lock(mutex);++status.dropped;}else if(drawable.texture.pixelFormat!=layer.pixelFormat){fail("Presentation pixel format changed before the frame completed");}else{
-     auto commands=[displayCommandsQueue() commandBuffer];if(!commands)throw std::runtime_error("Independent presentation commands are unavailable");ownPresentationBuffer(commands);const bool presented=encodeFinal(commands,drawable,*display,false);[commands commit];if(diagnosticLine(display->batch))nativeLog(deliveryIdentity(display->batch)+" event=final-encode generated="+std::to_string(display->generated)+" accepted="+std::to_string(presented));if(presented){lastQueuedFrame=display->batch->id;lastQueuedGenerated=display->generated;lastQueuedSubframe=display->subframe;lastQueuedTime=display->due;undeliveredReal.reset();}
+   if(display){if(display->generated<0&&!display->batch->output.active())undeliveredReal=display->batch;pumpStep.store(2,std::memory_order_relaxed);auto drawable=outputDrawable(layer);pumpStep.store(3,std::memory_order_relaxed);if(!drawable){deliveryDecision(display->batch,"no-drawable-after-take");std::lock_guard<std::mutex>lock(mutex);++status.dropped;}else{const auto image=display->generated<0?display->batch->real:display->batch->generated.at(display->generated);if(drawable.texture.width!=display->batch->outputWidth||drawable.texture.height!=display->batch->outputHeight){
+     // The image was made for another drawable size. Return the drawable instead of holding its lease.
+     drawables.abandon(drawable);drawableSizeDrops.fetch_add(1,std::memory_order_relaxed);deliveryDecision(display->batch,"drawable-size-mismatch");
+     if(!drawableSizeReported.exchange(true))nativeLog("Presentation drawable "+std::to_string(drawable.texture.width)+"x"+std::to_string(drawable.texture.height)+" does not match the "+std::to_string(display->batch->outputWidth)+"x"+std::to_string(display->batch->outputHeight)+" image; the image is dropped");
+     std::lock_guard<std::mutex>lock(mutex);++status.dropped;}else if(drawable.texture.pixelFormat!=layer.pixelFormat){fail("Presentation pixel format changed before the frame completed");}else{
+     pumpStep.store(4,std::memory_order_relaxed);auto commands=[displayCommandsQueue() commandBuffer];if(!commands)throw std::runtime_error("Independent presentation commands are unavailable");ownPresentationBuffer(commands);pumpStep.store(5,std::memory_order_relaxed);const bool presented=encodeFinal(commands,drawable,*display,false);pumpStep.store(6,std::memory_order_relaxed);[commands commit];pumpStep.store(7,std::memory_order_relaxed);if(diagnosticLine(display->batch))nativeLog(deliveryIdentity(display->batch)+" event=final-encode generated="+std::to_string(display->generated)+" accepted="+std::to_string(presented));if(presented){lastQueuedFrame=display->batch->id;lastQueuedGenerated=display->generated;lastQueuedSubframe=display->subframe;lastQueuedTime=display->due;undeliveredReal.reset();}
    }}}
   }catch(const std::exception&e){fail(e.what());}}@catch(NSException*e){fail(e.reason.UTF8String?:"Presentation failed");}
   if(undeliveredReal){std::lock_guard<std::mutex>lock(mutex);retireBatch(undeliveredReal);}
   {std::lock_guard lock(mutex);handed.reset();}
   bool more=false;{std::lock_guard<std::mutex>lock(mutex);more=immediate.has_value()&&!waitingForDrawable;if(wakeup&&!stopping.load()){auto next=delivery.nextTime();const auto refresh=displayHz.load();if(next&&latest&&latest->targeted&&refresh)*next-=1./refresh;if(motionFrame&&motionFrame->totalSubframes>1&&(!next||nextSubframeTime<*next))next=nextSubframeTime;
-   // Waiting for a drawable: the next display-link tick schedules the pump; the layer route retries after half a refresh.
-   if(waitingForDrawable)next=metalTiming.load()?std::optional<double>{}:std::optional<double>(CACurrentMediaTime()+(refresh?0.5/refresh:0.004));
+   // Waiting for a drawable: the next display-link tick schedules the pump, and the timer checks the
+   // link's supply at its deadline; the layer route retries after half a refresh.
+   if(waitingForDrawable&&metalTiming.load()){
+    const double now=CACurrentMediaTime(),deadline=std::max(linkStarted.load(),linkSupplied.load())+linkSupplyTimeout;
+    if(now<deadline)next=deadline;
+    else{next.reset();const auto epoch=timingEpoch.load();if(linkRetiredEpoch.exchange(epoch)!=epoch){nativeLog("Presentation display link supplied no drawable for "+std::to_string(int((now-deadline+linkSupplyTimeout)*1000))+" ms while images were due ("+linkSupplyCounts()+"); presenting with layer drawables");retireMetalTiming(epoch);}}
+   }else if(waitingForDrawable)next=CACurrentMediaTime()+(refresh?0.5/refresh:0.004);
    dispatch_source_set_timer(wakeup,next?dispatch_time(DISPATCH_TIME_NOW,int64_t(std::max(0.,*next-CACurrentMediaTime())*NSEC_PER_SEC)):DISPATCH_TIME_FOREVER,DISPATCH_TIME_FOREVER,100*NSEC_PER_USEC);}}finishPump(more);
  }
  void generationBudgetContract(unsigned w,unsigned h){
