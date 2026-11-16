@@ -851,7 +851,9 @@ ShaderResult EffectExecution::bindGenerationScene(id<MTLCommandBuffer>commands,s
     auto actual=impl->normalizeScene(*scratch,commands,source,colour,colour,jittered,false,false,true,attachments,1,GuideAll,rawGuides);const auto aovs=temporalSceneAovs(actual);actual.owner=stage.state.get();if(aovs&&bindSceneAovLease(actual,aovs)!=RS_TEMPORAL_OK)return {false,"The generation endpoint attachments could not be retained"};
     bindMetalFxGenerationResources(actual,source,copiedFrom);
     if(auto matrices=sceneMatricesForImage(source,lease?lease->matrices:temporalSceneMatrices(source),jittered,origin==FrameOrigin::BottomLeft);matrices&&!temporalSceneMatrices(actual))rsBindTemporalSceneMatrices(&actual,&*matrices);
-    actual.method=RS_TEMPORAL_OFF;actual.reserved=0;stage.encoder->setScene(actual);stage.encoder->setSceneColorJitter(jittered);stage.encoder->setSceneOrigin(origin);return {true,{}};
+    actual.method=RS_TEMPORAL_OFF;actual.reserved=0;
+    if(nativeConfig().diagnostics.enabled){static std::atomic<unsigned>reported{0};if(reported.fetch_add(1,std::memory_order_relaxed)<64)nativeLog("Generation scene request stageOwner="+std::to_string(reinterpret_cast<uintptr_t>(stage.state.get()))+" commands="+std::to_string(reinterpret_cast<uintptr_t>((__bridge void*)commands))+" scene="+std::to_string(actual.frameId)+" sourceOwner="+std::to_string(reinterpret_cast<uintptr_t>(source.owner))+" flags="+std::to_string(actual.flags)+" reset="+std::to_string(bool(actual.flags&RS_TEMPORAL_RESET)));}
+    stage.encoder->setScene(actual);stage.encoder->setSceneColorJitter(jittered);stage.encoder->setSceneOrigin(origin);return {true,{}};
 }catch(const TransientBusy&error){return {false,error.what(),!error.structurallyImpossible};}catch(const std::exception&error){return {false,error.what()};}}
 ShaderResult EffectExecution::encodeAfterScene(const ShaderFrame &frame,bool suffix,bool generated){return encodeAfterScene(frame,suffix,generated,false,nullptr);}
 ShaderResult EffectExecution::encodeAfterScene(const ShaderFrame &frame,bool suffix,bool generated,bool inputMapped,bool*displayMapped) {
