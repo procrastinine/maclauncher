@@ -46,6 +46,7 @@ export const GENERATION=Object.freeze({
   "mlx-interpolation":Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:5,color:"sdr",gpuWorkScope:"external-queues"}),
   rife:Object.freeze({scene:false,camera:false,matrices:false,maximumMultiplier:5,color:"sdr",gpuWorkScope:"external-queues"}),
   metalfx:Object.freeze({scene:true,camera:true,matrices:false,maximumMultiplier:2,gpuWorkScope:"caller-command-buffer"}),
+  anr:Object.freeze({scene:true,camera:true,matrices:false,maximumMultiplier:5,minimumMacOS:"26.0",gpuWorkScope:"caller-command-buffer"}),
   fsr3:Object.freeze({scene:true,camera:true,matrices:false,maximumMultiplier:2,gpuWorkScope:"caller-command-buffer"}),
   xess:Object.freeze({scene:true,camera:false,matrices:true,maximumMultiplier:2,gpuWorkScope:"external-queues"}),
   // Image-pair methods built on macOS frameworks need no model files. A

@@ -140,11 +140,20 @@ Frame generation produces timestamped images between two consecutive input image
 | RIFE | A color pair and an explicit phase; v4.6 four-stage flow refinement and GPU warping | The configured phases, up to four intermediate images | An exactly supported RIFE model; the same provider and helper requirements. |
 | MetalFX interpolation | A real scene pair, depth and motion, jitter and exposure, and finite perspective camera data | One midpoint for an eligible real interval | macOS 26 or later and device support for the MetalFX interpolator. |
 | FSR 3 interpolation | The original optical-flow and frame-interpolation effects, with real scene data and camera conventions | One midpoint for an eligible real interval | The optional universal Metal provider with its complete shader resources, macOS 13 or later. |
+| Apex Neural Rendering (`anr`) | Real scene color, depth, current-to-previous motion, jitter and finite camera near/far planes | Explicit timeline phases, 2× through 5× | Apple silicon, macOS 26 or later, the ANR graphics provider and separately prepared Apex B15 models. Exact 1920×1080, 2560×1440 or 3840×2160 output. |
 | XeSS interpolation | The original XeSS-FG and XeLL components; real scene color, depth and motion, and view and projection matrices | One midpoint for an eligible real interval | The D3D12 compute host and separately imported compatible FG and latency components. |
 | VideoToolbox interpolation (`vt-interpolation`) | A color pair; VideoToolbox low-latency frame interpolation (`VTFrameProcessor` with `VTLowLatencyFrameInterpolationConfiguration`) on the Neural Engine | One midpoint at 2×, or up to three images at quarter phases at 4× | macOS 26 or later and a Mac that the processor reports as supported. Needs no model files or renderer guides. |
 | MetalFX image interpolation (`metalfx-image`) | A color pair; the MetalFX frame interpolator with motion estimated from the pair by `VTMotionEstimationSession` and a constant depth | One midpoint for each pair | macOS 26 or later and device support for the MetalFX interpolator. Needs no renderer guides. |
 | Vision optical flow (`vision-flow`) | A color pair; forward and backward flow from `VNGenerateOpticalFlowRequest`, a consistency-checked warp and a blend fallback | The configured phases, up to four intermediate images | macOS 11 or later. Needs no model files or renderer guides. |
 | Automatic (`auto`) | One of the three methods above for each pair, chosen by measured cost | As the method that runs the pair | At least one of its methods available for the row's multiplier. |
+
+### Apex Neural Rendering
+
+ANR is an independent Metal provider in the shared processor. Its scene inputs can come from any supported producer, including native Metal, Godot, DXMT, NGX, FidelityFX and the explicit frame API. It uses the model's no-matrix path with actual motion and finite near/far planes. Input-grid motion must exclude sample jitter. An unsupported input convention or output size produces an availability reason; fixed graphs are never stretched.
+
+The Apex macOS B15 kit is downloaded after consent or imported from a local archive or directory. Preparation extracts the required weights and kernels, converts the DXIL kernels using the kit's original Apple converter, and verifies each prepared size against the kit's own reference frames at phases 0.5 and 0.75. Only the prepared runtime remains in the profile. A usable installed runtime needs no download or preparation. Model assets and the converter library are separate from the graphics package.
+
+ANR accepts explicit sRGB, PQ and linear BT.709 color descriptions. A validated full-size HUD-less image and matching explicit alpha overlay keep the overlay outside interpolation. Without that exact split, the complete scene image is interpolated. The provider retains no inferred HUD mask or pixel-difference threshold.
 
 ### Image-pair methods from macOS frameworks
 
@@ -196,7 +205,7 @@ Graphics packages that include the step declare `features.graphics.generationSta
 
 ### Transparency and history
 
-Most generation methods need opaque images: Lossless Scaling, MetalFX, FSR 3, XeSS, VideoToolbox interpolation, MetalFX image interpolation, Vision optical flow and Automatic generation declare this requirement. The MLX interpolation and RIFE integrations, however, carry alpha separately from their RGB model inputs. The opacity requirement applies only to the selected generation provider and does not disable other image operations in the graph.
+Most generation methods need opaque images: Lossless Scaling, MetalFX, FSR 3, ANR, XeSS, VideoToolbox interpolation, MetalFX image interpolation, Vision optical flow and Automatic generation declare this requirement. The MLX interpolation and RIFE integrations, however, carry alpha separately from their RGB model inputs. The opacity requirement applies only to the selected generation provider and does not disable other image operations in the graph.
 
 Each provider's history tracks its own reset, discontinuity, source epoch, scene and color geometry, and completion. Paused redraws reprocess the accepted image without advancing generation history. When a provider returns a no-interpolation or failed result, that result is never counted as a generated image, and its real endpoint stays available. XeLL, the latency component used with XeSS frame generation, runs in a helper, and that integration adds no engine simulation markers and does not measure input latency end to end.
 

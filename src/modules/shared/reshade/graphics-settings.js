@@ -126,6 +126,8 @@ function capabilities(root, host, options = {}) {
     const hardware = options.graphicsHardware || require("./hardware-support").snapshot(root, options);
     if(graphics.generationProviderAPI===1&&(!options.selectedMethods||options.selectedMethods.generation?.includes("fsr3"))&&require("./generation/fsr3").resolve(root,options))graphics.frameGenerationMethods=[...new Set([...(graphics.frameGenerationMethods||[]),"fsr3"])];
     else graphics.frameGenerationMethods=graphics.frameGenerationMethods?.filter(method=>method!=="fsr3");
+    if(graphics.anrGenerationAPI===1&&(!options.selectedMethods||options.selectedMethods.generation?.includes("anr"))&&require("./generation/anr").resolve(root,options))graphics.frameGenerationMethods=[...new Set([...(graphics.frameGenerationMethods||[]),"anr"])];
+    else graphics.frameGenerationMethods=graphics.frameGenerationMethods?.filter(method=>method!=="anr");
     if(graphics.xessGenerationAPI===1&&(!options.selectedMethods||options.selectedMethods.generation?.includes("xess"))&&require("./xess").resolve(root,options)?.generation)
       graphics.frameGenerationMethods=[...new Set([...(graphics.frameGenerationMethods||[]),"xess"])];
     else graphics.frameGenerationMethods=graphics.frameGenerationMethods?.filter(method=>method!=="xess");

@@ -1,4 +1,5 @@
 [
+  { "label": "ANR Metal runtime and NRX preparation / fsr4-native-macos (MIT)", "url": "https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos/tree/e9d12070dd9b81dc7ec1725368c71a4d3859a108" },
   { "label": "Cutter native CLI distribution", "url": "https://github.com/rizinorg/cutter" },
   { "label": "Rizin (LGPL-3.0-or-later)", "url": "https://github.com/rizinorg/rizin" },
   { "label": "rz-ghidra (LGPL-3.0-or-later)", "url": "https://github.com/rizinorg/rz-ghidra" },

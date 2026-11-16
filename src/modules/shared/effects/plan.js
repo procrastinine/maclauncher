@@ -70,7 +70,7 @@ const METHODS = Object.freeze({ area: {label: "Area", recommended: ["downsample"
   bicubic: {label: "Bicubic", recommended: ["upscale", "downsample"]}, bilinear: {label: "Bilinear", recommended: ["upscale", "downsample"]},
   metalfx: {label: "MetalFX", recommended: ["temporal", "frame-generation"]}, "metalfx-denoised": {label: "MetalFX denoised scaling"},
   fsr1: {label: "AMD FSR 1", recommended: ["upscale"]}, fsr2: {label: "AMD FSR 2"}, fsr3: {label: "AMD FSR 3", recommended: ["temporal"]}, fsr4: {label: "AMD FSR 4"},
-  xess: {label: "Intel XeSS"}, asr: {label: "Arm ASR"}, sgsr2: {label: "Snapdragon GSR 2"}, mako: {label: "Mako"}, ls1: {label: "Lossless Scaling LS1"},
+  anr: {label:"Apex Neural Rendering"}, xess: {label: "Intel XeSS"}, asr: {label: "Arm ASR"}, sgsr2: {label: "Snapdragon GSR 2"}, mako: {label: "Mako"}, ls1: {label: "Lossless Scaling LS1"},
   lsfg: {label: "Lossless Scaling Frame Generation", recommended: ["frame-generation"]}, libplacebo: {label: "libplacebo"},
   "vt-interpolation": {label: "VideoToolbox interpolation"}, "metalfx-image": {label: "MetalFX image interpolation"},
   "vision-flow": {label: "Vision optical flow"}, auto: {label: "Automatic"},
@@ -170,11 +170,12 @@ function catalog({ reshadeState = {}, graphicsCapabilities = {}, graphicsInputs 
       const reason = runtimeReason || (method==="xess"&&xess?.available!==true?xess?.reason||"Install the Intel XeSS runtime and a compatible GPU compute host.":null) || (requiredModel && !model ? "Compatible Lossless Scaling models are required." : null);
       const category = method.startsWith("metalfx") ? "MetalFX" : method==="xess"?"Intel XeSS":/^fsr\d$/.test(method) ? "AMD FidelityFX" : ["ls1", "lsfg"].includes(method) ? "Lossless Scaling" :
         ["vt-interpolation","vision-flow","auto"].includes(method) ? "macOS frameworks" : "Standard filters";
-      const midpoint=scene||operation?.maximumMultiplier===2;
+      const midpoint=operation?.maximumMultiplier===2;
       rows.push({ id: kind + ":" + method, kind, label: method === "downsample" ? "Downsample" : support.spatialMethodLabels?.[method] || METHODS[method]?.label || (method.startsWith("libplacebo:") ? require("./presentation.mjs").libplaceboFilterLabel(method.slice(11)) : method),
         group: resize ? "Resize" : "Temporal", category,
         ...(["ls1","lsfg"].includes(method)?{traits:{neural:true}}:{}),
         ...(method==="fsr4"?{profiles:support.temporalProfiles?.fsr4||["exact-fast"],profileOptions:support.temporalProfileOptions?.fsr4||[]}:{}),
+        ...(method==="anr"?{...require("../reshade/generation/anr").descriptor(),id:kind+":"+method,runtimeManagerId:"anr"}:{}),
         ...(method==="xess"?{backends:xess?.backends||[],runtimeManagerId:"graphics-xess",availableWithoutRuntime:xess?.availableWithoutRuntime===true}:{}),
         ...(support.colorPipeline&&["ls1","lsfg"].includes(method)?{colorPolicy:method==="lsfg"&&support.lsfgHDR?Providers.SCRGB_COLOR_POLICY:Providers.SDR_COLOR_POLICY}:{}),
         inputContract:{domain:scene?"scene":kind==="frame-generation"?"image-pair":"image",color:"rgb",requires:[...sceneRequirements,...(kind==="frame-generation"?["opaque"]:[])],acceptsSynthetic:!scene},

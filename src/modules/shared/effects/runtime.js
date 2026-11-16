@@ -630,6 +630,12 @@ async function prepare(entry, options = {}) {
         settings: {...prepared.settings,...(node.kind === "frame-generation" ? {frameMultiplier,framePacing,targetFps,smoothCadence,...(keepStaticContent !== undefined ? {keepStaticContent} : {})} : {})},
         ...(!["frame-generation","temporal"].includes(node.kind) ? {intrinsicScale: prepared.intrinsicScale||Providers.descriptor(node.method).scale} : {}),
         modelPath: prepared.settings.modelPath, requirements });
+    } else if(node.kind==="frame-generation"&&node.method==="anr") {
+      const Anr=require("../reshade/generation/anr"),Library=require("../reshade/generation/anr/library");
+      const provider=Anr.resolve(ctx.root,ctx);if(!provider)throw Error("A compatible ANR graphics provider is required.");
+      const installed=await Library.install(ctx);if(!installed)throw Error("Apex Neural Rendering installation was cancelled.");
+      environment.RESHADE_ANR_GENERATION_LIBRARY=provider.library;
+      nodes.push({id:node.id,kind:node.kind,enabled:true,method:"anr",settings:stageSettings(node),modelPath:installed.runtimePath,requirements});
     } else if(["temporal","frame-generation"].includes(node.kind)&&node.method==="xess") {
       const Xess=require("../reshade/xess");
       const binding=launch?.effectPlanLiveResources?.xess||Xess.reserve({...ctx,directory,launchId:options.launchId||LaunchBinding.read(entry,ctx)?.launchId||entry.id});

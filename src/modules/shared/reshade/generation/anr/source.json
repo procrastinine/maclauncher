@@ -1,0 +1,106 @@
+{
+  "repository": "https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos",
+  "license": "MIT",
+  "managerId": "anr",
+  "version": "FG-V.B15",
+  "minimumMacOS": "26.0",
+  "architectures": [
+    "arm64",
+    "x86_64"
+  ],
+  "asset": "anr-fg-V.B15-kit-macos.tar.gz",
+  "sha256": "d1b9607c0779e501d3ae319811f7cc090b0f54a8860fc0a2ce8d8392e099b2a3",
+  "url": "https://github.com/apex-compute/ANR/releases/download/FG-V.B15/anr-fg-V.B15-kit-macos.tar.gz",
+  "sourceUrl": "https://github.com/apex-compute/ANR/releases/tag/FG-V.B15",
+  "checkpoint": "e09deb7012c96c172e49e72eb0b747b4611a8b6e3f14e5f5563189c580772ac1",
+  "kernelPack": "aeb6f568a241a63daf804a213de9c17dad2bdd7f7e79779f3002a9a3e1493767",
+  "converter": "1af7a62b73330e56e7e47ad7cf3582b3b79b5cdee1c8fef9ab1387fb15b71d2e",
+  "sizes": [
+    {
+      "id": "1080p",
+      "width": 1920,
+      "height": 1080,
+      "sha256": "87340ac7131f5b19e5433f6bcc46df63b44d536ea6c4c763cfb68039b4df39e8"
+    },
+    {
+      "id": "1440p",
+      "width": 2560,
+      "height": 1440,
+      "sha256": "b280b9b380f456b65ea05b1ce7e1ffe769061df8aad1b2c340f37673a10fd7e8"
+    },
+    {
+      "id": "2160p",
+      "width": 3840,
+      "height": 2160,
+      "sha256": "bf0b64db424bb912f24d46944d005be650086585217eb66bddf638840c03704e"
+    }
+  ],
+  "commit": "e9d12070dd9b81dc7ec1725368c71a4d3859a108",
+  "converterHeaders": {
+    "repository": "https://github.com/MethanePowered/MetalShaderConverterBinary",
+    "commit": "cfed9ebffb64e1d784853edb8cdeea32456a75a0",
+    "archive": {
+      "url": "https://codeload.github.com/MethanePowered/MetalShaderConverterBinary/tar.gz/cfed9ebffb64e1d784853edb8cdeea32456a75a0",
+      "sha256": "6f3e3c9b7e7ebd414a0c9dbb7cf12b4d864f55246375d78ac3aab64ce64d827c",
+      "bytes": 50966971
+    },
+    "files": {
+      "metal_irconverter/Acknowledgements.rtf": "01ed5de80de6e1ca7c074ef602d867ef0bdbf0be3abc97adb7199c1ad380c3ba",
+      "metal_irconverter/LICENSE.txt": "9a09e3e5c6bde5ea5704c3599620753b5eb19116f9fd649c37b5bc4497a25cea",
+      "metal_irconverter/ir_comparison_function.h": "7511d5c187f3a9d82cbb9f4e868c6cab51aa8273748b158683c0b86792d9c96e",
+      "metal_irconverter/ir_descriptor_range_flags.h": "1ee1bb476ad13de96085348381b7b48c1832ba59710fbe363512ea2f4ec5e3e0",
+      "metal_irconverter/ir_filter.h": "fe53948535c289d4471b8cef315d43a48b73f2c266c6fcf90d2b209604819de2",
+      "metal_irconverter/ir_format.h": "4e48cfe1f7e8da5e356b1b70c481873bba811bfc309f38c3b00a41ff262dc700",
+      "metal_irconverter/ir_input_classification.h": "2561c71b7580769c5d2d94106c7008575dff9c570fa12bb6d32f5c98306f4998",
+      "metal_irconverter/ir_input_primitive.h": "b32694d0fcbd42f991b7bb3a3f6f335c61ad359109a3f06e31da73bf96218ed2",
+      "metal_irconverter/ir_input_topology.h": "ff65da73a76c1efbcce8092fd610812fc59958ebde651167c6f965ec375d70e6",
+      "metal_irconverter/ir_root_descriptor_flags.h": "c7e7686b47080a7aa1aa06725c8355e5a03fa301fdf1af656163aff77c4bc5d2",
+      "metal_irconverter/ir_root_signature_flags.h": "9e1a3bb28a834ffa9dce52484c201d640c0944a31850413a6dd981c5ce87476b",
+      "metal_irconverter/ir_shader_visibility.h": "397a782c0c33b559f327a4d90a272ab9caab956b5ccea3e21ec25eff09187e40",
+      "metal_irconverter/ir_tessellator_domain.h": "45d15402c6cefde95195d93d07ba8c0c1e4d72b6018b2486f424e866e31b60bf",
+      "metal_irconverter/ir_tessellator_output_primitive.h": "22c2bfd5962796f59d50e2ad57ab786a6458b433d15524b5d8f930a10b3362bc",
+      "metal_irconverter/ir_tessellator_partitioning.h": "3c83f133bcfc44ba0c6642ac4c27f1838d06ccc80e1518d42dd7ad88990ca3a9",
+      "metal_irconverter/ir_texture_address_mode.h": "4772ce70faba3c923751a2c47825772cd5a13c1b262243767a6aa57514d69abb",
+      "metal_irconverter/ir_version.h": "9fec1c90a69042025d9e63780eb496468d8016bbc7708339955d8c39f421104f",
+      "metal_irconverter/metal_irconverter.h": "efc72e02b048977b7ac58ae1fb77ab0d1183ea700f7f8ea4b3e0d8adbcc94408",
+      "metal_irconverter_runtime/Acknowledgements.rtf": "01ed5de80de6e1ca7c074ef602d867ef0bdbf0be3abc97adb7199c1ad380c3ba",
+      "metal_irconverter_runtime/LICENSE.txt": "9a09e3e5c6bde5ea5704c3599620753b5eb19116f9fd649c37b5bc4497a25cea",
+      "metal_irconverter_runtime/ir_raytracing.h": "303a24caea8207c9e6c6e920db393193771961096af3be2e80d8981df63f561b",
+      "metal_irconverter_runtime/ir_tessellator_tables.h": "c8d3a87d0082263f1d69e8c195cd7c52f11fba3479c1bb51f8e102daef157c4d",
+      "metal_irconverter_runtime/metal_irconverter_runtime.h": "f1f3fa1833285d01c4a3839c4d73f2f2bdecdfcc9c6b5b7aedfd4b67fa52b10f"
+    }
+  },
+  "verificationFiles": {
+    "inputs/timing-1080p/color0.bin": "a47d069e9e5136a816e731e0587e7e123c0163876d3ce87e5f20a6e94caadc8c",
+    "inputs/timing-1080p/color1.bin": "e118a538b24d4c386db5184c5b7fe907b6d870d63d32fe3ec638bc89839c4af8",
+    "inputs/timing-1080p/depth0.bin": "190395790f64ab4f8ef2679af7385281d3a5ccc0fedb98c2644a542a21c2d7b8",
+    "inputs/timing-1080p/depth1.bin": "976ccab2b6c57f0519f6ea50ced7b5142c069bbd2b72b5a001760b4008de430d",
+    "inputs/timing-1080p/motion0.bin": "30a6620be9f42599c30430a700f670b4750f27aa1dbb9c32fdd24d9d658ee9e6",
+    "inputs/timing-1080p/motion10.bin": "efe3161f11b9762930a31bb5bd05d5a6417b6a6cd1b3afa2f37764f3f4e8de2d",
+    "inputs/timing-1080p/frame0.bin": "b3ed9cc02f1cfed5440b3d2ae212eb399429a6ea68215a9fe286e7c54d0105e7",
+    "inputs/timing-1080p/frame.bin": "397cabf3d74c95f775ba23f1fb2849795353fb88a55729c02d3461a32744f1a5",
+    "references/timing-1080p-t0.5.bin": "5719c972ffcd31a85d839f6edc3dbfb49296b6262647d9cc3311615383cb9e2c",
+    "references/timing-1080p-t0.75.bin": "6a10c18eb57b318fcc17d455e4d76139810ecd9c021ba3439c386a088a537280",
+    "inputs/timing-1440p/color0.bin": "76423c311f0f9df96087d2d9ad18d5ebbbf603f2e62a79e9969901b2f91ba714",
+    "inputs/timing-1440p/color1.bin": "772b3e6199ebcd8e592a8f005818d53d81df2d1320338f2f2d92335efaac17b9",
+    "inputs/timing-1440p/depth0.bin": "44f105d11a74d90ad9541fde46614717c2e8b6c6eada3c5f26ad900b97112cf7",
+    "inputs/timing-1440p/depth1.bin": "2f13638af3fbdca3af5f510e8750fe379b3932cb5d609e20e64a436aa30be2b8",
+    "inputs/timing-1440p/motion0.bin": "c242aabbb92d10dd844fafb213befbf4fe0424879b1e8f971106c807800af8fb",
+    "inputs/timing-1440p/motion10.bin": "c8355ecf18310a045e9aa1c15e88eaa5f77a8cfac483a8e98087af9c7ca0e5d0",
+    "inputs/timing-1440p/frame0.bin": "b300d4626a1e82b7e01a2e99a27b5718ea69c6eb769ed2595431be932c3add60",
+    "inputs/timing-1440p/frame.bin": "075ed31adea28858e7f64d4df40bee3f93dfec5f78ecfb266155d64ecafcc7cf",
+    "references/timing-1440p-t0.5.bin": "41404ca666d2399dfced1e13b559a18a2c3a548f6bfc362cd43122063289a1e9",
+    "references/timing-1440p-t0.75.bin": "8664715824f750bd753bcb6e65ce1b2352d10a243f3bb32eea00a8bdd0d3f8af",
+    "inputs/timing-2160p/color0.bin": "72d79b161dae7d4eb006b6887d28909a0dbde85014dc16e6d4bc72e52fba1a3a",
+    "inputs/timing-2160p/color1.bin": "1d5fad816031320fe7cc31e31435294ada3c426cdf363f19a25649bf46933e7e",
+    "inputs/timing-2160p/depth0.bin": "04089579bb1fdec88095d2af07ef35db64cce21078405073aa507d4375e4ad31",
+    "inputs/timing-2160p/depth1.bin": "90acded50a7804f03e446deaf3e0b1cf91a6caad8748954fc24d26a79283849d",
+    "inputs/timing-2160p/motion0.bin": "93877ef91fa170c8738a26619dca55272288ff7f7e2ab259c87c4ac21947a871",
+    "inputs/timing-2160p/motion10.bin": "73aabe1fdb93a503746a231d24b1e72d1218d573bca96a9b82f04d92bf0caffb",
+    "inputs/timing-2160p/frame0.bin": "7eea9f2b79c861bd09ef97a4b15e62734c69b0d8c1f6d36209252f0619f72eef",
+    "inputs/timing-2160p/frame.bin": "d0339664a8e22233b56211d933a769c599cf907e1b70024e37721fad09bcd5c8",
+    "references/timing-2160p-t0.5.bin": "be56a7c2e6fb410d149f463d7d2947a6cc0065dd0ebd968740151af2b7cc0090",
+    "references/timing-2160p-t0.75.bin": "39df10f7dcccb1c875211e151d2f41d1018cb9f60bf1ac841af63bd6f528dd52"
+  },
+  "bytes": 466791077
+}

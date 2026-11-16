@@ -421,6 +421,7 @@ std::shared_ptr<GenerationEncoder>makeGenerationEncoder(id<MTLDevice>device,cons
  if(method=="xess")return makeXessGenerationEncoder(device,config);
  if(method=="mlx-interpolation")return makeNeuralGenerationEncoder(device,config);
  if(method=="rife")return makeRifeGenerationEncoder(device,config);
+ if(method=="anr")return makeANRGenerationEncoder(device,config);
  if(method=="fsr3")return makeFSR3GenerationEncoder(device,config);
  if(method=="vt-interpolation")return makeVideoToolboxGenerationEncoder(device,config);
  if(method=="metalfx-image")return makeMetalFXImageGenerationEncoder(device,config);

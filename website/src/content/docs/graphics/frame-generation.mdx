@@ -1,6 +1,6 @@
 ---
 title: Frame generation
-description: "Frame generation for games on macOS: Lossless Scaling frame generation (LSFG) from a purchased copy, RIFE, VideoToolbox, Vision optical flow, MetalFX, FSR 3 and XeSS."
+description: "Frame generation for games on macOS: Lossless Scaling frame generation (LSFG) from a purchased copy, RIFE, VideoToolbox, Vision optical flow, MetalFX, FSR 3, ANR and XeSS."
 head:
   - tag: title
     content: "Frame generation on Mac: Lossless Scaling (LSFG), RIFE, VideoToolbox and MetalFX | MacLauncher"
@@ -47,10 +47,11 @@ The last three use frameworks that come with macOS, so they need no downloads or
 
 Each frame generation row has a **Frame multiplier**, which sets how many images its generator adds between a pair of real frames. At 3×, for example, a generator draws two images for every real frame, taking a 30 fps game toward 90 fps. Most image-pair generators go up to 5×, or four images per pair; VideoToolbox interpolation offers 2× and 4×, and MetalFX image interpolation offers only 2×. Image-pair generators also detect repeated frames and scene cuts and skip generation across them, so transitions don't smear.
 
-The second kind, scene generators, use the game's depth, motion vectors and camera data, just as the [temporal upscalers](/maclauncher/graphics/upscaling/#temporal-upscalers) do. They draw one image in the middle of each interval between real frames, and they only run in games whose runtime supplies that data:
+The second kind, scene generators, use the game's depth, motion vectors and camera data, just as the [temporal upscalers](/maclauncher/graphics/upscaling/#temporal-upscalers) do. They run in games whose runtime supplies that data. MetalFX, FSR 3 and XeSS draw one midpoint; ANR supports multipliers from 2× through 5×:
 
 - <span id="metalfx-frame-interpolation"></span>**MetalFX frame interpolation** needs macOS 26 or later and a supported GPU.
 - <span id="fsr-3-frame-interpolation"></span>**[FSR 3](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) frame interpolation** is AMD's optical-flow and interpolation passes, ported to [Metal](https://developer.apple.com/metal/).
+- <span id="anr-frame-generation"></span>**[Apex Neural Rendering](https://github.com/apex-compute/ANR)** runs on Apple silicon with macOS 26 or later. Its macOS kit is downloaded after consent or imported locally, then prepared and checked against its reference images. The prepared graphs support exact 1080p, 1440p and 2160p output. The [provider reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md#apex-neural-rendering) lists its scene and color requirements.
 - <span id="xess-frame-generation"></span>**[Intel XeSS](https://github.com/intel/xess) frame generation** uses XeSS-FG components that you import separately. It runs on Apple Silicon through D3DMetal, Apple's translator from Windows Direct3D to Metal.
 
 ## Automatic

@@ -5,11 +5,12 @@
 #include <string_view>
 namespace macfx {
 struct GenerationMethodInfo{std::string_view id;bool scene,camera,matrices;unsigned maximumMultiplier;std::string_view gpuWorkScope;bool sdr;unsigned multipliers;};
-inline constexpr std::array<GenerationMethodInfo,10>generationMethods{{
+inline constexpr std::array<GenerationMethodInfo,11>generationMethods{{
     {"lsfg",false,false,false,5,"caller-command-buffer",false,60},
     {"mlx-interpolation",false,false,false,5,"external-queues",true,60},
     {"rife",false,false,false,5,"external-queues",true,60},
     {"metalfx",true,true,false,2,"caller-command-buffer",false,4},
+    {"anr",true,true,false,5,"caller-command-buffer",false,60},
     {"fsr3",true,true,false,2,"caller-command-buffer",false,4},
     {"xess",true,false,true,2,"external-queues",false,4},
     {"vt-interpolation",false,false,false,4,"external-queues",true,20},

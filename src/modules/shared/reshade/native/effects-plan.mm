@@ -453,7 +453,7 @@ PlanDemand effectPlanDemand(const EffectPlanSnapshot &plan) noexcept {
         neural|=node.kind=="neural";demand.sceneAovs|=required.sceneAovs;
         auto &scene=demand.sceneFrame;
         if(node.kind=="temporal")scene|=temporal(node.method);
-        if(sceneGeneration){scene|=temporal(node.method=="metalfx"?"metalfx-interpolation":node.method);if(node.method=="xess")scene|=RS_SCENE_VIEW_MATRIX|RS_SCENE_PROJECTION_MATRIX;}
+        if(sceneGeneration){scene|=temporal(node.method=="metalfx"?"metalfx-interpolation":node.method);if(generationRequiresCamera(node.method))scene|=RS_SCENE_CAMERA;if(node.method=="xess")scene|=RS_SCENE_VIEW_MATRIX|RS_SCENE_PROJECTION_MATRIX;}
         if(required.depth)scene|=RS_SCENE_COLOR|RS_SCENE_DEPTH;
         if(required.motion)scene|=RS_SCENE_COLOR|RS_SCENE_MOTION;
         if(required.exposure)scene|=RS_SCENE_COLOR|RS_SCENE_EXPOSURE;

@@ -51,6 +51,7 @@ std::shared_ptr<GenerationEncoder> makeGenerationEncoder(id<MTLDevice>,const std
 std::shared_ptr<GenerationEncoder> makeNeuralGenerationEncoder(id<MTLDevice>,const LsfgConfig&);
 std::shared_ptr<GenerationEncoder> makeRifeGenerationEncoder(id<MTLDevice>,const LsfgConfig&);
 std::shared_ptr<GenerationEncoder> makeXessGenerationEncoder(id<MTLDevice>,const LsfgConfig&);
+std::shared_ptr<GenerationEncoder> makeANRGenerationEncoder(id<MTLDevice>,const LsfgConfig&);
 std::shared_ptr<GenerationEncoder> makeFSR3GenerationEncoder(id<MTLDevice>,const LsfgConfig&);
 std::shared_ptr<GenerationEncoder> makeVideoToolboxGenerationEncoder(id<MTLDevice>,const LsfgConfig&);
 std::shared_ptr<GenerationEncoder> makeMetalFXImageGenerationEncoder(id<MTLDevice>,const LsfgConfig&);

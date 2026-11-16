@@ -53,6 +53,7 @@ function selectedFiles(manifest, entry, options = {}) {
   if (needed.neural) prefixes.push("neural/");
   prefixes.push(...require("./temporal/providers").prefixes(demand.methods.temporal));
   if(demand.methods.temporal.includes("xess")||demand.methods.generation.includes("xess"))prefixes.push("xess/");
+  if(demand.methods.generation.includes("anr"))prefixes.push("generation/anr/");
   if(demand.methods.generation.includes("fsr3"))prefixes.push("generation/fsr3/");
   if (formats.has("libplacebo") || demand.methods.spatial.some(method => method.startsWith("libplacebo:"))) {
     names.add("libmacfx-libplacebo.dylib");names.add("libplacebo-prepare");prefixes.push("libplacebo/");
