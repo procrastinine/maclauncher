@@ -1,3 +1,4 @@
+const BinaryArch = require('../../../../core/binary-arch');
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const { cloneOrCopySync } = require("../../../shared/copy-file");
 const execute = require("node:util").promisify(require("node:child_process").execFile);
@@ -5,9 +6,10 @@ const Writable = require("../../../shared/writable-input");
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
 function embeddedPlist(bytes) {
-  if (bytes.length < 32 || bytes.readUInt32LE(0) !== 0xfeedfacf || bytes.readUInt32LE(4) !== 0x100000c)
+  const format = bytes.length >= 32 && BinaryArch.machoMagic(bytes.readUInt32BE(0));
+  if (!format || format.fat || !format.wide || !format.little || BinaryArch.machoArchitecture(BinaryArch.machoCpuType(bytes)) !== "arm64")
     throw new Error("The Mac.apk application executable is not compatible with Apple Silicon.");
-  const count = bytes.readUInt32LE(16), end = 32 + bytes.readUInt32LE(20);
+  const facts = BinaryArch.machoHeader(bytes), count = facts.commandCount, end = 32 + facts.commandBytes;
   if (count > 4096 || end > bytes.length) throw new Error("The Mac.apk application executable is invalid.");
   const name = offset => bytes.subarray(offset, offset + 16).toString("ascii").split("\0")[0];
   for (let offset = 32, index = 0; index < count; index++) {

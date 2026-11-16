@@ -1,3 +1,4 @@
+const BinaryArch = require('../../../../core/binary-arch');
 const fs = require("node:fs");
 const Guards = require("../../../shared/runtime/guards");
 // Inspect only a bounded PE export directory; malformed or unnamed interfaces
@@ -7,8 +8,10 @@ function inspect(file) {
     const stat = fs.statSync(file);
     if (!stat.isFile() || stat.size < 256 || stat.size > Guards.limit(32 * 1024 * 1024)) return null;
     const b = fs.readFileSync(file), pe = b.readUInt32LE(60);
-    if (b.readUInt16LE(0) !== 0x5a4d || pe < 64 || pe + 24 > b.length || b.readUInt32LE(pe) !== 0x4550 || b.readUInt16LE(pe + 4) !== 0x8664) return null;
-    const count = b.readUInt16LE(pe + 6), size = b.readUInt16LE(pe + 20), optional = pe + 24;
+    if (b.readUInt16LE(0) !== 0x5a4d || pe < 64 || pe + 24 > b.length || b.readUInt32LE(pe) !== 0x4550) return null;
+    const facts = BinaryArch.peHeaderFacts(b.subarray(pe, pe + 24));
+    if (facts.declaredArchitecture !== "x86_64") return null;
+    const count = facts.sectionCount, size = facts.optionalBytes, optional = pe + 24;
     if (!count || count > 96 || size < 120 || optional + size + count * 40 > b.length || b.readUInt16LE(optional) !== 0x20b || b.readUInt32LE(optional + 108) < 1) return null;
     const sections = Array.from({ length: count }, (_, i) => { const p = optional + size + 40 * i;return { rva: b.readUInt32LE(p + 12), size: b.readUInt32LE(p + 16), offset: b.readUInt32LE(p + 20) }; });
     function raw(rva, length) {

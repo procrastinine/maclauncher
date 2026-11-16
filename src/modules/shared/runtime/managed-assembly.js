@@ -1,3 +1,4 @@
+const BinaryArch = require('../../../core/binary-arch');
 const fs = require("node:fs");
 
 // ECMA-335 metadata tables through GenericParamConstraint. Detection never loads
@@ -53,7 +54,7 @@ function inspectManagedAssembly(filePath, { maxMetadataBytes = 8 * 1024 * 1024, 
     const peOffset = dos.readUInt32LE(60);
     const coff = read(peOffset, 24);
     if (coff.readUInt32LE(0) !== 0x4550) throw new Error("Invalid PE signature.");
-    const sectionsCount = coff.readUInt16LE(6), optionalSize = coff.readUInt16LE(20);
+    const facts = BinaryArch.peHeaderFacts(coff), sectionsCount = facts.sectionCount, optionalSize = facts.optionalBytes;
     if (!sectionsCount || sectionsCount > 96 || optionalSize < 224 || optionalSize > 4096) throw new Error("Invalid PE section or optional header.");
     const optional = read(peOffset + 24, optionalSize);
     const magic = optional.readUInt16LE(0);
@@ -209,7 +210,7 @@ function inspectManagedAssembly(filePath, { maxMetadataBytes = 8 * 1024 * 1024, 
     }
     return { assemblyName: assembly ? string(assembly[7]) : null,
       assemblyVersion: assembly ? version(assembly.slice(1, 5)) : null,
-      clrMetadataVersion, targetFramework, references, typeReferences, nativeImports, peMachine: coff.readUInt16LE(4), peFormat: magic === 0x20b ? "PE32+" : "PE32",
+      clrMetadataVersion, targetFramework, references, typeReferences, nativeImports, peMachine: facts.machineCode, peFormat: magic === 0x20b ? "PE32+" : "PE32",
       hasNativeManagedCode: Boolean(cli.readUInt32LE(64) || cli.readUInt32LE(68)),
       ilOnly: Boolean(flags & 1), requires32Bit: Boolean(flags & 2), prefer32Bit: Boolean(flags & 0x20000),
       nativeEntryPoint: Boolean(flags & 0x10), entryPointToken,

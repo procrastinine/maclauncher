@@ -1,8 +1,10 @@
+const BinaryArch = require('../../../../core/binary-arch');
 function parsed(bytes) {
   const valid=(at,size)=>Number.isSafeInteger(at)&&at>=0&&size>=0&&at+size<=bytes.length;
   if(!Buffer.isBuffer(bytes)||bytes.length<256||bytes.readUInt16LE(0)!==0x5a4d)throw Error("Invalid adapter PE image.");
-  const pe=bytes.readUInt32LE(0x3c);if(!valid(pe,24)||bytes.readUInt32LE(pe)!==0x4550||bytes.readUInt16LE(pe+4)!==0x8664)throw Error("The adapter requires a 64-bit PE image.");
-  const count=bytes.readUInt16LE(pe+6),optional=pe+24,optionalSize=bytes.readUInt16LE(pe+20),table=optional+optionalSize;
+  const pe=bytes.readUInt32LE(0x3c);if(!valid(pe,24)||bytes.readUInt32LE(pe)!==0x4550)throw Error("The adapter requires a 64-bit PE image.");
+  const facts=BinaryArch.peHeaderFacts(bytes.subarray(pe,pe+24));if(facts.declaredArchitecture!=="x86_64")throw Error("The adapter requires a 64-bit PE image.");
+  const count=facts.sectionCount,optional=pe+24,optionalSize=facts.optionalBytes,table=optional+optionalSize;
   if(!count||count>96||optionalSize<120||!valid(table,count*40)||bytes.readUInt16LE(optional)!==0x20b)throw Error("Invalid adapter PE sections.");
   const sections=Array.from({length:count},(_,index)=>{const at=table+index*40;return {at,virtualSize:bytes.readUInt32LE(at+8),address:bytes.readUInt32LE(at+12),rawSize:bytes.readUInt32LE(at+16),raw:bytes.readUInt32LE(at+20)};});
   const offset=(rva,size=1)=>{const section=sections.find(row=>rva>=row.address&&rva+size<=row.address+row.rawSize);if(!section||!valid(section.raw+rva-section.address,size))throw Error("Invalid adapter export address.");return section.raw+rva-section.address;};

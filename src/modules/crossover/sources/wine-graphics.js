@@ -1,3 +1,4 @@
+const BinaryArch = require('../../../core/binary-arch');
 const fs = require("node:fs");
 const { cloneOrCopy } = require("../../shared/copy-file");
 const path = require("node:path");
@@ -112,7 +113,7 @@ async function linkFile(source, destination, signal) {
         !header.subarray(64).includes(Buffer.from("Wine builtin DLL\0"))) fail("The selected renderer requires a supported Wine builtin DLL package.");
       const pe = header.readUInt32LE(60), machine = require("../../shared/runtime/binary-compatibility").requiredMachine(path.basename(path.dirname(destination)).replace(/-windows$/, "")) || 0x8664;
       if (pe < 80 || pe > stat.size - coff.length || (await handle.read(coff, 0, coff.length, pe)).bytesRead !== coff.length ||
-        coff.readUInt32LE(0) !== 0x4550 || coff.readUInt16LE(4) !== machine || !(coff.readUInt16LE(22) & 0x2000))
+        coff.readUInt32LE(0) !== 0x4550 || BinaryArch.peHeaderFacts(coff).machineCode !== machine || !(BinaryArch.peHeaderFacts(coff).characteristics & 0x2000))
         fail("A selected renderer DLL does not match its Windows architecture.");
     } finally { await handle.close(); }
   }
@@ -157,8 +158,10 @@ async function cloneLoaderFile(source, destination, signal) {
 // thin 64-bit or universal Intel Mach-O image.
 function embeddedInfo(bytes) {
   const thin = offset => {
-    if (offset + 32 > bytes.length || bytes.readUInt32LE(offset) !== 0xfeedfacf) return null;
-    const count = bytes.readUInt32LE(offset + 16), end = offset + 32 + bytes.readUInt32LE(offset + 20);
+    if (offset + 32 > bytes.length) return null;
+    const format = BinaryArch.machoMagic(bytes.readUInt32BE(offset));
+    if (!format || format.fat || !format.little || !format.wide) return null;
+    const facts = BinaryArch.machoHeader(bytes.subarray(offset, offset + 32)), count = facts.commandCount, end = offset + 32 + facts.commandBytes;
     if (count > 4096 || end > bytes.length) return null;
     const name = at => bytes.subarray(at, at + 16).toString("latin1").split("\0")[0];
     for (let command = offset + 32, index = 0; index < count && command + 8 <= end; index++) {
@@ -174,10 +177,12 @@ function embeddedInfo(bytes) {
     }
     return null;
   };
-  if (bytes.length >= 8 && bytes.readUInt32BE(0) === 0xcafebabe) {
-    for (let index = 0, count = Math.min(bytes.readUInt32BE(4), 16); index < count; index++) {
+  const format = bytes.length >= 8 && BinaryArch.machoMagic(bytes.readUInt32BE(0));
+  if (format?.fat && !format.wide && !format.little) {
+    const container = BinaryArch.machoFatHeader(bytes);
+    for (let index = 0, count = Math.min(container.count, 16); index < count; index++) {
       const at = 8 + index * 20;
-      if (at + 20 <= bytes.length && bytes.readUInt32BE(at) === 0x01000007) return thin(bytes.readUInt32BE(at + 8));
+      if (at + 20 <= bytes.length) { const entry = BinaryArch.machoFatEntry(bytes.subarray(8), index, container); if (BinaryArch.machoArchitecture(entry.cpu) === "x86_64") return thin(entry.offset); }
     }
     return null;
   }
