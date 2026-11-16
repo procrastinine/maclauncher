@@ -249,7 +249,9 @@ function resolveManagedRuntimeSelection(entry, { settings, userDataDir } = {}) {
   const layer = selectRuntimeVersion({ manual: trimString(original.version),
     recommended: nightlyMatch?.version || (channel === CHANNEL_NIGHTLY ? null : resolveRecommendedRelease(entry)),
     defaultVersion: saved, fallback: fallbackSection && usableDefaultVersion(fallbackSection) });
-  const version = installedRuntimeVersion({ ...layer, compatibility: LoveRuntimeManager.versionCompatibility,
+  const nativeVersion = channel === CHANNEL_STABLE && !saved
+    ? LoveCore.preferredInstalledVersion(entry, { userDataDir, ...layer }) : null;
+  const version = nativeVersion || installedRuntimeVersion({ ...layer, compatibility: LoveRuntimeManager.versionCompatibility,
     installed: channelSections.flatMap(section => section.installed || []) }) || layer.version;
   const install = version ? LoveCore.resolveInstalled({ userDataDir, channel, version }) : null;
   const source = layer.source === "manual" ? install ? "explicit-version" : "explicit-missing"
@@ -290,8 +292,8 @@ async function ensureRuntime(entry, context) {
   let version = trimString(selection.installVersion);
   const explicit = String(selection.source || "").startsWith("explicit");
   if (channel === CHANNEL_STABLE) {
-    version = normalizeLoveVersion(version || detected || sections.stable.catalog?.versions?.[0]);
-    const known = version && (sections.stable.catalog?.versions || []).some(candidate => normalizeLoveVersion(candidate) === version);
+    version = LoveCore.normalizeVersion(version || detected || sections.stable.catalog?.versions?.[0]);
+    const known = version && (sections.stable.catalog?.versions || []).some(candidate => LoveCore.normalizeVersion(candidate) === version);
     if (version && !known && sections.stable.catalog?.status === "success") {
       if (explicit || resolveExplicitChannel(resolveRuntimeData(entry))) return { managerId: LoveRuntimeManager.id, version,
         installOptions: { sectionId: CHANNEL_STABLE } };
@@ -573,7 +575,7 @@ module.exports = {
       const detectedRequiredVersion = normalizeLoveVersion(status.requiredVersion);
 
       if (installChannel === CHANNEL_STABLE && installVersion) {
-        installVersion = normalizeLoveVersion(installVersion);
+        installVersion = LoveCore.normalizeVersion(installVersion);
       }
       if (installChannel === CHANNEL_NIGHTLY && installVersion) {
         installVersion = normalizeNightlyBuildKey(installVersion);
@@ -591,7 +593,8 @@ module.exports = {
             await LoveRuntimeManager.refreshCatalog({
               logger: context.logger,
               force: true,
-              sectionId: CHANNEL_STABLE
+              sectionId: CHANNEL_STABLE,
+              userDataDir: context.userDataDir
             });
             context.onRuntimeStateChange?.();
             sections = resolveManagerSections(context.settings, context.userDataDir);
@@ -622,19 +625,20 @@ module.exports = {
           }
 
           const knownStable = Array.isArray(sections.stable.catalog?.versions)
-            ? sections.stable.catalog.versions.some(version => normalizeLoveVersion(version) === desiredVersion)
+            ? sections.stable.catalog.versions.some(version => LoveCore.normalizeVersion(version) === desiredVersion)
             : false;
           if (!knownStable) {
             await LoveRuntimeManager.refreshCatalog({
               logger: context.logger,
               force: true,
-              sectionId: CHANNEL_STABLE
+              sectionId: CHANNEL_STABLE,
+              userDataDir: context.userDataDir
             });
             context.onRuntimeStateChange?.();
             sections = resolveManagerSections(context.settings, context.userDataDir);
           }
           const refreshedStable = Array.isArray(sections.stable.catalog?.versions)
-            ? sections.stable.catalog.versions.some(version => normalizeLoveVersion(version) === desiredVersion)
+            ? sections.stable.catalog.versions.some(version => LoveCore.normalizeVersion(version) === desiredVersion)
             : false;
           if (refreshedStable) {
             const installed = await LoveRuntimeManager.installRuntime({

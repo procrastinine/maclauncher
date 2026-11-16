@@ -87,14 +87,14 @@ function buildNightlyLabels(installed, catalogEntriesByVersion) {
   return labels;
 }
 
-async function refreshCatalog({ logger, force, latestOnly, sectionId } = {}) {
+async function refreshCatalog({ logger, force, latestOnly, sectionId, userDataDir, signal } = {}) {
   if (sectionId === LuaSteam.SECTION_ID) return LuaSteam.getSection().catalog;
   return sectionId === SECTION_NIGHTLY
     ? refreshNightlyCatalog({ logger, force, latestOnly })
-    : refreshStableCatalog({ logger, force });
+    : refreshStableCatalog({ logger, force, userDataDir, signal });
 }
 
-async function refreshStableCatalog({ logger, force } = {}) {
+async function refreshStableCatalog({ logger, force, userDataDir, signal } = {}) {
   const ttlMs = 1000 * 60 * 60 * 6;
   const mode = "all";
   const now = Date.now();
@@ -107,7 +107,7 @@ async function refreshStableCatalog({ logger, force } = {}) {
   stableCatalog = { ...stableCatalog, status: "loading", error: null, mode };
   stableCatalogPromise = (async () => {
     try {
-      const result = await Core.fetchAvailableVersions({ logger });
+      const result = await Core.fetchAvailableVersions({ logger, force, userDataDir, signal });
       stableCatalogEntriesByVersion = result.entriesByVersion || {};
       stableCatalog = {
         status: "success",
@@ -266,7 +266,8 @@ async function installRuntime({
   sectionId,
   downloads,
   signal: callerSignal,
-  resourcesRoot
+  resourcesRoot,
+  archiveFile
 } = {}) {
   if (sectionId === LuaSteam.SECTION_ID) {
     const included = LuaSteam.resolveBundle({ version, resourcesRoot });
@@ -309,7 +310,7 @@ async function installRuntime({
   let stableVersion = version ? Core.normalizeVersion(version) : null;
   if (!stableVersion) {
     if (!stableCatalog.versions.length) {
-      await refreshStableCatalog({ logger, force: true });
+      await refreshStableCatalog({ logger, force: true, userDataDir });
     }
     stableVersion = stableCatalog.versions[0] || null;
   }
@@ -330,6 +331,7 @@ async function installRuntime({
         logger,
         onProgress: taskProgress,
         signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal,
+        archiveFile,
         entriesByVersion: stableCatalogEntriesByVersion
       }),
     { onProgress }

@@ -19,6 +19,55 @@ const {
   shortSha
 } = require("../version");
 
+const projectBuilds = { projectId: "love", repository: "procrastinine/maclauncher-builds" };
+let buildsManager;
+function projectManager() {
+  return buildsManager ||= require("../../shared/runtime/pinned-native-manager").createPinnedNativeManager({
+    id: "love", label: "LÖVE", projectBuilds, customRuntime: false,
+    sourceUrl: "https://github.com/love2d/love", resolveExecutable: root => path.join(root, "project-payload/love.app/Contents/MacOS/love")
+  });
+}
+function normalizeRuntimeVersion(input) {
+  const raw = String(input || "").trim().replace(/^v/i, ""), base = normalizeLoveVersion(raw);
+  return base && /^\d+\.\d+(?:\.\d+)?-[A-Za-z0-9][A-Za-z0-9._-]*$/.test(raw) ? raw : base;
+}
+function projectInstall(row) {
+  if (!row) return null;
+  const executablePath = row.executablePath || row.runtimePath;
+  return { ...row, channel: CHANNEL_STABLE, appPath: path.dirname(path.dirname(path.dirname(executablePath))), executablePath,
+    bundleVersionNormalized: normalizeLoveVersion(row.version), source: "MacLauncher Builds" };
+}
+function listProjectInstalled(userDataDir) {
+  return projectManager().core.listInstalled(userDataDir).map(projectInstall);
+}
+const luaCompatibility = new Map();
+// LuaJIT 2.1 cannot read the LuaJIT 2.0 dump format. Keep the publisher route
+// for those inputs, and for inputs that cannot be inspected without changing them.
+function supportsLuaJit21(entry) {
+  const source = entry?.gamePath;
+  if (!source) return false;
+  try {
+    const stat = fs.statSync(source, { bigint: true });
+    if (!stat.isFile()) return false;
+    const identity = [source, stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
+    if (luaCompatibility.has(identity)) return luaCompatibility.get(identity);
+    const Zip = require("../../shared/runtime/zip"), archive = Zip.readZipEntries(source);
+    if (!archive?.entries?.length) return false;
+    let supported = true;
+    for (const item of archive.entries) {
+      if (item.name.endsWith("/")) continue;
+      const bytes = Zip.readZipEntry(source, item);
+      if (!bytes || bytes[0] === 27 && bytes[1] === 76 && bytes[2] === 74 && bytes[3] !== 2) { supported = false; break; }
+    }
+    luaCompatibility.clear(); luaCompatibility.set(identity, supported);
+    return supported;
+  } catch { return false; }
+}
+function preferredInstalledVersion(entry, { userDataDir, version, source } = {}) {
+  if (source === "manual" || require("../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch !== "arm64" || !supportsLuaJit21(entry)) return null;
+  return listInstalledStable(userDataDir).find(row => row.ready !== false &&
+    ["arm64", "universal"].includes(row.architecture) && normalizeLoveVersion(row.version) === normalizeLoveVersion(version))?.version || null;
+}
 const REPO_OWNER = "love2d";
 const REPO_NAME = "love";
 const INSTALL_META_FILE = ".maclauncher-love.json";
@@ -66,7 +115,7 @@ function installRootDir(userDataDir, channel) {
 function getInstallDir({ userDataDir, channel, version }) {
   const installChannel = normalizeChannel(channel);
   const normalizedVersion =
-    installChannel === CHANNEL_STABLE ? normalizeLoveVersion(version) : normalizeNightlyBuildKey(version);
+    installChannel === CHANNEL_STABLE ? normalizeRuntimeVersion(version) : normalizeNightlyBuildKey(version);
   if (!normalizedVersion) {
     throw new Error(`Invalid LÖVE ${installChannel} version: ${String(version || "")}`);
   }
@@ -146,13 +195,8 @@ function detectArchitecture(executablePath) {
     return { architecture: "unknown", requiresRosetta: false };
   }
   try {
-    const result = spawnSync("/usr/bin/lipo", ["-archs", executablePath], { encoding: "utf8" });
-    if (result.status === 0 && result.stdout) {
-      const arches = result.stdout
-        .trim()
-        .split(/\s+/)
-        .map(value => value.trim())
-        .filter(Boolean);
+    const arches = readMachOLoadCommands(executablePath).architectures;
+    if (arches.length) {
       const hasArm64 = arches.includes("arm64");
       const hasX64 = arches.includes("x86_64");
       if (hasArm64 && hasX64) {
@@ -273,7 +317,7 @@ function listInstalledStable(userDataDir) {
 
 function listInstalledStableUncached(userDataDir) {
   const root = installRootDir(userDataDir, CHANNEL_STABLE);
-  const out = [];
+  const out = listProjectInstalled(userDataDir);
   let versions = [];
   try {
     versions = fs.readdirSync(root, { withFileTypes: true });
@@ -302,11 +346,9 @@ function listInstalledStableUncached(userDataDir) {
       bundleVersionRaw: meta.bundleVersionRaw || bundleInfo.bundleVersionRaw,
       bundleVersionNormalized:
         meta.bundleVersionNormalized || bundleInfo.bundleVersionNormalized || version,
-      architecture: meta.architecture || bundleInfo.architecture,
+      architecture: bundleInfo.architecture,
       requiresRosetta:
-        typeof meta.requiresRosetta === "boolean"
-          ? meta.requiresRosetta
-          : bundleInfo.requiresRosetta === true
+        bundleInfo.requiresRosetta === true
     });
   }
   out.sort((a, b) => compareLoveVersionsDesc(a.version, b.version));
@@ -349,11 +391,9 @@ function listInstalledNightlyUncached(userDataDir) {
       bundleVersionRaw: meta.bundleVersionRaw || bundleInfo.bundleVersionRaw,
       bundleVersionNormalized:
         meta.bundleVersionNormalized || bundleInfo.bundleVersionNormalized || null,
-      architecture: meta.architecture || bundleInfo.architecture,
+      architecture: bundleInfo.architecture,
       requiresRosetta:
-        typeof meta.requiresRosetta === "boolean"
-          ? meta.requiresRosetta
-          : bundleInfo.requiresRosetta === true,
+        bundleInfo.requiresRosetta === true,
       runId: meta.runId || null,
       artifactId: meta.artifactId || null,
       artifactName: meta.artifactName || null,
@@ -375,7 +415,7 @@ function resolveInstalled({ userDataDir, channel, version }) {
   const installChannel = normalizeChannel(channel);
   if (!version) return null;
   const normalizedVersion =
-    installChannel === CHANNEL_NIGHTLY ? normalizeNightlyBuildKey(version) : normalizeLoveVersion(version);
+    installChannel === CHANNEL_NIGHTLY ? normalizeNightlyBuildKey(version) : normalizeRuntimeVersion(version);
   if (!normalizedVersion) return null;
   return (
     listInstalled(userDataDir, installChannel).find(entry => {
@@ -435,15 +475,26 @@ const stableSource = Upstream.github({ repository: `${REPO_OWNER}/${REPO_NAME}`,
 } });
 
 // One row per version, from its newest release.
-async function fetchAvailableVersions({ logger, signal } = {}) {
+async function fetchAvailableVersions({ logger, signal, userDataDir, force } = {}) {
   const entries = [], entriesByVersion = {};
-  for (const row of (await stableSource.discover({ logger, signal })).slice().sort((a, b) => compareLoveVersionsDesc(a.version, b.version))) {
+  const [hosted, releases] = await Promise.allSettled([
+    projectManager().refreshCatalog({ userDataDir, logger, signal, force }),
+    stableSource.discover({ logger, signal })
+  ]);
+  signal?.throwIfAborted();
+  if (hosted.status === "rejected" && releases.status === "rejected") throw releases.reason;
+  if (hosted.status === "rejected") logger?.warn?.(`[love] Builds catalog: ${hosted.reason.message}`);
+  for (const row of projectManager().core.listCatalog({ userDataDir })) {
+    entries.push(entriesByVersion[row.version] = { ...row, channel: CHANNEL_STABLE });
+  }
+  for (const row of (releases.status === "fulfilled" ? releases.value : []).slice().sort((a, b) => compareLoveVersionsDesc(a.version, b.version))) {
     if (entriesByVersion[row.version] || !row.files[0]) continue;
     const file = row.files[0];
     entriesByVersion[row.version] = { channel: CHANNEL_STABLE, version: row.version, file,
       browserDownloadUrl: file.url, assetName: file.name, sha256: file.digest?.algorithm === "sha256" ? file.digest.value : null };
     entries.push(entriesByVersion[row.version]);
   }
+  entries.sort((a,b) => compareLoveVersionsDesc(a.version,b.version));
   return { versions: entries.map(entry => entry.version), entries, entriesByVersion, source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases` };
 }
 
@@ -555,9 +606,12 @@ async function installStableVersion({
   logger,
   onProgress,
   signal,
-  entriesByVersion
+  entriesByVersion,
+  archiveFile
 } = {}) {
-  const targetVersion = normalizeLoveVersion(version);
+  const targetVersion = normalizeRuntimeVersion(version);
+  const build = projectManager().core.listCatalog({ userDataDir }).find(row => row.version === targetVersion);
+  if (build?.projectPackage) return projectInstall(await projectManager().core.installVersion({ userDataDir, version: targetVersion, archiveFile, logger, onProgress, signal }));
   if (!targetVersion) throw new Error(`Invalid LÖVE version: ${String(version || "")}`);
   if (compareLoveVersions(targetVersion, "0.7.0") < 0) throw new Error("LÖVE releases before 0.7 have no 64-bit macOS download.");
   const existing = resolveInstalled({ userDataDir, channel: CHANNEL_STABLE, version: targetVersion });
@@ -565,7 +619,7 @@ async function installStableVersion({
 
   let entry = entriesByVersion?.[targetVersion] || null;
   if (!entry) {
-    const refreshed = await fetchAvailableVersions({ logger });
+    const refreshed = await fetchAvailableVersions({ logger, signal, userDataDir });
     entry = refreshed.entriesByVersion[targetVersion] || null;
   }
   if (!entry?.file && !entry?.browserDownloadUrl) {
@@ -667,6 +721,8 @@ async function installNightlyVersion({
 }
 
 function uninstallVersion({ userDataDir, channel, version, installDir } = {}) {
+  if (version && projectManager().core.listCatalog({ userDataDir }).some(row => row.version === version))
+    return projectManager().uninstallRuntime({ userDataDir, version, installDir });
   const targetInstallDir =
     installDir ||
     (version
@@ -690,7 +746,7 @@ module.exports = {
   NIGHTLY_WORKFLOW,
   NIGHTLY_ARTIFACT_NEEDLE,
   normalizeChannel,
-  normalizeVersion: normalizeLoveVersion,
+  normalizeVersion: normalizeRuntimeVersion,
   compareVersions: compareLoveVersions,
   compareVersionsDesc: compareLoveVersionsDesc,
   compareNightlyBuildKeysDesc,
@@ -713,7 +769,10 @@ module.exports = {
   installNightlyVersion,
   uninstallVersion,
   isRosettaAvailable,
-  projectBuilds: { projectId: "love", repository: "procrastinine/maclauncher-builds" },
+  projectBuilds,
+  projectManager,
+  preferredInstalledVersion,
+  supportsLuaJit21,
   upstream: [stableSource, nightlySource],
   __test: {
     copyAppBundle,
