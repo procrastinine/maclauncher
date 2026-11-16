@@ -59,10 +59,6 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     const wrapper = [path.join(parent, 'project-package.json'), path.join(parent, 'runtime-package.json')]
       .find(file => fs.existsSync(file)) || path.join(parent, 'project-package.json');
     const outer = fs.existsSync(wrapper) ? JSON.parse(Bundled.readRegular(wrapper,Bundled.LIMITS.manifestBytes).bytes) : null;
-    if (outer && path.basename(wrapper) === 'runtime-package.json' &&
-        ['id', 'version', 'arch', 'minimumMacOS', 'manifestRelative', 'manifestSha256', 'sourceSha256']
-          .some(key => record[key] !== undefined && outer[key] !== record[key]))
-      throw new Error('The local runtime package declaration differs from its manifest or selected package.');
     if (outer && !installedDependencies) installedDependencies = P.load(userDataDir || (outer.dependencies?.length?P.userDataForPayload(root):undefined),outer.dependencies,{verification:'status'});
     resolveDependency ||= P.resolver(installedDependencies || new Map());
     const selected = inspectPackage(root,record,{...format,projectId: formerIds.includes(record.id) ? record.id : projectId,

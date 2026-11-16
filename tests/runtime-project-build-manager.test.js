@@ -53,6 +53,39 @@ test("project inspection shares the executable contract across manifest and seal
   }
 });
 
+test("custom published packages preserve independent source metadata in either declaration layout", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "project-custom-source-"));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const id = "custom-source", source = Buffer.from('{"revision":"upstream"}'), entry = Buffer.from("module.exports = {};");
+  const declaredSource = sha(Buffer.from("separately retained producer inputs"));
+  const manager = createProjectBuildManager({projectId: id, label: "Custom source", repository: "example/runtime-builds",
+    manifestRelative: "manifest.json", sourceRelative: "source.json", executableRelative: "entry.js", dataOnly: true,
+    verifyPayload: selected => Bundled.verifyPayload(selected.root, selected.declaration),
+    dependencies: {systemVersionSync: () => "27.0"}});
+  for (const name of ["runtime-package.json", "project-package.json"]) {
+    const directory = path.join(root, name.replace(/\.json$/, "")), payload = path.join(directory, "files");
+    fs.mkdirSync(payload, {recursive: true});
+    const files = [["entry.js", entry], ["source.json", source]].map(([file, bytes]) => {
+      fs.writeFileSync(path.join(payload, file), bytes, {mode: 0o644});
+      return {path: file, size: bytes.length, mode: 0o644, sha256: sha(bytes)};
+    });
+    const manifest = {schemaVersion: 1, kind: "data", id, version: "1.0", arch: "arm64", minimumMacOS: "13.0", files};
+    const bytes = Buffer.from(JSON.stringify(manifest));
+    fs.writeFileSync(path.join(payload, "manifest.json"), bytes, {mode: 0o644});
+    fs.writeFileSync(path.join(directory, name), JSON.stringify({...manifest, sourceSha256: declaredSource,
+      manifestRelative: "manifest.json", manifestSha256: sha(bytes), sourceRelative: "source.json",
+      files: [...files, {path: "manifest.json", size: bytes.length, mode: 0o644, sha256: sha(bytes)}]}));
+    const selected = manager.customRuntime.inspect(payload, {verification: "full"});
+    assert.equal(selected.ready, true);
+    assert.equal(selected.installDir, payload);
+    assert.equal(selected.declaration.sourceSha256, declaredSource);
+    assert.equal(selected.sourceIdentity.declaredSourceSha256, sha(source));
+    assert.deepEqual(fs.readFileSync(path.join(payload, "entry.js")), entry);
+    fs.unlinkSync(path.join(payload, "entry.js"));
+    assert.throws(() => manager.customRuntime.inspect(payload, {verification: "full"}), /ENOENT|not found/);
+  }
+});
+
 test("project manager accepts a checksum-bound manifest source pointer with a distinct producer revision", {skip: process.platform !== "darwin"}, async t => {
   const Catalog = require("../src/modules/shared/runtime/maclauncher-builds");
   const {nativeTool, packageFor} = require("./helpers/managed-tool-fixture.cjs");
