@@ -176,11 +176,12 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     const { all } = includedPackages(options);
     const explicit = selectRuntimeVersion({ manual: options.version, recommended: entry?.runtimeData?.[runtimeId]?.version }).version;
     const recommendation = options.recommendedVersion ?? options.recommended;
+    const eligibleInstalled = row => !options.compatible || options.compatible(row.catalogEntry || row.declaration || row);
     const layer = selectRuntimeVersion({ manual: explicit,
       recommended: explicit ? null : typeof recommendation === "function" ? recommendation() : recommendation,
       defaultVersion: core.normalizeSettings(settings?.runtimes?.[projectId]).defaultVersion,
       fallback: managerDefaultVersion({ listed: core.core.listDiscoveredCatalog({ userDataDir }).filter(pin => compatible(pin) && !pin.installReason && (!options.compatible || options.compatible(pin))).map(pin => pin.version).sort(compareRuntimeVersions),
-        installed: all.filter(item => item.present && item.ready).map(item => item.version).concat(core.getState({userDataDir}).installed.filter(row => row.ready !== false).map(row => row.version)).sort(compareRuntimeVersions) }) });
+        installed: all.filter(item => item.present && item.ready && eligibleInstalled(item)).map(item => item.version).concat(core.getState({userDataDir}).installed.filter(row => row.ready !== false && eligibleInstalled(row)).map(row => row.version)).sort(compareRuntimeVersions) }) });
     const configured = layer.version;
     const published = core.core.listDiscoveredCatalog({ userDataDir }).filter(pin => pin.projectPackage && pin.asset);
     const select = selectedVersion => {
