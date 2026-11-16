@@ -1226,3 +1226,11 @@ test("applying a preset keeps the game's depth input", async t => {
     assert.deepEqual(writes.at(-1).video, []);assert.deepEqual(writes.at(-1).depthInput, {farPlane: 300});
   } finally {harness.close();}
 });
+test('frame-generation choices omit the intermediate-frames tag their slot already implies',()=>{
+ const node={id:'gen',kind:'frame-generation',method:'anr',enabled:true,settings:{frameMultiplier:2}},plan={schema:2,mode:'advanced',enabled:true,video:[node]};
+ const row={id:'frame-generation:anr',kind:'frame-generation',label:'Apex Neural Rendering',group:'Temporal',available:true,runtimeManagerId:'anr',runtimeInstalled:true,
+  sizes:[{id:'1080p',width:1920,height:1080}],outputContract:{domain:'timeline',sizing:'preserve',phases:'explicit',maximumMultiplier:5},
+  inputContract:{domain:'scene',color:'rgb',requires:['depth','motion','camera','opaque'],acceptsSynthetic:false},template:node};
+ const harness=simpleHarness(EffectsControls,{game:{gamePath:'preset',effects:plan},running:false,editor:{info:{plan,catalog:[row]},onChange:()=>{}}});
+ try{const markup=renderToStaticMarkup(harness.render());assert.match(markup,/Apex Neural Rendering/);assert.doesNotMatch(markup,/Intermediate frames/);}finally{harness.close();}
+});

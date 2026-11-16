@@ -44,13 +44,15 @@ export function replacementFor(choice: EffectCatalogRow | undefined, catalog: re
  * A picker entry's size tag. A tag the slot already implies is omitted: every
  * image filter keeps its input size.
  */
-// A slot's shared size says nothing: every image filter keeps its size, and
-// every built-in resize or temporal method takes its size from its options.
-// Shaders keep the size detail, which tells a fixed scale from the row's size.
+// A slot's shared size says nothing: every image filter keeps its size, every
+// frame generator adds intermediate frames, and every built-in resize or
+// temporal method takes its size from its options. Shaders keep the size
+// detail, which tells a fixed scale from the row's size.
 export function choiceDetail(row: EffectCatalogRow, type: string | null): string | undefined {
   if (customShader(row)) return undefined;
   const summary = implementationOutputSummary(row, type ?? undefined);
   if (type === "image" && summary === "Same size") return undefined;
+  if (type === "generation" && summary === "Intermediate frames") return undefined;
   return type && type !== "image" && row.kind !== "shader" && summary === "Size set in options" ? undefined : summary;
 }
 

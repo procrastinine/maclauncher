@@ -236,7 +236,7 @@ The sizing rows that such an effect adds belong to that effect. Simple lists onl
 
 Effects are picked from menus, and each menu leads with **Recommended** choices. Specialized variants, including libplacebo copies of the native kernels and unnamed files from an installed collection, follow under **More** and also appear directly in search results; once shown, each is listed under its group's heading.
 
-- Downsample and Upscale menus list shaders with a fixed direction first, then shaders that take the row's size under Any size. Image filter entries and built-in resize methods carry no size tag.
+- Downsample and Upscale menus list shaders with a fixed direction first, then shaders that take the row's size under Any size. Image filter entries and built-in resize methods carry no size tag, and frame-generation entries carry no output tag.
 - Shaders from an installed collection are listed under the collection's name, each named after its shader file. Other shaders appear under purpose headings such as Sharpen, Colour and tone, CRT and retro, and Depth.
 - An effect's name omits its pack name where the menu already shows it, and searching for the pack name still finds it. Availability notes such as Needs depth appear as muted text beside the name.
 - Rows that need scene inputs the game's frame source does not supply are listed last, under **Needs scene inputs**.
