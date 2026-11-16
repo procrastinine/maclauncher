@@ -1,22 +1,34 @@
+const fs = require("node:fs");
+const path = require("node:path");
 const Host = require("../../shared/runtime/host-capabilities");
 const Requirements = require("../../shared/runtime/feature-requirements");
-const Parent = require("../../../runtime-adapters/wine");
-const Description = require("../../shared/runtime/translator-description");
+const { readMachOLoadCommands } = require("../../shared/runtime/macho-load-commands");
 
 // Wine's own deployment target is independent of the selected renderer. Inspect
 // renderer libraries without opening Wine or raising the floor of other paths.
 function minimumMacOS(installation, backend) {
   let minimum = (Requirements.WINE_BACKENDS[backend] || Requirements.WINE_BACKENDS.dxmt).minimumMacOS;
-  if (!installation?.crossoverRoot) return minimum;
-  const selected = Parent.embeddedComponent(installation,{sourceId:"crossover",engine:backend});
-  if (!selected) return minimum;
-  if (selected.minimumMacOS && Host.versionAtLeast(selected.minimumMacOS,minimum)) minimum=selected.minimumMacOS;
-  try {
-    const description=Description.describeTranslator(selected.root,{engine:backend,source:selected.source.id});
-    // This compatibility seam belongs to the existing Intel CrossOver route.
-    // Core passes measured admitted parts to the new route independently.
-    for(const file of description.files)for(const image of file.slices||[])if(image.architecture==="x86_64"&&image.minimumMacOS&&Host.versionAtLeast(image.minimumMacOS,minimum))minimum=image.minimumMacOS;
-  } catch {}
+  const root = installation?.crossoverRoot;
+  if (!root) return minimum;
+  const directory = backend === "dxmt" ? path.join(root, "lib/dxmt/x86_64-unix")
+    : path.join(root, "lib64/apple_gptk/external/D3DMetal.framework");
+  const pending = [{ directory, depth: 0 }], files = new Set();
+  while (pending.length && files.size < 128) {
+    const item = pending.pop();
+    let entries; try { entries = fs.readdirSync(item.directory, { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      const file = path.join(item.directory, entry.name);
+      if (entry.isDirectory() && item.depth < 4) pending.push({ directory: file, depth: item.depth + 1 });
+      else if (entry.isFile() && /(?:\.(?:dylib|so)$|^D3DMetal$)/.test(entry.name)) files.add(file);
+      if (files.size >= 128) break;
+    }
+  }
+  for (const file of files) {
+    try {
+      const image = readMachOLoadCommands(file, { architecture: "x86_64" }).slices[0];
+      if (image.minimumMacOS && Host.versionAtLeast(image.minimumMacOS, minimum)) minimum = image.minimumMacOS;
+    } catch {}
+  }
   return minimum;
 }
 

@@ -9,10 +9,8 @@ const Requirements = require("../runtime/feature-requirements");
 const Host = require("../runtime/host-capabilities");
 
 function unavailableReason(backend, dependencies) {
-  const source=require('../../../runtime-sources').loadSources().find(source=>source.kind==='vulkan-driver'&&(source.manager.engine===backend||source.manager.id===backend));
-  const requirements=source&&require('../../../runtime-sources/requirements').feature(source);
-  if(!requirements)return null;
-  const support = Requirements.requirementSupport(requirements, dependencies.hostCapabilities || Host.getHostCapabilities());
+  if (backend !== "kosmickrisp" && backend !== managed.projectId) return null;
+  const support = Requirements.requirementSupport(Requirements.METAL4, dependencies.hostCapabilities || Host.getHostCapabilities());
   return support.supported === false ? support.reason : null;
 }
 // The Intel KosmicKrisp offer names its build. Settings entries share their

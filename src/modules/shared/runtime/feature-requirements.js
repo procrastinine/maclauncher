@@ -24,14 +24,19 @@ const NEURAL = feature("MLX neural restoration and interpolation", require("../r
   {hardwareArchitectures: Object.freeze(["arm64"])});
 const FSR4 = feature("FSR 4.1", require("../reshade/temporal/fsr4/source.json").minimumMacOS,
   {hardwareArchitectures: METAL4.hardwareArchitectures});
-const SourceRequirements = require("../../../runtime-sources/requirements");
-const WINE_BACKENDS = Object.freeze(SourceRequirements.byKind("d3d-translator"));
-const TEMPLATE_RENDERERS = Object.freeze(SourceRequirements.byKind("vulkan-driver"));
+const WINE_BACKENDS = Object.freeze({
+  dxmt: feature("DXMT", "14.0"),
+  d3dmetal: feature("D3DMetal", "14.0", {hardwareArchitectures: Object.freeze(["arm64"])})
+});
+const TEMPLATE_RENDERERS = Object.freeze({
+  kosmickrisp: feature("KosmicKrisp", METAL4.minimumMacOS + ".0", {hardwareArchitectures: METAL4.hardwareArchitectures})
+});
 // The content picker reports the picked window and app from this release on.
 const WINDOW_GRAPHICS = feature("Window graphics", "15.2");
 const WINE_TEMPORAL = feature("Wine temporal scene bridge", WINE_BACKENDS.dxmt.minimumMacOS,
   {hardwareArchitectures: METAL4.hardwareArchitectures});
-const WINE_MODERN_VULKAN = Object.freeze({...TEMPLATE_RENDERERS.kosmickrisp,label:"Wine modern Vulkan renderers"});
+const WINE_MODERN_VULKAN = feature("Wine modern Vulkan renderers", METAL4.minimumMacOS,
+  {hardwareArchitectures: METAL4.hardwareArchitectures});
 // The one spelling map for CPU names: x86_64 and amd64 read as x64, aarch64 as arm64.
 const normalizeArchitecture = value => ["x86_64", "amd64"].includes(value) ? "x64" : value === "aarch64" ? "arm64" : value;
 

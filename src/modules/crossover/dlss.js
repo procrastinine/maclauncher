@@ -3,7 +3,6 @@ const path = require("node:path");
 const { versionAtLeast, systemVersionSync } = require("../shared/runtime/bundled-native");
 const { inspectMachOExports } = require("../shared/runtime/macho-exports");
 const { usedForApi } = require("../shared/runtime/translator-roles");
-const Requirements = require("../shared/runtime/feature-requirements");
 
 const DLLS = Object.freeze(["nvapi64", "nvngx"]);
 const ENVIRONMENT = Object.freeze(["DXMT_ENABLE_NVEXT", "D3DM_ENABLE_METALFX", "DXVK_ENABLE_NVAPI", "DXVK_NVAPI_ALLOW_OTHER_DRIVERS", "DXVK_NVAPI_GPU_ARCH"]);
@@ -66,7 +65,7 @@ function selection(settings, { backend, dxmt = false, d3dmetal = false,
   if (vulkan && apiEngines?.some(engine => ["dxvk", "vkd3d-proton"].includes(engine))) return { enabled: true, dxmt: false, d3dmetal: false, vulkan: true };
   if (!["auto", "dxmt", "d3dmetal"].includes(backend)) throw new Error("MetalFX Temporal requires DXMT or D3DMetal. Change Graphics or disable MetalFX Temporal.");
   macOSVersion ||= systemVersionSync();
-  const supportsDxmt = dxmt && versionAtLeast(macOSVersion, Requirements.WINE_BACKENDS.dxmt.minimumMacOS);
+  const supportsDxmt = dxmt && versionAtLeast(macOSVersion, "14.0.0");
   const supportsD3DMetal = d3dmetal && versionAtLeast(macOSVersion, "26.0.0");
   if (backend === "dxmt" && !supportsDxmt || backend === "d3dmetal" && !supportsD3DMetal ||
       backend === "auto" && !supportsDxmt && !supportsD3DMetal) {
