@@ -44,6 +44,9 @@
 #include <algorithm>
 #include <functional>
 #include <cmath>
+#include <cstdio>
+#include <deque>
+#include <optional>
 #include <stdexcept>
 #include <chrono>
 #include <atomic>
@@ -847,6 +850,25 @@ ShaderResult EffectExecution::bindSceneImage(id<MTLCommandBuffer>commands,id<MTL
         else if(NSUInteger width=0,height=0;sceneUILayerSize(source->frame.frameId,width,height)&&(width!=colour.width||height!=colour.height))reportInterfaceLayer("unavailable: the interface layer is "+std::to_string(width)+"x"+std::to_string(height)+" and the scene image is "+std::to_string(colour.width)+"x"+std::to_string(colour.height));}
     bindMetalFxGenerationResources(actual,source->frame);normalized=std::move(result);return {true,{}};
 }catch(const std::exception&error){return {false,error.what()};}}
+// Late scenes (rsProcessLateScene): the HUD-less color, UI color and alpha and camera that a game supplies after its
+// evaluation of a frame, retained in command order and named by that frame's owner and id. The newest eight are kept;
+// a generation stage reads its own frame's record and never another's.
+struct LateScene {void*owner=nullptr;uint64_t frameId=0;bool camera=false;uint32_t cameraFlags=0;float nearPlane=0,farPlane=0,verticalFov=0;std::array<id<MTLTexture>,2>images{};std::array<RSSceneAovImage,2>regions{};};
+std::mutex lateSceneLock;std::deque<LateScene>lateScenes;
+std::optional<LateScene>lateScene(void*owner,uint64_t frameId){if(!owner||!frameId)return std::nullopt;std::lock_guard guard(lateSceneLock);for(auto i=lateScenes.rbegin();i!=lateScenes.rend();++i)if(i->owner==owner&&i->frameId==frameId)return *i;return std::nullopt;}
+void rememberLateScene(LateScene next){std::lock_guard guard(lateSceneLock);const auto found=std::find_if(lateScenes.begin(),lateScenes.end(),[&](const auto&s){return s.owner==next.owner&&s.frameId==next.frameId;});
+    if(found!=lateScenes.end()){for(unsigned i=0;i<2;++i)if(!next.images[i]){next.images[i]=found->images[i];next.regions[i]=found->regions[i];}if(!next.camera&&found->camera){next.camera=true;next.cameraFlags=found->cameraFlags;next.nearPlane=found->nearPlane;next.farPlane=found->farPlane;next.verticalFov=found->verticalFov;}lateScenes.erase(found);}
+    lateScenes.push_back(std::move(next));while(lateScenes.size()>8)lateScenes.pop_front();}
+// The record's HUD-less color and UI color and alpha as this generation input's HUD split. Streamline's contract for
+// these tags (DLSS-G programming guide): the HUD-less color matches the backbuffer, and the UI color is premultiplied
+// in the same domain, so both take the presented image's color description; the generator checks sizes and formats.
+std::shared_ptr<const SceneAovLease>lateScenePair(const LateScene&late,uint64_t frameId,id<MTLTexture>colour,const ImageColorDescription&color){
+    if(!late.images[0]||!late.images[1]||!colour||!frameId)return nullptr;
+    RSSceneAovs v{};v.size=sizeof(v);v.version=RS_SCENE_AOV_ABI_VERSION;v.frameId=frameId;v.viewId=v.epoch=uint64_t(uintptr_t(late.owner));v.imageRevision=frameId;v.preExposure=1;
+    v.color=writeImageColor(color);v.hudlessColor=v.color;v.uiColor=v.color;v.uiColor.alpha=RS_COLOR_PREMULTIPLIED;v.pass=v.colorPass=RS_SCENE_AOV_AFTER_TRANSPARENT;
+    v.images[RS_SCENE_AOV_HUDLESS_COLOR]=late.regions[0];v.images[RS_SCENE_AOV_UI_COLOR_ALPHA]=late.regions[1];
+    auto lease=captureSceneAovs(v,colour.device);if(!lease||!lease->textures[RS_SCENE_AOV_HUDLESS_COLOR]||!lease->textures[RS_SCENE_AOV_UI_COLOR_ALPHA])return nullptr;
+    lease->composedColor=colour;lease->composedX=lease->composedY=0;lease->composedWidth=uint32_t(colour.width);lease->composedHeight=uint32_t(colour.height);lease->composedRegionKnown=true;return lease;}
 // A scene without a camera takes the one its game supplied after this frame's evaluation (late-camera.hpp), matched
 // by the evaluation's own jitter offset in the raw scene. Generation only; each outcome is logged once.
 static void attachLateCamera(RSTemporalFrame&actual,const RSTemporalFrame&raw){
@@ -866,12 +888,20 @@ ShaderResult EffectExecution::bindGenerationScene(id<MTLCommandBuffer>commands,s
     if(index>=impl->stages.size())return {false,"The generation stage is unavailable"};const auto&stage=impl->stages[index];if(!stage.encoder->requiresScene())return {true,{}};
     auto scratch=impl->acquire(commands);if(!scratch||(!lease&&!scratch->scene))return {false,"This real generation endpoint has no matching scene lease"};
     const auto&source=lease?lease->frame:*scratch->scene;const auto rawGuides=lease?&rawSceneGuides(lease):scratch->guideLease?&rawSceneGuides(scratch->guideLease):nullptr;const bool jittered=!replacesTemporal()&&!(lease?lease->resolvedColor:scratch->resolvedColor)&&source.method==RS_TEMPORAL_OFF;
+    const auto&raw=rawGuides?*rawGuides:source;const auto late=lateScene(raw.owner,raw.frameId);
     auto attachments=lease?copiedFrom?copiedSceneAovLease(lease->aovs,copiedFrom,colour):lease->aovs:nullptr;
     if(lease&&lease->interfaceLayer)attachments=interfaceLayerAttachments(commands,colour,lease->interfaceLayer,attachments,source,impl->colorDescription,origin);
+    const auto pair=!attachments&&late?lateScenePair(*late,source.frameId,colour,imageColor()):nullptr;if(pair)attachments=pair;
     auto actual=impl->normalizeScene(*scratch,commands,source,colour,colour,jittered,false,false,true,attachments,1,GuideAll,rawGuides);const auto aovs=temporalSceneAovs(actual);actual.owner=stage.state.get();if(aovs&&bindSceneAovLease(actual,aovs)!=RS_TEMPORAL_OK)return {false,"The generation endpoint attachments could not be retained"};
     bindMetalFxGenerationResources(actual,source,copiedFrom);
     if(auto matrices=sceneMatricesForImage(source,lease?lease->matrices:temporalSceneMatrices(source),jittered,origin==FrameOrigin::BottomLeft);matrices&&!temporalSceneMatrices(actual))rsBindTemporalSceneMatrices(&actual,&*matrices);
-    attachLateCamera(actual,rawGuides?*rawGuides:source);
+    // The frame's own late scene first (its camera is named by frame id), then the camera file.
+    const bool lateCamera=late&&late->camera&&!(raw.flags&RS_TEMPORAL_CAMERA_VALID)&&bool(late->cameraFlags&RS_TEMPORAL_DEPTH_REVERSED)==bool(raw.flags&RS_TEMPORAL_DEPTH_REVERSED);
+    if(lateCamera){actual.flags=(actual.flags&~uint32_t(RS_TEMPORAL_DEPTH_INFINITE))|RS_TEMPORAL_CAMERA_VALID|(late->cameraFlags&RS_TEMPORAL_DEPTH_INFINITE);actual.nearPlane=late->nearPlane;actual.farPlane=late->farPlane;actual.verticalFov=late->verticalFov;}
+    else attachLateCamera(actual,raw);
+    {static std::atomic<unsigned>reported{0};const unsigned bit=!late?1u:pair?2u:4u;if(!(reported.fetch_or(bit)&bit)){
+        const auto describe=[&](unsigned i){id<MTLTexture>t=late?late->images[i]:nil;return t?std::to_string(t.width)+"x"+std::to_string(t.height)+" format "+std::to_string(unsigned(t.pixelFormat)):std::string("none");};
+        nativeLog(!late?std::string("No late scene for a generation scene"):std::string("Late scene on a generation scene: HUD-less ")+describe(0)+", UI "+describe(1)+", presented "+std::to_string(colour.width)+"x"+std::to_string(colour.height)+" format "+std::to_string(unsigned(colour.pixelFormat))+", HUD split "+(pair?"bound":"not bound")+", camera "+(lateCamera?"bound":"none"));}}
     if(stage.row<impl->rows.size()&&generationRequiresCamera(impl->rows[stage.row].spec.method)&&!sceneGenerationCamera(impl->rows[stage.row].spec.method,&actual))return {false,"Needs matching renderer camera inputs"};
     actual.method=RS_TEMPORAL_OFF;actual.reserved=0;
     if(nativeConfig().diagnostics.enabled){static std::atomic<unsigned>reported{0};if(reported.fetch_add(1,std::memory_order_relaxed)<64)nativeLog("Generation scene request stageOwner="+std::to_string(reinterpret_cast<uintptr_t>(stage.state.get()))+" commands="+std::to_string(reinterpret_cast<uintptr_t>((__bridge void*)commands))+" scene="+std::to_string(actual.frameId)+" sourceOwner="+std::to_string(reinterpret_cast<uintptr_t>(source.owner))+" flags="+std::to_string(actual.flags)+" reset="+std::to_string(bool(actual.flags&RS_TEMPORAL_RESET)));}
@@ -1908,3 +1938,25 @@ EffectExecutionSelection EffectPlanExecutor::buildSnapshot(const ShaderFrame &in
 extern "C" uint32_t rsShaderInputPolicyAPI(void){return 1;}
 
 extern "C" uint32_t rsShaderLinearInputPolicyAPI(void){return 1;}
+
+// A late scene: retains the scene images that a game supplied after its evaluation of an earlier frame (frame.h).
+extern "C" int rsProcessLateScene(const RSTemporalFrame*f,RSTemporalResult*r){
+    const auto answer=[&](int code,const char*reason,bool encoded){if(r&&r->size>=sizeof(*r)&&r->version==1){r->status=uint32_t(code);r->encoded=encoded;std::snprintf(r->reason,sizeof(r->reason),"%s",reason);}return code;};
+    @autoreleasepool{try{
+        if(!f||!macfx::lateSceneFrame(*f))return answer(RS_TEMPORAL_INVALID,"A late scene names an earlier frame by its owner and id, with unsubmitted commands and no images of its own",false);
+        auto commands=(__bridge id<MTLCommandBuffer>)f->commandBuffer;if(commands.status>=MTLCommandBufferStatusCommitted)return answer(RS_TEMPORAL_INVALID,"The late scene's commands are already committed",false);
+        macfx::LateScene next;next.owner=f->owner;next.frameId=f->frameId;
+        if(f->flags&RS_TEMPORAL_CAMERA_VALID){const bool infinite=f->flags&RS_TEMPORAL_DEPTH_INFINITE;
+            if(std::isfinite(f->nearPlane)&&f->nearPlane>0&&std::isfinite(f->verticalFov)&&f->verticalFov>0&&f->verticalFov<float(M_PI)&&(infinite?f->farPlane==0:std::isfinite(f->farPlane)&&f->farPlane>f->nearPlane)){
+                next.camera=true;next.cameraFlags=f->flags&(RS_TEMPORAL_DEPTH_INFINITE|RS_TEMPORAL_DEPTH_REVERSED);next.nearPlane=f->nearPlane;next.farPlane=f->farPlane;next.verticalFov=f->verticalFov;}}
+        if(const auto aovs=macfx::takeLateSceneAovs(*f)){const unsigned slots[2]={RS_SCENE_AOV_HUDLESS_COLOR,RS_SCENE_AOV_UI_COLOR_ALPHA};
+            for(unsigned i=0;i<2;++i){const auto&region=aovs->value.images[slots[i]];id<MTLTexture>source=aovs->textures[slots[i]];if(!source||!region.width||!region.height)continue;
+                auto d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:source.pixelFormat width:region.width height:region.height mipmapped:NO];d.storageMode=MTLStorageModePrivate;d.usage=MTLTextureUsageShaderRead|MTLTextureUsageRenderTarget|MTLTextureUsagePixelFormatView;
+                id<MTLTexture>copy=[commands.device newTextureWithDescriptor:d];id<MTLBlitCommandEncoder>blit=copy?[commands blitCommandEncoder]:nil;if(!blit)return answer(RS_TEMPORAL_BUSY,"The late scene images could not be retained",false);
+                [blit copyFromTexture:source sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(region.x,region.y,0) sourceSize:MTLSizeMake(region.width,region.height,1) toTexture:copy destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[blit endEncoding];
+                next.images[i]=copy;next.regions[i]=region;next.regions[i].texture=(__bridge void*)copy;next.regions[i].x=next.regions[i].y=0;next.regions[i].encoding=RS_SCENE_AOV_COLOR;next.regions[i].pass=0;}}
+        if(!next.camera&&!next.images[0]&&!next.images[1])return answer(RS_TEMPORAL_UNAVAILABLE,"The late scene has no valid camera or readable scene images",false);
+        macfx::rememberLateScene(std::move(next));return answer(RS_TEMPORAL_OK,"",true);
+    }catch(const std::exception&error){return answer(RS_TEMPORAL_FAILED,error.what(),false);}}
+}
+

@@ -89,12 +89,17 @@ int bindExact(const RSTemporalFrame&f,const std::shared_ptr<const SceneAovLease>
 struct Pending {void*owner=nullptr;__weak id<MTLTexture>color,depth,motion;bool hasDepth=false,hasMotion=false,blocked=false;std::shared_ptr<const SceneAovLease>lease;};
 std::mutex pendingLock;std::array<Pending,maximumPending>pending;std::atomic<unsigned>pendingCount{0};
 void recount(){unsigned n=0;for(const auto&r:pending)n+=r.lease&&!r.blocked;pendingCount.store(n,std::memory_order_release);}
+struct LateAovs {void*owner=nullptr;uint64_t frameId=0;void*commands=nullptr;std::shared_ptr<const SceneAovLease>lease;};
+thread_local LateAovs lateAovs;
 }
+bool macfx::lateSceneFrame(const RSTemporalFrame&f){return f.size>=sizeof(f)&&f.version==1&&f.owner&&f.frameId&&f.commandBuffer&&!f.commandBufferKind&&!f.color&&!f.depth&&!f.motion&&!f.output&&f.method==RS_TEMPORAL_OFF;}
+std::shared_ptr<const macfx::SceneAovLease>macfx::takeLateSceneAovs(const RSTemporalFrame&f){auto value=std::move(lateAovs);lateAovs={};return value.owner==f.owner&&value.frameId==f.frameId&&value.commands==f.commandBuffer?value.lease:nullptr;}
 extern "C" uint32_t rsSceneAovAPI(void){return 1;}
 // A plan states its own attachment demand, including a denoised temporal row's
 // operation inputs; the legacy temporal selection applies only without one.
 extern "C" uint32_t rsGetSceneAovDemand(uint32_t version){if(version!=1)return 0;if(macfx::effectPlanRequested())return macfx::effectPlanSceneAovDemand();return macfx::temporalControls().method==RS_TEMPORAL_METALFX_DENOISED?macfx::metalFxDenoisedAovDemand():0u;}
-extern "C" int rsBindTemporalSceneAovs(const RSTemporalFrame*f,const RSSceneAovs*v){try{if(!f||f->size<sizeof(*f)||!v||v->size!=sizeof(*v)||v->version!=1||!f->color)return RS_TEMPORAL_INVALID;auto image=(__bridge id<MTLTexture>)f->color;const auto value=sanitizeHud(*v,image.device);if(!valid(value,image.device))return RS_TEMPORAL_INVALID;auto lease=capture(value,image.device);associate(*lease,*f);return bindExact(*f,lease);}catch(...){return RS_TEMPORAL_INVALID;}}
+extern "C" int rsBindTemporalSceneAovs(const RSTemporalFrame*f,const RSSceneAovs*v){try{if(f&&v&&v->size==sizeof(*v)&&v->version==1&&macfx::lateSceneFrame(*f)){auto commands=(__bridge id<MTLCommandBuffer>)f->commandBuffer;const auto value=sanitizeHud(*v,commands.device);if(value.frameId!=f->frameId||!valid(value,commands.device))return RS_TEMPORAL_INVALID;lateAovs={f->owner,f->frameId,f->commandBuffer,capture(value,commands.device)};return RS_TEMPORAL_OK;}
+ if(!f||f->size<sizeof(*f)||!v||v->size!=sizeof(*v)||v->version!=1||!f->color)return RS_TEMPORAL_INVALID;auto image=(__bridge id<MTLTexture>)f->color;const auto value=sanitizeHud(*v,image.device);if(!valid(value,image.device))return RS_TEMPORAL_INVALID;auto lease=capture(value,image.device);associate(*lease,*f);return bindExact(*f,lease);}catch(...){return RS_TEMPORAL_INVALID;}}
 extern "C" void rsClearTemporalAovsTextures(void*owner){if(!owner)return;std::lock_guard guard(pendingLock);for(auto&r:pending)if(r.owner==owner)r={};recount();}
 extern "C" void rsReleaseTemporalSceneAovs(void*owner){rsClearTemporalAovsTextures(owner);std::lock_guard guard(boundLock);bound.erase(owner);}
 extern "C" int rsSetTemporalAovsForTextures(void*owner,void*color,void*depth,void*motion,const RSSceneAovs*v){return rsSetTemporalAovsForTexturesObserved(owner,color,depth,motion,v,nullptr);}

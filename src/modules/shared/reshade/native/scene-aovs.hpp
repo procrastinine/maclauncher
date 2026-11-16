@@ -48,4 +48,8 @@ bool sceneUILayerSize(uint64_t frameId,NSUInteger&width,NSUInteger&height);
 // Only for an already-recorded full-image, same-format byte copy. It cannot
 // authorize a split after a shader, color conversion, crop or other transform.
 std::shared_ptr<const SceneAovLease>copiedSceneAovLease(const std::shared_ptr<const SceneAovLease>&,id<MTLTexture>source,id<MTLTexture>target);
+// A late scene frame (rsProcessLateScene) names an earlier frame and carries no images of its own; the attachments
+// that rsBindTemporalSceneAovs validated for it wait on this thread and are taken once by that frame's late scene.
+bool lateSceneFrame(const RSTemporalFrame&);
+std::shared_ptr<const SceneAovLease>takeLateSceneAovs(const RSTemporalFrame&);
 }

@@ -51,6 +51,12 @@ int rsProcessTemporalFrame(const RSTemporalFrame *, RSTemporalResult *);
 int rsProcessTemporalProviderFrame(const RSTemporalFrame *,RSTemporalResult *);
 struct RSImageColorDescription;
 int rsProcessTemporalFrameColor(const RSTemporalFrame *,const struct RSImageColorDescription *,RSTemporalResult *);
+// The scene that a game supplies after its evaluation of an earlier frame (a late scene). owner and frameId name a
+// frame given to rsProcessTemporalFrame; color, depth, motion and output are null and method is RS_TEMPORAL_OFF.
+// Its bound scene attachments (rsBindTemporalSceneAovs: HUD-less color, UI color and alpha) are copied in
+// commandBuffer's order, and with RS_TEMPORAL_CAMERA_VALID its camera (and RS_TEMPORAL_DEPTH_INFINITE) is taken,
+// for that frame's generation stage. encoded is 1 when the frame was found before its generation stage read it.
+int rsProcessLateScene(const RSTemporalFrame *, RSTemporalResult *);
 // Release when a renderer stops or discards an unsubmitted frame. Some native
 // scalers retain their most recent commands; releasing the owner breaks that
 // relationship and ensures the next submitted frame begins with fresh history.
