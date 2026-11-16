@@ -30,3 +30,50 @@ async function verifySumsFile({ archiveSha256, checksum, filename, signal, label
   return { verified: true, archiveSha256, identity: `publisher-sha256-file:${listed}` };
 }
 module.exports={readChecksum,verifySumsFile};
+
+function verifyArchiveSums({root,sumsPath}) {
+ const crypto=require('node:crypto'),base=fs.realpathSync(root);
+ const contained=relative=>{
+  if(typeof relative!=='string'||path.isAbsolute(relative)||relative.includes('\\')||relative.includes('\0')||relative.split('/').includes('..'))throw new Error('An archive checksum path escapes its payload.');
+  const absolute=fs.realpathSync(path.join(base,relative));
+  if(!absolute.startsWith(base+path.sep)||!fs.statSync(absolute).isFile())throw new Error('An archive checksum member is outside its payload.');return absolute;
+ };
+ const list=contained(sumsPath);if(fs.statSync(list).size>16*1024*1024)throw new Error('The archive checksum list is too large.');
+ const members=[];
+ for(const raw of fs.readFileSync(list,'utf8').split(/\r?\n/)){
+  if(!raw.trim())continue;const match=/^([a-f0-9]{64})[ \t]+\*?(.+?)\s*$/i.exec(raw);
+  if(!match)throw new Error('The archive checksum list contains an invalid entry.');
+  const name=match[2].replace(/^\.\//,''),file=contained(name),sha256=crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  if(sha256!==match[1].toLowerCase())throw new Error(`Archive member ${name} does not match its published SHA-256.`);
+  members.push({path:name,sha256});
+ }
+ if(!members.length)throw new Error('The archive checksum list contains no members.');return{verified:true,members};
+}
+async function verifySource({source,asset,archiveSha256,root,verificationFiles=[],headers={},signal},dependencies={}){
+ require('./schema').validateSource(source);const receipts=[];
+ for(const rule of source.verify){
+  throwIfAborted(signal);
+  if(rule.type==='github-asset-digest'){
+   const digest=Upstream.readDigest(asset?.digest||asset?.sha256,'sha256');
+   if(digest?.algorithm!=='sha256'||digest.value!==archiveSha256)throw new Error('The archive does not match its published GitHub SHA-256.');
+   receipts.push({type:rule.type,verified:true,sha256:digest.value});
+  }else if(rule.type==='sums-file'){
+   const matches=verificationFiles.filter(file=>new RegExp(rule.match).test(file.name||file.filename||''));
+   if(matches.length!==1)throw new Error('A unique publisher checksum file is required.');
+   receipts.push({type:rule.type,...await verifySumsFile({archiveSha256,checksum:matches[0],filename:asset.name||asset.filename,signal,label:source.label},dependencies)});
+  }else if(rule.type==='archive-sums')receipts.push({type:rule.type,...verifyArchiveSums({root,sumsPath:rule.path})});
+  else if(rule.type==='response-header'){
+   const value=Object.entries(headers).find(([name])=>name.toLowerCase()===rule.header.toLowerCase())?.[1],digest=Upstream.readDigest(value,'sha256');
+   if(digest?.algorithm!=='sha256'||digest.value!==archiveSha256)throw new Error('The archive does not match its published response-header SHA-256.');
+   receipts.push({type:rule.type,verified:true,sha256:digest.value});
+  }else if(rule.type==='codesign'){
+   if(typeof dependencies.verifyCodeSignature!=='function')throw new Error('Strict code-signature verification is not configured.');
+   const receipt=await dependencies.verifyCodeSignature({root,source,signal});
+   if(receipt?.verified!==true)throw new Error('Strict code-signature verification failed.');
+   receipts.push({type:rule.type,...receipt});
+  }
+ }
+ return {verified:true,receipts};
+}
+module.exports.verifyArchiveSums=verifyArchiveSums;
+module.exports.verifySource=verifySource;
