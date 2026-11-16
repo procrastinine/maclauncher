@@ -149,6 +149,7 @@ function includedTranslators(source, install, add, context = {}) {
 }
 
 function supportFacts(id) {
+  const Requirements=require('../modules/shared/runtime/feature-requirements');
   const source=definition(id), embeds=source.included || [];
   const renderers=embeds.filter(embed=>embed.kind==='d3d-translator' && embed.engine!=='wined3d');
   const rendererPath=path.posix.dirname(renderers[0].parts[0].path), support=rendererPath.split('/')[0];
@@ -157,7 +158,8 @@ function supportFacts(id) {
   const media=embeds.find(embed=>embed.kind==='media');
   return {root:support, relativePaths:{frameworks:relative(path.posix.dirname(rendererPath)),renderers:relative(rendererPath),vulkan:relative(path.posix.dirname(icd.path))},
     media:Object.fromEntries(media.parts.map(part=>[part.name,relative(part.path)])),
-    minimumMacOS:{}};
+    minimumMacOS:Object.fromEntries(Object.entries({...Requirements.TEMPLATE_RENDERERS,...Requirements.WINE_BACKENDS})
+      .map(([name,required])=>[name,[...String(required.minimumMacOS).split('.'),'0','0'].slice(0,3).join('.')]))};
 }
 // One storage/status path for managed Wine sources. Publisher modules supply
 // only release recognition, extraction and sealed payload transport hooks.

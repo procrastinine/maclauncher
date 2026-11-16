@@ -127,10 +127,36 @@ function moduleExport(record, name, symbol, visited = new Set(), native = false)
   return unknown ? null : false;
 }
 function libraryExport(record, file, symbol) { return moduleExport(record, file, symbol, new Set(), true); }
-function compatibility(description, record, {executableArchitecture} = {}) {
- const machine=requiredMachine(executableArchitecture),architecture=record.layout.architecture;
- const selected=binaryFiles(description.files||[],{machine,architecture,requiredPaths:description.requiredPaths||[]});
- return {compatible:!selected.missing.length,reason:selected.missing[0]?.reason||null,warnings:[],files:selected.files};
+function compatibility(description, record, { macOSVersion, executableArchitecture } = {}) {
+  const warnings = [], machine = requiredMachine(executableArchitecture), expectedUnix = record.layout.architecture;
+  const incompatible = reason => ({ compatible: false, reason, warnings });
+  const requiredPaths = [...(description.requiredPaths || [])];
+  if (description.entryPoint && description.component === 'vulkan-driver') requiredPaths.push(description.entryPoint);
+  if (description.icd) {
+    try { const icd = JSON.parse(fs.readFileSync(description.icd, 'utf8')); requiredPaths.push(path.resolve(path.dirname(description.icd), icd.ICD.library_path)); } catch {}
+  }
+  const selected = binaryFiles(description.files || [], { machine, architecture: expectedUnix, requiredPaths });
+  if (selected.missing.length) return incompatible(selected.missing[0].reason);
+  for (const file of selected.files) {
+    if (!fs.existsSync(file.path)) return incompatible(`Required file is missing: ${file.path}`);
+    const actual = file;
+    if (actual.format === 'pe' && machine && !acceptsBinary(expectedUnix, peArchitecture(machine), 'native', { format: 'pe', machine: peArchitecture(actual.machine) }).accepted) return incompatible(`${path.basename(file.path)} has no PE machine for ${executableArchitecture}`);
+    if (actual.format !== 'macho') { if (actual.format === 'unknown') warnings.push(`Could not inspect ${file.path}`); continue; }
+    if (expectedUnix && !acceptsBinary(expectedUnix, peArchitecture(machine), 'native', { format: 'macho', architectures: actual.cpuSlices }).accepted) return incompatible(`${path.basename(file.path)} has no ${expectedUnix} CPU slice`);
+    const image = actual.slices.find(slice => slice.architecture === expectedUnix) || actual.slices[0];
+    if (macOSVersion && image.minimumMacOS && compareVersions(image.minimumMacOS, macOSVersion) > 0)
+      return incompatible(`${path.basename(file.path)} requires macOS ${image.minimumMacOS}`);
+    if (!image.importsComplete) warnings.push(`Imports could not be fully inspected: ${file.path}`);
+    for (const item of image.imports || []) {
+      if (item.weak || !item.library || /^\/(?:usr\/lib|System\/Library)\//.test(item.library)) continue;
+      const name = wineDependency(record, item.library);
+      if (!name) { warnings.push(`Dependency was not established as a Wine module: ${item.library}`); continue; }
+      // Only the actual dependency and its reexports can satisfy a two-level import.
+      const found = moduleExport(record, name, item.symbol);
+      if (found === false) return incompatible(`${name} does not export required symbol ${item.symbol}`);
+      if (found == null) warnings.push(`Could not establish export ${item.symbol} from ${name}`);
+    }
+  }
+  return { compatible: true, reason: null, warnings, files: selected.files };
 }
-
 module.exports = { wineCompatibilityRecord, completeWineNativeLibraries, compatibility, requiredMachine, moduleExport, resolveNativeDependency, nativeRunPaths, libraryExport };
