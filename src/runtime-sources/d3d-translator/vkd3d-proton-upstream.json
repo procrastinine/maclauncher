@@ -11,5 +11,6 @@
     },
     "prereleases": true
   },
-  "vulkan": true
+  "vulkan": true,
+  "dxgi": { "engine": "dxvk", "from": "2" }
 }

@@ -88,6 +88,8 @@ A driver has to match the processor that WINE itself is built for. Sikarugir, Wi
 
 CrossOver, Sikarugir's Template and WineCX all include MoltenVK, and MacLauncher can install Khronos's own releases. Its settings offer fast math, argument buffers and an Unreal Engine 4 compatibility option. MacLauncher also offers a MoltenVK build of its own, **MoltenVK scene support**, from [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/), where MacLauncher publishes the packages it builds itself. This build can pass a game's DLSS data from DXVK and vkd3d-proton to MacLauncher's upscalers, and it stands in for MacLauncher KosmicKrisp on Macs that can't run KosmicKrisp. [Effects and upscaling](/maclauncher/windows/effects-and-upscaling/#dlss-games-and-the-selected-upscaler) describes how that works.
 
+vkd3d-proton uses the DXGI of DXVK 2.0 or later, so when a game's Direct3D 12 runs on vkd3d-proton and its other Direct3D versions are left automatic, MacLauncher pairs it with an installed DXVK 2.0 or later and never with a DXVK 1.x build, so installing DXVK-macOS for another game doesn't change that pairing.
+
 MoltenVK has no geometry shaders, which DXVK 2.0 and later need, so a game whose Vulkan driver is MoltenVK isn't offered those DXVK versions, while builds made for MoltenVK, such as Gcenx's DXVK 1.10.3, stay available. MacLauncher learns this by asking each installed Vulkan driver once which Vulkan features it has, so a driver that adds a feature is offered with the translators that need it.
 
 ### KosmicKrisp

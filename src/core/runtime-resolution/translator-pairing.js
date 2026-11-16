@@ -1,6 +1,7 @@
 const path = require('node:path');
 const Roles = require('../../modules/shared/runtime/translator-roles');
 const { label } = require('../../modules/shared/runtime/translator-description');
+const { compareRuntimeVersions } = require('../../modules/shared/runtime/pinned-native-manager');
 
 const isDxgi = file => file.format === 'pe' && path.basename(file.path).toLowerCase() === 'dxgi.dll';
 const explicit = row => row?.selected && !row.projected && !['automatic', 'inherit'].includes(row.value);
@@ -53,11 +54,20 @@ function resolvePairing(plan, { choices = [], included = [], compatibility = {},
   // An explicit API owns its exact DXGI/Unix closure, not another version of
   // the same engine. Proton and Wine vkd3d have separately supplied DXGI.
   const ownDxgi = family === owner.engine;
+  // Installed providers are ranked by what they are, never by the order they
+  // were installed in: declared sources in their declared order, the newest
+  // version of a source first, then components that other runtimes include.
+  const ranked = [...candidates].sort((a, b) => (a.sourceOrder ?? Infinity) - (b.sourceOrder ?? Infinity) ||
+    compareRuntimeVersions(a.version || '', b.version || '') || String(a.id).localeCompare(String(b.id)));
   const ordered = ownDxgi ? [...candidates.filter(item => item.id === owner.id || item.root && item.root === owner.root), owner] :
-    [rows.d3d11?.used, rows.d3d10?.used, rows['d3d-renderer'].used, ...candidates];
+    [rows.d3d11?.used, rows.d3d10?.used, rows['d3d-renderer'].used, ...ranked];
+  // A declared DXGI need admits only that engine from that version on: vkd3d-proton
+  // presents through the DXGI of DXVK 2 and later. An unknown version is admitted.
+  const need = owner.dxgiRequires;
+  const meets = item => !need || item.engine === need.engine && (!need.from || !item.version || compareRuntimeVersions(String(item.version), String(need.from)) <= 0);
   // Absent DXGI facts still leave physical bridge conflicts authoritative.
   if (ownDxgi && !ordered.some(item => item.files?.some(isDxgi))) return false;
-  const partner = ordered.find(item => item?.engine === family && usable(item, providerRole) &&
+  const partner = ordered.find(item => item?.engine === family && meets(item) && usable(item, providerRole) &&
     [...machines].every(machine => dxgiFiles(described(item, providerRole)).some(file => isDxgi(file) && file.machine === machine)));
   if (!partner) return missing(family, ownerLabel + ' requires ' + familyLabel + ' DXGI. Play installs the matching translator after confirmation.');
   const selected = described(partner, providerRole), binding = dxgiFiles(selected);

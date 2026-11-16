@@ -125,10 +125,14 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
         files: description.files.map(file => ({ ...file, path: path.resolve(root, file.path) })) };
       const declaration=manager.sources?.find(source=>source.manager?.sectionId===value.sectionId)||manager.sources?.[0];
       if(declaration)value.sourceId=declaration.id;
-      // Vulkan features this translator release requires of the driver, from its source declaration.
+      // What this release's source declares: the Vulkan features it requires of
+      // the driver, the DXGI it presents through, and the source's order.
       const catalogSource = typeof description.source === 'object' ? description.source?.id : null;
-      const vulkanRequires = require('./vulkan-features').required(require('./translator-managers').sourceDeclaration(value.settingsEngine, catalogSource) || declaration, description.version);
+      const declared = require('./translator-managers').sourceDeclaration(value.settingsEngine, catalogSource) || declaration;
+      const vulkanRequires = require('./vulkan-features').required(declared, description.version);
       if (vulkanRequires.length) value.vulkanRequires = vulkanRequires;
+      if (declared?.dxgi) value.dxgiRequires = { ...declared.dxgi };
+      if (Number.isFinite(declared?.order)) value.sourceOrder = declared.order;
       choices.push(value);
       if (value.engine === 'd3dmetal') choices.push({ ...value, id: value.id + ':d3d12', component: 'd3d12' });
     }
