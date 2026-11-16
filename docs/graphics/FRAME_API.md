@@ -57,7 +57,7 @@ Motion estimated from the images never stands in for these inputs. LSFG's own im
 
 ## Scene frames and matching guides
 
-Processing that depends on the scene receives a color image together with the scene guides that match it.
+Processing that depends on the scene receives a color image together with the scene guides that match it. A retained scene keeps the pooled image tickets for its color, output, guides and declared attachments until its last consumer releases them. Other intermediate images remain held through command completion and then return to the pool, even while generation history retains the scene.
 
 ### Temporal frames
 

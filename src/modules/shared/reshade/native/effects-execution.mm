@@ -400,7 +400,29 @@ struct EffectExecution::Impl {
                 return value;
             }
         };
-        struct Storage{std::vector<PooledImage>holds;};
+        struct Storage{
+            std::vector<PooledImage>holds;
+            // Command completion releases every scratch intermediate. Scene
+            // history keeps only tickets for images that its frame names;
+            // retaining the entire scratch set would pin obsolete ping-pong
+            // guides until the last generation endpoint retires.
+            std::shared_ptr<Storage>retaining(const RSTemporalFrame&frame,const std::shared_ptr<const SceneAovLease>&aovs)const{
+                if(holds.empty())return {};
+                const std::array<void*,7>images{frame.color,frame.output,frame.depth,frame.motion,frame.exposure,frame.reactive,frame.transparency};
+                const auto named=[&](id<MTLTexture>texture){
+                    const auto pointer=(__bridge void*)texture;
+                    if(std::find(images.begin(),images.end(),pointer)!=images.end())return true;
+                    for(auto lease=aovs;lease;lease=lease->upstream){
+                        if(texture==lease->composedColor)return true;
+                        for(const auto&image:lease->value.images)if(pointer==image.texture)return true;
+                    }
+                    return false;
+                };
+                auto retained=std::make_shared<Storage>();retained->holds.reserve(holds.size());
+                for(const auto&hold:holds)if(named(hold.texture()))retained->holds.push_back(hold);
+                return retained;
+            }
+        };
         struct Pair{std::array<id<MTLTexture>,2>images{};std::shared_ptr<Prepared>prepared;};
         struct Depth{id<MTLTexture>image=nil;std::shared_ptr<Prepared>prepared;};
         struct Guides{std::array<SceneGuideTargets,2>images;std::array<std::shared_ptr<Prepared>,5>prepared;};
@@ -795,7 +817,7 @@ ShaderResult EffectExecution::encodeScene(const ShaderFrame&frame,const RSTempor
 }catch(const TransientBusy&error){return {false,error.what(),!error.structurallyImpossible};}catch(const std::exception&error){return {false,error.what()};}}}
 std::shared_ptr<const EffectSceneLease>EffectExecution::captureSceneLease(id<MTLCommandBuffer>commands){
     auto scratch=impl->acquire(commands);if(!scratch||!scratch->scene)return {};if(auto prior=scratch->lease.lock())if(prior->frame.frameId==scratch->scene->frameId)return prior;
-    auto lease=std::make_shared<EffectSceneLease>();lease->resolvedColor=scratch->resolvedColor||replacesTemporal();lease->frame=*scratch->scene;lease->color=(__bridge id<MTLTexture>)lease->frame.color;lease->output=(__bridge id<MTLTexture>)lease->frame.output;lease->guideHistory=impl->sceneHistory;lease->upstream=scratch->guideLease;lease->guideSource=scratch->guideLease?(scratch->guideLease->guideSource?:scratch->guideLease.get()):nullptr;lease->guides={(__bridge id<MTLTexture>)lease->frame.depth,(__bridge id<MTLTexture>)lease->frame.motion,(__bridge id<MTLTexture>)lease->frame.exposure,(__bridge id<MTLTexture>)lease->frame.reactive,(__bridge id<MTLTexture>)lease->frame.transparency};lease->matrices=temporalSceneMatrices(lease->frame);lease->aovs=temporalSceneAovs(lease->frame);lease->storage=scratch->storage;scratch->lease=lease;return lease;
+    auto lease=std::make_shared<EffectSceneLease>();lease->resolvedColor=scratch->resolvedColor||replacesTemporal();lease->frame=*scratch->scene;lease->color=(__bridge id<MTLTexture>)lease->frame.color;lease->output=(__bridge id<MTLTexture>)lease->frame.output;lease->guideHistory=impl->sceneHistory;lease->upstream=scratch->guideLease;lease->guideSource=scratch->guideLease?(scratch->guideLease->guideSource?:scratch->guideLease.get()):nullptr;lease->guides={(__bridge id<MTLTexture>)lease->frame.depth,(__bridge id<MTLTexture>)lease->frame.motion,(__bridge id<MTLTexture>)lease->frame.exposure,(__bridge id<MTLTexture>)lease->frame.reactive,(__bridge id<MTLTexture>)lease->frame.transparency};lease->matrices=temporalSceneMatrices(lease->frame);lease->aovs=temporalSceneAovs(lease->frame);lease->storage=scratch->storage->retaining(lease->frame,lease->aovs);scratch->lease=lease;return lease;
 }
 ShaderResult EffectExecution::bindSceneImage(id<MTLCommandBuffer>commands,id<MTLTexture>colour,id<MTLTexture>output,const std::shared_ptr<const EffectSceneLease>&source,std::shared_ptr<const EffectSceneLease>&normalized){return bindSceneImage(commands,colour,output,source,normalized,FrameOrigin::TopLeft);}
 ShaderResult EffectExecution::bindSceneImage(id<MTLCommandBuffer>commands,id<MTLTexture>colour,id<MTLTexture>output,const std::shared_ptr<const EffectSceneLease>&source,std::shared_ptr<const EffectSceneLease>&normalized,FrameOrigin origin){try{
