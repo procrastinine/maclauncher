@@ -16,7 +16,7 @@ test("Vulkan required drivers reuse manager defaults without seeding downloads o
   const Libraries = require("../src/modules/shared/vulkan/libraries");
   const manager = Libraries.createManager("moltenvk", {systemVersionSync:()=>"26.0"}), requests = Harness.network.requests.length;
   t.after(() => assert.equal(Harness.network.requests.length, requests, "selection and requirements stay offline"));
-  const context = {userDataDir,settings:{},runtimeSettings:{vulkanRuntime:"auto"}};
+  const context = {userDataDir,settings:{},runtimeSettings:{translatorVulkan:"auto"}};
   const dependencies = {managers:[manager],adapted:noAdapted,required:true};
   assert.deepEqual(manager.getState({userDataDir}).catalog.versions, []);
   assert.deepEqual(Vulkan.requirements(context,dependencies),
@@ -24,12 +24,12 @@ test("Vulkan required drivers reuse manager defaults without seeding downloads o
     "with nothing listed, consented preparation discovers the newest release instead of a fixed version");
   context.settings = {runtimes:{[manager.id]:{defaultVersion:"1.4.3"}}};
   assert.equal(Vulkan.requirements(context,dependencies)[0].version,"1.4.3");
-  context.runtimeSettings.vulkanRuntime = "moltenvk:1.4.4";
+  context.runtimeSettings.translatorVulkan = "moltenvk:1.4.4";
   assert.equal(Vulkan.requirements(context,dependencies)[0].version,"1.4.4");
   assert.equal(manager.resolveSelection({},context.settings,userDataDir,{recommendedVersion:"1.4.5"}).version,"1.4.5");
   assert.equal(manager.resolveSelection({runtimeData:{[manager.id]:{version:"1.4.6"}}},context.settings,userDataDir,
     {recommendedVersion:"1.4.5"}).version,"1.4.6");
-  context.runtimeSettings.vulkanRuntime = "auto";
+  context.runtimeSettings.translatorVulkan = "auto";
   context.settings.runtimes[manager.id].defaultVersion = null;
   assert.equal(Vulkan.requirements(context,dependencies)[0].discoveryRequired,true);
   const support = require("../src/modules/crossover/temporal/support-manager").createManager();
@@ -51,7 +51,7 @@ test("native Vulkan choices use matching installed images and preserve file-only
     libraries: [driver, loader].map(file => ({ file: path.basename(file), sha256: hashFile(file) })) } };
   const managers = [{ id: "vulkan-kosmickrisp", backend: "kosmickrisp", getState: () => ({catalog:{versions:[]}}), core: { listInstalled: () => [install] } }];
   const dependencies = { managers, architecture: "arm64", macOSVersion: "26.0", adapted: noAdapted };
-  const context = { userDataDir: root, runtimeSettings: { vulkanRuntime: "kosmickrisp:fixture" } };
+  const context = { userDataDir: root, runtimeSettings: { translatorVulkan: "kosmickrisp:fixture" } };
   const selected = Vulkan.resolve(context, dependencies);
   assert.equal(selected.library, loader); assert.deepEqual(selected.readable, [driver, loader]);
   let fullChecks = 0;
@@ -61,9 +61,9 @@ test("native Vulkan choices use matching installed images and preserve file-only
   assert.deepEqual(Vulkan.choices(context, withAdapted).vulkanRuntimes.map(item => item.value), ["auto", "kosmickrisp:fixture", adaptedRecord.id]);
   assert.equal(Vulkan.resolve({ ...context, runtimeSettings: {} }, withAdapted).id, "kosmickrisp:fixture");
   assert.equal(fullChecks, 0);
-  assert.equal(Vulkan.resolve({ ...context, runtimeSettings: { vulkanRuntime: adaptedRecord.id } }, withAdapted), adaptedRecord);
+  assert.equal(Vulkan.resolve({ ...context, runtimeSettings: { translatorVulkan: adaptedRecord.id } }, withAdapted), adaptedRecord);
   assert.equal(fullChecks, 1);
-  assert.equal(Vulkan.resolve({ ...context, runtimeSettings: { vulkanRuntime: "kosmickrisp:maclauncher" } }, withAdapted), adaptedRecord);
+  assert.equal(Vulkan.resolve({ ...context, runtimeSettings: { translatorVulkan: "kosmickrisp:maclauncher" } }, withAdapted), adaptedRecord);
   assert.equal(fullChecks, 2);
   const env = Vulkan.environment(selected, root);
   assert.equal(env.KL_MVK_DYLIB, loader);
@@ -137,24 +137,24 @@ test("managed MacLauncher KosmicKrisp selections retain the complete closure and
 });
 
 test("saved MacLauncher KosmicKrisp choices request exact consented installation and reuse installed packages", () => {
-  const uses = [], versions = [], context = {userDataDir: os.tmpdir(), settings:{}, runtimeSettings:{vulkanRuntime:"kosmickrisp:maclauncher"}, recordRuntimeUse: row => uses.push(row)};
+  const uses = [], versions = [], context = {userDataDir: os.tmpdir(), settings:{}, runtimeSettings:{translatorVulkan:"kosmickrisp:maclauncher"}, recordRuntimeUse: row => uses.push(row)};
   let ready = false;
   const manager = {id:"maclauncher-kosmickrisp",resolveSelection: (_entry,_settings,_data,options) => {
     versions.push(options.version); return {version:options.version || "recommended",ready,install:ready ? {installDir:"/installed/native"} : null};
   }};
   const dependencies = {adaptedManager:manager};
   assert.deepEqual(Vulkan.requirements(context, dependencies), [{managerId:manager.id,version:"recommended",requiresDownload:true,installOptions:{}}]);
-  context.runtimeSettings.vulkanRuntime = "maclauncher-kosmickrisp:older";
+  context.runtimeSettings.translatorVulkan = "maclauncher-kosmickrisp:older";
   assert.equal(Vulkan.requirements(context, dependencies)[0].version, "older");
   ready = true;
   assert.deepEqual(Vulkan.requirements(context, dependencies), []);
   assert.deepEqual(uses, [{managerId:manager.id,version:"older",sectionId:"default",sourcePath:"/installed/native"}]);
   for (const request of ["auto"]) {
-    context.runtimeSettings.vulkanRuntime = request;
+    context.runtimeSettings.translatorVulkan = request;
     assert.deepEqual(Vulkan.requirements(context, dependencies), []);
   }
   for (const [request, managerId, version] of [["moltenvk:1.0", "vulkan-moltenvk", "1.0"], ["kosmickrisp:stock", "vulkan-kosmickrisp", "stock"]]) {
-    context.runtimeSettings.vulkanRuntime = request;
+    context.runtimeSettings.translatorVulkan = request;
     assert.deepEqual(Vulkan.requirements(context, dependencies), [{managerId, version, requiresDownload:true, installOptions:{}}]);
   }
   assert.deepEqual(versions,[undefined,"older","older"]);
@@ -237,8 +237,8 @@ test("MacLauncher KosmicKrisp retains earlier selections, installations and cata
     assert.equal(gameSelection.install.installDir, installed[0].installDir);
     const current = {...context, settings: migrated, runtimeSettings: {}};
     for (const [request, choice] of [["kosmickrisp:maclauncher-gles32", Managed.selectionId], ["kosmickrisp-gles32:" + older, Managed.projectId + ":" + older]]) {
-      current.runtimeSettings.vulkanRuntime = Rename.convertChoice(request);
-      assert.equal(current.runtimeSettings.vulkanRuntime, choice);
+      current.runtimeSettings.translatorVulkan = Rename.convertChoice(request);
+      assert.equal(current.runtimeSettings.translatorVulkan, choice);
       assert.equal(Vulkan.resolve(current, options).version, older);
       assert.deepEqual(Vulkan.requirements(current, options), []);
       const choices = Vulkan.choices(current, options).vulkanRuntimes;
@@ -284,7 +284,7 @@ test("MacLauncher KosmicKrisp retains earlier selections, installations and cata
     const count = requests.length, good = Rename.migrateSettings(settings, {userDataDir});
     const request = Rename.convertChoice("kosmickrisp-gles32:../invalid", logger);
     assert.equal(request, "auto"); assert.equal(warnings.length, 2);
-    const migratedContext = {...context, settings: good, logger, runtimeSettings: {vulkanRuntime: request}};
+    const migratedContext = {...context, settings: good, logger, runtimeSettings: {translatorVulkan: request}};
     assert.equal(Vulkan.resolve(migratedContext, options).version, older);
     assert.deepEqual(Vulkan.requirements(migratedContext, options), []);
     assert.equal(requests.length, count);

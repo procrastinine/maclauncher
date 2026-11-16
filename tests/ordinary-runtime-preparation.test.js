@@ -556,7 +556,7 @@ test("saved Android MacLauncher KosmicKrisp selection joins ordinary consent, in
   t.mock.method(manager, "installRuntime", async options => {
     events.push(["install",options.version]); ready = true;
   });
-  const ctx = {...context("klepton"),userDataDir:freshRoot,runtimeSettings:{vulkanRuntime:"kosmickrisp:maclauncher"},
+  const ctx = {...context("klepton"),userDataDir:freshRoot,runtimeSettings:{translatorVulkan:"kosmickrisp:maclauncher"},
     confirmRuntimeInstall: async plan => {events.push(["consent",plan.managerId,plan.version]);return approved;},
     recordRuntimeUse: row => uses.push(row)};
   const prepare = () => prepareForLaunch({entry:{},mod:Android,info:Android.manifest,context:ctx,

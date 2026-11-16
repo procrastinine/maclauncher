@@ -106,7 +106,7 @@ test("preferred Vulkan and explicit MacLauncher KosmicKrisp are downloadable fro
   // Settings list installed drivers only; Play downloads what a choice needs.
   assert.deepEqual(Vulkan.choices(context).vulkanRuntimes.map(row => row.value), ["auto"]);
   for (const choice of ["kosmickrisp:auto", "kosmickrisp:maclauncher"]) {
-    context.runtimeSettings.vulkanRuntime = choice;
+    context.runtimeSettings.translatorVulkan = choice;
     assert.ok(Vulkan.choices(context).vulkanRuntimes.some(row => row.value === choice && /not installed/.test(row.label)), choice);
     assert.equal(Vulkan.requirements(context)[0].discoveryRequired, true, choice);
   }

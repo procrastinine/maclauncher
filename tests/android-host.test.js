@@ -303,7 +303,7 @@ test("Android renderer choices follow the installed provider and retain Metal de
   const schema = manifest.runtime.entries.klepton.settings;
   assert.equal(schema.defaults.angleBackend, 'metal');
   assert.notEqual(schema.fields.find(field => field.key === 'angleBackend').gameOnly, true);
-  assert.notEqual(schema.fields.find(field => field.key === 'vulkanRuntime').gameOnly, true);
+  assert.notEqual(schema.fields.find(field => field.key === 'translatorVulkan').gameOnly, true);
   let profile = {};
   t.mock.method(Runtime, 'resolveSelected', () => ({ profile }));
   assert.deepEqual(module.actions.listAngleBackends().angleBackends.map(item => item.value), ['metal']);
@@ -313,11 +313,11 @@ test("Android renderer choices follow the installed provider and retain Metal de
   assert.deepEqual(module.actions.listAngleBackends().angleBackends.map(item => item.value), ['metal','vulkan']);
   assert.deepEqual(module.settingsActions.listAngleBackends(), module.actions.listAngleBackends());
   const {resolveModuleRuntimeSettings,resolveRuntimeSettingsForEntry} = require('../src/core/runtime-settings');
-  const settings = {modules:{android:{runtimeSettings:{klepton:{angleBackend:'vulkan',vulkanRuntime:'kosmickrisp:installed'}}}}};
+  const settings = {modules:{android:{runtimeSettings:{klepton:{angleBackend:'vulkan',translatorVulkan:'kosmickrisp:installed'}}}}};
   const defaults = resolveModuleRuntimeSettings(settings,'android',manifest,'klepton');
-  assert.equal(defaults.angleBackend,'vulkan'); assert.equal(defaults.vulkanRuntime,'kosmickrisp:installed');
+  assert.equal(defaults.angleBackend,'vulkan'); assert.equal(defaults.translatorVulkan,'kosmickrisp:installed');
   const game = resolveRuntimeSettingsForEntry({runtimeSettings:{klepton:{angleBackend:'metal'}}},settings,manifest,'klepton');
-  assert.equal(game.angleBackend,'metal'); assert.equal(game.vulkanRuntime,'kosmickrisp:installed');
+  assert.equal(game.angleBackend,'metal'); assert.equal(game.translatorVulkan,'kosmickrisp:installed');
   assert.equal(Host.angleBackend({runtimeSettings:{angleBackend:'vulkan'}}, { profile }), 'vulkan');
   assert.throws(() => Host.angleBackend({runtimeSettings:{angleBackend:'inherited'}}, { profile }), /Select Metal or Vulkan/);
 });

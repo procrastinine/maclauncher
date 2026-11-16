@@ -36,14 +36,14 @@ test("Android explicit Metal selections survive game, module, shared defaults an
 
 test("Android native GLES fallback resolves MoltenVK without reusing incompatible shared-image providers", async () => {
   let selected;
-  const context = { runtimeSettings: { execution: "art", vulkanRuntime: "auto" } };
+  const context = { runtimeSettings: { execution: "art", translatorVulkan: "auto" } };
   const result = await select(context, required, { renderer: "metal", vulkan: kosmic }, {
     installedVulkan: () => [kosmic, molten], resolveVulkan: request => { selected = request; return molten; }
   });
   assert.deepEqual(result, { renderer: "vulkan", vulkan: molten });
-  assert.equal(selected.runtimeSettings.vulkanRuntime, molten.id);
-  assert.equal(context.runtimeSettings.vulkanRuntime, "auto", "Launch selection does not overwrite preferences");
-  await assert.rejects(select({ runtimeSettings: { execution: "art", vulkanRuntime: kosmic.id } }, required,
+  assert.equal(selected.runtimeSettings.translatorVulkan, molten.id);
+  assert.equal(context.runtimeSettings.translatorVulkan, "auto", "Launch selection does not overwrite preferences");
+  await assert.rejects(select({ runtimeSettings: { execution: "art", translatorVulkan: kosmic.id } }, required,
     { renderer: "metal", vulkan: kosmic }), /requires MoltenVK/);
 });
 
@@ -53,7 +53,7 @@ test("Android required GLES downloads only its existing compatible supplier afte
     installRuntime: async request => calls.push(["install", request.version]) };
   const dependencies = { installedVulkan: () => [], moltenVkManager: manager,
     confirmGraphicsInstall: async (_context, request) => calls.push(["consent", request.manager.id, request.version]),
-    resolveVulkan: context => { calls.push(["resolve", context.runtimeSettings.vulkanRuntime]); return molten; } };
+    resolveVulkan: context => { calls.push(["resolve", context.runtimeSettings.translatorVulkan]); return molten; } };
   const context = { runtimeSettings: { execution: "art" }, onRuntimeStateChange: () => calls.push(["changed"]) };
   assert.deepEqual(await select(context, required, { renderer: "metal", vulkan: null }, dependencies),
     { renderer: "vulkan", vulkan: molten });

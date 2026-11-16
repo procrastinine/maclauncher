@@ -88,7 +88,7 @@ test("AnyPS5 and Prosper launch with the merged values of their runtime and Vulk
   const action = payload => anyps5.actions.listTranslatorEnvironments(entry, payload, context);
   assert.deepEqual(action({}).translatorEnvironments, ["anyps5", "kosmickrisp"]);
   Vulkan.resolve.mock.mockImplementation(() => { throw new Error("The selected Vulkan library is unavailable for this Mac."); });
-  assert.deepEqual(action({ runtimeSettings: { vulkanRuntime: "missing" } }).translatorEnvironments, ["anyps5"]);
+  assert.deepEqual(action({ runtimeSettings: { translatorVulkan: "missing" } }).translatorEnvironments, ["anyps5"]);
   assert.deepEqual(prosper.actions.listTranslatorEnvironments(entry, {}, context).translatorEnvironments, ["prosper"]);
 });
 

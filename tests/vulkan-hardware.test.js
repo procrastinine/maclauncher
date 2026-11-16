@@ -40,7 +40,7 @@ function fixture(t, architecture = "x64") {
     library: path.join(kosmic.install.installDir, "libvulkan.1.dylib"), driver: kosmic.install.executablePath,
     readable: kosmic.install.installationMetadata.libraries.map(row => path.join(kosmic.install.installDir, row.file)) };
   const context = { userDataDir: root, settings: { runtimes: { "vulkan-kosmickrisp": {
-    defaultVersion: "fixture", defaultArchitecture: "arm64" }, [Managed.projectId]: { defaultArchitecture: "arm64" } } }, runtimeSettings: { vulkanRuntime: "auto" } };
+    defaultVersion: "fixture", defaultArchitecture: "arm64" }, [Managed.projectId]: { defaultArchitecture: "arm64" } } }, runtimeSettings: { translatorVulkan: "auto" } };
   const managedManager = { id: Managed.projectId, label: "MacLauncher KosmicKrisp", present: false, catalogReady: true,
     pin: { version: "fixture", architecture }, selections: [],
     core: { listCatalog: () => [managedManager.pin] },
@@ -98,7 +98,7 @@ test("saved KosmicKrisp selections retain their identity and reject only known i
   const selected = { ...dependencies,
     adapted: { installed: () => [adapted], resolve: item => item } };
   for (const request of ["kosmickrisp:fixture", "kosmickrisp:auto", "maclauncher-kosmickrisp:fixture", "kosmickrisp:maclauncher"]) {
-    context.runtimeSettings.vulkanRuntime = request;
+    context.runtimeSettings.translatorVulkan = request;
     const saved = JSON.stringify(context);
     for (const hostCapabilities of [intel, { ...apple, macOSVersion: "15.7" }]) {
       const unavailable = { ...selected, hostCapabilities }, reason = hostCapabilities === intel ? /Apple Silicon/ : /macOS 26/;
@@ -244,7 +244,7 @@ test("working MoltenVK suppresses a new offer and Intel hardware only offers Mol
 test("unversioned managed Vulkan choices skip an ARM-only install for an Intel consumer", async t => {
   for (const provider of Managed.providers) await t.test(provider.projectId, t => {
     const { context, adapted } = fixture(t, "arm64"), calls = [];
-    context.runtimeSettings.vulkanRuntime = provider.selectionId;
+    context.runtimeSettings.translatorVulkan = provider.selectionId;
     context.settings.runtimes[provider.projectId] = { defaultVersion: "older", defaultArchitecture: "arm64" };
     const oldInstall = { version: "older", installDir: path.dirname(adapted.driver) };
     const pins = [{ version: "older", architecture: "arm64" }, { version: "newer", architecture: "x64" }];
@@ -265,7 +265,7 @@ test("unversioned managed Vulkan choices skip an ARM-only install for an Intel c
       version: "newer", requiresDownload: true, installOptions: { architecture: "x64" } }]);
     assert.equal(calls.at(-1).version, "newer");
     assert.ok(Vulkan.choices(context, dependencies).vulkanRuntimes.some(row => row.value === provider.selectionId && row.label.endsWith("(not installed)")));
-    context.runtimeSettings.vulkanRuntime = provider.prefix + "older";
+    context.runtimeSettings.translatorVulkan = provider.prefix + "older";
     assert.throws(() => Vulkan.requirements(context, dependencies), /no compatible x64 library/,
       "an exact game version is not replaced by another catalog version");
     assert.equal(JSON.stringify(context.settings), saved, "manager defaults remain unchanged");
@@ -273,7 +273,7 @@ test("unversioned managed Vulkan choices skip an ARM-only install for an Intel c
     pins.push({ version: "other", architecture: "x64" });
     installs.set("other", { version: "other", installDir: path.dirname(other.driver) });
     dependencies.adapted.installed = () => [{ ...other, version: "other", projectId: provider.projectId }];
-    context.runtimeSettings.vulkanRuntime = provider.selectionId;
+    context.runtimeSettings.translatorVulkan = provider.selectionId;
     context.settings.runtimes[provider.projectId].defaultVersion = "newer";
     assert.deepEqual(Vulkan.requirements(context, dependencies), [{ managerId: provider.projectId,
       version: "newer", requiresDownload: true, installOptions: { architecture: "x64" } }],
@@ -288,7 +288,7 @@ test("inspector Vulkan choices omit cached catalog releases and retain only a mi
   managers[0].core.listCatalog = () => ["fixture", "1.4.0-rc1", "1.4.0-rc2"].map(version => ({ version, architecture: "x64" }));
   const selected = { ...dependencies, hostCapabilities: apple };
   assert.deepEqual(Vulkan.choices(context, selected).vulkanRuntimes.map(row => row.value), ["auto", "moltenvk:fixture"]);
-  context.runtimeSettings.vulkanRuntime = "moltenvk:1.4.0-rc1";
+  context.runtimeSettings.translatorVulkan = "moltenvk:1.4.0-rc1";
   const choices = Vulkan.choices(context, selected).vulkanRuntimes;
   assert.deepEqual(choices.map(row => row.value), ["auto", "moltenvk:fixture", "moltenvk:1.4.0-rc1"]);
   assert.match(choices.at(-1).label, /1\.4\.0-rc1 \(not installed\)$/);
