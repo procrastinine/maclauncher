@@ -331,7 +331,9 @@ ShaderResult sceneShaderCall(const std::shared_ptr<ShaderNode>&node,const std::s
 
 }
 struct EffectSceneGuideHistory {struct Sample{uint64_t id=0;float x=0,y=0;unsigned width=0,height=0;};std::mutex mutex;Sample latest,previous;uint64_t qualityEpoch=1,qualityContent=0;};
-struct EffectSceneLease {bool resolvedColor=false;RSTemporalFrame frame{};id<MTLTexture>color=nil,output=nil;std::array<id<MTLTexture>,5>guides{};std::optional<RSSceneMatrices>matrices;std::shared_ptr<const SceneAovLease>aovs;std::shared_ptr<void>storage;std::shared_ptr<const EffectSceneLease>upstream;const EffectSceneLease*guideSource=nullptr;std::shared_ptr<EffectSceneGuideHistory>guideHistory;
+// commands: the scene's command buffer while it exists, taken from the live buffer that recorded the scene. It is weak, so the
+// lease keeps none of that buffer's resources, and it reads nil once the buffer is released, whatever is allocated after it.
+struct EffectSceneLease {bool resolvedColor=false;RSTemporalFrame frame{};__weak id<MTLCommandBuffer>commands=nil;id<MTLTexture>color=nil,output=nil;std::array<id<MTLTexture>,5>guides{};std::optional<RSSceneMatrices>matrices;std::shared_ptr<const SceneAovLease>aovs;std::shared_ptr<void>storage;std::shared_ptr<const EffectSceneLease>upstream;const EffectSceneLease*guideSource=nullptr;std::shared_ptr<EffectSceneGuideHistory>guideHistory;
     // The producer's interface layer for this final image, copied when the
     // final image was associated with its scene (scene-aovs.h UI layer).
     std::shared_ptr<HudSplitImages>interfaceLayer;};
@@ -826,7 +828,7 @@ ShaderResult EffectExecution::encodeScene(const ShaderFrame&frame,const RSTempor
 }catch(const TransientBusy&error){return {false,error.what(),!error.structurallyImpossible};}catch(const std::exception&error){return {false,error.what()};}}}
 std::shared_ptr<const EffectSceneLease>EffectExecution::captureSceneLease(id<MTLCommandBuffer>commands){
     auto scratch=impl->acquire(commands);if(!scratch||!scratch->scene)return {};if(auto prior=scratch->lease.lock())if(prior->frame.frameId==scratch->scene->frameId)return prior;
-    auto lease=std::make_shared<EffectSceneLease>();lease->resolvedColor=scratch->resolvedColor||replacesTemporal();lease->frame=*scratch->scene;lease->color=(__bridge id<MTLTexture>)lease->frame.color;lease->output=(__bridge id<MTLTexture>)lease->frame.output;lease->guideHistory=impl->sceneHistory;lease->upstream=scratch->guideLease;lease->guideSource=scratch->guideLease?(scratch->guideLease->guideSource?:scratch->guideLease.get()):nullptr;lease->guides={(__bridge id<MTLTexture>)lease->frame.depth,(__bridge id<MTLTexture>)lease->frame.motion,(__bridge id<MTLTexture>)lease->frame.exposure,(__bridge id<MTLTexture>)lease->frame.reactive,(__bridge id<MTLTexture>)lease->frame.transparency};lease->matrices=temporalSceneMatrices(lease->frame);lease->aovs=temporalSceneAovs(lease->frame);lease->storage=scratch->storage->retaining(lease->frame,lease->aovs);scratch->lease=lease;return lease;
+    auto lease=std::make_shared<EffectSceneLease>();lease->resolvedColor=scratch->resolvedColor||replacesTemporal();lease->frame=*scratch->scene;if(lease->frame.commandBuffer==(__bridge void*)commands)lease->commands=commands;lease->color=(__bridge id<MTLTexture>)lease->frame.color;lease->output=(__bridge id<MTLTexture>)lease->frame.output;lease->guideHistory=impl->sceneHistory;lease->upstream=scratch->guideLease;lease->guideSource=scratch->guideLease?(scratch->guideLease->guideSource?:scratch->guideLease.get()):nullptr;lease->guides={(__bridge id<MTLTexture>)lease->frame.depth,(__bridge id<MTLTexture>)lease->frame.motion,(__bridge id<MTLTexture>)lease->frame.exposure,(__bridge id<MTLTexture>)lease->frame.reactive,(__bridge id<MTLTexture>)lease->frame.transparency};lease->matrices=temporalSceneMatrices(lease->frame);lease->aovs=temporalSceneAovs(lease->frame);lease->storage=scratch->storage->retaining(lease->frame,lease->aovs);scratch->lease=lease;return lease;
 }
 ShaderResult EffectExecution::bindSceneImage(id<MTLCommandBuffer>commands,id<MTLTexture>colour,id<MTLTexture>output,const std::shared_ptr<const EffectSceneLease>&source,std::shared_ptr<const EffectSceneLease>&normalized){return bindSceneImage(commands,colour,output,source,normalized,FrameOrigin::TopLeft);}
 ShaderResult EffectExecution::bindSceneImage(id<MTLCommandBuffer>commands,id<MTLTexture>colour,id<MTLTexture>output,const std::shared_ptr<const EffectSceneLease>&source,std::shared_ptr<const EffectSceneLease>&normalized,FrameOrigin origin){try{
@@ -836,7 +838,7 @@ ShaderResult EffectExecution::bindSceneImage(id<MTLCommandBuffer>commands,id<MTL
     // the retained source lease and are resolved once by the actual consumer.
     auto result=std::make_shared<EffectSceneLease>();result->frame=source->frame;auto&actual=result->frame;
     const bool jittered=!replacesTemporal()&&!source->resolvedColor&&source->frame.method==RS_TEMPORAL_OFF;
-    actual.owner=result.get();actual.commandBuffer=(__bridge void*)commands;actual.color=(__bridge void*)colour;actual.output=(__bridge void*)output;
+    actual.owner=result.get();result->commands=commands;actual.commandBuffer=(__bridge void*)commands;actual.color=(__bridge void*)colour;actual.output=(__bridge void*)output;
     actual.depth=actual.motion=actual.exposure=actual.reactive=actual.transparency=nullptr;
     actual.colorX=actual.colorY=actual.outputX=actual.outputY=actual.depthX=actual.depthY=actual.motionX=actual.motionY=0;
     actual.renderWidth=actual.maxRenderWidth=colour.width;actual.renderHeight=actual.maxRenderHeight=colour.height;actual.outputWidth=output.width;actual.outputHeight=output.height;
@@ -1150,10 +1152,12 @@ ShaderResult EffectExecution::encodeRange(const ShaderFrame &incoming,size_t beg
         }
         if(insideSDR){const auto converted=closeIsland();if(!converted.encoded)return converted;}
         const auto copied=impl->fit(frame,current,frame.target);if(!copied.encoded)return copied;if(displayMapped)*displayMapped=mapped;
-        // MetalFX generation resources bind only within the scene's own command buffer, which the caller holds. A scene
-        // presented later through another command buffer keeps only a raw pointer to its completed, possibly released
-        // command buffer, which is never messaged.
-        if(const auto scene=temporal?temporal:sceneLease?&sceneLease->frame:held->scene?&*held->scene:nullptr;scene&&scene->commandBuffer==(__bridge void*)frame.commands){auto from=*scene;from.color=(__bridge void*)current;from.output=nullptr;from.colorX=from.colorY=0;from.renderWidth=current.width;from.renderHeight=current.height;auto to=from;to.color=(__bridge void*)frame.target;to.renderWidth=frame.target.width;to.renderHeight=frame.target.height;const bool byteCopy=current.width==frame.target.width&&current.height==frame.target.height&&current.pixelFormat==frame.target.pixelFormat;bindMetalFxGenerationResources(to,from,byteCopy?current:nil);}
+        // MetalFX generation resources bind only within the scene's own command buffer while it is recording: the caller's
+        // current temporal frame, this buffer's scratch scene, or a lease whose weak buffer reference is this buffer. A scene
+        // presented later through another command buffer reads nil or another buffer there, and its raw pointer is never used.
+        const auto scene=temporal?temporal:sceneLease?&sceneLease->frame:held->scene?&*held->scene:nullptr;
+        id<MTLCommandBuffer>sceneCommands=temporal?(temporal->commandBuffer==(__bridge void*)frame.commands?frame.commands:nil):sceneLease?sceneLease->commands:held->scene&&held->scene->commandBuffer==(__bridge void*)frame.commands?frame.commands:nil;
+        if(scene&&sceneCommands&&sceneCommands==frame.commands){auto from=*scene;from.color=(__bridge void*)current;from.output=nullptr;from.colorX=from.colorY=0;from.renderWidth=current.width;from.renderHeight=current.height;auto to=from;to.color=(__bridge void*)frame.target;to.renderWidth=frame.target.width;to.renderHeight=frame.target.height;const bool byteCopy=current.width==frame.target.width&&current.height==frame.target.height&&current.pixelFormat==frame.target.pixelFormat;bindMetalFxGenerationResources(to,from,byteCopy?current:nil);}
         return {true,reason};
     }catch(const TransientBusy&error){return {false,error.what(),!error.structurallyImpossible};}
     catch(const std::exception &error){return {false,error.what()};}
