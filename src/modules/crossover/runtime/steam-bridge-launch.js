@@ -3,37 +3,7 @@ const path = require('node:path');
 const { readPeVersion } = require('../../shared/runtime/pe-version');
 const { readPeResources } = require('../../shared/runtime/pe-resources');
 const { readWindowsExecutable } = require('../detect');
-const { validate } = require('../../shared/runtime/launch-arguments');
-
-// The bootstrap's embedded command line uses Windows quoting, not shell escapes.
-function windowsArguments(text) {
-  const args = []; let token = '', quoted = false, started = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (!quoted && /[ \t]/.test(c)) {
-      if (started) args.push(token);
-      token = ''; started = false; continue;
-    }
-    started = true;
-    if (c === '\\') {
-      let count = 1;
-      while (text[i + 1] === '\\') { count++; i++; }
-      if (text[i + 1] === '"') {
-        token += '\\'.repeat(Math.floor(count / 2)); i++;
-        if (count % 2) token += '"';
-        else if (quoted && text[i + 1] === '"') { token += '"'; i++; }
-        else quoted = !quoted;
-      } else token += '\\'.repeat(count);
-    } else if (c === '"') {
-      if (quoted && text[i + 1] === '"') { token += '"'; i++; }
-      else quoted = !quoted;
-    }
-    else token += c;
-  }
-  if (quoted) throw new Error('The Windows bootstrap has an unclosed argument quote.');
-  if (started) args.push(token);
-  return validate(args);
-}
+const { windowsArguments } = require('../../../runtime-adapters/steam-bridge');
 
 function resolve(executablePath, architecture) {
   const unchanged = { executablePath, arguments: [] };

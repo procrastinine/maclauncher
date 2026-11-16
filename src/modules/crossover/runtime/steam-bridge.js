@@ -11,6 +11,7 @@ const Steam = require('../../shared/runtime/steamworks/installed-client');
 const ClientStart = require('../../shared/runtime/steamworks/client-start');
 const { readGameAppId } = require('../../shared/runtime/steamworks/app-id');
 const Components = require('./steam-client-components');
+const Adapter = require('../../../runtime-adapters/steam-bridge');
 const id = 'maclauncher-steam-bridge';
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
 function identify(entry) {
@@ -160,20 +161,13 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
         if (!inside(fs.realpathSync(current.root), fs.realpathSync(file))) throw new Error('Steam bridge file escaped its managed package.');
         return file;
       };
-      // Wine's extended Unix device paths work without a Z: mapping and leave
-      // managed files outside the selected bottle, including shared bottles.
-      const windowsPath = file => '\\\\?\\unix' + file.split(path.sep).join('\\');
-      const helper = windowsPath(source(descriptor.windows[pe].helper));
-      const extra = { WINEDLLPATH: [...new Set([current.root, ...String(environment.WINEDLLPATH || '').split(path.delimiter).filter(Boolean)])].join(path.delimiter),
-        WINEDLLOVERRIDES: [environment.WINEDLLOVERRIDES, 'lsteamclient=b'].filter(Boolean).join(';'),
-        SteamAppId: String(game.appId), SteamGameId: String(game.appId), STEAM_COMPAT_CLIENT_INSTALL_PATH: native,
-        MACLAUNCHER_STEAM_BOOTSTRAP: windowsPath(source(descriptor.windows[pe].bootstrap)),
-        MACLAUNCHER_STEAM_BUILTIN: windowsPath(source(descriptor.windows[pe].builtin)),
-        ...Object.fromEntries(Object.entries(descriptor.clientEnvironment).filter(([abi]) => components.clients[abi]).map(([abi, name]) =>
-          [name, windowsPath(path.join(components.root, components.clients[abi]))])), HOME: os.homedir(), CFFIXED_USER_HOME: os.homedir() };
-      const prepared = { ...environment, ...extra, WINEPREFIX: prefixPath };
-      delete prepared.STEAM_DYLD_INSERT_LIBRARIES; delete prepared.NOTPROTON_OVERLAY_SHIM;
-      return { environment: prepared, extra, helper, appId: String(game.appId), packageVersion: current.version };
+      const parts = { native: source(descriptor.native[nativeArch]),
+        builtin: source(descriptor.windows[pe].builtin), bootstrap: source(descriptor.windows[pe].bootstrap),
+        helper: source(descriptor.windows[pe].helper),
+        clients: Object.fromEntries(Object.entries(descriptor.clientEnvironment).filter(([abi]) => components.clients[abi]).map(([abi, name]) =>
+          [name, path.join(components.root, components.clients[abi])])) };
+      return Adapter.apply({ build: { root: current.root, version: current.version }, parts, environment,
+        parameters: { appId: game.appId, clientRoot: native, home: os.homedir(), prefixPath } });
     } catch (error) { if (context.signal?.aborted) throw error; return null; }
   }
   return Object.assign(manager, { requirements, prepare, skipOptional, clearSkipped, inspectorDetail });
