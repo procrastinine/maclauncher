@@ -17,7 +17,7 @@ function execution(build,host={}){
  if(hardware==='arm64'&&images.every(b=>(b.cpuSlices||b.architectures).includes('x86_64')))return 'rosetta';
  return undefined;
 }
-function projectRuntimeRoles({plan,settings={},optionLists={},source={},host={},wine}={}){
+function projectRuntimeRoles({plan,settings={},optionLists={},source={},sources=[],host={},wine}={}){
  const automatic=source.labels?.automatic||'Automatic', environment=source.labels?.environment;
  const rows=plan.roles||Object.entries(plan.components||{}).map(([id,row])=>({...row,id}));
  const roles=[];
@@ -31,6 +31,12 @@ function projectRuntimeRoles({plan,settings={},optionLists={},source={},host={},
    const kind=option.kind||(option.value==='inherit'?'environment':!option.value||['auto','automatic'].includes(option.value)?'automatic':String(option.value).startsWith('source:')?'source':'build');
    return {...option,value:kind==='automatic'?'automatic':kind==='environment'?'inherit':/^(?:source|build):/.test(option.value)?option.value:`build:${option.value}`,kind,label:kind==='automatic'?automatic:kind==='environment'?environment||option.label:option.label,badges:option.badges||badges(item,host),...(item?{execution:presentedExecution(item)}:{})};
   });
+  const sourceOptions=new Map();
+  for(const option of options){if(option.kind!=='build')continue;const item=option.description||[...(plan.inventory?.included||[]),...(plan.inventory?.choices||[])].find(item=>option.value===`build:${item.id}`);const sourceId=item?.sourceId||option.sourceId;if(!sourceId||sourceOptions.has(sourceId)||options.some(row=>row.value===`source:${sourceId}`))continue;
+   const declaration=sources.find(row=>row.id===sourceId)||(source.source||source).embeds?.find(row=>row.id===sourceId);
+   sourceOptions.set(sourceId,{value:`source:${sourceId}`,label:declaration?.label||item.engine||sourceId,kind:'source',sourceId,badges:badges(item,host),...(presentedExecution(item)?{execution:presentedExecution(item)}:{})});
+  }
+  const insertion=options.findIndex(option=>option.kind==='build');options.splice(insertion<0?options.length:insertion,0,...sourceOptions.values());
   if(!options.some(option=>option.kind==='automatic'))options.unshift({value:'automatic',label:automatic,kind:'automatic',badges:[]});
   const label=used?.label||used?.engine||automatic;
   roles.push({...definition,required:definition.id==='wine'||definition.id.startsWith('cpu.'),value,used:{label,version:String(used?.version||''),badges:badges(used,host),execution:presentedExecution(used)},fallback:row?.fallback?{reason:row.reason||row.fallback.reason,notice:'Saved selection (unavailable)'}:null,layers:row?.layers||[],options});

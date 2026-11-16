@@ -56,7 +56,7 @@ function selectorBackend(plan, selections, included) {
 const serves = (description, role) => !description?.apis?.length || description.apis.some(api => role.apis.includes(api));
 const findChoice = (choices, value) => {
   const id=String(value||'').replace(/^build:/,'');
-  if(String(value||'').startsWith('source:')){const source=value.slice(7);return choices.find(item=>item.managerId===source||item.engine===source||item.source===source||item.source?.id===source||item.source?.kind===source)||null;}
+  if(String(value||'').startsWith('source:')){const source=value.slice(7);return choices.find(item=>item.sourceId===source||item.embedId===source||item.managerId===source||item.engine===source||item.source===source||item.source?.id===source||item.source?.kind===source)||null;}
   return choices.find(item => item.id === id) || choices.find(item => item.aliases?.includes(id)) || null;
 };
 const identity = description => description && `${description.id}:${description.root || ''}`;

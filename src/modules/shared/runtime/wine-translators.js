@@ -26,6 +26,8 @@ function includedTranslators(install, runtime, { engine: requestedEngine, descri
       if (!value) return;
       // A supplied version is the reader's fallback; the component's own version text precedes it.
       value = Pairing.completeSets({ ...value, included: true, id: `included:${component}:${extra.templateComponent || engine}`, ...extra, version: value.version });
+      const embed=wine.source?.embeds?.find(embed=>embed.engine===engine&&(!extra.templateComponent||embed.parts.some(part=>part.name===extra.templateComponent)));
+      if(embed){value.sourceId=embed.id;value.embedId=embed.id;}
       if (!value.version && wine.includedVersion) value.version = wine.includedVersion(engine, layout, Description);
       result.push(value);
       if (engine === 'd3dmetal' && component === 'd3d-renderer') result.push({ ...value, component: 'd3d12', id: 'included:d3d12:d3dmetal' });
@@ -113,6 +115,8 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
         managerId: manager.id, settingsEngine: manager.translatorEngine || manager.translator?.engine, runtimeVersion: install.version, architecture: Architecture.recordArchitecture(install) || selection?.architecture,
         variant: install.variant, sectionId: install.sectionId || selection?.sectionId || 'default', buildKey: install.buildKey,
         files: description.files.map(file => ({ ...file, path: path.resolve(root, file.path) })) };
+      const declaration=manager.sources?.find(source=>source.manager?.sectionId===value.sectionId)||manager.sources?.[0];
+      if(declaration)value.sourceId=declaration.id;
       choices.push(value);
       if (value.engine === 'd3dmetal') choices.push({ ...value, id: value.id + ':d3d12', component: 'd3d12' });
     }
