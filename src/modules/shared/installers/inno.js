@@ -25,10 +25,10 @@ function relative(value) {
     throw installerError("The installer contains an unsafe file path.");
   return value.replace(/\\/g, "/");
 }
-function validateMetadata(value, probe, helper) {
+function validateMetadata(value, probe, helper, { allowEmpty = false } = {}) {
   if (value?.schemaVersion !== 1 || value.format !== "inno" || value.helperVersion !== helper.version || value.sourceRevision !== helper.sourceRevision ||
       value.headerOffset !== probe.headerOffset || value.dataOffset !== probe.dataOffset || value.externalData !== probe.externalData ||
-      !String(value.formatVersion).startsWith(probe.formatVersion) || !Array.isArray(value.files) || !value.files.length || value.files.length > LIMITS.files ||
+      !String(value.formatVersion).startsWith(probe.formatVersion) || !Array.isArray(value.files) || !allowEmpty && !value.files.length || value.files.length > LIMITS.files ||
       !Array.isArray(value.requiredSlices) || value.requiredSlices.length > LIMITS.slices || typeof value.encrypted !== "boolean")
     throw installerError("The installer metadata does not match its header or helper.");
   if (value.encrypted) throw installerError("This installer needs a password. Use an unencrypted offline installer.", "INSTALLER_ENCRYPTED");
@@ -91,7 +91,7 @@ async function inspectInstaller(file, options = {}) {
   if (identity(file) !== sourceIdentity) throw installerError("The installer changed during inspection.");
   let metadata;
   try { metadata = JSON.parse(result.stdout); } catch { throw installerError("The installer reader returned invalid metadata."); }
-  const info = validateMetadata(metadata, probe, helper);
+  const info = validateMetadata(metadata, probe, helper, { allowEmpty: options.allowEmpty });
   const companions = [], missing = [];
   for (const slice of info.requiredSlices) {
     const matches = slice.names.map(name => path.join(path.dirname(file), name)).filter(candidate => {
@@ -165,7 +165,7 @@ function validCachedFiles(files, { hashed = false } = {}) {
 function validateCacheReceipt(receipt, index, { file, probe, helper }) {
   const sources = sourceList(index.sources, file, { content: true });
   const historical = receipt?.legacyGeneration && require("./backcompat/inno-receipts").isHistoricalGeneration(receipt, index, file);
-  if (index.schemaVersion !== 2 || !sources || index.sourceIdentity !== sources[0].identity || !SHA256.test(index.helperCacheIdentity || "") || receipt?.schemaVersion !== 2 || receipt.format !== "inno" ||
+  if (index.schemaVersion !== 2 || !sources || index.freeArc !== receipt?.freeArc || index.freeArc !== undefined && !SHA256.test(index.freeArc) || index.sourceIdentity !== sources[0].identity || !SHA256.test(index.helperCacheIdentity || "") || receipt?.schemaVersion !== 2 || receipt.format !== "inno" ||
       receipt.key !== index.key || (receipt.legacyGeneration ? !historical : index.contentKey !== index.key) || receipt.contentKey !== index.contentKey ||
       contentCacheKey(index.helperCacheIdentity, sources) !== index.contentKey || receipt.helperCacheIdentity !== index.helperCacheIdentity ||
       receipt.helperIdentity !== index.helperIdentity || receipt.helperVersion !== helper.version || receipt.sourceRevision !== helper.sourceRevision ||
@@ -254,7 +254,7 @@ function upgradedRecords(receipt, helper, compatibility, sources, files, { legac
     helperVersion: helper.version, sourceRevision: helper.sourceRevision, sources, files };
   if (legacy) next.legacyGeneration = { key: receipt.key, helperIdentity: receipt.helperIdentity, sources: receipt.sources };
   return { receipt: next, index: { schemaVersion: 2, key: receipt.key, contentKey, sourceIdentity: sources[0].identity,
-    helperIdentity: helper.identity, helperCacheIdentity: compatibility, sources } };
+    helperIdentity: helper.identity, helperCacheIdentity: compatibility, sources, ...(receipt.freeArc ? { freeArc: receipt.freeArc } : {}) } };
 }
 async function prepareInstaller(file, options = {}) {
   const { userDataDir, gameId, signal, onProgress, onSpawn, readOnly = false } = options;
@@ -274,7 +274,10 @@ async function prepareInstaller(file, options = {}) {
     if (!index && fs.existsSync(path.join(cacheRoot, "current.json")))
       throw installerError("The installer cache metadata changed or is unreadable.", "INSTALLER_CACHE_INVALID");
     helper ||= await ensureHelper(options);
-    const compatibility = await helperCacheIdentity(helper, { signal });
+    const FreeArc = require("./freearc"), archives = FreeArc.findArchives(file);
+    let decoderTools = index?.freeArc ? await FreeArc.toolsFor(options) : null;
+    const readerCompatibility = await helperCacheIdentity(helper, { signal });
+    let compatibility = decoderTools ? sha(JSON.stringify([readerCompatibility, FreeArc.ABI, decoderTools.identity])) : readerCompatibility;
     if (index?.schemaVersion === 2 && SHA256.test(index.key || "") && index.helperCacheIdentity === compatibility) {
       const generation = path.join(cacheRoot, index.key), receipt = readReceipt(receiptPath(generation, index));
       if (!receipt) throw installerError("The installer cache receipt changed or is missing.", "INSTALLER_CACHE_INVALID");
@@ -292,18 +295,34 @@ async function prepareInstaller(file, options = {}) {
     }
     if (readOnly) throw installerError("Add this installer to unpack its game before inspecting it.", "INSTALLER_IMPORT_REQUIRED");
     onProgress?.({ phase: "inspecting", completed: 0 });
-    const info = await inspectInstaller(file, { helper, probe, signal, onSpawn });
+    const info = await inspectInstaller(file, { helper, probe, signal, onSpawn, allowEmpty: archives.length > 0 });
+    if (info.sourceIdentity !== sourceIdentity) throw installerError("The installer changed before inspection completed.");
     if (info.missing.length) throw installerError(`Missing installer data: ${info.missing.join(", ")}. Put it beside ${path.basename(file)} and add the installer again.`, "INSTALLER_MISSING_PARTS");
-    const inspectedSources = [{ path: file, identity: info.sourceIdentity }, ...info.companions];
-    const sources = await contentSources(inspectedSources, { signal });
-    if (!sameSources(inspectedSources)) throw installerError("Installer files changed during verification.");
-    const key = contentCacheKey(compatibility, sources);
     ensureDirectory(cacheRoot);
-    const target = path.join(cacheRoot, key), stage = path.join(cacheRoot, ".extract-" + crypto.randomBytes(12).toString("hex"));
-    if (fs.existsSync(target)) throw installerError("The existing installer cache is incomplete. Remove this game and add its installer again.", "INSTALLER_CACHE_INVALID");
+    const stage = path.join(cacheRoot, ".extract-" + crypto.randomBytes(12).toString("hex"));
     ensureDirectory(stage); const output = path.join(stage, "files"); ensureDirectory(output);
     let timer;
     try {
+      const shell = archives.length ? await FreeArc.stageShell(file, stage, helper, options) : null;
+      if (shell) {
+        decoderTools ||= await FreeArc.toolsFor(options);
+        compatibility = sha(JSON.stringify([readerCompatibility, FreeArc.ABI, decoderTools.identity]));
+      } else { decoderTools = null; compatibility = readerCompatibility; }
+      const freeArc = shell ? await FreeArc.prepare(file, archives, stage, helper, decoderTools, options, shell) : null;
+      if (freeArc) {
+        require("./freearc-format").validateFiles([...info.files, ...freeArc.files]);
+        const combined = [...info.files, ...freeArc.files.filter(item => !item.dir)];
+        info.extractedBytes = require("./freearc-format").validateFiles(combined);
+        info.files = combined;
+      }
+      if (!info.files.length) throw installerError("The installer has no application files or matching FreeArc payload.");
+      const inspectedSources = [...new Map([{ path: file, identity: info.sourceIdentity }, ...info.companions,
+        ...(freeArc ? archives.map(archive => ({ path: archive, identity: identity(archive) })) : [])].map(source => [source.path, source])).values()];
+      if (inspectedSources.length > LIMITS.slices + 1) throw installerError("The installer companion count exceeds its limit.");
+      const sources = await contentSources(inspectedSources, { signal });
+      if (!sameSources(inspectedSources)) throw installerError("Installer files changed during verification.");
+      const key = contentCacheKey(compatibility, sources), target = path.join(cacheRoot, key);
+      if (fs.existsSync(target)) throw installerError("The existing installer cache is incomplete. Remove this game and add its installer again.", "INSTALLER_CACHE_INVALID");
       // The fresh private stage contains no writable links or existing files.
       const report = async () => {
         let completed = 0;
@@ -316,17 +335,20 @@ async function prepareInstaller(file, options = {}) {
       timer = setInterval(() => { report().catch(() => {}); }, 1000); timer.unref();
       await runHelper(helper.executable, ["--extract", "--silent", "--progress=false", "--color=false", "--collisions=error", "--exclude-temp", "--output-dir", output, file],
         { signal, timeout: 60 * 60 * 1000, maximum: 65536, onSpawn });
+      if (freeArc) await FreeArc.extract(freeArc, output, decoderTools, options);
+      await fs.promises.rm(path.join(stage, "decoder-shell"), { recursive: true, force: true });
       clearInterval(timer);
       if (!sameSources(sources)) throw installerError("Installer files changed during extraction.");
       const files = await validateOutput(output, info.files, { signal, onProgress });
       const receipt = { schemaVersion: 2, key, contentKey: key, format: "inno", formatVersion: info.formatVersion, helperVersion: helper.version,
-        sourceRevision: helper.sourceRevision, helperIdentity: helper.identity, helperCacheIdentity: compatibility, sources, files, extractedBytes: info.extractedBytes };
+        sourceRevision: helper.sourceRevision, helperIdentity: helper.identity, helperCacheIdentity: compatibility, sources, files, extractedBytes: info.extractedBytes,
+        ...(decoderTools ? { freeArc: decoderTools.identity } : {}) };
       writeFileAtomic(path.join(stage, "receipt.json"), JSON.stringify(receipt) + "\n");
       signal?.throwIfAborted();
       if (fs.existsSync(target)) throw installerError("Another extraction already owns this cache.");
       fs.renameSync(stage, target);
       writeJsonAtomic(path.join(cacheRoot, "current.json"), { schemaVersion: 2, key, contentKey: key, sourceIdentity, helperIdentity: helper.identity,
-        helperCacheIdentity: compatibility, sources });
+        helperCacheIdentity: compatibility, sources, ...(decoderTools ? { freeArc: decoderTools.identity } : {}) });
       onProgress?.({ phase: "ready", cached: false, completed: info.extractedBytes, total: info.extractedBytes });
       return { inputPath: path.join(target, "files"), containerData: { format: "inno", version: info.formatVersion, sourcePath: file, key,
         helperVersion: helper.version, helperIdentity: helper.identity, helperCacheIdentity: compatibility,

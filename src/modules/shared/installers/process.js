@@ -3,11 +3,11 @@ const { spawn } = require("node:child_process");
 // These are data-reading native helpers. The Windows installer is always an
 // argument, never a command. Drained/capped output and asynchronous spawn keep
 // installer work outside both Electron and the worker's request loop.
-function runHelper(executable, args, { signal, timeout = 15000, maximum = 32 * 1024 * 1024, cwd, onSpawn } = {}) {
+function runHelper(executable, args, { signal, timeout = 15000, maximum = 32 * 1024 * 1024, cwd, onSpawn, env: suppliedEnvironment } = {}) {
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
-    const env = { ...process.env };
-    for (const key of Object.keys(env)) if (/^(DYLD_|Malloc)/.test(key)) delete env[key];
+    const env = { ...process.env, ...suppliedEnvironment };
+    for (const key of Object.keys(env)) if (/^(DYLD_|Malloc)/.test(key) && !suppliedEnvironment?.[key]) delete env[key];
     const child = spawn(executable, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: false });
     const stdout = [], stderr = []; let outBytes = 0, error, killTimer;
     const fail = value => {

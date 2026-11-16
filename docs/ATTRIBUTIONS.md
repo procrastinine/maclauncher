@@ -48,6 +48,8 @@ MacLauncher's archive and executable tools use [7-Zip](https://www.7-zip.org/) (
 
 Offline installer imports use [innoextract](https://github.com/dscharrer/innoextract) (Zlib), built from source with [Boost.Filesystem](https://github.com/boostorg/filesystem), [Boost.Program_options](https://github.com/boostorg/program_options) and [Boost.Iostreams](https://github.com/boostorg/iostreams) (BSL-1.0). The resulting installer reader keeps their notices and links against Apple's system compression libraries.
 
+FreeArc payload extraction uses [FreeArc 0.67](https://github.com/M-Gonzalo/FreeArc), whose [upstream project](https://sourceforge.net/projects/freearc/) identifies GPLv2, and SREP 3.93 by Bulat Ziganshin under its retained upstream copyright terms. The native decoder wrapper, SREP portability adaptation and CLS host derive from [mac-game-porter](https://github.com/KarmSakha/mac-game-porter) (MIT, KarmSakha). The container reader follows the [Cellar FreeArc reader](https://github.com/joemunene-by/cellar), retained in that project's helper source (MIT, Joe Munene). Complete MIT notices accompany the adapted reader; decoder packages keep the component notices and exact source references.
+
 ## Backends and module tools
 
 Most runtimes and tools in this section are downloaded separately through **Runtimes**, and the components included in the app are listed in [Runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md).

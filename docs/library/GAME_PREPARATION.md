@@ -59,6 +59,8 @@ Removing a game that still has such folders brings up a confirmation that names 
 
 MacLauncher imports Inno Setup offline installers with the [installer reader](../tools/INSTALLERS.md), which is built from [innoextract](https://github.com/dscharrer/innoextract). An installer keeps its numbered data parts beside it in the same folder. The backend lists the parts it needs, unpacks them once into `games/<gameId>/containers/inno/`, and then detects the extracted game with the ordinary engine registry. When parts are missing, the error names the exact files. Windows installer code never runs.
 
+FreeArc-compressed payloads use this same folder and extraction record. Their archive files stay beside the installer. Native decoders handle built-in methods and SREP; a method needing the installer's own Windows decoder uses the selected Wine in a disposable private prefix. Neither the installer executable nor `unarc.dll` runs. Game files are not copied into an existing Wine or CrossOver bottle during extraction.
+
 While an extraction runs, a compact progress row shows it and can cancel it. Incomplete output is removed.
 
 Each new extraction checks paths, case collisions, output sizes and file types, and it accepts only regular files. The completed folder becomes the game's writable source folder, where saves, script edits, patches and added assets can stay, and engine preparation uses it directly without making a second writable copy.

@@ -80,6 +80,8 @@ Many games don't arrive as a plain folder. MacLauncher opens the common wrappers
 
 [GOG](https://www.gog.com/)'s offline Windows installers, like many others, are built with [Inno Setup](https://jrsoftware.org/isinfo.php): a `setup_….exe`, often with numbered `.bin` parts beside it. MacLauncher reads the installer as data with [innoextract](https://github.com/dscharrer/innoextract), without running it, then detects the game type inside like any other folder. A GOG Windows installer of a Ren'Py, GameMaker or RPG Maker game can therefore end up on a native Mac runtime, with no Windows or [WINE](https://www.winehq.org/) (the compatibility layer for Windows programs) at any step. Those installers, older versions included, can be downloaded from inside MacLauncher, as [Stores and downloads](/maclauncher/tools/stores-and-downloads/) describes. Encrypted installers aren't supported.
 
+Some Inno Setup installers store their payload in FreeArc `.bin` archives. MacLauncher reads the shell as data, then uses native FreeArc and SREP decoders. Only methods requiring a bundled Windows decoder start the selected Wine, in a temporary private prefix. File sizes and CRCs are checked before import; the installer and `unarc.dll` never run. The separate **FreeArc decoders** tool downloads after consent and keeps the same extracted-game storage and reuse behavior. An existing CrossOver bottle remains available for playing the imported game.
+
 ### Packed games
 
 Some games ship entirely inside one `.exe`, and MacLauncher reads it in place:
