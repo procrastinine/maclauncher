@@ -14,5 +14,5 @@ const rows = [
  ['graphics-core','Graphics processor','host',['graphics:processor'],[]]
 ];
 const KINDS = Object.freeze(Object.fromEntries(rows.map(([id,label,domain,provides,requires]) => [id,Object.freeze({id,label,domain,provides:Object.freeze(provides),requires:Object.freeze(requires),adapter:id})])));
-function getKind(id) { return KINDS[id] || null; }
+function getKind(id) { return Object.hasOwn(KINDS,id) ? KINDS[id] : null; }
 module.exports={KINDS,getKind};

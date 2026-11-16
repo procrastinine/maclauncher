@@ -30,7 +30,7 @@ function resolvePlan({target,choices={},builds=[],system={}}={}) {
     return null;
   };
   function systemHas(token) {
-    if(token.startsWith('macos>='))return Boolean(system.macOS)&&versionAtLeast(system.macOS,token.slice(7));
+    if(token.startsWith('macos>='))return /^\d+(?:\.\d+){0,2}$/.test(system.macOS||'')&&/^\d+(?:\.\d+){0,2}$/.test(token.slice(7))&&versionAtLeast(system.macOS,token.slice(7));
     return (system.provides||[]).includes(token);
   }
   function copy(state){return new Map(state);}
@@ -87,6 +87,8 @@ function resolvePlan({target,choices={},builds=[],system={}}={}) {
     const hosts=[...new Set(process.binaries.filter(b=>b.format==='macho').flatMap(b=>b.architectures||[]))];
     const ordered=[system.hostArch,...hosts.filter(a=>a!==system.hostArch)].filter(a=>hosts.includes(a));
     for(const host of ordered) {
+      const hostIssue=process.binaries.filter(b=>b.format==='macho').map(b=>acceptsBinary(host,guest,'native',b)).find(result=>!result.accepted);
+      if(hostIssue){exclude(process,hostIssue.reason);continue;}
       if(![system.hostArch,'x86_64'].includes(host) || host==='x86_64' && !['arm64','x86_64'].includes(system.hostArch)){exclude(process,`Cannot start a ${host} macOS process on ${system.hostArch}.`);continue;}
       let state=new Map([['wine',process]]),integration='native',guestTranslation=null,processExecution='native';
       if(host!==system.hostArch) {
@@ -118,7 +120,8 @@ function resolvePlan({target,choices={},builds=[],system={}}={}) {
           ...(b.kind==='wine'?{execution:processExecution}:executions.length===1?{execution:executions[0]}:{}),
           binaries,adapter:getKind(b.kind).adapter};
       });
-      return {satisfied:true,target:{guestArch:guest,execution:guestTranslation?`fex(${guestTranslation.id})`:processExecution},components,processes:[{build:process.id,hostArch:host,guestArch:guest,integration,execution:processExecution}],downloads:components.filter(b=>!b.installed).map(b=>b.build),excluded,unsatisfied};
+      const selectedIds=new Set(components.map(component=>component.build));
+      return {satisfied:true,target:{guestArch:guest,execution:guestTranslation?`fex(${guestTranslation.id})`:processExecution},components,processes:[{build:process.id,hostArch:host,guestArch:guest,integration,execution:processExecution}],downloads:components.filter(b=>!b.installed).map(b=>b.build),excluded:excluded.filter(row=>!selectedIds.has(row.build)),unsatisfied};
     }
   }
   unsatisfied.push('No complete execution plan satisfies the selected sources and capabilities.');
