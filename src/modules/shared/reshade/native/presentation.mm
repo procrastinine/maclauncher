@@ -1,4 +1,5 @@
 #include "generation-execution.hpp"
+#include "caller-copy.hpp"
 #include "presentation.hpp"
 #include "target-policy.hpp"
 #include "completion.hpp"
@@ -1095,6 +1096,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
   // row; preserve its original presents and process only real images here.
   const auto intervalOwner=effectPlanDemands(PlanDemandGeneration)?callerIntervalSource(source):nullptr;
   const bool callerOwnsSource=intervalOwner&&intervalOwner->blocksPresenter(planMode&&execution?execution->revision():std::string{});
+  observeCallerSourcePresentation(source);
   if(callerOwnedSource!=callerOwnsSource){std::lock_guard lock(mutex);retireDelivery();historyReady=false;++generationSequence;if(execution)for(const auto&stage:execution->generationStages())++stage.state->sequence;callerOwnedSource=callerOwnsSource;}
   const bool opaqueRequired=!callerOwnsSource&&(planMode&&execution?std::any_of(execution->generationStages().begin(),execution->generationStages().end(),[](const auto&stage){return stage.encoder->requiresOpaque();}):generator&&generator->requiresOpaque());
   if(!redraw&&!opaque&&generationEnabled&&opaqueRequired){result.reason="The selected frame generator requires an opaque source image";return result;}

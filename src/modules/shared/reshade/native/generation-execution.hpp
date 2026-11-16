@@ -12,7 +12,7 @@ struct SceneAovLease;
 void observeCallerIntervalFallback(const RSTemporalFrame&,const ShaderResult&);
 // Shared row/provider processing for an SDK-owned interval. It writes only the
 // SDK output and never creates a presenter, commits or waits for commands.
-class SdkInterpolationProcessor {
+class SdkInterpolationProcessor : public std::enable_shared_from_this<SdkInterpolationProcessor> {
  struct Impl;std::unique_ptr<Impl>impl;
 public:
  SdkInterpolationProcessor();~SdkInterpolationProcessor();

@@ -69,6 +69,7 @@ enum PlanDemandFlag : uint32_t {
     PlanDemandIndependentImageQueue=64, // neural rows with no scene, temporal or generation row
     PlanDemandGeneration=128,        // a frame-generation row
     PlanDemandOutputPolicy=256,      // output processing (comparison, tone mapping, motion clarity)
+    PlanDemandCallerIntervals=512,   // exactly one enabled generator requesting the SDK midpoint
 };
 struct PlanDemand {
     uint32_t flags=0;

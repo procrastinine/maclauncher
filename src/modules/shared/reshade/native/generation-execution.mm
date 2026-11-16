@@ -4,6 +4,7 @@
 #include "metal4-classic-bridge.hpp"
 #include "scene-aovs.hpp"
 #include "temporal-plan.hpp"
+#include "caller-copy.hpp"
 #include <mutex>
 #include "source-timing.hpp"
 #include "image-admission.hpp"
@@ -117,12 +118,13 @@ static std::shared_ptr<EffectPlanSnapshot>callerIntervalPlan(std::string&reason)
  return selected;
 }
 struct SdkIntervalBridgeState {std::shared_ptr<Metal4ClassicBridge>bridge;std::atomic<bool>ready{false},preparing{false};std::mutex mutex;std::string error;struct Slot{id<MTLTexture>image=nil;std::atomic<bool>busy{false};};std::array<std::shared_ptr<Slot>,4>slots;explicit SdkIntervalBridgeState(id<MTLDevice>device):bridge(std::make_shared<Metal4ClassicBridge>(device)){for(auto&slot:slots)slot=std::make_shared<Slot>();}};
-struct SdkInterpolationProcessor::Impl {std::shared_ptr<CallerIntervalSourceOwnership>sourceClaim;EffectPlanExecutor plan;std::mutex mutex;void*owner=nullptr;std::shared_ptr<GenerationEncoder>nativeEncoder;std::string nativeRow,nativeMethod,nativeModel;std::map<std::string,EffectPlanScalar>nativeSettings;std::shared_ptr<SdkIntervalBridgeState>bridge;~Impl(){if(owner){rsReleaseTemporalSceneMatrices(owner);rsReleaseTemporalSceneAovs(owner);}}};
+struct SdkInterpolationProcessor::Impl {CallerIntervalCopies copies;std::shared_ptr<CallerIntervalSourceOwnership>sourceClaim;EffectPlanExecutor plan;std::mutex mutex;void*owner=nullptr;std::shared_ptr<GenerationEncoder>nativeEncoder;std::string nativeRow,nativeMethod,nativeModel;std::map<std::string,EffectPlanScalar>nativeSettings;std::shared_ptr<SdkIntervalBridgeState>bridge;~Impl(){if(owner){rsReleaseTemporalSceneMatrices(owner);rsReleaseTemporalSceneAovs(owner);}}};
 SdkInterpolationProcessor::SdkInterpolationProcessor():impl(std::make_unique<Impl>()){}
 SdkInterpolationProcessor::~SdkInterpolationProcessor()=default;
 ShaderResult SdkInterpolationProcessor::encode(const MetalFxImageInputs&input,const std::shared_ptr<const SceneAovLease>&metadata,bool*recorded,std::function<ShaderResult()>*completion){
  if(recorded)*recorded=false;
  if(!effectPlanDemands(PlanDemandGeneration))return {false,{}};
+ CallerCopyScope sharedCommands;
  std::string selectionReason;auto selected=callerIntervalPlan(selectionReason);if(!selected)return {false,selectionReason};
  const auto&row=selected->nodes.front();
  auto scene=input.frame;auto commands=(__bridge id<MTLCommandBuffer>)scene.commandBuffer;
@@ -143,8 +145,10 @@ ShaderResult SdkInterpolationProcessor::encode(const MetalFxImageInputs&input,co
  if(!scene.renderWidth||!scene.renderHeight||input.depth.width<scene.renderWidth||input.depth.height<scene.renderHeight||input.motion.width<scene.renderWidth||input.motion.height<scene.renderHeight)return {false,"The caller interval guides do not cover their declared render extent"};
  if(row.method!="metalfx"&&std::abs(input.aspectRatio-float(current.width)/current.height)>1e-4f)return {false,"The caller camera aspect differs from the selected provider image contract"};
  std::unique_lock guard(impl->mutex,std::try_to_lock);if(!guard)return {false,"The caller interval owner is busy",true};
- impl->sourceClaim=reserveCallerIntervalSource(current,input.callerOutput?:output,impl->sourceClaim,selected->revision,row.id);
- if(!impl->sourceClaim)return {false,"The caller interval needs its current real image and requested output to be current drawables of the same presentation source; the original SDK encode is retained"};
+ if(input.callerClaim){if(input.callerClaim->revision!=selected->revision||input.callerClaim->stage!=row.id)return {false,"The observed copy interval belongs to another graphics publication"};impl->sourceClaim=input.callerClaim;}
+ else{impl->sourceClaim=reserveCallerIntervalSource(current,input.callerOutput?:output,impl->sourceClaim,selected->revision,row.id);
+  if(!impl->sourceClaim){if(!metadata&&!generationPreservesUnspecifiedColor(row.method))return {false,"The selected provider needs a declared source color encoding; the SDK call supplies none"};return impl->copies.stage(shared_from_this(),input,metadata,selected->revision,row.id);}}
+
  impl->owner=scene.owner;
  if(input.matricesValid&&rsBindTemporalSceneMatrices(&scene,&input.matrices)!=RS_TEMPORAL_OK)return {false,"The caller interval camera matrices could not be bound"};
  observeRuntimeFrameSource(reinterpret_cast<uintptr_t>(scene.owner),RuntimeFrameSource::RendererScene,temporalSceneInputMask(scene));

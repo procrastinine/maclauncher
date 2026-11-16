@@ -14,6 +14,9 @@ std::shared_ptr<CallerIntervalSourceOwnership>reserveCallerIntervalSource(id<MTL
 std::shared_ptr<CallerIntervalSourceOwnership>callerIntervalSource(id<MTLTexture>);
 // Propagate only the adapter's actual completed-image copy/view provenance.
 void copyCallerIntervalSource(id<MTLTexture>from,id<MTLTexture>to);
+id callerIntervalDrawableRegistration(id<MTLTexture>);
+std::shared_ptr<CallerIntervalSourceOwnership>reserveObservedCallerIntervalSource(id<MTLTexture>real,id<MTLTexture>generated,const std::shared_ptr<CallerIntervalSourceOwnership>&previous,const std::string&revision,const std::string&stage);
+bool bindCallerIntervalSource(id<MTLTexture>,id acquisition,const std::shared_ptr<CallerIntervalSourceOwnership>&);
 bool reserveTemporalOutput(id<MTLCommandBuffer>,id<MTLTexture>);
 // Explicit scene producers own the supplied output; a receipt still matches
 // only that exact output and its unsubmitted retaining command buffer.

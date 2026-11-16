@@ -3,6 +3,7 @@
 #include "scene-aovs.hpp"
 #include "generation-execution.hpp"
 #include "generation-schedule.hpp"
+#include "caller-copy.hpp"
 #include "metalfx-image-ingress.hpp"
 #include "log.hpp"
 #import <MetalFX/MetalFX.h>
@@ -14,7 +15,7 @@
 #include <mutex>
 @interface RSMMetalFxGenerationAccess : NSObject { @public std::shared_ptr<void> value; } @end
 @implementation RSMMetalFxGenerationAccess @end
-@interface RSMMetalFxClassicObservation : NSObject { @public std::atomic<bool> hadField; std::unique_ptr<macfx::SdkInterpolationProcessor> processor; uint64_t sequence; bool originalReset; std::mutex intervalMutex; } @end
+@interface RSMMetalFxClassicObservation : NSObject { @public std::atomic<bool> hadField; std::shared_ptr<macfx::SdkInterpolationProcessor> processor; uint64_t sequence; bool originalReset; std::mutex intervalMutex; } @end
 @implementation RSMMetalFxClassicObservation
 - (instancetype)init {self=[super init];if(self)std::atomic_init(&hadField,false);return self;}
 @end
@@ -42,12 +43,13 @@ void classicEncode(id sdk,SEL selector,id commands){
  const auto original=classicOriginal(sdk);if(!original)return;
  RSMMetalFxClassicObservation*observation=objc_getAssociatedObject(sdk,&classicObservation);
  const bool requested=effectPlanDemands(PlanDemandGeneration);
+ if(observation&&callerCopyObservation())if(@available(macOS 26.0,*)){@try{if([sdk respondsToSelector:@selector(outputTexture)])observeCallerImageWrite(commands,[(id<MTLFXFrameInterpolatorBase>)sdk outputTexture]);else observeCallerUnknownWrite(commands);}@catch(NSException*){observeCallerUnknownWrite(commands);}}
  if(!requested){auto interval=observation;if(interval&&interval->processor){std::unique_lock guard(interval->intervalMutex,std::try_to_lock);if(guard&&interval->processor){std::shared_ptr<SdkInterpolationProcessor>retired=std::move(interval->processor);dispatch_async(retirementQueue(),^{(void)retired;});}}}
  const bool owned=encodeCallerOwnedInterval(requested,[&]{
   auto interval=observation;if(!interval)return false;
   std::unique_lock guard(interval->intervalMutex,std::try_to_lock);if(!guard)return false;
   @try{
-   if(!interval->processor)interval->processor=std::make_unique<SdkInterpolationProcessor>();
+   if(!interval->processor)interval->processor=std::make_shared<SdkInterpolationProcessor>();
    MetalFxImageInputs inputs;const auto captured=captureMetalFxImageInputs(sdk,MetalFxImageKind::Interpolation,commands,(__bridge void*)interval,++interval->sequence,inputs);if(!captured.encoded)return false;
    auto lookup=inputs.frame;lookup.depth=(__bridge void*)inputs.depth;lookup.motion=(__bridge void*)inputs.motion;
    std::shared_ptr<const SceneAovLease>metadata;void*owner=nullptr;peekTemporalAovsForTextures(lookup,metadata,owner);
@@ -58,6 +60,7 @@ void classicEncode(id sdk,SEL selector,id commands){
    return result.encoded;
   }@catch(NSException*){return false;}
  },[&]{
+  std::optional<CallerCopyScope>nativeProducer;if(requested&&effectPlanDemands(PlanDemandCallerIntervals))nativeProducer.emplace();
   auto interval=observation;
   if(@available(macOS 26.0,*)){if(interval&&interval->originalReset){auto source=(id<MTLFXFrameInterpolatorBase>)sdk;const bool reset=source.shouldResetHistory;source.shouldResetHistory=YES;
    @try{reinterpret_cast<void(*)(id,SEL,id)>(original)(sdk,selector,commands);interval->originalReset=false;}@finally{source.shouldResetHistory=reset;}return;}}
