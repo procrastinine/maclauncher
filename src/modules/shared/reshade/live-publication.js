@@ -46,6 +46,10 @@ function createPublication({isCurrent} = {}) {
     const record = observe(file, options);
     record.bytes = Buffer.isBuffer(contents) ? Buffer.from(contents) : Buffer.from(contents, options.encoding || "utf8");
     record.activation = options.activation === true;
+    if (options.mappedByte === true) {
+      if (record.bytes.length !== 1 || record.bytes[0] !== 48 && record.bytes[0] !== 49) throw new Error("Mapped demand requires one boolean byte.");
+      record.mappedByte = true;
+    }
   }
   const rows = () => [...records.values()].filter(record => record.bytes !== undefined)
     .sort((left, right) => Number(left.activation) - Number(right.activation));
@@ -68,7 +72,8 @@ function createPublication({isCurrent} = {}) {
     if (!current() || applied.some(record => !equal(snapshot(record.file), record.bytes))) return false;
     for (const record of [...applied].reverse()) {
       if (!current()) return false;
-      if (record.before === null) fs.rmSync(record.file, {force: true});
+      if (record.mappedByte) require("./mapped-demand").write(record.file, record.before || "0", {root: record.root});
+      else if (record.before === null) fs.rmSync(record.file, {force: true});
       else Writable.atomicWrite(record.file, record.before, {root: record.root});
     }
     return true;
@@ -78,7 +83,9 @@ function createPublication({isCurrent} = {}) {
     try {
       for (const record of rows()) {
         if (!current()) throw stale();
-        Writable.atomicWrite(record.file, record.bytes, {root: record.root});applied.push(record);
+        if (record.mappedByte) require("./mapped-demand").write(record.file, record.bytes, {root: record.root});
+        else Writable.atomicWrite(record.file, record.bytes, {root: record.root});
+        applied.push(record);
       }
       state = "committed";return true;
     } catch (error) {
