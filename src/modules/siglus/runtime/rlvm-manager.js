@@ -47,6 +47,6 @@ function createManager({ dependencies = {} } = {}) {
     // RealLive script data does not link against the RLVM package version.
     versionCompatibility: () => true,
      id: "rlvm", label: "RLVM", sourceUrl: Catalog.RELEASES,
-    upstream: Catalog.source, resolveExecutable: executable, prepareInstall, dependencies });
+    upstream: Catalog.source, projectBuilds: Catalog.projectBuilds, resolveExecutable: executable, prepareInstall, dependencies });
 }
 module.exports = Object.assign(createManager(), { createManager, executable, prepareInstall, resolveAdapter, adapterSelection, resolveForLaunch, adapterManager });

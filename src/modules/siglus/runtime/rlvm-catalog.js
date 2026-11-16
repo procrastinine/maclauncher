@@ -14,4 +14,5 @@ const source = Upstream.github({ repository: "eglaysher/rlvm", allArchitectures:
     return downloads.length ? downloads.map(({ asset, architecture }) => ({ version, ...(architecture ? { architecture } : {}), assets: [asset] }))
       : { version, installReason: "This release has no macOS app download." };
   } });
-module.exports = { RELEASES, source };
+const projectBuilds = { projectId: "rlvm", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true };
+module.exports = { RELEASES, source, projectBuilds };
