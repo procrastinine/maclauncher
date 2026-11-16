@@ -2302,9 +2302,6 @@ select.input:not([multiple]) {
   max-width: 100%;
 }
 
-/* Why the chosen runtime option cannot be used: its own line under the control. */
-.settingsControl > .settingsReason { flex: 1 0 100%; }
-
 /* The update button keeps its size; the result beside it wraps under it when narrow. */
 .settingsUpdateControl > .btn { flex-shrink: 0; }
 .settingsStatus {

@@ -25,7 +25,7 @@ import { ErrorText } from "./ErrorText";
 import { Toggle } from "./FieldRow";
 import { createQueuedWriter, type QueuedWriter } from "./queued-write-model";
 import { inventoryChoiceLabel, loadSettingChoices, readSettingChoices, storeSettingChoices, settingChoiceRequest, settingChoiceScope, type SettingChoices } from "./runtime-setting-choices";
-import { isRoleFieldShown, isRoleOptionDisabled, planSummary, roleOptionLabel, roleOptionReason } from "./runtime-role-options";
+import { isRoleFieldShown, isRoleList, roleOptionLabel, roleRowOptions } from "./runtime-role-options";
 import { RuntimeFileSetting } from "./RuntimeFileSetting";
 import { GameTranslatorEnvironment } from "./TranslatorEnvironmentEditor";
 
@@ -366,10 +366,10 @@ export function RuntimeSettingsWindow({
                   if (!isRoleFieldShown(choices[field.optionsAction], field.key)) return null;
                   const firstInGroup = visibleFields.find(row => row.optionsAction === field.optionsAction && isRoleFieldShown(choices[field.optionsAction!], row.key))?.key === field.key;
                   const notice = firstInGroup && choices[field.optionsAction]?.notice;
-                  const summary = firstInGroup ? planSummary(choices[field.optionsAction]) : "";
                   const selected = String((displaySettings as any)[field.key] || "");
                   const listed: RuntimeSettingOption[] = choices[field.optionsAction]?.[field.optionsKey || field.key] || field.options || [];
-                  const options = field.optionsAction === "listRuntimeVersions" ? runtimeVersionOptions(listed) : listed;
+                  const roles = isRoleList(choices[field.optionsAction]);
+                  const options = field.optionsAction === "listRuntimeVersions" ? runtimeVersionOptions(listed) : roles ? roleRowOptions(listed, selected) : listed;
                   const scope = settingChoiceScope(choices[field.optionsAction], field, options.find(option => option.value === selected));
                   // A cached list, the game's last launch or the installed runtime inventories
                   // name a saved choice before its list arrives.
@@ -379,9 +379,7 @@ export function RuntimeSettingsWindow({
                   const loading = choiceLoading[field.optionsAction] === true;
                   // Static options lack the list's linked settings, so a select waits for its list and keeps the saved label meanwhile.
                   const disabled = fieldsDisabled || (field.gameOnly === true && !isGameScope) || (loading && !choices[field.optionsAction]);
-                  const reason = roleOptionReason(options.find(option => option.value === selected));
                   return <React.Fragment key={field.key}>
-                    {summary && <div className="dim" aria-label="Launch plan">{summary}</div>}
                     {typeof notice === "string" && notice && <div className="dim">{notice}</div>}
                     <div className="settingsRow">
                     <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}
@@ -391,10 +389,9 @@ export function RuntimeSettingsWindow({
                         onChange={event => { const value = event.target.value, option = options.find(option => option.value === value);
                           return onFieldsChange(option?.runtimeSettingsPatch || { [field.key]: value }); }}>
                         {!options.some(option => option.value === selected) && <option value={selected}>{recordedLabel || (selected ? (loading || !choices[field.optionsAction] ? "Loading saved selection…" : "Selected option unavailable") : "Off")}</option>}
-                        {options.map(option => <option key={option.value} value={option.value} disabled={isRoleOptionDisabled(option)}
-                          title={roleOptionReason(option) || settingChoiceScope(choices[field.optionsAction!], field, option) || undefined}>{roleOptionLabel(option)}</option>)}
+                        {options.map(option => <option key={option.value} value={option.value} disabled={roles && option.disabled === true}
+                          title={settingChoiceScope(choices[field.optionsAction!], field, option) || undefined}>{roles ? roleOptionLabel(option) : option.label}</option>)}
                       </Select>
-                      {reason && <div className="dim settingsReason">{reason}</div>}
                       {firstInGroup && <button type="button" className="btn iconOnly" title="Refresh choices" aria-label="Refresh choices" disabled={disabled || loading}
                         onClick={() => setChoiceRevision(value => value + 1)}><RefreshIcon /></button>}
                       {field.pickerAction && <button type="button" className="btn" disabled={disabled || pickingField === field.key}

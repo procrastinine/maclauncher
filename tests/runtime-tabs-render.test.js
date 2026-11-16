@@ -1269,29 +1269,32 @@ test('linked runtime choices persist one advertised patch and ordinary choices k
   }
 });
 
-test('runtime role rows show the plan summary, measured CPU labels, FEX use and disabled choices with their reason, and hide roles the plan does not use', async () => {
+test('runtime role rows list only what the game\'s Wine can use, without per-entry notes', async () => {
   const state=require('./library-layout-fixture').createLibraryFixture(),context={scope:'module',moduleId:'fixture',runtimeId:'managed'};
   const role=(key,label)=>({key,label,type:'select',default:'',optionsAction:'roles'});
-  const fields=[{...role('wine','Wine'),default:'source:metalsharp-wine'},role('translatorCpuX64','x64 CPU translator'),role('translatorCpuX86','x86 CPU translator'),{...role('translatorD3D11','Direct3D 11'),default:'source:intel-only'}];
+  const fields=[role('translatorCpuX64','x64 CPU translator'),role('translatorCpuX86','x86 CPU translator'),{...role('translatorD3D11','Direct3D 11'),default:'source:intel-only'}];
   state.modules[0].runtime.entries.managed.settings={fields};
-  const automatic={value:'',label:"MetalSharp Wine's automatic choice",kind:'automatic'};
-  const result={summary:'x64 game · MetalSharp Wine (Apple Silicon) · FEX (MetalSharp) · Direct3D 11: DXVK-MacOS (ARM64X)',roleKeys:['wine','translatorCpuX64','translatorD3D11'],
-    wine:[{value:'source:metalsharp-wine',label:'MetalSharp Wine',badges:['Apple Silicon'],kind:'source'},{value:'source:sikarugir',label:'Sikarugir',badges:['Intel (Rosetta)'],kind:'source',download:{bytes:524288000}}],
-    translatorCpuX64:[automatic,{value:'source:highball-fex',label:'Highball FEX',kind:'source',disabled:true,reason:'Needs the Highball Wine it ships with.'}],
-    translatorD3D11:[automatic,{value:'source:dxvk-macos',label:'DXVK-MacOS',badges:['ARM64X'],kind:'source'},
-      {value:'build:translator-dxvk:2.6',label:'DXVK 2.6',badges:['x64'],execution:'fex',translatorLabel:'FEX (MetalSharp)',kind:'build',prerelease:true},
-      {value:'source:intel-only',label:'Intel-only DXVK',badges:['x64'],kind:'source',disabled:true,reason:'Needs an Intel Wine.'}]};
+  const automatic={value:'',label:"MetalSharp Wine's automatic choice",kind:'automatic',badges:[]};
+  // The action still carries measured facts and exclusion reasons; the row shows none of them.
+  const facts={badges:['ARM64X'],execution:'fex',translatorLabel:'FEX (MetalSharp)',download:{bytes:524288000}};
+  const result={summary:'x64 game · MetalSharp Wine (Apple Silicon) · FEX (MetalSharp)',roleKeys:['translatorCpuX64','translatorD3D11'],
+    translatorCpuX64:[automatic,{value:'source:highball-fex',label:'Highball FEX',kind:'source',sourceId:'highball-fex',disabled:true,reason:'Needs the Highball Wine it ships with.'}],
+    translatorD3D11:[automatic,
+      {value:'source:dxvk-macos',label:'DXVK-MacOS',kind:'source',sourceId:'dxvk-macos',...facts},
+      {value:'build:dxvk-macos:1.0',label:'DXVK-MacOS · 1.0',kind:'build',sourceId:'dxvk-macos',...facts},
+      {value:'source:dxvk',label:'DXVK',kind:'source',sourceId:'dxvk',...facts},
+      {value:'build:dxvk:2.6',label:'DXVK · 2.6',kind:'build',sourceId:'dxvk',prerelease:true,...facts},
+      {value:'build:dxvk:2.5',label:'DXVK · 2.5',kind:'build',sourceId:'dxvk',...facts},
+      {value:'build:dxvk:2.4-intel',label:'DXVK · 2.4 Intel',kind:'build',sourceId:'dxvk',disabled:true,reason:'Needs an Intel Wine.'},
+      {value:'source:intel-only',label:'Intel-only DXVK',kind:'source',sourceId:'intel-only',disabled:true,reason:'Needs an Intel Wine.'}]};
   const api={moduleAction:async()=>result,moduleSettingsAction:async()=>result,setModuleRuntimeSettings:async()=>assert.fail('Rendering must not write'),setGameRuntimeSettings:async()=>assert.fail('Rendering must not write')};
   const h=componentHarness(RuntimeSettingsWindow,{api,state,context,error:null});
   try{h.render();const markup=renderToStaticMarkup(await h.settle());
-    assert.equal((markup.match(/x64 game · MetalSharp Wine \(Apple Silicon\) · FEX \(MetalSharp\)/g)||[]).length,1,'one summary line for the group');
     assert.doesNotMatch(markup,/x86 CPU translator/,'a role the plan does not use is hidden');
-    assert.match(markup,/>MetalSharp Wine · Apple Silicon<\/option>/);assert.match(markup,/>Sikarugir · Intel \(Rosetta\) · Download 500(?:\.0)? MB<\/option>/);
-    assert.match(markup,/>DXVK-MacOS · ARM64X<\/option>/);assert.match(markup,/>DXVK 2\.6 · x64 · FEX \(MetalSharp\) · Pre-release<\/option>/);
-    assert.match(markup,/<option value="source:intel-only" disabled="" title="Needs an Intel Wine\."(?: selected="")?>Intel-only DXVK · x64<\/option>/);
-    assert.match(markup,/<option value="source:highball-fex" disabled="" title="Needs the Highball Wine it ships with\.">Highball FEX<\/option>/);
-    assert.match(markup,/class="dim settingsReason">Needs an Intel Wine\.<\/div>/,'the saved, unusable choice explains itself under its row');
-    assert.equal((markup.match(/settingsReason/g)||[]).length,1,'only the chosen unusable option adds a line');
+    assert.doesNotMatch(markup,/x64 game|Highball FEX|DXVK · 2\.4 Intel|Needs |ARM64X|FEX \(MetalSharp\)|Download|Launch plan/,'no summary, incompatible entry, reason or per-entry fact');
+    assert.match(markup,/>DXVK-MacOS<\/option>/);assert.doesNotMatch(markup,/DXVK-MacOS · 1\.0/,'a source with one usable build is one entry');
+    assert.match(markup,/>DXVK<\/option>/);assert.match(markup,/>DXVK · 2\.6 · Pre-release<\/option>/);assert.match(markup,/>DXVK · 2\.5<\/option>/);
+    assert.match(markup,/<option value="source:intel-only" disabled=""(?: selected="")?>Intel-only DXVK \(unavailable\)<\/option>/,'the saved choice stays named');
   }finally{h.close();}
 });
 
