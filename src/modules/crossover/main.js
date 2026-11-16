@@ -45,7 +45,7 @@ async function listRuntimeRoles(entry, payload, context, dependencies = {}) {
   const inventory = await Translators.optionsInventory(selected.install, runtime, prepared, {...dependencies,entry,readOnly:true});
   const plan = Translators.optionsPlan(inventory, prepared);plan.inventory=inventory;
   const options=Translators.optionLists(selected.install,runtime,prepared,{...dependencies,inventory,plan,executableArchitecture:Detection.cachedWindowsExecutable(entry)?.executableArchitecture});
-  return require('../../core/runtime-roles').projectRuntimeRoles({plan,settings:prepared.runtimeSettings,optionLists:options,source:Sources.get(runtime),host:require('../shared/runtime/host-capabilities').getHostCapabilities(),wine:selected.install&&{...selected.install,source:runtime,label:Sources.get(runtime).label}});
+  return require('../../core/runtime-roles').projectRuntimeRoles({plan,settings:prepared.runtimeSettings,optionLists:options,source:Sources.get(runtime),host:require('../shared/runtime/host-capabilities').getHostCapabilities(),wine:selected.install&&{...selected.install,source:runtime,label:Sources.get(runtime).label,binaries:inventory.layout?.architecture?[{format:'macho',architectures:[inventory.layout.architecture]}]:[]}});
 }
 // What the last Play recorded applies while the translator settings and the
 // Wine installation are unchanged.

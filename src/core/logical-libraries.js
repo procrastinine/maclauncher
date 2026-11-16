@@ -6,14 +6,24 @@ function fileProvides(binary){const name=path.basename(binary.path||'').toLowerC
 function selectLogicalLibraries({build,hostArch,guestArch,integration='native',needed=[],libraries,infrastructure=false}={}){
  let inventory=build.binaries||[];
  if(infrastructure){
+  const prefix=integration==='wow64'?'wow64':'arm64ec';
+  const semantic=(build.parts||[]).filter(part=>/^(?:arm64ec|wow64)-(?:client|helper)$/.test(part.name||''));
+  if(semantic.length){
+   const selected=semantic.filter(part=>part.name===prefix+'-client'||part.name===prefix+'-helper');
+   const inside=(binary,part)=>binary.path===part.path||binary.path?.startsWith(part.path.replace(/\/$/,'')+'/');
+   for(const name of [prefix+'-client',prefix+'-helper'])if(!selected.some(part=>part.name===name&&inventory.some(binary=>inside(binary,part))))return {accepted:false,binaries:[],excluded:[{logicalName:name,reason:`Required CPU support part ${name} is unavailable.`}],reason:`Required CPU support part ${name} is unavailable.`};
+   inventory=inventory.filter(binary=>selected.some(part=>inside(binary,part)));
+  }
   const supported=machine=>integration==='wow64'?machine==='arm64':['arm64ec','arm64x'].includes(machine);
   const pe=inventory.filter(binary=>binary.format==='pe'),selected=pe.filter(binary=>supported(binary.machine));
   const other=pe.filter(binary=>!supported(binary.machine));
   if(selected.length&&other.length){
    const knownOther=other.every(binary=>(build.reach||[]).some(reach=>reach.integration!==integration&&(reach.integration==='wow64'?binary.machine==='arm64':['arm64ec','arm64x'].includes(binary.machine))));
-   if(knownOther){
+   if(knownOther&&!semantic.length){
     const stem=binary=>path.basename(binary.path||'').replace(/\.(?:dll|so)$/i,'').toLowerCase();
     const unused=new Set(other.map(stem)),required=new Set(selected.map(stem));
+    const helpers=inventory.filter(binary=>binary.format==='macho');
+    if(helpers.some(binary=>!unused.has(stem(binary))&&!required.has(stem(binary))))return {accepted:false,binaries:[],excluded:[],reason:'CPU support helper pairing is ambiguous; semantic parts are required.'};
     inventory=inventory.filter(binary=>binary.format==='pe'?supported(binary.machine):!unused.has(stem(binary))||required.has(stem(binary)));
    }
   }

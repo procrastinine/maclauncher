@@ -5,7 +5,7 @@ const {validateSource,validateDeclared,validateBuild}=require('./schema');
 
 // The installer supplies its executable inventory after extraction and signature
 // verification. The returned record is persisted with that immutable install.
-function measureBuild({source,root,files,declares,id,version,provenance={},parent}={}) {
+function measureBuild({source,root,files,declares,id,version,provenance={},parent,parts}={}) {
  validateSource(source);
  const base=fs.realpathSync(root);
  if(!Array.isArray(files)||!files.length)throw new TypeError('An installed executable inventory is required.');
@@ -18,7 +18,7 @@ function measureBuild({source,root,files,declares,id,version,provenance={},paren
   return {path:file,...inspectBinary(absolute)};
  });
  validateDeclared(declares,binaries);
- return validateBuild({id,source:source.id,kind:source.kind,version,installed:true,binaries,
+ return validateBuild({id,source:source.id,kind:source.kind,version,installed:true,measured:true,root:base,binaries,...(parts?{parts:structuredClone(parts)}:{}),
   interfaces:structuredClone(source.interfaces||{provides:[],requires:[]}),
   ...(source.reach?{reach:structuredClone(source.reach)}:{}),
   ...(parent?{parent}:{}),provenance:structuredClone(provenance)});
