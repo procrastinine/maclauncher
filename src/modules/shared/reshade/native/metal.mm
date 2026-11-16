@@ -22,6 +22,7 @@
 #include "temporal-camera.h"
 extern "C" __attribute__((visibility("hidden"))) void rsTemporalCameraFrameBoundary();
 #include "frame-capture.hpp"
+#include "presentation-capture-policy.hpp"
 #include "capture-file.hpp"
 #include "screenshot-image.hpp"
 #include "metal4-diagnostics.hpp"
@@ -1169,8 +1170,9 @@ void process(id<MTLCommandBuffer> buffer,id<MTLDrawable> drawable,const char *ti
             if(!source)throw std::runtime_error("Cannot read the game presentation texture");
             if(macfx::effectPlanDemands(macfx::PlanDemandGeneration))macfx::copyCallerIntervalSource(metal.texture,source);
             auto result=presentation->submitDisplayFrame(buffer,source,0,sourceTime>0?sourceTime:CACurrentMediaTime(),metal.layer.opaque,captured?&depth:nullptr);
-            if(result.encoded){macfx::observeTiming(buffer,timingScope,source.width,source.height);return;}
-            if(result.busy)return;
+            const auto outcome=macfx::presentationFrameWithScreenshot(result,presentation->outputRevealed(),[&]{capturePresented();});
+            if(outcome==macfx::PresentationFrameOutcome::Encoded){macfx::observeTiming(buffer,timingScope,source.width,source.height);return;}
+            if(outcome==macfx::PresentationFrameOutcome::Declined)return;
             if(!presentation->terminalGpuFailure())presentation->stop();log("Graphics presentation disabled: "+result.reason);
         }catch(const std::exception&error){presentation->stop();log("Graphics presentation disabled: "+std::string(error.what()));}}
         @catch(NSException*error){presentation->stop();log("Graphics presentation disabled: "+std::string(error.reason.UTF8String?:"Presentation failed"));}

@@ -16,6 +16,8 @@ public:
     bool colorSpaceMatches(CGColorSpaceRef,std::optional<ImageColorSpace> = {})const;
     bool failedForCurrentContract(unsigned,unsigned,MTLPixelFormat=MTLPixelFormatInvalid,id<MTLDevice> device=nil);
     bool terminalGpuFailure()const;
+    // The owned output has replaced the game's drawable on screen.
+    bool outputRevealed()const;
     std::shared_ptr<ViewPresentation> takePreviousOutput();
     ~ViewPresentation();
     void update(NSView *source,unsigned width,unsigned height); // Main thread only.

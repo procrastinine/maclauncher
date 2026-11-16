@@ -314,6 +314,7 @@ macfx::ViewPresentation::ViewPresentation(NSView*v,unsigned w,unsigned h,const P
 macfx::ViewPresentation::ViewPresentation(CAMetalLayer*l,NSView*v,unsigned w,unsigned h,const PresenterConfig&c,CGColorSpaceRef color,std::shared_ptr<ViewPresentation>previous):impl(std::make_shared<Impl>(l,v,w,h,c,color,std::move(previous))){impl->observeVisibility();}
 bool macfx::ViewPresentation::failedForCurrentContract(unsigned w,unsigned h,MTLPixelFormat format,id<MTLDevice>device){return impl->presenter->gpuFailureMatchesCurrent(w,h,format,device);}
 bool macfx::ViewPresentation::terminalGpuFailure()const{return impl->presenter->terminalGpuFailure();}
+bool macfx::ViewPresentation::outputRevealed()const{return impl->revealed.load();}
 bool macfx::ViewPresentation::colorSpaceMatches(CGColorSpaceRef color,std::optional<ImageColorSpace>mode)const{return sameImageColorSpace(impl->sourceColorTag.value,color)&&(!mode||*mode==impl->sourceColorMode);}
 std::shared_ptr<macfx::ViewPresentation> macfx::ViewPresentation::takePreviousOutput(){return impl->stopped.load()?std::exchange(impl->previousOwner,{}):nullptr;}
 macfx::ViewPresentation::~ViewPresentation(){stop();}
