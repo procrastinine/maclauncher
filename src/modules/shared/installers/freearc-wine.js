@@ -27,6 +27,8 @@ async function selectedWine(context) {
 }
 async function withPrivateWine(context, directory, helpers, callback, dependencies = {}) {
   const host = await (dependencies.selectedWine || selectedWine)(context);
+  if (!host.source || !path.isAbsolute(host.install?.executablePath || "") || !path.isAbsolute(host.install?.serverPath || ""))
+    throw installerError("The selected Wine runtime lacks a decoder loader or server.", "INSTALLER_TOOL_MISSING");
   // Use the existing private Wine ownership boundary. Only this fresh child
   // prefix is disposable; existing game prefixes and external bottles survive.
   const runtimeDirectory = path.join(GameData.resolveGameDir(context.userDataDir, context.gameId || context.entry?.gameId), "runtimes", host.source.id);
@@ -51,10 +53,11 @@ async function withPrivateWine(context, directory, helpers, callback, dependenci
         environment = launch.buildEnvironment(settings, host.install, runtimeDirectory, prefix, runtime, { baseEnvironment: basicEnvironment() }).environment;
       }
       require("../../crossover/sources/launch-steps").detachProfileAliases(prefix);
-      environment = { ...environment, HOME: path.join(directory, "home"), TMPDIR: path.join(directory, "tmp"), WINEPREFIX: prefix, WINEDEBUG: "-all", WINEDLLOVERRIDES: "winemenubuilder.exe=d" };
+      environment = { ...environment, HOME: path.join(directory, "home"), TMPDIR: path.join(directory, "tmp"), WINEPREFIX: prefix, WINEDEBUG: "-all", WINEDLLOVERRIDES: "winemenubuilder.exe=d;unarc,unarc64=d" };
       for (const name of ["home", "tmp"]) await fs.promises.mkdir(path.join(directory, name), { recursive: true });
       const copied = path.join(prefix, "drive_c", "decoders");
-      await fs.promises.cp(helpers, copied, { recursive: true, errorOnExist: true, force: false, dereference: false });
+      await fs.promises.cp(helpers, copied, { recursive: true, errorOnExist: true, force: false, dereference: false,
+        filter: file => !/^unarc(?:64)?\.dll$/i.test(path.basename(file)) });
       return await callback({ executable: host.install.executablePath, environment, helpers: copied, onSpawn });
     } finally {
       // Stop only this branded, disposable prefix before deleting it. The
