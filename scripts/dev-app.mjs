@@ -12,6 +12,9 @@ const { copyAppBundle, validateAppBundle } = require("../src/modules/shared/runt
 const { applicationDocumentTypes } = require("../src/core/file-associations");
 const Modules = require("../src/modules/registry");
 const projectRoot = path.resolve(import.meta.dirname, "..");
+// macOS turns on Game Mode for an app in a games category; the launcher is not
+// a game, so the development bundle takes the packaged app's category.
+const applicationCategory = require("../package.json").build.mac.category;
 
 export function pruneDevelopmentApps(cacheRoot,current,{processes=generationProcesses(),alive=processAlive}={}){
   if(processes===null)return;
@@ -53,6 +56,7 @@ export async function prepareDevelopmentApp({ electronBinary, platform = process
     if (fs.existsSync(file)) digest.update(fs.readFileSync(file));
   }
   digest.update(JSON.stringify(documentTypes));
+  digest.update(applicationCategory);
   const keychain = signingKeychain && fs.existsSync(signingKeychain) ? path.resolve(signingKeychain) : null;
   let certificate = null;
   if(keychain){
@@ -110,6 +114,7 @@ export async function prepareDevelopmentApp({ electronBinary, platform = process
     info.CFBundleIdentifier = "com.maclauncher.launcher.development";
     info.CFBundleIconFile = "icon.icns";
     info.CFBundleDocumentTypes = documentTypes;
+    info.LSApplicationCategoryType = applicationCategory;
     info.NSMicrophoneUsageDescription = "Selected games can record audio from the input chosen in game Settings.";
     info.NSCameraUsageDescription = "Selected games can receive video from the camera chosen in game Settings.";
     fs.copyFileSync(iconPath, path.join(contents, "Resources", "icon.icns"));

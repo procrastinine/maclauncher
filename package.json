@@ -292,7 +292,7 @@
       "target": [
         "zip"
       ],
-      "category": "public.app-category.games",
+      "category": "public.app-category.entertainment",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Selected games can record audio from the input chosen in game Settings.",
         "NSCameraUsageDescription": "Selected games can receive video from the camera chosen in game Settings."
