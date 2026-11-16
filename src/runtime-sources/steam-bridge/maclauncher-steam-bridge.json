@@ -1,0 +1,49 @@
+{
+  "id": "maclauncher-steam-bridge",
+  "kind": "steam-bridge",
+  "label": "Steam client bridge",
+  "order": 203,
+  "manager": {
+    "id": "maclauncher-steam-bridge",
+    "sectionLabel": "Steam client bridge",
+    "tabLabel": "Steam client bridge",
+    "category": "compatibility"
+  },
+  "discover": {
+    "type": "builds-catalog",
+    "catalog": "https://raw.githubusercontent.com/procrastinine/maclauncher-builds/main/catalogs/maclauncher-steam-bridge.json"
+  },
+  "assets": [
+    {
+      "match": "\\.(?:zip|tar\\.(?:gz|xz|zst))$",
+      "declares": {
+        "macho": [
+          "arm64",
+          "x86_64"
+        ],
+        "pe": [
+          "i386",
+          "x86_64"
+        ]
+      }
+    }
+  ],
+  "verify": [],
+  "layout": {
+    "type": "archive",
+    "entry": "steam.exe"
+  },
+  "labels": {
+    "source": "Proton lsteamclient"
+  },
+  "interfaces": {
+    "provides": [
+      "steam:client"
+    ],
+    "requires": []
+  },
+  "license": "LGPL-2.1",
+  "credits": {
+    "url": "https://github.com/ValveSoftware/Proton"
+  }
+}

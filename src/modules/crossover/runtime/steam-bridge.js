@@ -3,7 +3,8 @@ const path = require('node:path');
 const os = require('node:os');
 const Bundled = require('../../shared/runtime/bundled-native');
 const { wineLayout } = require('../../shared/runtime/wine-layout');
-const { createProjectBuildManager } = require('../../shared/runtime/project-build-manager');
+const { createSourceBackedManager } = require('../../../runtime-sources/manager');
+const source = require('../../../runtime-sources/steam-bridge/maclauncher-steam-bridge.json');
 const { compareRuntimeVersions } = require('../../shared/runtime/pinned-native-manager');
 const { readJsonObject, writeJsonAtomic } = require('../../../core/json-files');
 const Clients = require('../../shared/reshade/steam-client-models');
@@ -12,7 +13,7 @@ const ClientStart = require('../../shared/runtime/steamworks/client-start');
 const { readGameAppId } = require('../../shared/runtime/steamworks/app-id');
 const Components = require('./steam-client-components');
 const Adapter = require('../../../runtime-adapters/steam-bridge');
-const id = 'maclauncher-steam-bridge';
+const id = source.manager.id;
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
 function identify(entry) {
   for (const candidate of [entry?.gamePath, entry?.importPath, entry?.contentRootDir]) {
@@ -52,18 +53,12 @@ function clientRoot(home = os.homedir()) {
   return null;
 }
 function create({ dependencies = {}, identifyGame = identify, discoverClient = clientRoot, isRunning = ClientStart.clientRunning } = {}) {
-  const base = createProjectBuildManager({ projectId: id, label: 'Steam client bridge', repository: 'procrastinine/maclauncher-builds', upstreamUrl: 'https://github.com/ValveSoftware/Proton', upstreamLabel: 'Proton lsteamclient',
-    manifestRelative: 'manifest.json', executableRelative: 'steam.exe', dataOnly: true, supportsDefault: false,
-    validateManifest(manifest) {
-      if (manifest.managerId !== id || !manifest.steamBridge?.native || !manifest.steamBridge?.windows || !manifest.steamBridge?.clientEnvironment)
-        throw new Error('The Steam bridge package lacks the managed loader paths required by this launcher and needs replacement.');
-    }, async verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); }, dependencies });
-  // The Wine runtimes share one managed row under Compatibility, after their
-  // own tabs. Play uses only managed versions, so the row offers no custom
-  // registration.
-  const manager = { ...base, ui: { groupId: 'steam-bridge', tabLabel: 'Steam client bridge', sectionLabel: 'Steam client bridge',
-    management: 'managed', order: 203, category: 'compatibility' }, distributionRequired: false, customRuntime: false };
-  delete manager.registerCustomRuntime;
+  const base = createSourceBackedManager({ id, source, adapter: Adapter, dependencies });
+  // One backend retains every installed version and its existing state.
+  const manager = Object.assign(Object.create(base), { ui: { ...base.ui, groupId: source.kind, tabLabel: source.manager.tabLabel,
+    sectionLabel: source.manager.sectionLabel, management: 'managed', order: source.order, category: source.manager.category },
+    distributionRequired: false, customRuntime: false });
+  manager.registerCustomRuntime = undefined;
   const skippedPath = directory => path.join(directory, 'runtimes/steam-bridge-skipped.json');
   const skipped = directory => readJsonObject(skippedPath(directory))?.apps || [];
   function skipOptional(plan, { userDataDir } = {}) {
