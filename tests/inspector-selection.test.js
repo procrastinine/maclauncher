@@ -107,7 +107,7 @@ test("runtime settings choice lists read through the prepared inspector worker",
   // Sikarugir, WineCX and CrossOver declare their translator menus this way.
   const wine = require("../src/modules/crossover/main").manifest;
   for (const runtimeId of ["sikarugir", "winecx", "crossover"].filter(id => wine.runtime.entries[id]))
-    assert.ok(resolveRuntimeSettingsSchema(wine, runtimeId).fields.some(field => field.key === "translatorRenderer" && field.optionsAction === "listTranslatorOptions"), runtimeId);
+    assert.ok(resolveRuntimeSettingsSchema(wine, runtimeId).fields.some(field => field.key === "translatorRenderer" && field.optionsAction === "listRuntimeRoles"), runtimeId);
 });
 
 // The inspector's lane keeps listed installations and verified app bundles

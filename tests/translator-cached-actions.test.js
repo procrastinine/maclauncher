@@ -54,11 +54,11 @@ test('warm actual backend translator choices and recorded status stay available 
   const { createBackendOperations } = require('../src/core/backend-operations');
   const backend = createBackendOperations({ userDataDir: f.userDataDir, registry });
   t.after(() => backend.beginShutdown());
-  const choices = await backend.moduleAction(entry, 'listTranslatorOptions', { runtimeSettings }, {}, { runtimeId: 'crossover' });
-  assert.ok(choices && typeof choices === 'object' && !Array.isArray(choices));
-  assert.ok(choices.translatorD3D9Options.some(option => option.value === runtimeSettings.translatorRenderer && /DXVK 3\.1\.1/.test(option.label)));
-  const settingsChoices = await backend.moduleSettingsAction('crossover', 'listTranslatorOptions', { runtimeId: 'crossover', runtimeSettings });
-  assert.deepEqual(settingsChoices.translatorD3D9Options, choices.translatorD3D9Options);
+  const choices = await backend.moduleAction(entry, 'listRuntimeRoles', { runtimeSettings }, {}, { runtimeId: 'crossover' });
+  assert.ok(choices.roleKeys.includes('translatorD3D9'));
+  assert.ok(choices.translatorD3D9.some(option => option.value === 'source:crossover-dxvk' && option.label === 'CrossOver DXVK'));
+  const settingsChoices = await backend.moduleSettingsAction('crossover', 'listRuntimeRoles', { runtimeId: 'crossover', runtimeSettings });
+  assert.deepEqual(settingsChoices.translatorD3D9, choices.translatorD3D9);
   const status = await backend.moduleAction(entry, 'runtimeStatus', {}, {}, { runtimeId: 'crossover' });
   assert.equal(status.ready, true); assert.deepEqual(status.translatorRows, recordedRows); assert.equal(status.graphicsInputs.architecture, 'x86_64');
   assert.ok(status.details.some(row => row.label === 'Direct3D 9' && /DXVK 3\.1\.1/.test(row.value)));
