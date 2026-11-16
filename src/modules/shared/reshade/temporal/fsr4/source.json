@@ -24,7 +24,10 @@
   "supportedProfiles": [
     "exact-fast",
     "lite",
-    "lite2"
+    "lite2",
+    "int8-lite",
+    "lossy2-412",
+    "int8-lite-lossy"
   ],
   "legacyPayloads": [
     {
@@ -67,6 +70,64 @@
       ],
       "ultraPerformanceModel": "lite",
       "inferenceReuse": true
+    },
+    {
+      "id": "int8-lite",
+      "upstreamProfile": "int8-lite",
+      "nativeProfile": "int8-lite",
+      "model": "4.1.2",
+      "license": "AMD upstream terms",
+      "userData": true
+    },
+    {
+      "id": "lossy2-412",
+      "upstreamProfile": "lossy2",
+      "nativeProfile": "lossy2",
+      "model": "4.1.2",
+      "license": "GPL-2.0-or-later"
+    },
+    {
+      "id": "int8-lite-lossy",
+      "upstreamProfile": "int8-lite-lossy",
+      "nativeProfile": "int8-lite-lossy",
+      "model": "4.1.2",
+      "license": "AMD upstream terms and GPL-2.0-or-later",
+      "userData": true
     }
-  ]
+  ],
+  "legacyProfileContracts": [
+    {
+      "id": "exact-fast",
+      "upstreamProfile": "exact-fast",
+      "nativeProfile": "exact",
+      "model": "4.1.1.2740",
+      "license": "MIT"
+    },
+    {
+      "id": "lite",
+      "upstreamProfile": "lossy",
+      "nativeProfile": "lossy",
+      "model": "4.1.1.2740",
+      "license": "MIT",
+      "inferenceReuse": true
+    },
+    {
+      "id": "lite2",
+      "upstreamProfile": "lossy2",
+      "nativeProfile": "lossy2",
+      "model": "4.1.1.2740",
+      "license": "GPL-2.0-or-later",
+      "trainedLayers": [
+        1,
+        2,
+        4,
+        5,
+        10,
+        12
+      ],
+      "ultraPerformanceModel": "lite",
+      "inferenceReuse": true
+    }
+  ],
+  "providerVersion": "3.2"
 }

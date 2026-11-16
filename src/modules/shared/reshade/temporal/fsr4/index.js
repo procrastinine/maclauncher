@@ -21,14 +21,10 @@ function inspect(root) {
         return null;
       profiles = [ 'exact-fast' ];
     } else {
+      const contracts=[SOURCE.profiles,SOURCE.legacyProfileContracts];
       if (metadata.profilesAPI !== 1 || metadata.resourcePreparation !== 1 ||
-          !Array.isArray(metadata.supportedProfiles) ||
-          metadata.supportedProfiles.length !==
-              SOURCE.supportedProfiles.length ||
-          metadata.supportedProfiles.some(
-              (name, index) => name !== SOURCE.supportedProfiles[index]) ||
-          JSON.stringify(metadata.profiles) !== JSON.stringify(SOURCE.profiles))
-        return null;
+          !contracts.some(rows=>JSON.stringify(metadata.supportedProfiles)===JSON.stringify(rows.map(p=>p.id)) &&
+            JSON.stringify(metadata.profiles)===JSON.stringify(rows))) return null;
       profiles = [...metadata.supportedProfiles ];
     }
     const library = path.join(directory, metadata.library),
@@ -68,6 +64,18 @@ function resolve(root, {platform = process.platform, macOSVersion, hardwareArch}
   return Requirements.requirementSupport({ ...Requirements.FSR4, minimumMacOS: installed.minimumMacOS }, actual).supported === false
     ? null : installed;
 }
+function profileOptions(installed, userDataDir) {
+  const labels={'exact-fast':'Exact Fast',lite:'Lite (4.1.1)',lite2:'Lite2 (4.1.1)',
+    'int8-lite':'FSR 4.1.2 Lite','lossy2-412':'FSR 4.1.2 Lossy','int8-lite-lossy':'FSR 4.1.2 Lite Lossy'};
+  return SOURCE.profiles.map(profile=>{
+    const supported=installed?.profiles?.includes(profile.id)===true;
+    const data=profile.userData?require('./models').read(userDataDir):null;
+    const ready=supported&&(!profile.userData||data?.profiles.includes(profile.id));
+    return {id:profile.id,label:labels[profile.id],model:profile.model,available:ready,
+      reason:!supported?'The installed FSR 4 provider does not support this profile.':!ready?'Download or import the FSR 4.1.2 model data.':null,
+      ...(profile.userData?{delivery:{...require('./models').descriptor,...(profile.id==='int8-lite-lossy'?{downloadBytes:require('./model.json').archiveBytes+require('./model.json').lossy.archiveBytes}:{}),requiresDownload:!data?.profiles.includes(profile.id),canImport:true}}:{})};
+  });
+}
 function prepare(root, options = {}) {
   const installed = resolve(root, options);
   if (!installed)
@@ -79,11 +87,13 @@ function prepare(root, options = {}) {
   return {
     RESHADE_FSR4_LIBRARY : installed.library,
     FSR4_ROOT : installed.directory,
-    FSR4_BUILD_DIR : installed.build
+    FSR4_BUILD_DIR : installed.build,
+    ...(options.modelEnvironment || {})
   };
 }
 module.exports = {
   inspect,
   resolve,
-  prepare
+  prepare,
+  profileOptions
 };

@@ -89,7 +89,7 @@ function providers(options, root, demand) {
   return { neuralProvider: options.discoverAllProviders===true || !demand || demand.needed.neural ? require("../reshade/neural").resolve(root, options) : null,
     xessProvider:options.discoverAllProviders===true||!demand||demand.methods.temporal.includes("xess")?require("../reshade/xess").state(root,options):null,
     xessGenerationProvider:options.discoverAllProviders===true||!demand||demand.methods.generation.includes("xess")?require("../reshade/xess").state(root,{...options,operation:"interpolate"}):null,
-    graphicsCapabilities: Graphics.capabilities(root, options.graphicsHost, { graphicsInputs: options.graphicsInputs,
+    graphicsCapabilities: Graphics.capabilities(root, options.graphicsHost, { userDataDir:options.userDataDir, graphicsInputs: options.graphicsInputs,
       graphicsArchitecture: options.graphicsArchitecture, macOSVersion: options.macOSVersion,
       graphicsHardware: options.graphicsHardware,
       ...(demand ? { selectedMethods: demand.methods } : {}) }) };

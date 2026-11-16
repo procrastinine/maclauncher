@@ -16,7 +16,7 @@ inline const TemporalControls &temporalControls(){
         std::chrono::steady_clock::time_point next{};
         // The launch selection comes from the native configuration; the control
         // file (MLTMCTL1) replaces it while the process runs.
-        Reader(){const auto &launch=nativeConfig().temporal;const auto &v=launch.method;value.method=v=="metalfx"?1:v=="fsr2"?2:v=="fsr3"?3:v=="fsr4"?4:v=="xess"?5:v=="asr"?6:v=="sgsr2"?7:v=="metalfx-denoised"?8:0;value.sharpness=.5;if(value.method==6){const auto &quality=launch.asrQuality;value.reserved=quality=="balanced"?2:quality=="performance"?3:quality=="ultra-performance"?4:1;}if(value.method==4){const auto &profile=launch.fsr4Profile;value.reserved=profile=="lite"?2:profile=="lite2"?3:0;}}
+        Reader(){const auto &launch=nativeConfig().temporal;const auto &v=launch.method;value.method=v=="metalfx"?1:v=="fsr2"?2:v=="fsr3"?3:v=="fsr4"?4:v=="xess"?5:v=="asr"?6:v=="sgsr2"?7:v=="metalfx-denoised"?8:0;value.sharpness=.5;if(value.method==6){const auto &quality=launch.asrQuality;value.reserved=quality=="balanced"?2:quality=="performance"?3:quality=="ultra-performance"?4:1;}if(value.method==4){const auto &profile=launch.fsr4Profile;value.reserved=profile=="lite"?2:profile=="lite2"?3:profile=="int8-lite"?4:profile=="lossy2-412"?5:profile=="int8-lite-lossy"?6:0;}}
         void poll(){const auto now=std::chrono::steady_clock::now();if(now<next)return;next=now+std::chrono::milliseconds(100);
             const auto &control=nativeConfig().temporal.controlFile;if(!control||control->empty())return;const char *file=control->c_str();
             const int fd=open(file,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);if(fd<0)return;

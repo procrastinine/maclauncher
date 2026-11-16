@@ -13,7 +13,7 @@ function packet(value) {
   bytes.writeUInt32LE(METHOD_ORDINALS[settings.temporalMethod] ?? 0, 8);
   bytes.writeFloatLE(settings.temporalSharpness, 12);
   if(settings.temporalMethod==="asr")bytes.writeUInt32LE(["quality","balanced","performance","ultra-performance"].indexOf(settings.asrQuality)+1,20);
-  if(settings.temporalMethod==="fsr4")bytes.writeUInt32LE(settings.fsr4Profile==="lite"?2:settings.fsr4Profile==="lite2"?3:0,20);
+  if(settings.temporalMethod==="fsr4")bytes.writeUInt32LE(settings.fsr4Profile==="lite"?2:settings.fsr4Profile==="lite2"?3:settings.fsr4Profile==="int8-lite"?4:settings.fsr4Profile==="lossy2-412"?5:settings.fsr4Profile==="int8-lite-lossy"?6:0,20);
   return bytes;
 }
 function file(entry, userDataDir) {

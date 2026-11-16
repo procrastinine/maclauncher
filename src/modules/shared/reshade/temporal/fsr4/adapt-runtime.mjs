@@ -150,3 +150,21 @@ kernel void fsr411_compose(texture2d<float,access::read> model [[texture(0)]],
                         .replaceAll('mix.x', 'fraction.x')
                         .replaceAll('mix.y', 'fraction.y');
 }
+
+// Lite uses the same resource boundary but its user-side MSL bundles have a
+// separate loader in upstream's include file.
+export function adaptLiteSession(original) {
+  const replace=(before,after)=>{if(original.split(before).length!==2)throw Error('FSR4 Lite adaptation changed: '+before.slice(0,80));original=original.replace(before,after);};
+  replace('    if(lossy && !run(@[@"python3",ns(root_+"/tools/fsr412/model_data.py"),@"--verify",@"--root",ns(root_)],error)) return nullptr;',
+    '    // Immutable initializer and native cache identities are validated below.');
+  replace('NSError *e=nil;auto lib=[device_ newLibraryWithURL:[NSURL fileURLWithPath:ns(buildDir_+"/"+key+"/"+utf8(entry[@"library"]))] error:&e];',
+    `NSError *e=nil;
+        NSString *source=[NSString stringWithContentsOfFile:ns(buildDir_+"/"+key+"/"+utf8(entry[@"library"])) encoding:NSUTF8StringEncoding error:&e];
+        MTLCompileOptions *co=[MTLCompileOptions new];co.languageVersion=MTLLanguageVersion2_3;
+        // Lite's translated integer/ordered floating point shaders use the
+        // same arithmetic as the upstream source build.
+        auto lib=source?[device_ newLibraryWithSource:source options:co error:&e]:nil;`);
+  replace('        expectedHash=receipt[@"initializers"][@"initializers-lite-lossy.bin"];',
+    '        expectedHash=@"c77c2d1a4d119ed76d94b8c23335490cc38280db3346c72396a1e1acb0523cfc";\n        if(![receipt[@"schema"] isEqual:@"fsr412_lite_lossy_import_v1"] || ![receipt[@"source_dll_sha256"] isEqual:@"d9b0a1f5781c2d633a327272f6f1c8607057df7cafd0233cf38c7395c8f7dbc5"] || ![receipt[@"initializers"][@"initializers-lite-lossy.bin"] isEqual:expectedHash]) {error="Lite Lossy source identity mismatch";return nullptr;}');
+  return original;
+}

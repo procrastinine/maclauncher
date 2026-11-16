@@ -1,7 +1,7 @@
 # FSR 4 Metal provider notices
 
-The native FSR 4.1.1 implementation is adapted from
-[fsr4-native-macos](https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos/tree/329d1d7367b6b948a53486505198a5d254f02809)
+The native FSR 4.1.1 and 4.1.2 implementation is adapted from
+[fsr4-native-macos](https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos/tree/e9d12070dd9b81dc7ec1725368c71a4d3859a108)
 by UzenUPoZiTiV4ik. The runtime and native Metal implementation declare
 `SPDX-License-Identifier: MIT` in their source files.
 
@@ -44,3 +44,5 @@ Their hashes and distinct profile identities are recorded in `provider.json`.
 Lite2 uses the unchanged Lite network for Ultra Performance; its six trained
 layers apply to the normal model family. The exact-fast default retains the
 original AMD model coefficients.
+
+FSR 4.1.2 Lite initializers and translated shaders remain user-side data from the upstream v3.2 release and retain their upstream terms. Lite Lossy training data is decoded from the GPL-2.0-or-later November 1 release of fsr4-shader-performance-overrides. The macOS DXC decoder comes from the same user-side kit; its original upstream licensing applies.

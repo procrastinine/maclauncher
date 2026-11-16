@@ -96,7 +96,7 @@ function mergeEnvironment(base, effect) {
   const result = { ...base, ...effect };
   if (effect.DYLD_INSERT_LIBRARIES) {
     // A shared-processor-only launch must not inherit a prior effect or model.
-    for (const key of Object.keys(base)) if ((key.startsWith("RESHADE_") || ["FSR4_ROOT", "FSR4_BUILD_DIR"].includes(key)) && !Object.hasOwn(effect, key)) delete result[key];
+    for (const key of Object.keys(base)) if ((key.startsWith("RESHADE_") || ["FSR4_ROOT", "FSR4_BUILD_DIR", "FSR4_MODEL_ROOT", "FSR4_MODEL_BUILD_DIR"].includes(key)) && !Object.hasOwn(effect, key)) delete result[key];
     result.DYLD_INSERT_LIBRARIES = [...new Set([base.DYLD_INSERT_LIBRARIES, effect.DYLD_INSERT_LIBRARIES].flatMap(value => (value || "").split(":")).filter(Boolean))].join(":");
     result.STEAM_DYLD_INSERT_LIBRARIES = [...new Set([base.STEAM_DYLD_INSERT_LIBRARIES, effect.STEAM_DYLD_INSERT_LIBRARIES, result.DYLD_INSERT_LIBRARIES].flatMap(value => (value || "").split(":")).filter(Boolean))].join(":");
   }

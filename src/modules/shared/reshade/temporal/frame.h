@@ -31,12 +31,13 @@ typedef struct RSTemporalFrame {
     float nearPlane, farPlane, verticalFov;
     uint32_t commandBufferKind; // 0: MTLCommandBuffer, 1: MTL4CommandBuffer
     // ASR: 0/1 quality, 2 balanced, 3 performance, 4 ultra performance.
-    // FSR4: 0/1 exact-fast, 2 Lite, 3 Lite2. Other methods require zero.
+    // FSR4: 0/1 exact-fast, 2 Lite, 3 Lite2, 4 int8-lite,
+    // 5 lossy2-412, 6 int8-lite-lossy. Other methods require zero.
     // Profiles are independent of actual producer render/output extents.
     uint32_t reserved;
 } RSTemporalFrame;
 static inline int rsTemporalFrameOptionsValid(const RSTemporalFrame *frame) {
-    return frame && (frame->method == RS_TEMPORAL_ASR ? frame->reserved <= 4 : frame->method == RS_TEMPORAL_FSR4 ? frame->reserved <= 3 : frame->reserved == 0);
+    return frame && (frame->method == RS_TEMPORAL_ASR ? frame->reserved <= 4 : frame->method == RS_TEMPORAL_FSR4 ? frame->reserved <= 6 : frame->reserved == 0);
 }
 typedef struct RSTemporalResult {
     uint32_t size, version, status, encoded;
@@ -71,7 +72,8 @@ typedef const RSTemporalProvider *(*RSGetTemporalProvider)(uint32_t version);
 // stays unchanged so existing immutable providers remain loadable.
 typedef int (*RSPrepareTemporalResources)(const RSTemporalFrame *, RSTemporalResult *);
 // Optional rsTemporalProviderProfiles returns supported reserved-profile bits.
-// A missing symbol admits only the original FSR4 exact-fast profile.
+// FSR4 indices 0/1 exact-fast, 2 lite, 3 lite2, 4 int8-lite, 5 lossy2-412,
+// 6 int8-lite-lossy. A missing symbol admits only original exact-fast.
 typedef uint32_t (*RSTemporalProviderProfiles)(uint32_t method);
 // Dispatcher support, including optional libraries that may be uninstalled.
 // Installation and actual frame inputs are checked separately.

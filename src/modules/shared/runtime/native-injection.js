@@ -94,7 +94,7 @@ function withoutGraphics(environment, graphics, original = {}) {
     const retained = String(result[key] || "").split(path.delimiter).filter(file => file && !libraries.has(file));
     if (retained.length) result[key] = retained.join(path.delimiter);else delete result[key];
   }
-  for (const key of Object.keys(graphics || {})) if (key.startsWith("RESHADE_") || ["FSR4_ROOT", "FSR4_BUILD_DIR"].includes(key)) {
+  for (const key of Object.keys(graphics || {})) if (key.startsWith("RESHADE_") || ["FSR4_ROOT", "FSR4_BUILD_DIR", "FSR4_MODEL_ROOT", "FSR4_MODEL_BUILD_DIR"].includes(key)) {
     if (Object.hasOwn(original, key) && original[key] !== graphics[key]) result[key] = original[key];else delete result[key];
   }
   return result;

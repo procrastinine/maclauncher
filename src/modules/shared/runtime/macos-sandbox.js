@@ -154,7 +154,7 @@ async function isolateGraphics(graphics, directory, writableDirectory, signal) {
 }
 
 async function scopeGraphics(graphics, directory, writableDirectory, signal) {
-  const result = Object.fromEntries(Object.entries(graphics).filter(([key]) => key.startsWith("RESHADE_") || ["FSR4_ROOT", "FSR4_BUILD_DIR"].includes(key)));
+  const result = Object.fromEntries(Object.entries(graphics).filter(([key]) => key.startsWith("RESHADE_") || ["FSR4_ROOT", "FSR4_BUILD_DIR", "FSR4_MODEL_ROOT", "FSR4_MODEL_BUILD_DIR"].includes(key)));
   const readable = [],executables=[],extensionRead=[],extensionWrite=[];let capabilities="";
   let compilerCachesGranted=false;
   const grantCompilerCaches=async()=>{

@@ -1,3 +1,4 @@
+export type TemporalProfileOption = {id:string;label:string;model:string;available:boolean;reason:string|null;delivery?:{managerId:string;version:string;label:string;sourceUrl:string;downloadBytes:number;requiresDownload:boolean;canImport:boolean}};
 import type { TranslatorEnvironmentDeclaration, TranslatorEnvironmentStore, TranslatorEnvironmentValues }
   from "../../../modules/shared/runtime/translator-environment.mjs";
 
@@ -269,7 +270,7 @@ export type GameGraphicsSettings = { spatialShader?: GameReShadeSettings | null;
   neuralMethod: "off" | "mlx-dlss"; neuralModelPath: string | null; neuralInputScale: number | null; neuralInputHeight: number | null; neuralIntensity: number; neuralTemporal: boolean;
   temporalMethod: "off" | "metalfx" | "metalfx-denoised" | "fsr2" | "fsr3" | "fsr4" | "xess" | "asr" | "sgsr2"; temporalSharpness: number;
   asrQuality?: "quality" | "balanced" | "performance" | "ultra-performance";
-  fsr4Profile?: "exact-fast" | "lite" | "lite2";
+  fsr4Profile?: "exact-fast" | "lite" | "lite2" | "int8-lite" | "lossy2-412" | "int8-lite-lossy";
   xessBackend?: "auto" | "d3d12" | "vulkan";
   effectPlacement: "before" | "after";
   spatialMultiplier: number | null; spatialSharpness: number; ls1Mode: "quality" | "performance"; frameGeneration: "off" | "lsfg" | "metalfx" | "fsr3" | "xess"; frameMultiplier: number;
@@ -281,7 +282,7 @@ export type GraphicsInputs = { cameraProjection: boolean; source: string; method
   sourceResolution?: false | { heights: boolean; multipliers: number[]; percentages?:boolean;processing?:boolean;control?: string; live?: boolean; methods?: string[]; methodLabels?: Record<string, string>; filterExclusiveWithTemporal?: boolean }; spatialBindingsNextLaunch?: boolean;
   depth?: boolean; motionVectors?: boolean; viewMatrix?: boolean; projectionMatrix?: boolean; sceneAovAPI?:1;sceneAovs?:string[];noisyColor?:boolean;architecture?: "arm64" | "x86_64";
   temporalSource?: string; temporalOutput?: string; commandBuffer?: string };
-export type GraphicsCapabilities = { hardware?:GraphicsHardware; spatial: boolean; temporal?: boolean; temporalMethods?: string[]; temporalProfiles?: Record<string,string[]>; cameraTemporalMethods?: string[]; effectPlacement?: boolean; frameGeneration: boolean; adaptive?: boolean; motionClarity?: boolean; depthInput?: boolean; comparison?: boolean; adaptiveQuality?: boolean; staticContent?: boolean; performanceHud?: boolean; frameRateCap?: boolean; presentationOptions?: boolean; outputColor?: boolean; lsfgHDR?: boolean; shaderInputPolicy?: boolean; liveSwitching?: boolean; virtualWindow?: boolean | {activationAPI: 1; autoAPI?: 1; percentageAPI?: 1; channelAPI?: 1}; spatialMethods: string[]; spatialMethodLabels?: Record<string, string>; frameGenerationMethods: string[]; resolutionMultipliers?: number[]; resolutionScope?: "metal" };
+export type GraphicsCapabilities = { hardware?:GraphicsHardware; spatial: boolean; temporal?: boolean; temporalMethods?: string[]; temporalProfiles?: Record<string,string[]>; temporalProfileOptions?: Record<string,TemporalProfileOption[]>; cameraTemporalMethods?: string[]; effectPlacement?: boolean; frameGeneration: boolean; adaptive?: boolean; motionClarity?: boolean; depthInput?: boolean; comparison?: boolean; adaptiveQuality?: boolean; staticContent?: boolean; performanceHud?: boolean; frameRateCap?: boolean; presentationOptions?: boolean; outputColor?: boolean; lsfgHDR?: boolean; shaderInputPolicy?: boolean; liveSwitching?: boolean; virtualWindow?: boolean | {activationAPI: 1; autoAPI?: 1; percentageAPI?: 1; channelAPI?: 1}; spatialMethods: string[]; spatialMethodLabels?: Record<string, string>; frameGenerationMethods: string[]; resolutionMultipliers?: number[]; resolutionScope?: "metal" };
 export type NeuralEffectSettings = {modelPath: string | null; temporal: boolean; intensity: number; denoiseStrength?: number};
 /** A sizing helper names the row that owns it. Only resize rows carry it; the edit operations keep it consistent. */
 export type EffectOwnership = {id: string; role: "input" | "fit"};
@@ -302,6 +303,7 @@ export type EffectCatalogRow = { id: string; kind: VideoEffectNode["kind"]; labe
   sourceRevision?: string;
   recommendedPlacement?:"after-upscale"|"during-upscale";
   profiles?: string[];
+  profileOptions?: TemporalProfileOption[];
   intrinsicScale?: number;
   intrinsicScales?: number[];
   nodeId?: string; selectionKey?: string;

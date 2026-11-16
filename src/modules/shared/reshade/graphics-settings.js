@@ -38,7 +38,7 @@ const valid = {
   temporalMethod: value => TEMPORAL_METHODS.includes(value),
   temporalSharpness: value => within(value, 0, 1),
   asrQuality: value => ["quality","balanced","performance","ultra-performance"].includes(value),
-  fsr4Profile: value => ["exact-fast","lite","lite2"].includes(value),
+  fsr4Profile: value => ["exact-fast","lite","lite2","int8-lite","lossy2-412","int8-lite-lossy"].includes(value),
   xessBackend: value => ["auto","d3d12","vulkan"].includes(value),
   effectPlacement: value => ["before", "after"].includes(value),
   spatialMultiplier: value => value === null || SourceResolution.REQUEST_DIVISORS.includes(value),
@@ -90,6 +90,7 @@ function normalizeCapabilities(graphics, presentation) {
     downsampleMethods: Array.isArray(graphics?.downsampleMethods) ? graphics.downsampleMethods.filter(spatialMethod) : [],
     temporal: presentation?.temporal === true,
     temporalProfiles:graphics?.temporalProfiles||{},
+    temporalProfileOptions:graphics?.temporalProfileOptions||{},
     providerTemporalMethods:Array.isArray(graphics?.temporalMethods)?TEMPORAL_METHODS.filter(method=>method!=="off"&&graphics.temporalMethods.includes(method)):[],
     effectPlacement: presentation?.effectPlacement === true,
     temporalMethods: presentation?.temporal === true && Array.isArray(graphics?.temporalMethods)
@@ -143,6 +144,8 @@ function capabilities(root, host, options = {}) {
     const portable=["fsr2","fsr3","fsr4","asr","sgsr2"],providers=require("./temporal/providers").resolve(root,options,graphics.temporalMethods||[]),installed=providers.flatMap(value=>value.methods);
     graphics.temporalProfiles={...graphics.temporalProfiles,...Object.fromEntries(providers.flatMap(({methods,installed})=>
       Array.isArray(installed.profiles)?methods.map(method=>[method,[...installed.profiles]]):[]))};
+    const fsr4=providers.find(value=>value.methods.includes("fsr4"));
+    if(fsr4)graphics.temporalProfileOptions={...graphics.temporalProfileOptions,fsr4:fsr4.api.profileOptions(fsr4.installed,options.userDataDir)};
     graphics.temporalMethods=graphics.temporalMethods?.filter(method=>!portable.includes(method)||installed.includes(method));
     if(graphics.xessSceneAPI===1&&(!options.selectedMethods||options.selectedMethods.temporal?.includes("xess"))&&require("./xess").resolve(root,options))
       graphics.temporalMethods=[...new Set([...(graphics.temporalMethods||[]),"xess"])];
@@ -193,10 +196,10 @@ function capabilities(root, host, options = {}) {
     return result;
   } catch { return normalizeCapabilities(null, null); }
 }
-async function prepare(value, { root, userDataDir, signal, graphicsHost = null, graphicsInputs = null, graphicsCapabilities, resolveModel = Models.resolveModel, useModel, logger,allowPendingInputs=false,stageDirection } = {}) {
+async function prepare(value, { root, userDataDir, signal, graphicsHost = null, graphicsInputs = null, graphicsCapabilities, resolveModel = Models.resolveModel, useModel, logger,allowPendingInputs=false,stageDirection,...modelContext } = {}) {
   const settings = normalizeSettings(value);
   if (!enabled(settings) && settings.effectPlacement === "before") return {};
-  const support = graphicsCapabilities || capabilities(root, graphicsHost, { graphicsInputs });
+  const support = graphicsCapabilities || capabilities(root, graphicsHost, { graphicsInputs,userDataDir });
   if (settings.effectPlacement === "after" && !support.effectPlacement)
     throw unavailable("This graphics runtime requires ReShade effects before spatial scaling. Choose Before spatial scaling.");
   const placementEnvironment = support.effectPlacement ? { RESHADE_EFFECT_PLACEMENT: settings.effectPlacement } : {};
@@ -221,6 +224,14 @@ async function prepare(value, { root, userDataDir, signal, graphicsHost = null, 
     throw unavailable("The selected frame-generation method does not produce this frame multiplier. Choose a supported multiplier.");
   if (settings.frameGeneration !== "off" && settings.framePacing === "adaptive" && !support.adaptive)
     throw unavailable("Adaptive frame generation is unavailable for this runtime. Choose Fixed.");
+  let fsr4ModelEnvironment={};
+  if(settings.temporalMethod==='fsr4' && ['int8-lite','int8-lite-lossy'].includes(settings.fsr4Profile)) {
+    const library=require('./temporal/fsr4/models');
+    const current=library.read(userDataDir);
+    const installed=current?.profiles.includes(settings.fsr4Profile)?current:await library.install({...modelContext,root,userDataDir,signal,fsr4Profile:settings.fsr4Profile});
+    if(!installed?.profiles.includes(settings.fsr4Profile))throw unavailable('Import the selected FSR 4.1.2 model data in Runtimes.');
+    fsr4ModelEnvironment=library.environment(userDataDir,settings.fsr4Profile);
+  }
   const required = [];
   if (settings.spatialMethod === "ls1") required.push(settings.ls1Mode === "quality" ? "ls1Quality" : "ls1Performance");
   if (settings.frameGeneration === "lsfg") required.push("lsfg" + (settings.lsfgFp16 ? "Fp16" : "Fp32") + (settings.lsfgMode === "quality" ? "Quality" : "Performance"));
@@ -236,7 +247,7 @@ async function prepare(value, { root, userDataDir, signal, graphicsHost = null, 
     ...(support.temporal ? { RESHADE_TEMPORAL_METHOD: settings.temporalMethod, RESHADE_TEMPORAL_SHARPNESS: String(settings.temporalSharpness) } : {}),
     ...(settings.temporalMethod==="asr"?{RESHADE_ASR_QUALITY:settings.asrQuality}:{}),
     ...(settings.temporalMethod==="fsr4"?{RESHADE_FSR4_PROFILE:settings.fsr4Profile}:{}),
-    ...require("./temporal/providers").prepare(root,{},[settings.temporalMethod]),
+    ...require("./temporal/providers").prepare(root,{fsr4Profile:settings.fsr4Profile,modelEnvironment:fsr4ModelEnvironment},[settings.temporalMethod]),
     ...(settings.frameGeneration==="fsr3"?require("./generation/fsr3").prepare(root):{}),
     ...(sourceAvailable ? { ...SourceResolution.environment(sourceSupport),
       [["engine", "virtual"].includes(sourceSupport.control) ? "RESHADE_RENDER_MULTIPLIER" : "RESHADE_RESOLUTION_MULTIPLIER"]: String(settings.spatialMultiplier) } : {}),

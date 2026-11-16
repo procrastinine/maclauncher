@@ -1,18 +1,20 @@
 # FSR4 Metal provider
 
-The provider records FSR4.1.1 temporal upscaling into borrowed Metal commands.
+The provider records FSR4.1.1 and FSR4.1.2 temporal upscaling into borrowed Metal commands.
 `rsGetTemporalProvider(1)` exposes the common temporal frame API. Native scene
 producers and translated renderers use the same color, depth, motion, jitter,
 exposure and ROI contract. Camera FOV, view and projection matrices are not inputs
 to this provider. The source color is linear RGB.
 
-Three profiles select distinct upstream models and execution policies:
+Profiles select distinct upstream models and execution policies:
 
 | Profile | Model and execution |
 | --- | --- |
 | Exact Fast | Original AMD coefficients with relaxed PRE/POST arithmetic; inference every frame. This is the default. |
 | Lite | Upstream folded coefficients, rounding and guarded inference reuse. |
 | Lite2 | Lite execution with six trained integer-weight layers for the normal model family. Ultra Performance retains the unchanged Lite model. |
+
+Additional profiles are FSR 4.1.2 Lite, FSR 4.1.2 Lossy and FSR 4.1.2 Lite Lossy.
 
 Profile selection uses `RSTemporalFrame.reserved`: zero or one selects Exact Fast,
 two selects Lite and three selects Lite2. The optional
@@ -57,3 +59,27 @@ separate identities. Their exact sources are declared in `source.json`.
 
 The macOS15 floor follows the guarded shader-math API and Metal3 SIMD
 path. Metal4 tensors, argument tables and residency APIs retain macOS26 guards.
+
+FSR 4.1.2 profiles use additional reserved indices: `int8-lite` (4),
+`lossy2-412` (5), and `int8-lite-lossy` (6). Legacy Exact Fast, Lite and Lite2
+retain indices 0/1, 2 and 3, their saved IDs and model coefficients. The updated
+Lossy model uses the October 29 trained weights and depth-edge speck clamp in a
+separate profile. Legacy Lite2 resources use a separate build namespace.
+
+AMD's 4.1.2 Lite data and 170 translated shaders come from the original
+fsr4-native-macos v3.2 release zip. Installation follows explicit consent or a
+local import and prepares the data in the launcher profile with the included
+interpreter. The provider package contains the MIT preparation code. It does
+not contain the restricted Lite initializers or translated shaders. Lite Lossy
+also uses the separately pinned GPL training release, read statically with the
+upstream macOS DXC helper from the verified kit. No Windows DLL is executed.
+A matching local `fsr412_model` folder and sibling `fsr412_lossy` data can be
+imported without a download. A usable installed profile never asks for consent.
+
+The shared frame API serves native MetalFX, Godot, DXMT, NGX, FidelityFX and
+explicit scene producers. The provider has no Wine-specific input path.
+M1–M4 SIMD uses exact Winograd for eligible CNB16/FNB32 kernels, vector integer
+epilogues and shared CT2D weights. Lite POST uses upstream's shared color tile.
+Per-subpixel trained biases, conditional first-tap biases and native/shader cache
+revision checks follow the v3.2 source. Original/tiled experimental profiles and
+optional pixelization/new-look controls are separate upstream options.

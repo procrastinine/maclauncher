@@ -174,7 +174,7 @@ function catalog({ reshadeState = {}, graphicsCapabilities = {}, graphicsInputs 
       rows.push({ id: kind + ":" + method, kind, label: method === "downsample" ? "Downsample" : support.spatialMethodLabels?.[method] || METHODS[method]?.label || (method.startsWith("libplacebo:") ? require("./presentation.mjs").libplaceboFilterLabel(method.slice(11)) : method),
         group: resize ? "Resize" : "Temporal", category,
         ...(["ls1","lsfg"].includes(method)?{traits:{neural:true}}:{}),
-        ...(method==="fsr4"?{profiles:support.temporalProfiles?.fsr4||["exact-fast"]}:{}),
+        ...(method==="fsr4"?{profiles:support.temporalProfiles?.fsr4||["exact-fast"],profileOptions:support.temporalProfileOptions?.fsr4||[]}:{}),
         ...(method==="xess"?{backends:xess?.backends||[],runtimeManagerId:"graphics-xess",availableWithoutRuntime:xess?.availableWithoutRuntime===true}:{}),
         ...(support.colorPipeline&&["ls1","lsfg"].includes(method)?{colorPolicy:method==="lsfg"&&support.lsfgHDR?Providers.SCRGB_COLOR_POLICY:Providers.SDR_COLOR_POLICY}:{}),
         inputContract:{domain:scene?"scene":kind==="frame-generation"?"image-pair":"image",color:"rgb",requires:[...sceneRequirements,...(kind==="frame-generation"?["opaque"]:[])],acceptsSynthetic:!scene},

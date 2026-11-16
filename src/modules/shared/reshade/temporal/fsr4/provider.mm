@@ -49,12 +49,21 @@ struct Owner {
   bool hasFrame = false, preparing = false, retired = false;
 };
 struct Context {
-  fsr411::Runtime runtime;
+  fsr411::Runtime runtime, legacyRuntime;
+  std::unique_ptr<fsr411::Runtime> liteRuntime;
+  fsr411::Runtime &forProfile(uint32_t profile) {
+    if ((profile == 4 || profile == 6) && liteRuntime) return *liteRuntime;
+    return profile == 3 ? legacyRuntime : runtime;
+  }
   std::map<void *, std::shared_ptr<Owner>> owners;
   std::vector<std::shared_ptr<fsr411::View>> retired;
   std::atomic<bool> retirementScheduled{false}, hasRetired{false};
   Context(id<MTLDevice> d, const char *root, const char *build)
-      : runtime(d, root, build) {}
+      : runtime(d, root, build), legacyRuntime(d, root, (std::string(build)+"/legacy-lite2").c_str()) {
+    const char *modelRoot=std::getenv("FSR4_MODEL_ROOT"), *modelBuild=std::getenv("FSR4_MODEL_BUILD_DIR");
+    if(modelRoot && modelRoot[0]=='/' && modelBuild && modelBuild[0]=='/')
+      liteRuntime=std::make_unique<fsr411::Runtime>(d,modelRoot,modelBuild);
+  }
   void collect() {
     retired.erase(std::remove_if(retired.begin(), retired.end(),
                                  [](const auto &v) {
@@ -135,6 +144,10 @@ fsr411::Options options(const RSTemporalFrame &f) {
   o.profile = f.reserved == 2   ? fsr411::Profile::Lossy
               : f.reserved == 3 ? fsr411::Profile::Lossy2
                                 : fsr411::Profile::ExactFast;
+  o.modelLite = f.reserved == 4 || f.reserved == 6;
+  if (f.reserved == 4) o.profile = fsr411::Profile::Int8Lite;
+  if (f.reserved == 5) o.profile = fsr411::Profile::Lossy2;
+  if (f.reserved == 6) o.profile = fsr411::Profile::Int8LiteLossy;
   o.allowCompile = false;
   o.ultraPerformance =
       f.renderWidth && double(f.outputWidth) / f.renderWidth >= 2.99;
@@ -182,7 +195,7 @@ Contract contract(const RSTemporalFrame &f) {
 }
 std::string validate(const RSTemporalFrame *f) {
   if (!f || f->size < sizeof(*f) || f->version != 1 ||
-      f->method != RS_TEMPORAL_FSR4 || f->reserved > 3 ||
+      f->method != RS_TEMPORAL_FSR4 || f->reserved > 6 ||
       f->commandBufferKind > 1)
     return "Invalid FSR4 temporal frame or model profile";
   if (!f->owner || !f->commandBuffer || !f->color || !f->depth || !f->motion ||
@@ -255,7 +268,7 @@ void prepare(std::shared_ptr<Context> context, std::shared_ptr<Owner> owner) {
           @try {
             auto f = frame(request->value);
             auto o = options(request->value);
-            ready = context->runtime.prepare_resources(
+            ready = context->forProfile(request->value.reserved).prepare_resources(
                 *view, f, o, request->value.commandBufferKind == 1, error);
           } @catch (NSException *e) {
             error = e.reason.UTF8String ?: "FSR4 preparation failed";
@@ -373,7 +386,7 @@ int encode(const RSTemporalFrame *f, RSTemporalResult *out) {
     v.input.reset |= reset;
     std::string error;
     @try {
-      if (!context->runtime.encode((__bridge id)f->commandBuffer, view, v, o,
+      if (!context->forProfile(f->reserved).encode((__bridge id)f->commandBuffer, view, v, o,
                                    error))
         return result(out,
                       error.find("in flight") != std::string::npos
@@ -442,5 +455,5 @@ rsPrepareTemporalResources(const RSTemporalFrame *f, RSTemporalResult *out) {
 }
 extern "C" __attribute__((visibility("default"))) uint32_t
 rsTemporalProviderProfiles(uint32_t method) {
-  return method == RS_TEMPORAL_FSR4 ? 15u : 0u;
+  return method == RS_TEMPORAL_FSR4 ? 127u : 0u;
 }

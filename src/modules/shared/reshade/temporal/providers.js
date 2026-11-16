@@ -2,7 +2,7 @@
 // evaluated separately from algorithm installation and shader-profile choice.
 const groups=Object.freeze([
   {path:"./fsr",methods:["fsr2","fsr3"],environment:["RESHADE_FSR2_LIBRARY","RESHADE_FSR3_LIBRARY","RESHADE_FSR_SHADER_DIRECTORY"]},
-  {path:"./fsr4",methods:["fsr4"],environment:["RESHADE_FSR4_LIBRARY","FSR4_ROOT","FSR4_BUILD_DIR"]},
+  {path:"./fsr4",methods:["fsr4"],environment:["RESHADE_FSR4_LIBRARY","FSR4_ROOT","FSR4_BUILD_DIR","FSR4_MODEL_ROOT","FSR4_MODEL_BUILD_DIR"]},
   {path:"./asr",methods:["asr"],environment:["RESHADE_ASR_LIBRARY","RESHADE_ASR_SHADER_DIRECTORY"]},
   {path:"./sgsr2",methods:["sgsr2"],environment:["RESHADE_SGSR2_LIBRARY","RESHADE_SGSR2_SHADER_DIRECTORY"]}
 ]);
@@ -34,6 +34,11 @@ function reserve(root,options,methods,files=[]){
     for(const method of available)providers[method]={library:path.join(directory,"libmaclauncher-"+method+".dylib"),directory};
     for(const key of group.environment){
       const method=/^RESHADE_(.+)_LIBRARY$/.exec(key)?.[1].toLowerCase();
+      if(key.startsWith('FSR4_MODEL_')) {
+        const model=require('./fsr4/models').read(options?.userDataDir);
+        if(model)environment[key]=key==='FSR4_MODEL_ROOT'?model.directory:model.build;
+        continue;
+      }
       const value=method?providers[method]?.library:key==="FSR4_BUILD_DIR"?path.join(directory,"build"):directory;
       if(value)environment[key]=value;
     }

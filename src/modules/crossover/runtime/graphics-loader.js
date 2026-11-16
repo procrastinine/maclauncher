@@ -212,7 +212,7 @@ function withoutGraphics(current, previous, graphics) {
   }
   // Roll back only shared-processor-owned settings. Wine, Steam, renderer and
   // arbitrary user environment values remain outside this optional fallback.
-  const owned = key => key.startsWith('RESHADE_') || ['FSR4_ROOT', 'FSR4_BUILD_DIR'].includes(key);
+  const owned = key => key.startsWith('RESHADE_') || ['FSR4_ROOT', 'FSR4_BUILD_DIR', 'FSR4_MODEL_ROOT', 'FSR4_MODEL_BUILD_DIR'].includes(key);
   for (const key of Object.keys(graphics)) if (owned(key)) {
     if (Object.hasOwn(previous, key)) result[key] = previous[key];
     else delete result[key];

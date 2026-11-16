@@ -58,7 +58,7 @@ The upscaling API a game calls and the provider selected in its row are separate
 | MetalFX Temporal Denoised | Native denoising and temporal reconstruction | Noisy scene color, depth and motion, view and projection matrices, surface normal and roughness, and diffuse and specular material reflectance | Requested output size; macOS 26 or later and device support for the denoised scaler. |
 | FSR 2 | The original FSR 2.2.1 scheduler and shaders, adapted to Metal | Color, depth and motion, jitter, exposure conventions and actual camera parameters; a scene region of at least 32 × 32 for its luminance pyramid | Requested output size; optional universal provider, macOS 13 or later. |
 | FSR 3 | The original FSR 3.1.4 temporal upscaler, adapted to Metal | The scene data its scheduler requires | Requested output size; optional universal provider, macOS 13 or later. This row does not select FSR frame generation. |
-| FSR 4 | The FSR 4.1.1 shader and model implementation, through the native Mac provider | Matching scene color, depth and motion, and jitter and exposure conventions | Requested output size; the provider requires macOS 15 or later and an Apple Silicon GPU, with the model and shader resources it includes. |
+| FSR 4 | FSR 4.1.1 and 4.1.2 models, through the native Mac provider | Matching scene color, depth and motion, and jitter and exposure conventions | Requested output size; the provider requires macOS 15 or later and an Apple Silicon GPU, with the model and shader resources it includes. |
 | Arm ASR | The original ASR scheduler with mixed fragment/MRT and compute passes, adapted to Metal | Matching scene color, depth and motion, jitter and exposure, and camera data | Requested output size; optional universal provider, macOS 13 or later. |
 | Snapdragon GSR 2 | The original two-pass temporal algorithm, adapted to Metal | Matching color, depth and motion, and jitter, exposure and camera conventions | Requested output size; optional universal provider, macOS 13 or later. |
 | XeSS | The original Intel XeSS runtime, through a shared GPU compute host | Matching color, depth and motion, and jitter and exposure conventions | Requested output size; support depends on the actual backend and installed host. |
@@ -76,11 +76,18 @@ In Arm ASR, the Quality, Balanced, Performance and Ultra Performance choices sel
 
 ### FSR 4
 
-Within one Temporal upscaling row, FSR 4's profile control selects one of three profiles, Exact Fast, Lite or Lite 2:
+Within one Temporal upscaling row, FSR 4's profile control selects a model:
 
 - Exact Fast keeps AMD's original coefficients and runs inference every frame. It is the default.
 - Lite uses the upstream folded coefficients, rounding and guarded reuse of inference results.
-- Lite 2 supplies six trained layers for the normal model family; its Ultra Performance model remains Lite.
+- Lite 2 retains its six trained 4.1.1 layers for the normal model family; its Ultra Performance model remains Lite.
+- FSR 4.1.2 Lite uses AMD's three-stage INT8 Lite model.
+- FSR 4.1.2 Lossy uses the retrained six-layer model and depth-edge speck clamp from the October 29 upstream release.
+- FSR 4.1.2 Lite Lossy uses the independently adapted trained Lite model and guarded inference reuse. Its trained normal model covers 1080p and 4K tensor tiers; 8K and Ultra Performance use upstream's base Lite coefficients.
+
+The 4.1.2 Lite models and translated shaders download from fsr4-native-macos after consent, or import from its original release zip or matching local data. Preparation uses the launcher's included interpreter. Lite Lossy also downloads and statically decodes the matching GPL training release; Windows DLLs are never executed. These user-side data files are separate from the provider package. Existing usable local profiles require no download consent.
+
+Every scene producer uses the same provider: native MetalFX callers, Godot, DXMT, NGX, FidelityFX and the explicit frame API supply the same color/depth/motion contract. A producer that lacks an input reports that limitation.
 
 Each profile has its own model and license, and an older installed provider offers only the profiles it contains. Shaders and models are created during background resource preparation, so that work never happens during encoding. On the GPU, the network output and source alpha are composed into the requested output region. FSR 4 uses no camera field of view or matrices.
 
