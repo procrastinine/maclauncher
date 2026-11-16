@@ -76,7 +76,7 @@ function nativeInfo(file, signal) {
   const fd = fs.openSync(file, "r"), bytes = Buffer.alloc(4);
   try { if (fs.readSync(fd, bytes, 0, 4, 0) !== 4 || !MAGIC.has(bytes.readUInt32BE(0))) return null; }
   finally { fs.closeSync(fd); }
-  return MachO.readMachOLoadCommands(file, { architecture: "x86_64", signal }).slices[0];
+  return MachO.readMachOLoadCommands(file, { signal }).slices;
 }
 // `required` lists the native images the source needs. `skip(relative)` leaves
 // out optional libraries whose closure is checked by their own consumer.
@@ -86,17 +86,17 @@ function inspectClosure(root, records, signal, { label = "Wine", required = [], 
   for (const record of records) {
     throwIfAborted(signal);
     if (record.kind !== "file" || skip(record.relative)) continue;
-    const image = nativeInfo(path.join(root, record.relative), signal);
-    if (!image) continue;
-    if (image.platform !== 1 || !image.minimumMacOS || ![2, 6, 8].includes(image.fileType) || image.dyldEnvironment.length)
+    const slices = nativeInfo(path.join(root, record.relative), signal);
+    if (!slices) continue;
+    for (const image of slices) if (image.platform !== 1 || !image.minimumMacOS || ![2, 6, 8].includes(image.fileType) || image.dyldEnvironment.length)
       throw new Error(`A ${label} native library has unsupported platform or loader requirements.`);
-    images.push({ relative: record.relative, ...image });
+    images.push({ relative: record.relative, slices });
   }
   for (const name of required) if (!images.some(image => image.relative === name))
     throw new Error(`The selected ${label} engine is missing its native Wine components.`);
   for (const image of images) {
     const file = path.join(root, image.relative);
-    for (const dependency of image.dependencies) {
+    for (const dependency of image.slices.flatMap(slice => slice.dependencies)) {
       if (dependency.path.startsWith("/usr/lib/") || dependency.path.startsWith("/System/Library/")) continue;
       const target = dependency.path.replace(/^@rpath\//, "");
       let candidates;
@@ -110,9 +110,13 @@ function inspectClosure(root, records, signal, { label = "Wine", required = [], 
     }
   }
   if (!images.length) throw new Error(`The selected ${label} engine is missing its native Wine components.`);
-  // The engine's macOS floor is the highest its native images declare.
-  return { minimumMacOS: images.reduce((floor, image) => later(floor, image.minimumMacOS), images[0].minimumMacOS),
-    nativeComponents: images.length, architectures: ["x86_64"] };
+  // The engine runs as a CPU every native image contains. Its macOS floor for
+  // that CPU is the highest its images declare; the lowest such floor applies.
+  const architectures = [...new Set(images[0].slices.map(slice => slice.architecture))]
+    .filter(architecture => images.every(image => image.slices.some(slice => slice.architecture === architecture)));
+  if (!architectures.length) throw new Error(`The ${label} native components share no CPU architecture.`);
+  const floors = architectures.map(architecture => images.map(image => image.slices.find(slice => slice.architecture === architecture).minimumMacOS).reduce(later));
+  return { minimumMacOS: floors.reduce((lowest, floor) => later(lowest, floor) === lowest ? floor : lowest), nativeComponents: images.length, architectures };
 }
 async function hashAsync(file, signal, label = "Wine") {
   throwIfAborted(signal);
