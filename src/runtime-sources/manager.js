@@ -1,11 +1,9 @@
 'use strict';
-const {validateSource}=require('./schema');
 
 // A legacy manager id may contain several publisher sections. Its backend owns
 // the existing installed/default state; this facade never copies that state.
 function createSourceBackedManager({id,source,sources=source?[source]:[],adapter,backend,dependencies={}}={}) {
  if(!sources.length)throw new TypeError('A runtime source declaration is required.');
- sources.forEach(validateSource);
  const kind=sources[0].kind;
  const generic=!backend&&!adapter?.createBackend;
  adapter ||= require('./adapters').getAdapter(kind);

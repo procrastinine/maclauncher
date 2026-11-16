@@ -55,3 +55,12 @@ test("role options name their source, label builds by source and version, and ca
   assert.deepEqual(rows.at(-1), { value: "build:managed:1.0", label: "managed:1.0", kind: "build", sourceId: "managed:1.0", disabled: true },
     "an unusable saved choice stays named and its value is unchanged");
 });
+
+test("creating the existing source-backed managers reports no unknown source keys", t => {
+  const warnings = [];
+  t.mock.method(console, "warn", message => warnings.push(String(message)));
+  const Sources = require("../src/modules/crossover/sources");
+  for (const id of ["sikarugir", "winecx", "crossover"]) Sources.get(id).manager();
+  require("../src/modules/shared/vulkan/managed");
+  assert.deepEqual(warnings.filter(message => /Unknown runtime source key/.test(message)), []);
+});

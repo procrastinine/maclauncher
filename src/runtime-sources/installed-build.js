@@ -1,12 +1,11 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path');
 const {inspectBinary}=require('../core/binary-arch');
-const {validateSource,validateDeclared,validateBuild}=require('./schema');
+const {validateDeclared,validateBuild}=require('./schema');
 
 // The installer supplies its executable inventory after extraction and signature
 // verification. The returned record is persisted with that immutable install.
 function measureBuild({source,root,files,declares,id,version,provenance={},parent,parts,intendedCPU}={}) {
- validateSource(source);
  const base=fs.realpathSync(root);
  if(!Array.isArray(files)||!files.length)throw new TypeError('An installed executable inventory is required.');
  const seen=new Set();
