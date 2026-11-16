@@ -345,7 +345,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     requestedSettings: context.runtimeSettings, install: selected.install, values: { windowsExecutablePath: match.windowsExecutablePath,
       executableArchitecture: match.executableArchitecture, bottlePath, applicationPath: selected.install.appPath } });
   timing('ready');
-  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, windowsExecutablePath, windowsWorkingDirectory, environment, args, translatorPlan, existingEnvironment };
+  const processPlan=require('../../../core/runtime-process-plan').measuredProcessPlan({build:'crossover:'+selected.version,invocationPath:executablePath,sourceExecutablePath:selected.install.graphicsExecutablePath||(translatorPlan.layout?.unixRoot&&path.join(translatorPlan.layout.unixRoot,'wine')),architecture:translatorPlan.layout?.architecture,guestArch:require('../../../core/binary-arch').peArchitecture(require('../../shared/runtime/binary-compatibility').requiredMachine(selectedExecutable.executableArchitecture)),host:host||require('../../shared/runtime/host-capabilities').getHostCapabilities()});
+  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, windowsExecutablePath, windowsWorkingDirectory, environment, args, translatorPlan, existingEnvironment, processPlan };
 }
 
 module.exports = { runtimeDirectory, buildEnvironment, wineEnvironmentString, ensureBottle, prepareLaunch, runSupervised, SUPERVISOR };

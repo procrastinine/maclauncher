@@ -347,7 +347,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   Steps.recordRuntime(entry, context, { runtimeId: source.id, match, gameRoot, existingEnvironment, steamBridge, translatorPlan, requestedSettings,
     install: selected.install, values: { installedVersion: selected.version, prefixPath, viewRoot, graphicsBackend: graphics.graphicsBackend,
       vulkanBackend: graphics.vulkanBackend, dlss: graphics.dlss?.enabled === true, componentVersions: graphics.componentVersions } });
-  return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, windowsWorkingDirectory, graphics, environment, args, translatorPlan,
+  const processPlan=require('../../../core/runtime-process-plan').measuredProcessPlan({build:source.id+':'+selected.version,invocationPath:graphics.executablePath,sourceExecutablePath:selected.install.graphicsExecutablePath||(translatorPlan.layout?.unixRoot&&path.join(translatorPlan.layout.unixRoot,'wine')),architecture:translatorPlan.layout?.architecture,guestArch:require('../../../core/binary-arch').peArchitecture(require('../../shared/runtime/binary-compatibility').requiredMachine(match.executableArchitecture)),host});
+  return { ...selected, directory, gameRoot, workingDirectory, prefixPath, viewRoot, executablePath, windowsExecutablePath, windowsWorkingDirectory, graphics, environment, args, translatorPlan, processPlan,
     existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath,
     sessionPath: graphics.executablePath && graphics.executablePath !== selected.install.executablePath ? selected.install.executablePath : "" };
 }
