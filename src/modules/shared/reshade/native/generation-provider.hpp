@@ -9,6 +9,9 @@
 #include <string_view>
 #include <mutex>
 namespace macfx {
+// Native MetalFX interpolation preserves its caller's raw color domain;
+// learned/SDK providers requiring a declared encoding cannot use this entry.
+inline bool generationPreservesUnspecifiedColor(std::string_view method)noexcept{return method=="metalfx";}
 struct GenerationResult:LsfgResult {
  bool preparing=false; // Replacement preparation is not evidence of overload.
  std::function<ShaderResult()> completion;
