@@ -128,6 +128,9 @@ test('Prosper managed Play obtains consent, resumes and preserves offline local 
   // The provider spawn is stubbed; reuse signed system bytes without compiling
   // or executing a fixture merely to exercise package architecture checks.
   const binary = fs.readFileSync('/usr/bin/true'), binaryArchitectures = Native.readMachOArchitectures('/usr/bin/true');
+  // This is a consent/offline test; its simulated host must support the real system binary it reuses.
+  const fixtureMacOS = require('../src/modules/shared/runtime/macho-load-commands').readMachOLoadCommands('/usr/bin/true').slices
+    .map(slice => slice.minimumMacOS).filter(Boolean).reduce((a, b) => a.localeCompare(b, 'en', {numeric: true}) >= 0 ? a : b, '27.0.0');
   const source = Buffer.from(JSON.stringify({upstreamRevision: 'a'.repeat(40)}));
   function fixture(name, redistribution) {
     const directory = path.join(root, name);
@@ -153,10 +156,7 @@ test('Prosper managed Play obtains consent, resumes and preserves offline local 
   const ordinary = fixture('future-MCLv2'), legacy = fixture('legacy-local', 'local-only');
   const userDataDir = path.join(root, 'profile');
   let offline = false, requests = 0;
-  // The fixture binary is this Mac's own /usr/bin/true, so its minimum is the
-  // running system's version.
-  const systemVersionSync = require('../src/modules/shared/runtime/bundled-native').systemVersionSync;
-  const dependencies = {systemVersionSync,
+  const dependencies = {systemVersionSync: () => fixtureMacOS,
     fetchUrlBuffer: async () => {assert.equal(offline, false); requests++; return {status: 200, body: Buffer.from(JSON.stringify(ordinary.catalog))};},
     downloadToFile: async (_url, destination) => {assert.equal(offline, false); requests++; fs.copyFileSync(ordinary.archive, destination);}};
   const manager = createManager(dependencies);
@@ -182,7 +182,7 @@ test('Prosper managed Play obtains consent, resumes and preserves offline local 
   fs.writeFileSync(path.join(game, 'eboot.elf'), elf);
   const entry = {moduleId: 'anyps5', gameId: 'prosper-fixture', runtimeId: 'prosper', gameType: 'ps5', gamePath: game,
     moduleData: {format: 'elf', executablePath: path.join(game, 'eboot.elf')}};
-  const playDependencies = {systemVersionSync,
+  const playDependencies = {systemVersionSync: () => fixtureMacOS,
     fetchUrlBuffer: async () => {events.push('catalog'); return {status: 200, body: Buffer.from(JSON.stringify({...packages[0].catalog, packages: packages.map(item => item.record)}))};},
     downloadToFile: async (url, destination) => {
       events.push('download'); const selected = packages.find(item => item.record.asset.url === url);
