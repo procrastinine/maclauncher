@@ -3,7 +3,7 @@ const Upstream = require("../../../shared/runtime/upstream");
 const { versionAtLeast } = require("../../../shared/runtime/bundled-native");
 const { ARCHIVE } = require("./archive");
 
-const SOURCE = Object.assign({},require('../../../../runtime-sources/wine/sikarugir.json'),{"manager":{"id":"sikarugir","memberOrder":0,"sectionLabel":"Sikarugir","tabLabel":"Sikarugir","category":"compatibility"},"layout":{"type":"archive","entry":"wswine.bundle/bin/wine"},"labels":{"source":"Sikarugir Template","automatic":"Sikarugir's automatic choice","environment":"Wrapper setting","environmentName":"Sikarugir wrapper"},"credits":{"url":"https://github.com/Sikarugir-App/Engines"},"discover":{"type":"github-releases"}});
+const SOURCE = require('../../../../runtime-sources/wine/sikarugir.json');
 const SOURCE_URL = 'https://github.com/' + SOURCE.upstream.github + '/releases';
 
 // Asset names follow upstream: any WSnn wrapper generation, an optional

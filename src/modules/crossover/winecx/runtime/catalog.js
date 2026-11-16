@@ -3,7 +3,7 @@ const Upstream = require("../../../shared/runtime/upstream");
 const { ARCHIVE } = require("../../../shared/runtime/safe-archive");
 const { parseMachOLoadCommands } = require("../../../shared/runtime/macho-load-commands");
 
-const SOURCE = Object.assign({},require('../../../../runtime-sources/wine/winecx.json'),{"manager":{"id":"winecx","memberOrder":0,"sectionLabel":"WineCX","tabLabel":"WineCX","category":"compatibility"},"layout":{"type":"archive","entry":"Libraries/Wine/bin/wine"},"labels":{"source":"WineCX","automatic":"WineCX's automatic choice"},"credits":{"url":"https://github.com/dappermint/winecx-gptk"},"discover":{"type":"github-releases","tag":"(?:^|[^\\d.])v?(?<version>[0-9]+\\.[0-9]+(?:\\.[0-9]+)?)$"}});
+const SOURCE = require('../../../../runtime-sources/wine/winecx.json');
 const REPOSITORY = SOURCE.upstream.github;
 const archiveAsset = name => Object.values(SOURCE.upstream.assets||{}).some(pattern=>new RegExp(pattern,'i').test(name||''));
 const SOURCE_URL = `https://github.com/${REPOSITORY}/releases`;

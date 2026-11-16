@@ -8,7 +8,7 @@ const { readMachOArchitectures } = require("../../shared/runtime/local-native");
 const { imageRequiresRosetta } = require("../../shared/runtime/architecture");
 const { createRuntimeSettingsStore } = require("../../../core/runtime-settings");
 
-const Source = Object.assign({},require('../../../runtime-sources/wine/crossover.json'),{"manager":{"id":"crossover","memberOrder":0,"sectionLabel":"CrossOver","tabLabel":"CrossOver","category":"compatibility"},"layout":{"type":"local-app","entry":"Contents/SharedSupport/CrossOver/bin/wine","paths":["/Applications/CrossOver.app","~/Applications/CrossOver.app"]},"labels":{"source":"CrossOver","automatic":"CrossOver's automatic choice","environment":"Bottle setting","environmentName":"CrossOver bottle"},"credits":{"url":"https://www.codeweavers.com/crossover"},"discover":{"type":"local-app"}});
+const Source = require('../../../runtime-adapters/wine').definition('crossover');
 const AUTOMATIC_PATHS = Source.layout.paths.map(value => value.startsWith('~/') ? path.join(os.homedir(),value.slice(2)) : value);
 const registryPath = userDataDir => path.join(userDataDir, "runtimes", "crossover", "registrations.json");
 const identity = appPath => "local-" + crypto.createHash("sha256").update(appPath).digest("hex").slice(0, 16);
