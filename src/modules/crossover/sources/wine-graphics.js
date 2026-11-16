@@ -274,27 +274,98 @@ function codesignOutput(file) {
     { env, timeout: 10000, maxBuffer: 1024 * 1024, encoding: "utf8" });
   return `${result.stdout || ""}\n${result.stderr || ""}`;
 }
-// Whether MacLauncher's graphics layer can attach to the game's process. The
-// layer attaches through DYLD_INSERT_LIBRARIES, so the signature of the loader
-// the game runs from decides: dyld ignores DYLD variables for the hardened
-// runtime without allow-dyld-environment-variables. Each loader file is read
-// once; a signature that cannot be read counts as attachable.
+// How MacLauncher's graphics layer attaches to the game's process, read from
+// the signature of the loader the game runs from. "dyld": through
+// DYLD_INSERT_LIBRARIES, which dyld ignores for the hardened runtime without
+// allow-dyld-environment-variables. "runtime-library": such a loader that
+// still loads unsigned libraries (disable-library-validation) loads the layer
+// through maclauncher-winemetal.so (runtimeLibraryRoute). null: neither. Each
+// loader file is read once; a signature that cannot be read counts as "dyld".
 const layerFacts = new Map();
-function graphicsLayerAttachable(install, { readSignature = codesignOutput } = {}) {
+function loaderFacts(install, readSignature) {
   let loader, identity;
   try {
     loader = gameLoader(install);
-    if (!loader) return true;
+    if (!loader) return null;
     const stat = fs.statSync(loader, { bigint: true });
     identity = [stat.dev, stat.ino, stat.size, stat.mtimeNs].join(":");
-  } catch { return true; }
+  } catch { return null; }
   const known = layerFacts.get(loader);
-  if (known?.identity === identity) return known.attachable;
-  const facts = require("../../shared/runtime/native-injection").parseSignature(readSignature(loader));
-  const attachable = facts.flags === null || !(facts.flags & 0x10000) || facts.allowDyld;
+  if (known?.identity === identity) return known.facts;
+  const signature = require("../../shared/runtime/native-injection").parseSignature(readSignature(loader));
+  const hardened = signature.flags !== null && Boolean(signature.flags & 0x10000);
+  const facts = { dyld: !hardened || signature.allowDyld, libraries: !hardened || signature.disableLibraryValidation };
   if (layerFacts.size >= 64) layerFacts.delete(layerFacts.keys().next().value);
-  layerFacts.set(loader, { identity, attachable });
-  return attachable;
+  layerFacts.set(loader, { identity, facts });
+  return facts;
+}
+function graphicsLayerRoute(install, { readSignature = codesignOutput } = {}) {
+  const facts = loaderFacts(install, readSignature);
+  if (!facts || facts.dyld) return "dyld";
+  return facts.libraries && runtimeLibraryRoute(install) ? "runtime-library" : null;
+}
+function graphicsLayerAttachable(install, options = {}) {
+  return graphicsLayerRoute(install, options) !== null;
+}
+// A Wine whose ntdll reads DXMT_RUNTIME_DIR loads <dir>/aarch64-unix/winemetal.so
+// as the Unix side of its Metal library, and its Windows libraries from the
+// folders beside it. The runtime's own folder is lib/mullion. The graphics
+// payload's maclauncher-winemetal.so takes winemetal.so's place in a folder of
+// the view and re-exports the runtime's own.
+const RUNTIME_LIBRARY = "maclauncher-winemetal.so";
+const runtimeDirectoryReaders = new Map();
+function readsRuntimeDirectory(ntdll) {
+  const stat = fs.statSync(ntdll, { bigint: true }), identity = [stat.dev, stat.ino, stat.size, stat.mtimeNs].join(":");
+  const known = runtimeDirectoryReaders.get(ntdll);
+  if (known?.identity === identity) return known.reads;
+  const reads = fs.readFileSync(ntdll).includes(Buffer.from("DXMT_RUNTIME_DIR\0"));
+  if (runtimeDirectoryReaders.size >= 16) runtimeDirectoryReaders.delete(runtimeDirectoryReaders.keys().next().value);
+  runtimeDirectoryReaders.set(ntdll, { identity, reads });
+  return reads;
+}
+function runtimeLibraryRoute(install) {
+  try {
+    const engine = engineRoot(install), unixName = wineLayout(install).unixName;
+    const runtime = path.join(engine, "lib", "mullion"), base = path.join(runtime, "aarch64-unix", "winemetal.so");
+    const library = path.join(require("../../shared/reshade").runtimeRoot(), RUNTIME_LIBRARY);
+    if (!unixName || !fs.statSync(base).isFile() || !fs.statSync(library).isFile()) return null;
+    return readsRuntimeDirectory(path.join(engine, "lib", "wine", unixName, "ntdll.so")) ? { runtime, base, library } : null;
+  } catch { return null; }
+}
+async function linkRuntimeFile(source, destination, signal) {
+  signal?.throwIfAborted();
+  const current = await fs.promises.lstat(destination).catch(error => { if (error.code !== "ENOENT") throw error; return null; });
+  if (current?.isSymbolicLink() && await fs.promises.readlink(destination) === source) return;
+  if (current) await fs.promises.rm(destination, { force: true });
+  await fs.promises.symlink(source, destination);
+}
+// The view's DXMT runtime folder: links to every file of the runtime's own
+// Windows folders, the runtime's winemetal.so as winemetal-runtime.so, and a
+// copy of maclauncher-winemetal.so as winemetal.so, which finds the runtime's
+// library beside itself.
+async function prepareRuntimeLibraryView(route, viewRoot, signal) {
+  const root = path.join(viewRoot, "graphics-runtime");
+  ownDirectory(root);
+  for (const folder of fs.readdirSync(route.runtime, { withFileTypes: true })) {
+    if (!folder.isDirectory() || folder.name === "aarch64-unix") continue;
+    const from = path.join(route.runtime, folder.name), to = path.join(root, folder.name);
+    ownDirectory(to);
+    for (const file of fs.readdirSync(from, { withFileTypes: true }))
+      if (file.isFile() || file.isSymbolicLink()) await linkRuntimeFile(path.join(from, file.name), path.join(to, file.name), signal);
+  }
+  const unix = path.join(root, "aarch64-unix");
+  ownDirectory(unix);
+  await linkRuntimeFile(route.base, path.join(unix, "winemetal-runtime.so"), signal);
+  const library = path.join(unix, "winemetal.so"), wanted = fs.readFileSync(route.library);
+  let current = null;
+  try { current = fs.lstatSync(library).isFile() ? fs.readFileSync(library) : null; } catch {}
+  if (!current?.equals(wanted)) {
+    const temporary = `${library}.${process.pid}.tmp`;
+    fs.rmSync(temporary, { force: true });
+    require("../../shared/copy-file").cloneOrCopySync(route.library, temporary);
+    fs.renameSync(temporary, library);
+  }
+  return root;
 }
 async function prepareLoaderView(engine, viewRoot, install, signal, source) {
   const wineRoot = path.join(viewRoot, "wine"), dllRoot = path.join(wineRoot, "lib", "wine");
@@ -419,6 +490,8 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
   }
   // Every game runs from the private loader view and its Game Mode bundle.
   const loader = await prepareLoaderView(engine, viewRoot, install, signal, source);
+  const runtimeLibrary = !environment && graphicsLayerRoute(install) === "runtime-library" ? runtimeLibraryRoute(install) : null;
+  const runtimeLibraryRoot = runtimeLibrary ? await prepareRuntimeLibraryView(runtimeLibrary, viewRoot, signal) : null;
   const dllRoot = loader.dllRoot, dllOverrides = [];
   ownDirectory(dllRoot);
   for (const architecture of [...layout.windows, layout.unixName]) ownDirectory(path.join(dllRoot, architecture));
@@ -471,7 +544,8 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     DYLD_LIBRARY_PATH: loader.libraryOverride,
     DYLD_FALLBACK_LIBRARY_PATH: libraryPaths.join(path.delimiter),
     ...(native.frameworks.length ? { DYLD_FALLBACK_FRAMEWORK_PATH: native.frameworks.join(path.delimiter) } : {}),
-    GST_REGISTRY_1_0: path.join(viewRoot, "gstreamer-registry.bin") };
+    GST_REGISTRY_1_0: path.join(viewRoot, "gstreamer-registry.bin"),
+    ...(runtimeLibraryRoot ? { DXMT_RUNTIME_DIR: runtimeLibraryRoot } : {}) };
   Object.assign(env, DLSS.environment(dlss), DLSS.adapterEnvironment(dlss, install?.capabilities));
   if (dxmt.length && dlss.dxmt) Object.assign(env, require("../temporal").environment(cameraBridge, dllRoot));
   if (gstreamer) {
@@ -490,8 +564,8 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
   const writesBuiltinPrefix = !environment || Object.values(translatorPlan?.components || {}).some(row => row.used && !row.inherited && row.used.files.some(file => file.format === 'pe' && file.form === 'builtin'));
   return { ...selection, ...loader, env, dllOverrides, translatorPlan,
     ...(path.isAbsolute(prefixPath || "") && writesBuiltinPrefix ? { applyPrefix: () => registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, layout) } : {}),
-    capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath };
+    capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath, ...(runtimeLibraryRoot ? { inProcessGraphics: true } : {}) };
 }
 
-module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, publisherSigned, graphicsLayerAttachable, gameLoader, keepBundleLoader, gameBundleInfo, prepareGraphicsView, capabilitiesFor,
+module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, publisherSigned, graphicsLayerAttachable, graphicsLayerRoute, runtimeLibraryRoute, prepareRuntimeLibraryView, gameLoader, keepBundleLoader, gameBundleInfo, prepareGraphicsView, capabilitiesFor,
   __test: { capabilitiesFor, ownDirectory, prepareLoaderView, CORE_DLLS } };

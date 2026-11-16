@@ -1,0 +1,8 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ x86_64-macos, arm64-macos ]
+install-name:    '@loader_path/winemetal-runtime.so'
+exports:
+  - targets:         [ x86_64-macos, arm64-macos ]
+    symbols:         [ ___wine_unix_call_funcs, ___wine_unix_call_wow64_funcs ]
+...

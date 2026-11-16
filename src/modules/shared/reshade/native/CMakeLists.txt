@@ -222,6 +222,11 @@ target_link_libraries(maclauncher-graphics-hardware PRIVATE "-framework Foundati
 # Reads the Vulkan device features an installed Vulkan driver reports, through
 # the driver's ICD entry point and without a Vulkan loader.
 add_executable(maclauncher-vulkan-features src/vulkan-features.c)
+# Loads the graphics layer inside a Wine process whose loader ignores DYLD
+# variables, in place of the Wine runtime's own winemetal.so, which it re-exports.
+add_library(maclauncher-winemetal SHARED src/winemetal-layer.c)
+set_target_properties(maclauncher-winemetal PROPERTIES PREFIX "" SUFFIX ".so" INSTALL_NAME_DIR "@rpath")
+target_link_options(maclauncher-winemetal PRIVATE "LINKER:-reexport_library,${CMAKE_CURRENT_SOURCE_DIR}/src/winemetal-runtime.tbd")
 
 # Native fixtures are separate host-architecture executables under test/. They
 # keep assertions enabled and use the library's include directories. Their

@@ -92,3 +92,72 @@ test("a Wine launch whose loader refuses the layer tells the launcher so", async
   assert.match(fs.readFileSync(path.join(__dirname, "../src/modules/crossover/sources/wine-launch.js"), "utf8"),
     /graphicsLayerAttachable\(selected\.install\) \? \{\} :\s*\{ graphicsUnavailable:/);
 });
+
+// MetalSharp Wine's ntdll reads DXMT_RUNTIME_DIR and loads <dir>/aarch64-unix/winemetal.so; its own runtime is lib/mullion.
+function runtimeLibraryFixture(t, { readsDirectory = true, library = true } = {}) {
+  const wine = wineFixture(t, { signed: true }), contents = wine.install.engineRoot;
+  const put = (file, bytes = "fixture") => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file; };
+  put(path.join(contents, "lib", "wine", "x86_64-unix", "ntdll.so"), Buffer.concat([require("./fixtures/macho-image").image(),
+    Buffer.from(readsDirectory ? "\0DXMT_RUNTIME_DIR\0" : "\0WINEDLLPATH\0")]));
+  const mullion = path.join(contents, "lib", "mullion");
+  for (const file of ["aarch64-unix/winemetal.so", "aarch64-windows/d3d11.dll", "aarch64-windows/dxgi.dll", "aarch64-windows/winemetal.dll", "i386-windows/d3d11.dll"]) put(path.join(mullion, file));
+  const graphics = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "graphics-root-")));
+  t.after(() => fs.rmSync(graphics, { recursive: true, force: true }));
+  if (library) put(path.join(graphics, "maclauncher-winemetal.so"), "layer library");
+  const ReShade = require("../src/modules/shared/reshade"), original = ReShade.runtimeRoot;
+  ReShade.runtimeRoot = () => graphics;
+  t.after(() => { ReShade.runtimeRoot = original; });
+  return { ...wine, mullion, graphics };
+}
+const metalsharpSignature = `CodeDirectory v=20500 size=447 flags=0x10000(runtime) hashes=3+7 location=embedded\nTeamIdentifier=TQK8H7V7RP\n[Dict]\n` +
+  ["com.apple.developer.cross-architecture-support", "com.apple.security.cs.allow-jit", "com.apple.security.cs.disable-library-validation"]
+    .map(key => `\t[Key] ${key}\n\t[Value]\n\t\t[Bool] true\n`).join("");
+
+test("a hardened loader that loads unsigned libraries takes the layer through the runtime's winemetal.so", t => {
+  const Graphics = require("../src/modules/crossover/sources/wine-graphics");
+  const route = fixture => Graphics.graphicsLayerRoute(fixture.install, { readSignature: () => metalsharpSignature });
+  const metalsharp = runtimeLibraryFixture(t);
+  assert.equal(route(metalsharp), "runtime-library");
+  assert.equal(Graphics.graphicsLayerAttachable(metalsharp.install), true, "the Graphics section is shown");
+  assert.equal(route(runtimeLibraryFixture(t, { library: false })), null, "a graphics component without maclauncher-winemetal.so");
+  assert.equal(route(runtimeLibraryFixture(t, { readsDirectory: false })), null, "an ntdll that does not read DXMT_RUNTIME_DIR");
+  const validated = runtimeLibraryFixture(t);
+  assert.equal(Graphics.graphicsLayerRoute(validated.install, { readSignature: () => metalsharpSignature.replace("disable-library-validation", "allow-unsigned-executable-memory") }), null,
+    "library validation on: no unsigned library loads");
+});
+
+test("the view's DXMT runtime folder links the runtime's files and holds the layer library as winemetal.so", async t => {
+  const Graphics = require("../src/modules/crossover/sources/wine-graphics");
+  const fixture = runtimeLibraryFixture(t), view = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "graphics-view-")));
+  t.after(() => fs.rmSync(view, { recursive: true, force: true }));
+  const route = Graphics.runtimeLibraryRoute(fixture.install);
+  for (let pass = 0; pass < 2; pass++) {
+    const root = await Graphics.prepareRuntimeLibraryView(route, view);
+    assert.equal(root, path.join(view, "graphics-runtime"));
+    for (const file of ["aarch64-windows/d3d11.dll", "aarch64-windows/dxgi.dll", "aarch64-windows/winemetal.dll", "i386-windows/d3d11.dll"])
+      assert.equal(fs.readlinkSync(path.join(root, file)), path.join(fixture.mullion, file), file);
+    assert.equal(fs.readlinkSync(path.join(root, "aarch64-unix", "winemetal-runtime.so")), path.join(fixture.mullion, "aarch64-unix", "winemetal.so"));
+    const library = path.join(root, "aarch64-unix", "winemetal.so");
+    assert.equal(fs.lstatSync(library).isFile(), true, "a copy, so the library finds winemetal-runtime.so beside itself");
+    assert.equal(fs.readFileSync(library, "utf8"), "layer library");
+  }
+  // A newer layer library replaces the copy.
+  fs.writeFileSync(path.join(fixture.graphics, "maclauncher-winemetal.so"), "newer layer library");
+  await Graphics.prepareRuntimeLibraryView(route, view);
+  assert.equal(fs.readFileSync(path.join(view, "graphics-runtime", "aarch64-unix", "winemetal.so"), "utf8"), "newer layer library");
+  const read = file => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
+  assert.match(read("src/modules/crossover/sources/wine-graphics.js"), /\.\.\.\(runtimeLibraryRoot \? \{ DXMT_RUNTIME_DIR: runtimeLibraryRoot \} : \{\}\)/);
+  assert.match(read("src/modules/crossover/sources/wine-launch.js"), /graphics\.inProcessGraphics && environment\.DYLD_INSERT_LIBRARIES\) environment\.MACLAUNCHER_GRAPHICS_LIBRARIES = environment\.DYLD_INSERT_LIBRARIES/);
+  assert.match(read("src/core/launcher.js"), /if \(graphicsInProcess === true\) \{releaseCopy\(target\);return original;\}/);
+  assert.match(read("src/modules/shared/reshade/native/CMakeLists.txt"), /add_library\(maclauncher-winemetal SHARED src\/winemetal-layer\.c\)/);
+  assert.match(read("src/modules/shared/reshade/native/winemetal-runtime.tbd"), /install-name:\s+'@loader_path\/winemetal-runtime\.so'/);
+});
+
+test("a Wine launch whose game process loads the layer itself starts without the DYLD route", async () => {
+  const { launch } = require("../src/runtime-adapters/wine");
+  const spawned = [], plan = { directory: "/tmp", winePath: "/view/bin/wine", serverPath: "/view/bin/wineserver", args: [], environment: {}, executablePath: "/game/Game.exe" };
+  const context = { spawnDetachedChecked: async (command, args, options) => { spawned.push(options); return { pid: 1, once() {}, on() {} }; } };
+  const dependencies = { processes: { installStopHandler() {} }, activation: { followWineActivation() {} }, supervisorArguments: () => [], createLog: () => ({ attach() {}, close() {} }) };
+  await launch({ ...plan, graphicsInProcess: true }, context, dependencies);
+  assert.equal(spawned[0].graphicsInProcess, true);
+});

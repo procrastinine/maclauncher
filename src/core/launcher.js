@@ -476,13 +476,16 @@ function createLauncher({
         .catch(error => warnGraphics(logger, "The private graphics copy could not be removed.", error.message));
     };
     const preflightGameGraphics = async (command, args, spawnOptions) => {
-      const {graphicsExecutable, graphicsUnavailable, ...nativeOptions} = spawnOptions || {};
+      const {graphicsExecutable, graphicsUnavailable, graphicsInProcess, ...nativeOptions} = spawnOptions || {};
       const target = Object.hasOwn(spawnOptions || {}, "graphicsExecutable") ? graphicsExecutable : command;
       const original = {command, args, options: nativeOptions};
       const Injection = require("../modules/shared/runtime/native-injection");
       if (graphicsAttachment?.available === false)
         return {...original, options: {...nativeOptions, env: Injection.withoutGraphics(nativeOptions.env, preparedGraphics)}};
       if (graphicsProcessBound || target === null) return original;
+      // A runtime that loads the layer inside the game's process itself needs
+      // neither the DYLD route nor a private copy.
+      if (graphicsInProcess === true) {releaseCopy(target);return original;}
       const processing = ReShade.executionRequirements(context.effectsEntry || entry).needed.processor;
       if (!preparedGraphics?.DYLD_INSERT_LIBRARIES) {if (!processing) releaseCopy(target);return original;}
       const libraries = preparedGraphics.DYLD_INSERT_LIBRARIES.split(path.delimiter).filter(Boolean);

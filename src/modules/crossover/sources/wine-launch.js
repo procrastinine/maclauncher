@@ -303,6 +303,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   // Apply launcher-owned optional effects only to the game, after stock Wine
   // finishes prefix initialization. User-supplied loader paths remain blocked.
   if (context.applyGameEnvironment) environment = await context.applyGameEnvironment(environment);
+  // A loader that ignores DYLD variables loads the graphics layer through the view's winemetal.so.
+  if (graphics.inProcessGraphics && environment.DYLD_INSERT_LIBRARIES) environment.MACLAUNCHER_GRAPHICS_LIBRARIES = environment.DYLD_INSERT_LIBRARIES;
   const ngxDestinationRequested = settings.dlss === true || DLSS.needsSceneInputs(entry.effects);
   Object.assign(environment, require("../temporal/ngx/connection").environment(ngxScene, { macDriverPath: ngxDestinationRequested ? require("../temporal/ngx/connection").windowModule(selected.install) : "", sceneDestinationRequested: ngxDestinationRequested }));
   if (existingEnvironment?.running) {
@@ -354,7 +356,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     existingEnvironment, winePath: graphics.executablePath || selected.install.executablePath, serverPath: graphics.serverPath || selected.install.serverPath,
     sessionPath: graphics.executablePath && graphics.executablePath !== selected.install.executablePath ? selected.install.executablePath : "",
     // The game runs from a loader whose signature refuses the graphics layer.
-    ...(existingEnvironment || require("./wine-graphics").graphicsLayerAttachable(selected.install) ? {} :
+    ...(graphics.inProcessGraphics ? { graphicsInProcess: true } : existingEnvironment || require("./wine-graphics").graphicsLayerAttachable(selected.install) ? {} :
       { graphicsUnavailable: "The Wine loader that runs the game is signed with the hardened runtime, which ignores DYLD graphics libraries." }) };
 }
 
