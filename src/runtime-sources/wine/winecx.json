@@ -127,5 +127,17 @@
         ]
       }
     }
-  ]
+  ],
+  "automatic": {
+    "d3d-renderer": [
+      "winecx-dxmt",
+      "winecx-wined3d"
+    ],
+    "vulkan-driver": [
+      "winecx-moltenvk"
+    ],
+    "legacy.dxvk": [
+      "winecx-dxvk"
+    ]
+  }
 }

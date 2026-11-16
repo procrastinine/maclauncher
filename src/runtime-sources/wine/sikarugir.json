@@ -264,6 +264,33 @@
         }
       },
       "sikarugir-wined3d"
+    ],
+    "d3d8": [
+      {
+        "embed": "sikarugir-d9vk",
+        "when": {
+          "setting": "d9vk",
+          "not": true,
+          "equals": false,
+          "selected": {
+            "role": "vulkan-driver",
+            "engine": "kosmickrisp"
+          }
+        }
+      },
+      "sikarugir-wined3d"
+    ],
+    "legacy.dxvk": [
+      {
+        "embed": "sikarugir-dxvk3",
+        "when": {
+          "selected": {
+            "role": "vulkan-driver",
+            "engine": "kosmickrisp"
+          }
+        }
+      },
+      "sikarugir-dxvk"
     ]
   }
 }
