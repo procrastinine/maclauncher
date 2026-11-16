@@ -165,9 +165,9 @@ async function genericInstallation(input, dependencies, options) {
   if (source.layout.type === 'pkg' ? !/\.pkg$/i.test(listed.name) : !format.test(listed.name) || /\.pkg$/i.test(listed.name))
     throw new Error('The selected asset format does not match its declared layout.');
   const transaction = await dependencies.prepareInstallation({...input, signal});
-  if (!transaction || typeof transaction.commit !== 'function' || typeof transaction.rollback !== 'function')
-    throw new Error('The existing installation store has no atomic commit and rollback hooks.');
   try {
+    if (!transaction || typeof transaction.commit !== 'function' || typeof transaction.rollback !== 'function')
+      throw new Error('The existing installation store has no atomic commit and rollback hooks.');
     throwIfAborted(signal);
     const directory = transaction.directory;
     if (!path.isAbsolute(directory || '') || fs.lstatSync(directory).isSymbolicLink() || !fs.statSync(directory).isDirectory() || fs.readdirSync(directory).length)
@@ -206,7 +206,7 @@ async function genericInstallation(input, dependencies, options) {
     const installed = await transaction.commit({root, build: persisted, verification, asset});
     return {installed, build: persisted, verification};
   } catch (error) {
-    try { await transaction.rollback(error); }
+    try { if (typeof transaction?.rollback === 'function') await transaction.rollback(error); }
     catch (rollbackError) { error.rollbackError = rollbackError; }
     throw error;
   }
