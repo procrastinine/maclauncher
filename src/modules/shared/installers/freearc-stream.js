@@ -3,7 +3,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { pipeline } = require("node:stream/promises");
 const { Readable } = require("node:stream");
-const { crc32, LIMITS } = require("./freearc-format");
+const { crc32, LIMITS, safePath } = require("./freearc-format");
 const { installerError } = require("./inno-header");
 const error = message => installerError(message, "INSTALLER_FREEARC_DECODER");
 class Input {
@@ -32,14 +32,14 @@ async function *run(executable, args, input, context = {}) {
   const environment = { ...process.env, ...env };
   for (const key of Object.keys(environment)) if (/^(?:Malloc|DYLD_)/.test(key) && !env?.[key]) delete environment[key];
   const child = (context.spawn || spawn)(executable, args, { cwd, env: environment, stdio: ["pipe", "pipe", "pipe"] });
-  let failure, closed = false, killing, errBytes = 0, stderr = "";
+  let failure, closed = false, killing, errBytes = 0, stderr = "", ownership = Promise.resolve();
   const stop = () => { if (!closed) { child.kill("SIGTERM"); killing ||= setTimeout(() => child.kill("SIGKILL"), 1500); killing.unref(); } };
   const done = new Promise(resolve => {
     child.once("error", e => { failure = e; });
     child.once("close", code => { closed = true; resolve(code); });
   });
   child.stderr.on("data", chunk => { if ((errBytes += chunk.length) < 65536) stderr += chunk.toString(); });
-  child.once("spawn", () => { Promise.resolve(onSpawn?.({ pid: child.pid, executable, args, startedAt: new Date().toISOString() })).catch(e => { failure ||= e; stop(); }); });
+  child.once("spawn", () => { ownership = Promise.resolve().then(() => onSpawn?.({ pid: child.pid, executable, args, startedAt: new Date().toISOString() })).catch(e => { failure ||= e; stop(); }); });
   signal?.addEventListener("abort", stop, { once: true });
   const timeout = setTimeout(() => { failure ||= error("The FreeArc decoder timed out."); stop(); }, context.timeout || 3600000); timeout.unref();
   const feeding = pipeline(Readable.from(input), child.stdin).then(() => null, e => { failure ||= e; stop(); return e; });
@@ -47,11 +47,11 @@ async function *run(executable, args, input, context = {}) {
     if (signal?.aborted) stop();
     let bytes = 0;
     for await (const chunk of child.stdout) { signal?.throwIfAborted(); if ((bytes += chunk.length) > maximum) throw error("The FreeArc decoder exceeded its output limit."); yield chunk; }
-    await feeding; const code = await done;
+    await feeding; const code = await done; await ownership;
     signal?.throwIfAborted();
     if (failure || code !== 0) throw error("The FreeArc decoder failed. " + (failure?.message || stderr).replace(/[\x00-\x1f]/g, " ").slice(0, 1000));
   } finally {
-    stop(); await done; await feeding; clearTimeout(timeout); clearTimeout(killing); signal?.removeEventListener("abort", stop);
+    stop(); await done; await feeding; await ownership; clearTimeout(timeout); clearTimeout(killing); signal?.removeEventListener("abort", stop);
   }
 }
 async function writeStream(file, input, { maximum = LIMITS.bytes, expected, signal } = {}) {
@@ -100,7 +100,19 @@ async function *decodeStage(stage, input, context) {
     if (stage.name === "storing") { yield* input; return; }
     yield* run(context.tools.filter, [stage.method], input, context); return;
   }
-  if (stage.kind === "srep") { yield* run(context.tools.srep, ["-d", "-", "-"], input, context); return; }
+  if (stage.kind === "srep") {
+    const reader = new Input(input), header = await reader.take(16);
+    // SREP format4 keeps an index in its footer and seeks to it before
+    // decoding. Earlier forward-only streams can retain the pipe path.
+    if ((header.readUInt32LE(8) & 255) !== 4) { yield* run(context.tools.srep, ["-d", "-", "-"], reader.rest(header), context); return; }
+    const directory = await fs.promises.mkdtemp(path.join(context.work, "srep-"));
+    try {
+      const file = path.join(directory, "input.srep");
+      await writeStream(file, reader.rest(header), { signal: context.signal });
+      yield* run(context.tools.srep, ["-d", file, "-"], [], { ...context, cwd: directory });
+    } finally { await fs.promises.rm(directory, { recursive: true, force: true }); }
+    return;
+  }
   let body = input;
   if (stage.header) {
     const reader = new Input(input), byte = await reader.take(1, true);
@@ -125,15 +137,25 @@ async function *decodeStage(stage, input, context) {
   } finally { await fs.promises.rm(directory, { recursive: true, force: true }); }
 }
 function decodeChain(stages, input, context) { for (const stage of stages) input = decodeStage(stage, input, context); return input; }
+async function outputDirectory(root, relative) {
+  let directory = root;
+  const check = async () => { const stat = await fs.promises.lstat(directory); if (!stat.isDirectory() || stat.isSymbolicLink()) throw error("The FreeArc output directory cannot be an alias or another file type."); };
+  await check();
+  if (relative !== ".") for (const part of safePath(relative).split("/")) {
+    directory = path.join(directory, part);
+    try { await fs.promises.mkdir(directory); } catch (failure) { if (failure.code !== "EEXIST") throw failure; }
+    await check();
+  }
+}
 async function extractBlock(archive, block, stages, output, context) {
   const source = block.compsize ? fs.createReadStream(archive, { start: block.offset, end: block.offset + block.compsize - 1 }) : [];
   const input = new Input(decodeChain(stages, source, context));
   try {
   for (const file of block.files) {
     context.signal?.throwIfAborted();
-    const destination = path.join(output, file.path);
-    if (file.dir) { await fs.promises.mkdir(destination, { recursive: true }); continue; }
-    await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+    const name = safePath(file.path), destination = path.join(output, name);
+    if (file.dir) { await outputDirectory(output, name); continue; }
+    await outputDirectory(output, path.posix.dirname(name));
     let crc = 0, left = file.size;
     async function *contents() { while (left) { const bytes = await input.take(Math.min(left, 4 * 1024 * 1024)); crc = crc32(bytes, crc); left -= bytes.length; yield bytes; } }
     await writeStream(destination, contents(), { maximum: file.size, expected: file.size, signal: context.signal });

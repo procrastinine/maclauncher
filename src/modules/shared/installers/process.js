@@ -9,7 +9,7 @@ function runHelper(executable, args, { signal, timeout = 15000, maximum = 32 * 1
     const env = { ...process.env, ...suppliedEnvironment };
     for (const key of Object.keys(env)) if (/^(DYLD_|Malloc)/.test(key) && !suppliedEnvironment?.[key]) delete env[key];
     const child = spawn(executable, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: false });
-    const stdout = [], stderr = []; let outBytes = 0, error, killTimer;
+    const stdout = [], stderr = []; let outBytes = 0, error, killTimer, ownership = Promise.resolve();
     const fail = value => {
       if (error) return;
       error = value; child.kill("SIGTERM");
@@ -26,8 +26,9 @@ function runHelper(executable, args, { signal, timeout = 15000, maximum = 32 * 1
     let errBytes = 0;
     child.stderr.on("data", bytes => { if ((errBytes += bytes.length) <= 64 * 1024) stderr.push(bytes); });
     child.on("error", value => { error ||= value; });
-    child.on("spawn", () => onSpawn?.({ pid: child.pid, executable, args, startedAt: new Date().toISOString() }));
-    child.on("close", (code, termSignal) => {
+    child.on("spawn", () => { ownership = Promise.resolve().then(() => onSpawn?.({ pid: child.pid, executable, args, startedAt: new Date().toISOString() })).catch(fail); });
+    child.on("close", async (code, termSignal) => {
+      await ownership;
       clearTimeout(timer); clearTimeout(killTimer); signal?.removeEventListener("abort", abort);
       const result = { pid: child.pid, code, signal: termSignal, stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8") };
       if (error) reject(error);
