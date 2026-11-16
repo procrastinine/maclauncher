@@ -1,7 +1,4 @@
-const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
-const Upstream = require("../../../shared/runtime/upstream");
 const { createPinnedNativeManager } = require("../../../shared/runtime/pinned-native-manager");
 const { throwIfAborted } = require("../../../shared/runtime/download-utils");
 const { extractArchive } = require("../../../shared/runtime/safe-archive");
@@ -13,24 +10,10 @@ const Host = require("../../../shared/runtime/bundled-native");
 // The archive must match the SHA-256 that the publisher's checksum file names,
 // in addition to any digest the release listing states. The checksum file is
 // itself a listed release file, read through the shared download layer.
-async function verifyChecksumFile({ archiveSha256, pin, signal }, dependencies = {}) {
-  throwIfAborted(signal);
-  if (!pin?.checksum?.url) throw new Error("The WineCX release lists no checksum file. No runtime was installed.");
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-winecx-")), target = path.join(directory, "checksum");
-  let text;
-  try {
-    await (dependencies.download || Upstream.download)(Upstream.listedFile(pin.checksum), target, { signal, headers: { "User-Agent": "maclauncher" } });
-    if (fs.statSync(target).size > 64 * 1024) throw new Error("it is larger than a checksum file");
-    text = fs.readFileSync(target, "utf8");
-  } catch (error) {
-    if (error?.name === "AbortError") throw error;
-    throw new Error(`The WineCX checksum file could not be read (${error.message}). No runtime was installed.`);
-  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
-  const listed = Catalog.readChecksum(text, pin.asset.filename);
-  if (!listed) throw new Error("The WineCX checksum file names no SHA-256 for the archive. No runtime was installed.");
-  if (listed !== archiveSha256) throw new Error("The WineCX archive does not match its published SHA-256. No runtime was installed.");
-  return { verified: true, archiveSha256, identity: `publisher-sha256-file:${listed}` };
+function verifyChecksumFile({ archiveSha256, pin, signal }, dependencies = {}) {
+  return require("../../../../runtime-sources/verification").verifySumsFile({ archiveSha256, checksum: pin?.checksum, filename: pin?.asset?.filename, signal, label: "WineCX" }, dependencies);
 }
+
 function createManager({ discoverCatalog = Catalog.discover, dependencies = {} } = {}) {
   const base = createPinnedNativeManager({
     id: "winecx", label: "WineCX", sourceUrl: Catalog.SOURCE_URL, sourceName: "dappermint/winecx-gptk",

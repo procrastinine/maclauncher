@@ -127,12 +127,6 @@ async function withFloor(pins, options = {}) {
 }
 
 // The publisher's checksum file names the archive's SHA-256.
-function readChecksum(text, filename) {
-  for (const line of String(text).split(/\r?\n/)) {
-    const match = /^([a-f0-9]{64})\s+\*?(.+?)\s*$/i.exec(line.trim()) || /^([a-f0-9]{64})$/i.exec(line.trim());
-    if (match && (!match[2] || match[2] === filename)) return match[1].toLowerCase();
-  }
-  return null;
-}
+const { readChecksum } = require("../../../../runtime-sources/verification");
 
 module.exports = { REPOSITORY, SOURCE_URL, source, runtimeAssets, releaseVersion, versionLabel, entryFor, validateEntry, discover, readChecksum, archiveFloor, wineExecutable };
