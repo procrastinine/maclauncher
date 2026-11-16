@@ -56,6 +56,13 @@ std::atomic<uint64_t>displayImageSequence{1};
 enum SceneGuideDemand:unsigned { GuideDepth=1,GuideMotion=2,GuideExposure=4,GuideAll=31 };
 unsigned shaderGuideDemand(const EffectPlanRequirements&r){return (r.depth?GuideDepth:0u)|(r.motion?GuideMotion:0u)|(r.exposure?GuideExposure:0u);}
 RSTemporalFrame consumedGuides(const RSTemporalFrame&source,unsigned mask){auto result=source;if(!(mask&GuideDepth))result.depth=nullptr;if(!(mask&GuideMotion))result.motion=nullptr;if(!(mask&GuideExposure))result.exposure=nullptr;if(!(mask&8))result.reactive=nullptr;if(!(mask&16))result.transparency=nullptr;return result;}
+// A frame stored past its snapshot build names textures that build created
+// (scene copy, guide targets, row output) only by unretained pointers. Its
+// later preparation queries keep every named object alive with it.
+struct RetainedTemporalFrame{
+    RSTemporalFrame frame;std::array<id,8>objects;
+    explicit RetainedTemporalFrame(const RSTemporalFrame&value):frame(value),objects{(__bridge id)value.commandBuffer,(__bridge id)value.color,(__bridge id)value.depth,(__bridge id)value.motion,(__bridge id)value.output,(__bridge id)value.exposure,(__bridge id)value.reactive,(__bridge id)value.transparency}{}
+};
 struct ScenePreparing:std::runtime_error{std::function<ShaderResult()>ready;explicit ScenePreparing(const std::string&reason,std::function<ShaderResult()>query={}):std::runtime_error(reason),ready(std::move(query)){};};
 // A failure always carries a reason. An empty message would otherwise let a
 // rejected candidate read as accepted and leave its row reason blank.
@@ -1675,8 +1682,8 @@ EffectExecutionSelection EffectPlanExecutor::buildSnapshot(const ShaderFrame &in
                 if(reusedPrepared)ready.status=RS_TEMPORAL_OK;
                 else if(!resourceOnly){auto probe=std::make_shared<TemporalOwner>();actual.owner=probe.get();if(row.temporalMethod==RS_TEMPORAL_METALFX)encodeTemporalProvider(&actual,&ready,workingColor);else encodeTemporalProvider(&actual,&ready);}
                 if(ready.status==RS_TEMPORAL_BUSY&&resourceOnly){
-                    auto owner=row.temporal;const auto pending=actual;const auto metadata=workingColor;const bool exact=row.temporalMethod==RS_TEMPORAL_METALFX;next->rows.push_back(std::move(row));
-                    throw ScenePreparing(ready.reason,[owner,pending,metadata,exact,commands=validation]{(void)owner;(void)commands;RSTemporalResult status{};status.size=sizeof(status);status.version=1;if(exact)prepareTemporalProvider(&pending,&status,metadata);else prepareTemporalProvider(&pending,&status);return ShaderResult{status.status==RS_TEMPORAL_OK,status.reason,status.status==RS_TEMPORAL_BUSY};});
+                    auto owner=row.temporal;const auto pending=std::make_shared<const RetainedTemporalFrame>(actual);const auto metadata=workingColor;const bool exact=row.temporalMethod==RS_TEMPORAL_METALFX;next->rows.push_back(std::move(row));
+                    throw ScenePreparing(ready.reason,[owner,pending,metadata,exact]{(void)owner;RSTemporalResult status{};status.size=sizeof(status);status.version=1;if(exact)prepareTemporalProvider(&pending->frame,&status,metadata);else prepareTemporalProvider(&pending->frame,&status);return ShaderResult{status.status==RS_TEMPORAL_OK,status.reason,status.status==RS_TEMPORAL_BUSY};});
                 }
                 if(ready.status==RS_TEMPORAL_BUSY)throw TransientBusy(ready.reason);if(ready.status!=RS_TEMPORAL_OK||(!resourceOnly&&!ready.encoded))throw std::runtime_error(*ready.reason?ready.reason:"The scene reconstruction could not be prepared");
                 row.temporalPrepared=true;
