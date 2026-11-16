@@ -141,9 +141,11 @@ const godot = process.env.MACLAUNCHER_TEST_GODOT || path.join(os.homedir(), 'Lib
   'runtimes', 'godot', '4.6.3-stable', 'standard', 'Godot.app', 'Contents', 'MacOS', 'Godot');
 // Headless, with its log file and user data inside the test directory, and a
 // frame limit so a failed check always ends the process instead of a timeout.
+// A hang past the timeout is ended with SIGKILL: SIGTERM makes the .NET build
+// abort with a crash report.
 const runGodot = (directory, script) => spawnSync(godot, ['--headless', '--log-file', path.join(directory, 'godot.log'),
   '--quit-after', '600', '--path', directory, '--script', script],
-  { encoding: 'utf8', timeout: 30000, env: { ...process.env, HOME: directory } });
+  { encoding: 'utf8', timeout: 30000, killSignal: 'SIGKILL', env: { ...process.env, HOME: directory } });
 
 test('The Godot graphics scripts parse headless', t => {
   if (!fs.existsSync(godot)) { t.skip('A local Godot runtime is required for GDScript parsing.'); return; }
