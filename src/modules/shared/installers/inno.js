@@ -273,8 +273,13 @@ async function prepareInstaller(file, options = {}) {
       throw installerError("This game's installer was extracted by an earlier MacLauncher version, and that extraction could not be converted. Its files were left unchanged. To play, copy any saves from the extracted game, then remove the game and import the installer again.", "INSTALLER_CACHE_RECHECK_REQUIRED");
     if (!index && fs.existsSync(path.join(cacheRoot, "current.json")))
       throw installerError("The installer cache metadata changed or is unreadable.", "INSTALLER_CACHE_INVALID");
-    helper ||= await ensureHelper(options);
     const FreeArc = require("./freearc"), archives = FreeArc.findArchives(file);
+    let selectedWine;
+    if (archives.length && !readOnly) {
+      const prepared = await require("./freearc-downloads").prepareDownloads({ ...options, inputPath: file });
+      options = prepared.context; selectedWine = prepared.wine;
+    }
+    helper ||= await ensureHelper(options);
     let decoderTools = index?.freeArc ? await FreeArc.toolsFor(options) : null;
     const readerCompatibility = await helperCacheIdentity(helper, { signal });
     let compatibility = decoderTools ? sha(JSON.stringify([readerCompatibility, FreeArc.ABI, decoderTools.identity])) : readerCompatibility;
@@ -335,7 +340,7 @@ async function prepareInstaller(file, options = {}) {
       timer = setInterval(() => { report().catch(() => {}); }, 1000); timer.unref();
       await runHelper(helper.executable, ["--extract", "--silent", "--progress=false", "--color=false", "--collisions=error", "--exclude-temp", "--output-dir", output, file],
         { signal, timeout: 60 * 60 * 1000, maximum: 65536, onSpawn });
-      if (freeArc) await FreeArc.extract(freeArc, output, decoderTools, options);
+      if (freeArc) await FreeArc.extract(freeArc, output, decoderTools, options, selectedWine);
       await fs.promises.rm(path.join(stage, "decoder-shell"), { recursive: true, force: true });
       clearInterval(timer);
       if (!sameSources(sources)) throw installerError("Installer files changed during extraction.");

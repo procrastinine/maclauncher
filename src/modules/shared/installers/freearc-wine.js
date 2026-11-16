@@ -2,32 +2,16 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const GameData = require("../game-data");
-const Sources = require("../../crossover/sources");
 const Environments = require("../runtime/wine-environment");
 const Wine = require("../../crossover/sources/wine-launch");
 const CrossOver = require("../../crossover/runtime/launch");
-const WindowsTools = require("../runtime/managed-windows-tool");
 const { environment: basicEnvironment } = require("../runtime/macos-sandbox");
 const { withRuntimeUse } = require("../../../core/coordinated-runtime-managers");
 const { runHelper } = require("./process");
 const { installerError } = require("./inno-header");
-async function selectedWine(context) {
-  const requested = context.runtimeId || context.entry?.runtimeId;
-  const source = Sources.get(requested);
-  const entry = context.entry || { gameId: context.gameId };
-  if (source?.downloads === false && !source.manager().resolveSelection(entry, context.settings, context.userDataDir).ready)
-    throw installerError("The selected Wine runtime is unavailable for this decoder.", "INSTALLER_TOOL_MISSING");
-  // The shared Windows-tool helper owns installation and the existing
-  // fallback policy. An explicit source is supplied to both slots so that
-  // its version cannot silently fall back to another Wine installation.
-  const dependencies = source ? { sikarugir: source.manager(), crossover: source.manager() } : {};
-  const selected = await WindowsTools.ensureWine(entry, context, dependencies);
-  if (selected.install.needsRosetta) await (context.ensureRosetta ? context.ensureRosetta() : require("../runtime/rosetta").ensure(context));
-  return { ...selected, source: source || Sources.get(selected.kind) };
-}
 async function withPrivateWine(context, directory, helpers, callback, dependencies = {}) {
-  const host = await (dependencies.selectedWine || selectedWine)(context);
-  if (!host.source || !path.isAbsolute(host.install?.executablePath || "") || !path.isAbsolute(host.install?.serverPath || ""))
+  const host = dependencies.host;
+  if (!host?.source || !path.isAbsolute(host.install?.executablePath || "") || !path.isAbsolute(host.install?.serverPath || ""))
     throw installerError("The selected Wine runtime lacks a decoder loader or server.", "INSTALLER_TOOL_MISSING");
   // Use the existing private Wine ownership boundary. Only this fresh child
   // prefix is disposable; existing game prefixes and external bottles survive.
@@ -42,19 +26,20 @@ async function withPrivateWine(context, directory, helpers, callback, dependenci
     if (!current.ready || current.install.executablePath !== host.install.executablePath) throw installerError("The selected Wine runtime changed before extraction.");
     const onSpawn = async child => { await lease.bind(child.pid); await context.onSpawn?.(child); };
     const scoped = { ...context, onToolProcessSpawn: onSpawn };
-    let environment;
+    const launch = host.source.id === "crossover" ? null : (dependencies.forSource || Wine.forSource)(host.source.id);
+    const runtime = launch?.prefixRuntime(host.install, runtimeDirectory);
+    const initial = launch ? launch.buildEnvironment(settings, host.install, runtimeDirectory, prefix, runtime, { baseEnvironment: basicEnvironment() })
+      : CrossOver.buildEnvironment(settings, host.install, runtimeDirectory, prefix, { baseEnvironment: basicEnvironment() });
+    const environment = { ...initial.environment, HOME: path.join(directory, "home"), TMPDIR: path.join(directory, "tmp"),
+      WINEPREFIX: prefix, WINEDEBUG: "-all", WINEDLLOVERRIDES: "winemenubuilder.exe=d;unarc,unarc64=d" };
+    const supervise = dependencies.runSupervised || Wine.runSupervised;
+    const run = (command, server, args, options) => supervise(command, server, args, { ...options, env: environment });
     try {
-      if (host.source.id === "crossover") {
-        await (dependencies.ensureBottle || CrossOver.ensureBottle)(host.install, owned, runtimeDirectory, settings, scoped);
-        environment = CrossOver.buildEnvironment(settings, host.install, runtimeDirectory, prefix, { baseEnvironment: basicEnvironment() }).environment;
-      } else {
-        const launch = (dependencies.forSource || Wine.forSource)(host.source.id), runtime = launch.prefixRuntime(host.install, runtimeDirectory);
-        await launch.ensurePrefix(host.install, owned, runtimeDirectory, settings, runtime, scoped);
-        environment = launch.buildEnvironment(settings, host.install, runtimeDirectory, prefix, runtime, { baseEnvironment: basicEnvironment() }).environment;
-      }
-      require("../../crossover/sources/launch-steps").detachProfileAliases(prefix);
-      environment = { ...environment, HOME: path.join(directory, "home"), TMPDIR: path.join(directory, "tmp"), WINEPREFIX: prefix, WINEDEBUG: "-all", WINEDLLOVERRIDES: "winemenubuilder.exe=d;unarc,unarc64=d" };
       for (const name of ["home", "tmp"]) await fs.promises.mkdir(path.join(directory, name), { recursive: true });
+      if (launch) await launch.ensurePrefix(host.install, owned, runtimeDirectory, settings, runtime, scoped, { run });
+      else await (dependencies.ensureBottle || CrossOver.ensureBottle)(host.install, owned, runtimeDirectory, settings, scoped,
+        { run: (command, args, options) => run(command, host.install.serverPath, args, options) });
+      require("../../crossover/sources/launch-steps").detachProfileAliases(prefix);
       const copied = path.join(prefix, "drive_c", "decoders");
       await fs.promises.cp(helpers, copied, { recursive: true, errorOnExist: true, force: false, dereference: false,
         filter: file => !/^unarc(?:64)?\.dll$/i.test(path.basename(file)) });
@@ -65,11 +50,11 @@ async function withPrivateWine(context, directory, helpers, callback, dependenci
       const env = { ...environment, WINEPREFIX: prefix };
       if (host.install.serverPath) {
         const runner = dependencies.runHelper || runHelper;
-        for (const args of [["-k"], ["-w"]]) await runner(host.install.serverPath, args, { env, timeout: 15000, onSpawn });
+        for (const args of [["-k"], ["-w"]]) await runner(host.install.serverPath, args, { env, environmentOnly: true, timeout: 15000, onSpawn });
       }
       Environments.assertPrivateEnvironment(owned, runtimeDirectory);
       await fs.promises.rm(prefix, { recursive: true, force: true });
     }
   }, { userDataDir: context.userDataDir });
 }
-module.exports = { selectedWine, withPrivateWine };
+module.exports = { withPrivateWine };

@@ -7,7 +7,7 @@ const Streams = require("./freearc-stream");
 const { runHelper } = require("./process");
 const { installerError } = require("./inno-header");
 const Manager = require("./runtime/freearc-manager");
-const ABI = "freearc-container-native-v1";
+const ABI = "freearc-builtins-external-srep-v2";
 async function toolsFor(context) {
   if (context.freeArcTools) return context.freeArcTools;
   let install;
@@ -17,17 +17,21 @@ async function toolsFor(context) {
     install = selection.install;
   } else install = await Manager.ensure(context.entry, {}, context);
   const root = install.installDir;
-  const tools = Object.fromEntries(["filter", "srep", "clsHost"].map(name => {
+  const tools = Object.fromEntries(["filter", "clsHost"].map(name => {
     const relative = install.runtimeFiles?.[name];
     if (typeof relative !== "string" || Format.safePath(relative) !== relative) throw installerError("The FreeArc decoder package is incomplete.", "INSTALLER_TOOL_MISSING");
     return [name, path.join(root, relative)];
   }));
+  const manifest = install.manifest;
+  if (!manifest?.files || !install.payloadRoot) throw installerError("The FreeArc decoder package has no verified file manifest.", "INSTALLER_TOOL_MISSING");
   const identities = [];
   for (const file of Object.values(tools)) {
     const stat = await fs.promises.lstat(file);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024 ** 2) throw installerError("The FreeArc decoder package contains an invalid helper.");
-    const hash = crypto.createHash("sha256"); for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
-    identities.push(hash.digest("hex"));
+    const relative = path.relative(install.payloadRoot, file).split(path.sep).join("/");
+    const record = manifest.files.find(record => record.path === relative);
+    if (!record || record.size !== stat.size || !/^[a-f0-9]{64}$/.test(record.sha256 || "")) throw installerError("The FreeArc decoder package manifest is incomplete.", "INSTALLER_TOOL_MISSING");
+    identities.push(record.sha256);
   }
   return { ...tools, identity: crypto.createHash("sha256").update(JSON.stringify([ABI, install.version, identities])).digest("hex") };
 }
@@ -70,7 +74,7 @@ async function prepare(file, archives, stage, helper, tools, context, payload) {
   const files = mapped.flatMap(a => a.blocks.flatMap(b => b.files)); Format.validateFiles(files);
   return { archives: mapped, files, work, helpers: payload.helpers, requiresWine: mapped.some(a => a.blocks.some(b => Codecs.needsWine(b.stages))) };
 }
-async function extract(plan, output, tools, context) {
+async function extract(plan, output, tools, context, selectedWine) {
   const controller = new AbortController(), abort = () => controller.abort(context.signal?.reason);
   context.signal?.addEventListener("abort", abort, { once: true }); if (context.signal?.aborted) abort();
   let ready, session, release, failure;
@@ -79,7 +83,7 @@ async function extract(plan, output, tools, context) {
     ready ||= new Promise((resolve, reject) => {
       session = require("./freearc-wine").withPrivateWine(scope, plan.work, plan.helpers, async wine => {
         resolve(wine); await finished;
-      }).catch(error => { reject(error); throw error; });
+      }, { host: selectedWine }).catch(error => { reject(error); throw error; });
       session.catch(() => {});
     });
     return ready;

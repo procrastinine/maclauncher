@@ -39,17 +39,17 @@ function split4x4(method) {
 function planStage(method, ini, files, depth = 0) {
   if (depth > 8 || typeof method !== "string" || !method || method.length > 4096 || /[\x00-\x1f]/.test(method)) bad("The FreeArc decoder method is invalid.");
   const [name] = method.split(":"), lower = name.toLowerCase();
-  if (lower === "srep") return { kind: "srep", name: lower, method };
+  if (lower === "srep" && !Object.hasOwn(ini, lower)) bad("This installer doesn't include the SREP decoder its archives need.");
   if (lower === "4x4") return { kind: "4x4", name: lower, method, inner: planStage(split4x4(method), ini, files, depth + 1) };
   if (BUILTINS.has(lower)) return { kind: "native", name: lower, method };
   const found = wanted => files.find(file => file.toLowerCase() === wanted.toLowerCase());
   if (Object.hasOwn(ini, lower)) {
     const section = ini[lower], command = section.unpackcmd;
-    if (!command) bad("The FreeArc external decoder has no command.");
+    if (!command) bad(lower === "srep" ? "This installer doesn't include the SREP decoder its archives need." : "The FreeArc external decoder has no command.");
     const pipe = /<stdin>|<stdout>/i.test(command);
     const cmd = argv(command.replaceAll("{options}", "").replaceAll("{compressor}", name).replace(/<stdin>|<stdout>/gi, ""));
     const exe = leaf(cmd[0]), executable = found(exe) || found(exe + ".exe");
-    if (!executable || !/\.exe$/i.test(executable) || /^(?:setup|installer|unarc|cmd|powershell|msiexec)\.exe$/i.test(executable)) bad("The required FreeArc decoder executable is missing or is an installer command.");
+    if (!executable || !/\.exe$/i.test(executable) || /^(?:setup|installer|unarc|cmd|powershell|msiexec)\.exe$/i.test(executable)) bad(lower === "srep" ? "This installer doesn't include the SREP decoder its archives need." : "The required FreeArc decoder executable is missing or is an installer command.");
     cmd[0] = executable;
     let kind = pipe ? "pipe" : "files";
     if (pipe && /^(?:xtool|rtool)/i.test(executable)) {
@@ -69,5 +69,5 @@ function planChain(chain, ini = {}, files = []) {
   const parts = String(chain).split("+"); if (parts.length > 32) bad("The FreeArc decoder chain exceeds its limit.");
   return parts.reverse().map(method => planStage(method.trim(), ini, files));
 }
-const needsWine = stages => stages.some(stage => stage.kind === "4x4" ? needsWine([stage.inner]) : !["native", "srep"].includes(stage.kind));
+const needsWine = stages => stages.some(stage => stage.kind === "4x4" ? needsWine([stage.inner]) : stage.kind !== "native");
 module.exports = { BUILTINS, parseIni, argv, planStage, planChain, needsWine };

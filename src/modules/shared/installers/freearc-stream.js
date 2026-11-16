@@ -29,7 +29,7 @@ class Input {
 async function *run(executable, args, input, context = {}) {
   const { signal, cwd, env, onSpawn, maximum = LIMITS.bytes } = context;
   signal?.throwIfAborted();
-  const environment = { ...process.env, ...env };
+  const environment = context.wineChild ? { ...env } : { ...process.env, ...env };
   for (const key of Object.keys(environment)) if (/^(?:Malloc|DYLD_)/.test(key) && !env?.[key]) delete environment[key];
   const child = (context.spawn || spawn)(executable, args, { cwd, env: environment, stdio: ["pipe", "pipe", "pipe"] });
   let failure, closed = false, killing, errBytes = 0, stderr = "", ownership = Promise.resolve();
@@ -100,19 +100,6 @@ async function *decodeStage(stage, input, context) {
     if (stage.name === "storing") { yield* input; return; }
     yield* run(context.tools.filter, [stage.method], input, context); return;
   }
-  if (stage.kind === "srep") {
-    const reader = new Input(input), header = await reader.take(16);
-    // SREP format4 keeps an index in its footer and seeks to it before
-    // decoding. Earlier forward-only streams can retain the pipe path.
-    if ((header.readUInt32LE(8) & 255) !== 4) { yield* run(context.tools.srep, ["-d", "-", "-"], reader.rest(header), context); return; }
-    const directory = await fs.promises.mkdtemp(path.join(context.work, "srep-"));
-    try {
-      const file = path.join(directory, "input.srep");
-      await writeStream(file, reader.rest(header), { signal: context.signal });
-      yield* run(context.tools.srep, ["-d", file, "-"], [], { ...context, cwd: directory });
-    } finally { await fs.promises.rm(directory, { recursive: true, force: true }); }
-    return;
-  }
   let body = input;
   if (stage.header) {
     const reader = new Input(input), byte = await reader.take(1, true);
@@ -120,17 +107,28 @@ async function *decodeStage(stage, input, context) {
     if (byte[0] === 0) { yield* reader.rest(); return; }
     body = reader.rest(byte[0] === 1 ? null : byte);
   }
+  let seekableSrep = false;
+  if (stage.name === "srep") {
+    const reader = new Input(body), header = await reader.take(16);
+    seekableSrep = (header.readUInt32LE(8) & 255) === 4;
+    body = reader.rest(header);
+  }
   const wine = context.wine || await context.getWine?.();
   if (!wine) throw error("This FreeArc method requires a Wine runtime.");
   const windowsPath = require("../runtime/managed-windows-tool").windowsPath;
   const command = stage.kind === "cls" ? [windowsPath(context.tools.clsHost), windowsPath(path.join(wine.helpers, stage.dll)), stage.parameters] : [windowsPath(path.join(wine.helpers, stage.cmd[0])), ...stage.cmd.slice(1)];
-  if (["pipe", "cls"].includes(stage.kind)) { yield* run(wine.executable, command, body, { ...context, env: wine.environment, cwd: wine.helpers, onSpawn: wine.onSpawn }); return; }
+  if (["pipe", "cls"].includes(stage.kind) && !seekableSrep) { yield* run(wine.executable, command, body, { ...context, env: wine.environment, cwd: wine.helpers, onSpawn: wine.onSpawn, wineChild: true }); return; }
   const directory = await fs.promises.mkdtemp(path.join(context.work, "external-"));
   try {
     const source = path.join(directory, stage.kind === "files" ? stage.packed : "input.bin"), target = path.join(directory, stage.kind === "files" ? stage.unpacked : "output.bin");
     await writeStream(source, body, { signal: context.signal });
-    const args = command.map(a => a === "{in}" ? windowsPath(source) : a === "{out}" ? windowsPath(target) : a);
-    for await (const ignored of run(wine.executable, args, [], { ...context, env: wine.environment, cwd: directory, onSpawn: wine.onSpawn })) { /* Drain bounded diagnostics. */ }
+    let args = command.map(a => a === "{in}" ? windowsPath(source) : a === "{out}" ? windowsPath(target) : a);
+    if (seekableSrep && stage.kind === "pipe") {
+      const dashes = args.map((a, i) => a === "-" ? i : -1).filter(i => i >= 0);
+      if (dashes.length < 2) throw error("The installer's SREP decoder command needs input and output file arguments.");
+      args[dashes.at(-2)] = windowsPath(source); args[dashes.at(-1)] = windowsPath(target);
+    }
+    for await (const ignored of run(wine.executable, args, [], { ...context, env: wine.environment, cwd: directory, onSpawn: wine.onSpawn, wineChild: true })) { /* Drain bounded diagnostics. */ }
     const stat = await fs.promises.lstat(target);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > LIMITS.bytes) throw error("The external decoder did not produce a regular output file.");
     yield* fs.createReadStream(target);
