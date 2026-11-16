@@ -61,9 +61,9 @@ test("documented API requirements agree with the host, MetalFX and neural gates"
 
 test("documented processor behavior agrees with shared execution and launch gates", async () => {
   const {documentFile} = await generator, text = fs.readFileSync(documentFile, "utf8");
-  assert.match(text, /Apple Silicon Macs execute ARM64 code directly and Intel code through/);
-  assert.match(text, /Intel Macs execute Intel code/);
-  assert.match(text, /By default, each app selects the processor build that matches its own/);
+  assert.match(text, /On Apple Silicon, ARM64 code runs directly and Intel code runs through/);
+  assert.match(text, /Intel Macs run Intel code only/);
+  assert.match(text, /Each app picks the runtime builds for its own processor by default/);
   // Use the actual included iOS helper declarations, without loading a game,
   // reading installed resources or starting any native helper.
   const mod = {distributionSupplementals: require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/ios/distribution-supplementals.json"))};

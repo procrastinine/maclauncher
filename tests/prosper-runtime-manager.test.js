@@ -153,7 +153,10 @@ test('Prosper managed Play obtains consent, resumes and preserves offline local 
   const ordinary = fixture('future-MCLv2'), legacy = fixture('legacy-local', 'local-only');
   const userDataDir = path.join(root, 'profile');
   let offline = false, requests = 0;
-  const dependencies = {systemVersionSync: () => '27.0',
+  // The fixture binary is this Mac's own /usr/bin/true, so its minimum is the
+  // running system's version.
+  const systemVersionSync = require('../src/modules/shared/runtime/bundled-native').systemVersionSync;
+  const dependencies = {systemVersionSync,
     fetchUrlBuffer: async () => {assert.equal(offline, false); requests++; return {status: 200, body: Buffer.from(JSON.stringify(ordinary.catalog))};},
     downloadToFile: async (_url, destination) => {assert.equal(offline, false); requests++; fs.copyFileSync(ordinary.archive, destination);}};
   const manager = createManager(dependencies);
@@ -179,7 +182,7 @@ test('Prosper managed Play obtains consent, resumes and preserves offline local 
   fs.writeFileSync(path.join(game, 'eboot.elf'), elf);
   const entry = {moduleId: 'anyps5', gameId: 'prosper-fixture', runtimeId: 'prosper', gameType: 'ps5', gamePath: game,
     moduleData: {format: 'elf', executablePath: path.join(game, 'eboot.elf')}};
-  const playDependencies = {systemVersionSync: () => '27.0',
+  const playDependencies = {systemVersionSync,
     fetchUrlBuffer: async () => {events.push('catalog'); return {status: 200, body: Buffer.from(JSON.stringify({...packages[0].catalog, packages: packages.map(item => item.record)}))};},
     downloadToFile: async (url, destination) => {
       events.push('download'); const selected = packages.find(item => item.record.asset.url === url);
