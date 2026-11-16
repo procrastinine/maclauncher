@@ -282,7 +282,7 @@ async function prepareLoaderView(engine, viewRoot, install, signal, source) {
   const libraryOverride = path.join(wineRoot, "loader-libraries");
   ownDirectory(libraryOverride);
   await linkFile(path.join(unix, "ntdll.so"), path.join(libraryOverride, "ntdll.so"), signal);
-  return { wineRoot, dllRoot, executablePath: separate ? executablePath : gameLoader, serverPath, libraryOverride };
+  return { wineRoot, dllRoot, executablePath: separate ? executablePath : gameLoader, serverPath, libraryOverride, sourceMainExecutablePath: separate ? unixLoader : install.executablePath || path.join(engine,"bin","wine"), plannedMainExecutablePath: gameLoader };
 }
 async function clearUnusedRenderers(dllRoot, renderers, components, signal) {
   const selected = new Set(components.flatMap(name => CORE_DLLS[name].map(module => module + ".dll")));

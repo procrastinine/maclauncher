@@ -345,7 +345,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     requestedSettings: context.runtimeSettings, install: selected.install, values: { windowsExecutablePath: match.windowsExecutablePath,
       executableArchitecture: match.executableArchitecture, bottlePath, applicationPath: selected.install.appPath } });
   timing('ready');
-  const processPlan=require('../../../core/runtime-process-plan').measuredProcessPlan({build:'crossover:'+selected.version,invocationPath:executablePath,sourceExecutablePath:selected.install.graphicsExecutablePath||(translatorPlan.layout?.unixRoot&&path.join(translatorPlan.layout.unixRoot,'wine')),architecture:translatorPlan.layout?.architecture,guestArch:require('../../../core/binary-arch').peArchitecture(require('../../shared/runtime/binary-compatibility').requiredMachine(selectedExecutable.executableArchitecture)),host:host||require('../../shared/runtime/host-capabilities').getHostCapabilities()});
+  const processPlan=require('../../../core/runtime-process-plan').measuredProcessPlan({build:'crossover:'+selected.version,invocationPath:executablePath,sourceExecutablePath:selected.install.graphicsExecutablePath||selected.install.loaderPath,architecture:translatorPlan.layout?.architecture,guestArch:require('../../../core/binary-arch').peArchitecture(require('../../shared/runtime/binary-compatibility').requiredMachine(selectedExecutable.executableArchitecture)),host:host||require('../../shared/runtime/host-capabilities').getHostCapabilities()});
+  context.processPlan=processPlan;
   return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, windowsExecutablePath, windowsWorkingDirectory, environment, args, translatorPlan, existingEnvironment, processPlan };
 }
 

@@ -556,7 +556,7 @@ function createLauncher({
     context.onProcessSpawn = async child => {
       options.ownedProcesses?.add(child);
       // Publish the owned PID before awaiting lease IPC or module readiness.
-      if (options.reportPreparation === true) onGameProcessSpawn?.(entry, child, runtimeId);
+      if (options.reportPreparation === true) onGameProcessSpawn?.(entry, child, runtimeId, {processPlan:context.processPlan,runtimePlan:context.runtimePlan});
       options.signal?.throwIfAborted();
       context.bindGameEffectsProcess(child);
       await scope?.bind(child.pid);
