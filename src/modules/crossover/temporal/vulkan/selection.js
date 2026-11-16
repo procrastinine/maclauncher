@@ -1,6 +1,7 @@
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const Writable = require('../../../shared/writable-input');
 const { readPeExports } = require('../../../shared/runtime/pe-exports');
+const { readMachOLoadCommands } = require('../../../shared/runtime/macho-load-commands');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const stat = file => fs.lstatSync(file, { throwIfNoEntry: false });
 
@@ -41,12 +42,20 @@ async function prepareSelection({ prefixPath, dllRoot, windows, unixName, client
   if (!path.isAbsolute(prefixPath || '') || !path.isAbsolute(dllRoot || '')) throw Error('WineVulkan needs a prepared Wine prefix and view.');
   const selected = checked(client), library = checked(native), original = checked(client.original);
   const name = clientName(selected), stem = name.slice(0, -4);
+  const imports = new Set(readMachOLoadCommands(library.file).slices.flatMap(image => image.dependencies)
+    .filter(item => item.path.startsWith('@rpath/')).map(item => item.path.slice(7)));
+  const dependencies = new Map();
+  for (const item of native.dependencies || []) {
+    if (!/^[a-zA-Z0-9_.-]+$/.test(item.name || '') || dependencies.has(item.name)) throw Error('WineVulkan dependency metadata is invalid.');
+    dependencies.set(item.name, checked(item));
+  }
+  for (const name of imports) if (!dependencies.has(name)) throw Error('WineVulkan publisher dependency is missing: ' + name);
   if (readPeExports(original.file)?.form !== 'builtin') throw Error('The original WineVulkan client is not a Wine builtin.');
   const directory = path.join(prefixPath, 'drive_c/windows', windows === 'i386-windows' ? 'syswow64' : 'system32');
   Writable.assertOwnDirectory(prefixPath, directory, { create: false });
   const destination = path.join(directory, 'winevulkan.dll'), token = crypto.randomUUID();
   const backup = path.join(directory, '.maclauncher-winevulkan-' + token);
-  const aliases = [], linkMatches = (file, target) => stat(file)?.isSymbolicLink() && fs.readlinkSync(file) === target;
+  const aliases = [], copies = [], linkMatches = (file, target) => stat(file)?.isSymbolicLink() && fs.readlinkSync(file) === target;
   let moved = false, applied = false, restored = false, abortFailure;
   function restoreSync() {
     if (restored) return;
@@ -59,6 +68,12 @@ async function prepareSelection({ prefixPath, dllRoot, windows, unixName, client
       if (stat(destination)) throw Error('WineVulkan destination changed; its original is preserved at ' + backup);
       fs.renameSync(backup, destination); moved = false;
     }
+    for (const copy of copies) {
+      const current = stat(copy.file);
+      if (current && (!current.isFile() || current.isSymbolicLink() || current.ino !== copy.ino || current.dev !== copy.dev || sha(fs.readFileSync(copy.file)) !== copy.sha256))
+        throw Error('WineVulkan view library changed; the later file was preserved.');
+    }
+    for (const copy of copies) if (stat(copy.file)) fs.unlinkSync(copy.file);
     for (const [file, target] of aliases) if (linkMatches(file, target)) fs.unlinkSync(file);
     signal?.removeEventListener('abort', onAbort);
     restored = true;
@@ -72,13 +87,26 @@ async function prepareSelection({ prefixPath, dllRoot, windows, unixName, client
     if (!current) { fs.symlinkSync(target, destination); aliases.push([destination, target]); }
     checkpoint();
   }
+  const nativePath = path.join(dllRoot, unixName, stem + '.so');
   try {
     alias(windows, name, selected.file);
-    alias(unixName, stem + '.so', library.file);
+    for (const name of imports) alias(unixName, name, dependencies.get(name).file);
+    // A real file keeps @loader_path at the owned view, beside the selected
+    // publisher libraries. Bytes and signature remain exactly the accepted input.
+    Writable.assertOwnDirectory(dllRoot, path.dirname(nativePath));
+    const current = stat(nativePath);
+    if (current && (!current.isFile() || current.isSymbolicLink() || sha(fs.readFileSync(nativePath)) !== library.sha256))
+      throw Error('WineVulkan view library is already owned by another input.');
+    if (!current) {
+      fs.copyFileSync(library.file, nativePath, fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE);
+      const identity = stat(nativePath);
+      copies.push({ file: nativePath, ino: identity.ino, dev: identity.dev, sha256: library.sha256 });
+    }
     checkpoint(); signal?.addEventListener('abort', onAbort, { once: true }); checkpoint();
   } catch (error) { restoreSync(); throw error; }
   return {
     env: { WINEDLLPATH: dllRoot, WINEDLLOVERRIDES: 'winevulkan=b' },
+    native: { file: nativePath, sha256: library.sha256 },
     async applyPrefix() {
       try {
         checkpoint();
