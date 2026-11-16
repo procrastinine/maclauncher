@@ -13,7 +13,7 @@ function read(userDataDir){try{const root=directory(userDataDir);Writable.assert
 }catch{return null;}}
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 async function verify(input){for(const row of spec.files){const file=path.join(input,row.path),stat=await fs.promises.lstat(file);if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==row.bytes||sha(await fs.promises.readFile(file))!==row.sha256)throw Error('FSR 4.1.2 model identity differs: '+row.path);}return input;}
-async function execute(executable,args,signal){return new Promise((resolve,reject)=>{const child=spawn(executable,args,{signal,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1',PYTHONNOUSERSITE:'1'},stdio:['ignore','pipe','pipe']});let error='';child.stdout.resume();child.stderr.on('data',b=>{error=(error+b).slice(-8192)});child.on('error',reject);child.on('close',code=>code===0?resolve():reject(Error('FSR 4.1.2 preparation failed: '+error)));});}
+async function execute(executable,args,signal){return new Promise((resolve,reject)=>{const child=spawn(executable,args,{...(signal?{signal}:{}),env:{...process.env,PYTHONDONTWRITEBYTECODE:'1',PYTHONNOUSERSITE:'1'},stdio:['ignore','pipe','pipe']});let error='';child.stdout.resume();child.stderr.on('data',b=>{error=(error+b).slice(-8192)});child.on('error',reject);child.on('close',code=>code===0?resolve():reject(Error('FSR 4.1.2 preparation failed: '+error)));});}
 async function prepareData(context,input){
  const installed=require('./index').inspect(context.root);if(!installed||!installed.profiles.includes('int8-lite'))throw Error('Install the FSR 4 v3.2 provider first.');
  await verify(input);
