@@ -110,11 +110,14 @@ function listBuilds({ manager, sources, context = {} }) {
   for (const pin of manager.core.listDiscoveredCatalog({ userDataDir: context.userDataDir })) {
     if (installed.some(row => row.version === pin.version)) continue;
     const declaration = source.assets.find(rule => new RegExp(rule.match).test(pin.asset?.filename || pin.asset?.name || ''));
-    if (declaration) result.push({ id: source.id + ':' + pin.version, source: source.id, kind: source.kind,
-      version: pin.version, installed: false, measured: false, binaries: [], bytes: pin.asset?.bytes, interfaces: { ...source.interfaces,
-        requires: [...new Set([...(source.interfaces?.requires || []), ...(pin.minimumMacOS ? ['macos>=' + pin.minimumMacOS] : [])])] },
-      ...(pin.installReason ? { available: false, unavailableReason: pin.installReason } : {}),
-      legacy: { catalogEntry: pin, declares: declaration.declares } });
+    if (declaration) {
+      const { projectAvailableBuild } = require('../runtime-sources/available-build');
+      const offer = projectAvailableBuild({ source, asset: declaration, id: source.id + ':' + pin.version,
+        version: pin.version, bytes: pin.asset?.bytes, provenance: { catalogEntry: pin } });
+      if (pin.minimumMacOS) offer.interfaces.requires = [...new Set([...offer.interfaces.requires, 'macos>=' + pin.minimumMacOS])];
+      if (pin.installReason) Object.assign(offer, { available: false, unavailableReason: pin.installReason });
+      result.push(offer);
+    }
   }
   return result;
 }
