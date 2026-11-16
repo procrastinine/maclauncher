@@ -129,7 +129,9 @@ async function runGameCli(argv = process.argv.slice(2)) {
           }
           const input = createInterface({ input: process.stdin, output: process.stderr });
           try {
-            const prompt = plan.licenseRequired ? `Agree to ${plan.licenseUrl} and install ${plan.label}? [y/N] ` : `${plan.message || `Download ${versionLabel}?`} [y/N] `;
+            // A Play that needs several downloads names them all in one question.
+            const all = [versionLabel, ...(plan.companions || []).map(item => [item.label, item.versionLabel].filter(Boolean).join(" "))];
+            const prompt = plan.licenseRequired ? `Agree to ${plan.licenseUrl} and install ${plan.label}? [y/N] ` : `${all.length > 1 ? `Download ${all.join(", ")}?` : plan.message || `Download ${versionLabel}?`} [y/N] `;
             const approved = /^y(?:es)?$/i.test((await input.question(prompt)).trim());
             return approved && plan.licenseRequired ? { approved: true, licenseAccepted: true } : approved;
           }

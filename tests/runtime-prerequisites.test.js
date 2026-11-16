@@ -40,7 +40,7 @@ function fixture(t, { webReady = false, hostReady = false, decline = null, hostD
     listSharedRuntimeManagers: () => managers,
     detectGame: input => ({ moduleId: mod.id, name: "Original title", gamePath: input }) };
   const launcher = createLauncher({ userDataDir, registry,
-    confirmRuntimeInstall: plan => { calls.push(["consent", plan.managerId, plan.version]); return plan.managerId !== decline; } });
+    confirmRuntimeInstall: plan => { calls.push(["consent", plan.managerId, plan.version], ...(plan.companions || []).map(item => ["listed", item.label, item.versionLabel])); return plan.managerId !== decline && !(plan.companions || []).some(item => item.label === decline); } });
   const entry = { moduleId: mod.id, gamePath, gameId: "test", runtimeId: "onsyuri_web",
     runtimeData: { "nwjs-patched": { version: "0.117.0", variant: "sdk" } } };
   return { calls, settings, userDataDir, launcher, entry, mod, registry, managers, ready };
@@ -55,7 +55,7 @@ test("original Yuri web declaration prepares its payload and NW host through the
     [{ managerId: "nwjs", runtimeId: "nwjs-patched", sectionId: "default" }]);
   assert.equal((await f.launcher.launchEntry(f.entry)).kind, "process");
   assert.deepEqual(f.calls, [
-    ["consent", "onsyuri", "0.7.7beta"], ["consent", "nwjs", "0.117.0"],
+    ["consent", "onsyuri", "0.7.7beta"], ["listed", "NW.js", "0.117.0"],
     ["install", "onsyuri", "0.7.7beta", "web"], ["install", "nwjs", "0.117.0", "default", "sdk"], ["launch"]
   ]);
   assert.deepEqual(JSON.parse(fs.readFileSync(settingsFile)), f.settings);
@@ -104,10 +104,10 @@ test("an installed selected release is used offline when its catalog and default
   assert.deepEqual(f.calls, [["launch"]]);
 });
 
-test("declining the second prerequisite prevents both installations and launch", async t => {
-  const f = fixture(t, { decline: "nwjs" });
+test("cancelling the one dialog that lists both prerequisites prevents both installations and launch", async t => {
+  const f = fixture(t, { decline: "NW.js" });
   assert.equal((await f.launcher.launchEntry(f.entry)).kind, "cancelled");
-  assert.deepEqual(f.calls, [["consent", "onsyuri", "0.7.7beta"], ["consent", "nwjs", "0.117.0"]]);
+  assert.deepEqual(f.calls, [["consent", "onsyuri", "0.7.7beta"], ["listed", "NW.js", "0.117.0"]]);
 });
 
 test("a damaged installed host is prepared again and does not count as ready", async t => {

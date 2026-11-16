@@ -80,17 +80,18 @@ test("web module preparation plans the exact missing NW.js/Greenworks pair befor
     { id: "greenworks", defaultVersion: "0.80.0", installed: [] }
   ] }));
   t.mock.method(Nwjs, "refreshCatalog", () => assert.fail("Exact selections do not need a catalog lookup"));
-  ctx.confirmRuntimeInstall = async plan => { events.push(["consent", plan.version, plan.installOptions.sectionId]); return plan.installOptions.sectionId !== "greenworks"; };
+  // One dialog lists the NW.js host and its Greenworks build; Cancel declines both.
+  ctx.confirmRuntimeInstall = async plan => { events.push(["consent", plan.version, plan.installOptions.sectionId], ...(plan.companions || []).map(item => ["listed", item.versionLabel])); return false; };
   const prepare = () => prepareForLaunch({ entry, mod: Web, info: Web.manifest, context: ctx,
     registry: { listModuleIds: () => [Web.id], getModule: () => Web },
     install: async (_manager, payload) => { events.push(["install", payload.version, payload.sectionId]); installed.push(payload); }
   });
   assert.equal(await prepare(), false);
-  assert.deepEqual(events, [["consent", "0.103.1", "default"], ["consent", "0.103.1", "greenworks"]]);
+  assert.deepEqual(events, [["consent", "0.103.1", "default"], ["listed", "0.103.1"]]);
   assert.deepEqual(installed, []); assert.equal(digest(path.join(entry.target, "greenworks.js")), sourceHash);
-  events.length = 0; ctx.confirmRuntimeInstall = async plan => { events.push(["consent", plan.version, plan.installOptions.sectionId]); return true; };
+  events.length = 0; ctx.confirmRuntimeInstall = async plan => { events.push(["consent", plan.version, plan.installOptions.sectionId], ...(plan.companions || []).map(item => ["listed", item.versionLabel])); return true; };
   assert.equal(await prepare(), true);
-  assert.deepEqual(events, [["consent", "0.103.1", "default"], ["consent", "0.103.1", "greenworks"],
+  assert.deepEqual(events, [["consent", "0.103.1", "default"], ["listed", "0.103.1"],
     ["install", "0.103.1", "default"], ["install", "0.103.1", "greenworks"]]);
   assert.equal(entry.runtimeData["nwjs-patched"].version, "0.103.1");
   assert.equal(ctx.settings.runtimes.nwjs.defaultVersion, "0.107.0");

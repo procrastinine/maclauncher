@@ -345,16 +345,21 @@ async function confirmRuntimeInstallation(plan, entry, {signal} = {}) {
   if (signal?.aborted) return false;
   if (plan?.kind === "licence") return require("./licence-sheet").show(plan, { parent: getLauncherDialogOwner(), signal });
   const versionLabel = [plan.label, plan.versionLabel || plan.version].filter(Boolean).join(" ");
-  // Optional companions of this download are listed with their version and size,
-  // or with a companion's own complete text.
-  const companions = (Array.isArray(plan.companions) ? plan.companions : []).map(item => item.detail ||
-    `Also downloads ${[item.label, item.versionLabel].filter(Boolean).join(" ")}${item.bytes > 0 ? ` (${Math.max(0.1, item.bytes / 1048576).toFixed(1)} MB)` : ""}. ${item.summary || ""}`.trim());
+  // A Play that needs several downloads asks once: one line per download with
+  // its version and size, then their total.
+  const companions = Array.isArray(plan.companions) ? plan.companions : [];
+  const items = [{ ...plan, versionLabel: plan.versionLabel || plan.version }, ...companions];
+  const size = bytes => `${Math.max(0.1, bytes / 1048576).toFixed(1)} MB`;
+  const lines = [...items.map(item => [item.label, item.versionLabel].filter(Boolean).join(" ") + (item.bytes > 0 ? ` (${size(item.bytes)})` : "")),
+    ...(items.every(item => item.bytes > 0) ? [`Total: ${size(items.reduce((sum, item) => sum + item.bytes, 0))}`] : [])];
   // One optional companion can be a checkbox, checked by default, so it can be
-  // declined without cancelling this download.
-  const optional = (Array.isArray(plan.companions) ? plan.companions : []).find(item => typeof item.checkboxLabel === "string" && item.checkboxLabel);
-  const options = { type: "question", buttons: [plan.confirmLabel || "Download and Play", plan.cancelLabel || "Cancel"], defaultId: 0, cancelId: 1, ...(signal ? {signal} : {}),
-    message: plan.message || `${plan.kind === "prerequisite" ? "Install" : "Download"} ${versionLabel}?`,
-    detail: [plan.detail || (entry ? `Required to run ${entry.name || path.basename(entry.gamePath)}.` : "Required by this runtime."), ...companions].join("\n\n"),
+  // declined without cancelling the other downloads.
+  const optional = companions.find(item => typeof item.checkboxLabel === "string" && item.checkboxLabel);
+  const name = entry && (entry.name || path.basename(entry.gamePath || ""));
+  const options = { type: "question", buttons: companions.length ? ["Download and Play", "Cancel"] : [plan.confirmLabel || "Download and Play", plan.cancelLabel || "Cancel"],
+    defaultId: 0, cancelId: 1, ...(signal ? {signal} : {}),
+    message: companions.length ? `Download what ${name || "this game"} needs?` : plan.message || `${plan.kind === "prerequisite" ? "Install" : "Download"} ${versionLabel}?`,
+    detail: companions.length ? lines.join("\n") : plan.detail || (entry ? `Required to run ${name}.` : "Required by this runtime."),
     ...(optional ? { checkboxLabel: optional.checkboxLabel, checkboxChecked: true } : {}) };
   const owner = getLauncherDialogOwner();
   const choice = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);

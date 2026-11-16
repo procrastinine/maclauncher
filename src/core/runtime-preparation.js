@@ -224,16 +224,16 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
       const installedBefore = (state?.sections || [state]).flatMap(item => item?.installed || []).map(row => String(row?.version));
       return { manager, plan, requiresDownload, versionLabel, installedBefore };
     });
-    // Consent covers discovery and acquisition before either occurs. Each
-    // download has its own dialog. An optional companion, such as a package
-    // matched to the selected runtime, is listed in the dialog of a required
-    // download of the same Play; without one it has its own dialog, and
-    // declining it continues Play.
+    // Consent covers discovery and acquisition before either occurs. One
+    // dialog lists every required download of this Play and its optional
+    // companions, such as a package matched to the selected runtime, and
+    // approving it installs them all. Another optional download has its own
+    // dialog, and declining it continues Play.
     let fallbackRequired = false;
     const pending = ({ plan, requiresDownload }) => (requiresDownload || !plan.version || plan.discoveryRequired) &&
       !approved.has(consentKey(plan)) && !declined.has(consentKey(plan));
     const host = installations.find(item => !item.plan.optional && pending(item));
-    const companions = host ? installations.filter(item => item.plan.optional && item.plan.companion && pending(item)) : [];
+    const companions = host ? installations.filter(item => item !== host && (!item.plan.optional || item.plan.companion) && pending(item)) : [];
     for (const { manager, plan, requiresDownload, versionLabel } of installations) {
       const key = consentKey(plan);
       if (declined.has(key) || companions.some(item => item.plan === plan)) continue;

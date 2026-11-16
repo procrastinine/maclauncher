@@ -144,7 +144,8 @@ test('with another Play download, the bridge is one line of that dialog', async 
   assert.deepEqual(accepted.installs.map(([manager]) => manager).sort(), ['engine', id]);
   assert.deepEqual(accepted.grants, ['steam-client-start']);
   const shown = await dialogOptions(accepted.dialogs[0], { name: 'Fixture' }, { response: 0, checkboxChecked: true });
-  assert.equal(shown.detail, 'Required to run Fixture.\n\n' + detail);
+  assert.equal(shown.message, 'Download what Fixture needs?');
+  assert.equal(shown.detail, 'Wine engine 11.0\nSteam client bridge 1.0.0 (0.1 MB)');
   assert.deepEqual([shown.checkboxLabel, shown.checkboxChecked, shown.result], ['Also connect to Steam', true, true]);
   const cleared = await dialogOptions(accepted.dialogs[0], { name: 'Fixture' }, { response: 0, checkboxChecked: false });
   assert.deepEqual({ ...cleared.result }, { approved: true, companionsDeclined: true });

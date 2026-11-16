@@ -30,6 +30,20 @@ test('an optional companion is listed with its version and size in the dialog of
   assert.deepEqual([declined.dialogs.length, declined.installs, declined.skips], [1, [], []]);
 });
 
+test('every download a Play needs is listed in one dialog, and approving it installs them all without a second dialog', async () => {
+  const translator = { managerId: 'integration', version: '3.0', label: 'Translator', bytes: 1048576 };
+  const accepted = harness({ plans: [{ managerId: 'engine', version: '2.0', label: 'Engine', bytes: 2097152 }, translator, { ...companion, managerId: 'engine', installOptions: { part: 'bridge' } }] });
+  assert.equal(await accepted.run(), true);
+  assert.equal(accepted.dialogs.length, 1, 'one dialog for the whole Play');
+  assert.equal(accepted.dialogs[0].label, 'Engine');
+  assert.deepEqual(accepted.dialogs[0].companions.map(item => [item.label, item.versionLabel, item.bytes]),
+    [['Translator', '3.0', 1048576], ['CrossOver graphics integration', '26.3.0-MCLv1', 244068]]);
+  assert.deepEqual(accepted.installs.map(([id, version]) => id + ' ' + version).sort(), ['engine 2.0', 'engine 26.3.0-MCLv1', 'integration 3.0']);
+  const declined = harness({ plans: [{ managerId: 'engine', version: '2.0', label: 'Engine' }, translator], answers: [false] });
+  assert.equal(await declined.run(), false, 'Cancel stops Play');
+  assert.deepEqual([declined.dialogs.length, declined.installs], [1, []]);
+});
+
 test('an optional companion alone has its own dialog; declining it continues Play and is remembered once', async () => {
   const alone = harness({ plans: [companion], answers: [false] });
   assert.equal(await alone.run(), true, 'Play continues without it');
@@ -102,7 +116,7 @@ test('an automatic CrossOver Vulkan launch, or a release with no listed package,
     'an automatic launch never links the package');
 });
 
-test('the Play download dialog lists each companion with version, size and what it adds', async () => {
+test('the Play download dialog lists each download with its version and size, then their total', async () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
   const code = source.slice(source.indexOf('async function confirmRuntimeInstallation('), source.indexOf('\nfunction logRuntimeToolSpawn('));
   const shown = [];
@@ -110,8 +124,14 @@ test('the Play download dialog lists each companion with version, size and what 
   vm.createContext(context); vm.runInContext(code, context);
   await context.confirmRuntimeInstallation({ label: 'DXVK', versionLabel: '2.7', companions: [{ label: 'CrossOver graphics integration',
     versionLabel: '26.3.0-MCLv1', bytes: 244068, summary: 'Adds Vulkan sharing.' }] }, { name: 'Fixture', gamePath: '/Fixture' });
-  assert.equal(shown[0].message, 'Download DXVK 2.7?');
-  assert.equal(shown[0].detail, 'Required to run Fixture.\n\nAlso downloads CrossOver graphics integration 26.3.0-MCLv1 (0.2 MB). Adds Vulkan sharing.');
+  assert.equal(shown[0].message, 'Download what Fixture needs?');
+  assert.equal(shown[0].detail, 'DXVK 2.7\nCrossOver graphics integration 26.3.0-MCLv1 (0.2 MB)');
+  assert.deepEqual(Array.from(shown[0].buttons), ['Download and Play', 'Cancel']);
+  await context.confirmRuntimeInstallation({ label: 'Wine', versionLabel: '11.0', bytes: 209715200, cancelLabel: 'Play Without It', companions: [{ label: 'DXVK',
+    versionLabel: '2.7', bytes: 10485760 }, { label: 'Steam client bridge', versionLabel: '1.0.0', bytes: 1048576, checkboxLabel: 'Also connect to Steam' }] }, { name: 'Fixture' });
+  assert.equal(shown[1].detail, 'Wine 11.0 (200.0 MB)\nDXVK 2.7 (10.0 MB)\nSteam client bridge 1.0.0 (1.0 MB)\nTotal: 211.0 MB');
+  assert.deepEqual([Array.from(shown[1].buttons), shown[1].checkboxLabel], [['Download and Play', 'Cancel'], 'Also connect to Steam']);
+  shown.splice(0, 1);
   await context.confirmRuntimeInstallation({ label: 'CrossOver graphics integration', versionLabel: '26.3.0-MCLv1', cancelLabel: 'Play Without It',
     detail: 'Adds Vulkan sharing. Fixture also starts without it.' }, { name: 'Fixture' });
   assert.deepEqual(Array.from(shown[1].buttons), ['Download and Play', 'Play Without It']);

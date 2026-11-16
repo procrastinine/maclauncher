@@ -234,18 +234,18 @@ test("invalid versions, pointers and symlinked storage cannot substitute another
   await assert.rejects(f.store.resolvePack({ userDataDir: f.userDataDir, id: "Standard" }));
 });
 
-test("Play collects all consents before installation; decline preserves runtime defaults and storage", async t => {
+test("Play asks once for every download before installation; Cancel preserves runtime defaults and storage", async t => {
   const f = fixture(t), events = [], game = entry(["Standard"]), settings = { runtimes: { mkxpz: { defaultVersion: "explicit-host" } } };
   const manager = { id: "mkxpz", label: "MKXP-Z", getState: () => ({ catalog: {} }), installRuntime: () => assert.fail("Install adapter expected") };
   const mod = { runtimeManagers: [manager], ensureRuntime: () => ({ managerId: "mkxpz", version: "explicit-host" }), getRuntimeRequirements: f.store.getRuntimeRequirements };
-  const ctx = { userDataDir: f.userDataDir, runtimeId: "mkxpz", settings, confirmRuntimeInstall: async plan => { events.push("consent:" + plan.version); return !plan.installOptions?.rtpPack; } };
+  const ctx = { userDataDir: f.userDataDir, runtimeId: "mkxpz", settings, confirmRuntimeInstall: async plan => { events.push("consent:" + [plan.version, ...(plan.companions || []).map(item => item.versionLabel)].join("+")); return false; } };
   const prepare = () => prepareForLaunch({ entry: game, mod, info: { runtime: {} }, context: ctx,
     registry: { listModuleIds: () => ["rgss"], getModule: () => mod }, runAction: () => assert.fail("No action required"),
     install: async (_manager, plan) => { events.push("install:" + plan.version); if (plan.rtpPack) await f.store.installPack({ userDataDir: f.userDataDir, id: plan.rtpPack, version: plan.version }); } });
-  assert.equal(await prepare(), false); assert.deepEqual(events, ["consent:explicit-host", "consent:rtp-standard-1.04"]);
+  assert.equal(await prepare(), false); assert.deepEqual(events, ["consent:explicit-host+rtp-standard-1.04"]);
   assert.equal(fs.existsSync(f.userDataDir), false); assert.equal(settings.runtimes.mkxpz.defaultVersion, "explicit-host");
-  ctx.confirmRuntimeInstall = async plan => { events.push("consent:" + plan.version); return true; }; events.length = 0;
-  assert.equal(await prepare(), true); assert.deepEqual(events, ["consent:explicit-host", "consent:rtp-standard-1.04", "install:explicit-host", "install:rtp-standard-1.04"]);
+  ctx.confirmRuntimeInstall = async plan => { events.push("consent:" + [plan.version, ...(plan.companions || []).map(item => item.versionLabel)].join("+")); return true; }; events.length = 0;
+  assert.equal(await prepare(), true); assert.deepEqual(events, ["consent:explicit-host+rtp-standard-1.04", "install:explicit-host", "install:rtp-standard-1.04"]);
   assert.equal(settings.runtimes.mkxpz.defaultVersion, "explicit-host");
 });
 

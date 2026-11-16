@@ -34,7 +34,7 @@ function additionalRequirementsFixture(requirements) {
     },
     prepareLaunch: async () => events.push("prepare") };
   const ctx = context("native");
-  ctx.confirmRuntimeInstall = async plan => { events.push(`consent:${plan.managerId}`); return true; };
+  ctx.confirmRuntimeInstall = async plan => { events.push(`consent:${[plan.managerId, ...(plan.companions || []).map(item => item.label)].join("+")}`); return true; };
   const prepare = () => prepareForLaunch({ entry: {}, mod, info: { runtime: {} }, context: ctx,
     registry: { listModuleIds: () => [mod.id], getModule: () => mod },
     runAction: () => assert.fail("No preparation action was declared"),
@@ -49,14 +49,14 @@ test("module-owned native bridges join the exact host plan and deduplicate befor
     { managerId: "host", version: "1.2.3", installOptions: { sectionId: "stable" } }
   ]);
   assert.equal(await f.prepare(), true);
-  assert.deepEqual(f.events, ["consent:host", "consent:bridge", "install:host:1.2.3", "install:bridge:0.22.0", "prepare"]);
+  assert.deepEqual(f.events, ["consent:host+bridge", "install:host:1.2.3", "install:bridge:0.22.0", "prepare"], "one dialog lists both downloads");
 });
 
-test("declining a native bridge leaves the host and game untouched", async () => {
+test("cancelling the dialog that lists a native bridge leaves the host and game untouched", async () => {
   const f = additionalRequirementsFixture([{ managerId: "bridge", version: "0.22.0" }]);
-  f.ctx.confirmRuntimeInstall = async plan => { f.events.push(`consent:${plan.managerId}`); return plan.managerId !== "bridge"; };
+  f.ctx.confirmRuntimeInstall = async plan => { f.events.push(`consent:${[plan.managerId, ...(plan.companions || []).map(item => item.label)].join("+")}`); return false; };
   assert.equal(await f.prepare(), false);
-  assert.deepEqual(f.events, ["consent:host", "consent:bridge"]);
+  assert.deepEqual(f.events, ["consent:host+bridge"]);
 });
 
 test("Play without a consent adapter declines every download and installs nothing", async () => {
@@ -167,7 +167,7 @@ test("a companion with cached choices uses its manager default before consent", 
   const version=managerDefaultVersion({listed:["2.0.0","1.0.0"]});
   const f=additionalRequirementsFixture([{managerId:"bridge",version}]);
   assert.equal(await f.prepare(),true);
-  assert.deepEqual(f.events,["consent:host","consent:bridge","install:host:1.2.3","install:bridge:2.0.0","prepare"]);
+  assert.deepEqual(f.events,["consent:host+bridge","install:host:1.2.3","install:bridge:2.0.0","prepare"]);
 });
 
 function preventDownloads(t, manager) {
