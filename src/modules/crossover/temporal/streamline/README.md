@@ -49,16 +49,9 @@ plugin directories. `dlssPlugin()` requires Streamline's DLSS plugin
 `slEvaluateFeature(sl::kFeatureDLSS)` receive a camera, and a game that ships
 the interposer without that plugin, such as Unreal Engine games with only DLSS
 Frame Generation and Reflex, calls NGX directly through the engine's own DLSS
-plugin. Unreal Engine's Streamline plugin layout
-(`Engine/Plugins/Runtime/Nvidia/Streamline/Binaries/ThirdParty/Win64`) without
-`sl.dlss.dll` is the exception: the NGX core binds each direct NGX evaluation
-to the same frame's constants by equal jitter offset, excluding the previous
-evaluation's jitter, and the plugin sets those
-constants only with `-slforcetagging`. `../index.js` `resolveVulkanCameraPlan`
-marks that route `forcedTagging`, and `cameraArguments` adds the argument only
-when an enabled plan row consumes the camera. `resolveVulkanCameraPlan` then
-declares camera projection whenever the route forwards, without a setting, and
-the game starts from its own folder.
+plugin. `../index.js` `resolveVulkanCameraPlan` then declares camera projection
+whenever the route forwards, without a setting, and the game starts from its
+own folder.
 
 ## DXMT and D3DMetal
 

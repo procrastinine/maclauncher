@@ -339,7 +339,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (dll) args.push("--dll", dll);
   if (settings.wineDebug) args.push("--debugmsg", safeText(settings.wineDebug, "Wine debug channels"));
   if (settings.wineDebug) args.push("--cx-log", path.join(directory, "wine.log"));
-  args.push("--", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(bridgeLaunch?.arguments || []), ...argumentsList, ...(plans.gameArguments || []), ...(context.gameArguments || []));
+  args.push("--", ...(steamBridge ? [steamBridge.helper] : []), windowsExecutablePath, ...(bridgeLaunch?.arguments || []), ...argumentsList, ...(context.gameArguments || []));
   Steps.keepLaunchFolder(entry, context, { runtimeId: "crossover", directory, view: cameraView });
   Steps.recordRuntime(entry, context, { runtimeId: "crossover", match, gameRoot, existingEnvironment, steamBridge, translatorPlan,
     requestedSettings: context.runtimeSettings, install: selected.install, values: { windowsExecutablePath: match.windowsExecutablePath,

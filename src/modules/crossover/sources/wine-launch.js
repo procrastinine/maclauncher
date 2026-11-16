@@ -338,7 +338,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
     { originalRoot, gameRoot, executable: match.windowsExecutablePath, executablePath, directory });
   Steps.runtimeDataPath(prefixPath, selected.install);
   Object.assign(environment, Steps.shaderCache(directory, prefixPath));
-  let applicationArguments = [...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")), ...(plans.gameArguments || []), ...(context.gameArguments || [])];
+  let applicationArguments = [...(Array.isArray(settings.arguments) ? settings.arguments : []).map(value => safeText(value, "Game arguments")), ...(context.gameArguments || [])];
   if (context.resolveRuntimeArguments) applicationArguments = await context.resolveRuntimeArguments({ arguments: applicationArguments,
     install: selected.install, executablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
     graphicsBackend: graphics.graphicsBackend });

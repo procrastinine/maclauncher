@@ -1,7 +1,7 @@
 // Graphics plans for one Wine launch, shared by every source: the translator
 // plan and its private files, the MetalFX and DLSS selection, the Vulkan DLSS
-// view, the NGX scene connection, the FidelityFX scene plan, the camera
-// adapter plans and the game arguments the camera needs. Packages that the plans use are recorded as in use.
+// view, the NGX scene connection, the FidelityFX scene plan and the camera
+// adapter plans. Packages that the plans use are recorded as in use.
 const DLSS = require("../dlss");
 const Translators = require("../../shared/runtime/wine-translators");
 const TranslatorFiles = require("../../shared/runtime/translator-files");
@@ -35,9 +35,7 @@ async function resolve(entry, context, { source, install, settings, executableAr
   const sceneInputs = Temporal.sceneSourceInputs(entry, context, { settings, translatorPlan });
   // The Vulkan DLSS route's camera comes from the game's Streamline constants.
   const vulkanCamera = Temporal.resolveVulkanCameraPlan(entry, context, { settings, forwarding: vulkanDLSS.enabled === true });
-  // Arguments the game needs to supply that camera, after its own arguments.
-  const gameArguments = Temporal.cameraArguments(entry, context, vulkanCamera, { root, settings });
-  return { settings, translatorPlan, translatorEnvironment, translatorView, vulkanDLSS, ngxScene, scenePlan, cameraBridge, vulkanCamera, sceneInputs, gameArguments };
+  return { settings, translatorPlan, translatorEnvironment, translatorView, vulkanDLSS, ngxScene, scenePlan, cameraBridge, vulkanCamera, sceneInputs };
 }
 
 module.exports = { resolve };

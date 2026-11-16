@@ -467,61 +467,16 @@ test("D3DMetal keeps the game's Streamline interposer and prepares no camera pla
   assert.equal(Temporal.resolvePlan(entry,{}, {...options,runtimeId:"sikarugir"}),null);
 });
 
-test("Unreal Engine's Streamline plugin without sl.dlss supplies the camera to direct NGX evaluations only with -slforcetagging for a camera row", t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "streamline-unreal-"));t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const Temporal = require("../src/modules/crossover/temporal"), ReShade = require("../src/modules/shared/reshade");
-  t.mock.method(ReShade, "resolveShaderSelection", () => ({requirements: {depth: true, motion: false}, traits: {}}));
-  const gameRoot = path.join(root, "game"), plugin = path.join(gameRoot, "Engine/Plugins/Runtime/Nvidia/Streamline/Binaries/ThirdParty/Win64");
-  const exe = path.join(gameRoot, "FSD/Binaries/Win64/FSD-Win64-Shipping.exe");fs.mkdirSync(path.dirname(exe), { recursive: true });fs.mkdirSync(plugin, { recursive: true });
-  const bytes = pe();bytes.writeUInt16LE(2, 0x96);bytes.writeUInt16LE(3, 0x98 + 68);fs.writeFileSync(exe, bytes);
-  const api = ["slEvaluateFeature", "slGetNewFrameToken", "slInit", "slSetConstants", "slShutdown"];
-  fs.writeFileSync(path.join(plugin, "sl.interposer.dll"), pe(api));fs.writeFileSync(path.join(plugin, "sl.dlss_g.dll"), pe(["slGetPluginFunction"]));
-  const runtimeData = { crossover: { sourceRoot: gameRoot, windowsExecutablePath: exe, executableArchitecture: "x86_64", detectionComplete: true } };
-  const effects = video => ({ effects: { schema: 2, mode: "advanced", enabled: true, video } });
-  const anr = { id: "frames", kind: "frame-generation", enabled: true, method: "anr", settings: { frameMultiplier: 2 } };
-  const entry = { gamePath: gameRoot, runtimeData, ...effects([anr]) };
-  // The camera comes from the same frame's Streamline constants on each direct NGX evaluation.
-  const plan = Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true });
-  assert.equal(plan.kind, "vulkan-camera");assert.equal(plan.forcedTagging, true);assert.equal(plan.inputs.cameraProjection, true);
-  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: false }), null);
-  assert.deepEqual(Temporal.cameraArguments(entry, {}, plan), ["-slforcetagging"]);
-  // Any other row whose requirements name the camera asks for it too.
-  for (const node of [{ id: "scene", kind: "temporal", enabled: true, method: "fsr2", settings: {} },
-    { id: "frames", kind: "frame-generation", enabled: true, method: "metalfx", settings: { frameMultiplier: 2 } }])
-    assert.deepEqual(Temporal.cameraArguments({ ...entry, ...effects([node]) }, {}, plan), ["-slforcetagging"], node.method);
-  // A plan without a camera row, a disabled row or plan, or no plan keeps the game's own arguments.
-  for (const other of [effects([{ ...anr, enabled: false }]), effects([{ id: "scene", kind: "temporal", enabled: true, method: "metalfx", settings: {} }]),
-    effects([{ id: "frames", kind: "frame-generation", enabled: true, method: "lsfg", settings: {} }]),
-    effects([{ id: "image", kind: "shader", enabled: true, shader: { enabled: true, preset: "grayscale" } }]),
-    { effects: { ...effects([anr]).effects, enabled: false } }, {}])
-    assert.deepEqual(Temporal.cameraArguments({ ...entry, effects: undefined, ...other }, {}, plan), []);
-  // The argument is never repeated when the game's settings or the command line already give it.
-  assert.deepEqual(Temporal.cameraArguments(entry, { runtimeSettings: { arguments: ["-dx12", "-SLForceTagging"] } }, plan), []);
-  assert.deepEqual(Temporal.cameraArguments(entry, { gameArguments: ["-slforcetagging"] }, plan), []);
-  // Streamline's DLSS plugin beside the interposer selects the camera inside slEvaluateFeature, without the argument.
-  fs.writeFileSync(path.join(plugin, "sl.dlss.dll"), pe(["slGetPluginFunction"]));
-  const sdk = Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true });
-  assert.equal(sdk.forcedTagging, undefined);assert.equal(sdk.inputs.cameraProjection, true);
-  assert.deepEqual(Temporal.cameraArguments(entry, {}, sdk), []);fs.unlinkSync(path.join(plugin, "sl.dlss.dll"));
-  // An interposer elsewhere, or one without Streamline's application API, gives neither the route nor the argument.
-  fs.writeFileSync(path.join(plugin, "sl.interposer.dll"), pe(names));
-  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true }), null);
-  assert.deepEqual(Temporal.cameraArguments(entry, {}, null), []);
-  fs.rmSync(path.join(gameRoot, "Engine"), { recursive: true });const moved = path.join(gameRoot, "Streamline");fs.mkdirSync(moved);
-  fs.writeFileSync(path.join(moved, "sl.interposer.dll"), pe(api));
-  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true }), null);
-});
-
 test("the Vulkan DLSS route takes the camera from the game's own Streamline interposer without replacing a file", async t => {
   const f = fixture(t), Temporal = require("../src/modules/crossover/temporal"), Steps = require("../src/modules/crossover/sources/launch-steps");
   const exe = path.join(f.gameRoot, "game.exe"), bytes = pe();bytes.writeUInt16LE(2, 0x96);bytes.writeUInt16LE(3, 0x98 + 68);fs.writeFileSync(exe, bytes);
   const entry = { gamePath: f.gameRoot, runtimeData: { crossover: { sourceRoot: f.gameRoot, windowsExecutablePath: exe, executableArchitecture: "x86_64", detectionComplete: true } } };
   fs.unlinkSync(f.target);fs.writeFileSync(f.target, pe(["slEvaluateFeature", "slGetNewFrameToken", "slInit", "slSetConstants", "slShutdown"]));
   const original = fs.readFileSync(f.target);
-  // The core selects a camera inside slEvaluateFeature(kFeatureDLSS). An
-  // interposer outside Unreal Engine's Streamline plugin layout, shipped
-  // without Streamline's DLSS plugin, leaves every DLSS evaluation without a
-  // camera, so the route declares none.
+  // The core selects a camera only inside slEvaluateFeature(kFeatureDLSS). An
+  // interposer shipped without Streamline's DLSS plugin (Deep Rock Galactic:
+  // DLSS Frame Generation and Reflex only, DLSS through UE's NGX plugin) leaves
+  // every DLSS evaluation without a camera, so the route declares none.
   assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true }), null);
   fs.writeFileSync(path.join(path.dirname(f.target), "sl.dlss_g.dll"), pe(["slGetPluginFunction"]));
   assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true }), null);
