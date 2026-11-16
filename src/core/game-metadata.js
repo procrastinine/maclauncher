@@ -118,7 +118,7 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
       return result;
     }
     const originalPath = entry.importPath || entry.gamePath;
-    const prepared = await inputPreparation(originalPath, { userDataDir, gameId: entry.gameId, signal, onProgress,
+    const prepared = await inputPreparation(originalPath, { userDataDir, gameId: entry.gameId, runtimeId: entry.runtimeId, signal, onProgress,
       entry, settings, logger, downloads, confirmRuntimeInstall, onRuntimeStateChange });
     if (prepared.containerData) entry = { ...entry, containerData: prepared.containerData, contentRootDir: prepared.inputPath };
     const roots = sourceRoots(entry), detectPath = prepared.inputPath;

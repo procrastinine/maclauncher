@@ -625,8 +625,10 @@ function createLauncher({
     const sourcePath = existing?.importPath && fs.existsSync(existing.importPath) ? existing.importPath : input;
     const gameId = existing?.gameId || Installers.findCachedInputGameId(userDataDir, sourcePath) || GameData.createGameId();
     return gameLifecycle.use({ gameId, gamePath: existing?.gamePath || input }, async () => {
+      // The installer reader learns the requested runtime, so its helpers and
+      // that runtime's downloads can share one consent.
       const prepared = await inputPreparation(sourcePath, { userDataDir, gameId, signal, onProgress, readOnly: !persist,
-        entry: existing, settings, logger, downloads: typeof downloads === "function" ? downloads() : downloads, onRuntimeStateChange,
+        runtimeId: runtimeId || existing?.runtimeId, entry: existing, settings, logger, downloads: typeof downloads === "function" ? downloads() : downloads, onRuntimeStateChange,
         confirmRuntimeInstall: typeof confirmRuntimeInstall === "function"
           ? plan => confirmRuntimeInstall(plan, existing || { gameId, gamePath: sourcePath }) : undefined });
       const detectPath = prepared.inputPath;
