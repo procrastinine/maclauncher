@@ -114,6 +114,16 @@ void noteSceneWindowPresenter(const std::shared_ptr<const void>&owner,const std:
  for(auto it=presenters.begin();it!=presenters.end();){if(it->owner.expired()||!it->window->alive()){it=presenters.erase(it);continue;}if(!it->owner.owner_before(owner)&&!owner.owner_before(it->owner))found=&*it;++it;}
  if(!found){presenters.push_back({owner,window,device});return;}found->window=window;found->device=device;
 }
+namespace {struct Rejection {std::weak_ptr<const SceneWindowAuthority>window;std::string reason;};std::mutex rejectionMutex;std::unordered_map<uint64_t,Rejection>rejections;}
+void reportTemporalSceneRejection(const RSTemporalFrame&frame,const std::string&reason){
+ if(!frame.commandBuffer||!frame.owner||!frame.frameId)return;auto destination=presentedTemporalSceneDestination(frame);if(!destination)return;
+ std::lock_guard guard(rejectionMutex);for(auto it=rejections.begin();it!=rejections.end();)if(it->second.window.expired())it=rejections.erase(it);else ++it;
+ if(reason.empty())rejections.erase(destination->window->identity());else rejections[destination->window->identity()]={destination->window,reason};
+}
+std::string temporalSceneRejection(id<MTLDevice>device){
+ std::shared_ptr<const SceneWindowAuthority>window;{std::lock_guard guard(presenterMutex);for(const auto&p:presenters){if(p.owner.expired()||!p.window->alive()||p.device!=device)continue;if(window&&window->identity()!=p.window->identity())return {};window=p.window;}}
+ if(!window)return {};std::lock_guard guard(rejectionMutex);const auto found=rejections.find(window->identity());return found==rejections.end()?std::string{}:found->second.reason;
+}
 std::optional<TemporalSceneDestination>presentedTemporalSceneDestination(const RSTemporalFrame&frame){
  const auto commands=(__bridge id<MTLCommandBuffer>)frame.commandBuffer;const auto device=commands.device;if(!device||!frame.owner||!frame.frameId)return {};
  std::lock_guard lock(presenterMutex);std::shared_ptr<const SceneWindowAuthority>window;

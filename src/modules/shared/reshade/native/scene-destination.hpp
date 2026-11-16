@@ -52,4 +52,6 @@ std::shared_ptr<TemporalSceneContinuation>temporalSceneContinuation(const std::s
 // Reissue the unchanged image receipt with its original producer dependency.
 std::shared_ptr<TemporalSceneContinuation>repeatTemporalSceneContinuation(const TemporalSceneDestination&,const std::shared_ptr<TemporalSceneContinuation>&);
 void releaseTemporalSceneContinuations(void*owner);
+void reportTemporalSceneRejection(const RSTemporalFrame&,const std::string&);
+std::string temporalSceneRejection(id<MTLDevice>);
 }

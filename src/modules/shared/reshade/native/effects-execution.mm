@@ -15,6 +15,8 @@
 #include "image-admission.hpp"
 #include "image-color.hpp"
 #include "runtime-status.hpp"
+#include "scene-destination.hpp"
+#include "temporal-frame-policy.hpp"
 #include "generation-timeline.hpp"
 #include "presentation-hold.hpp"
 #include "depth-resample.hpp"
@@ -564,7 +566,8 @@ struct EffectExecution::Impl {
     }
     std::string failure(const Row &row){std::lock_guard<std::mutex>guard(failureLock);const auto found=failures.find(row.spec.id);return found==failures.end()?std::string{}:found->second;}
     bool targetUnavailable(const Row &row){std::lock_guard<std::mutex>guard(failureLock);return unavailableTargets.count(row.spec.id);}
-    void report(const Row &row,const std::string &reason,bool persistent){
+    void report(const Row &row,const std::string &inputReason,bool persistent){
+        const auto reason=(row.spec.kind=="temporal"||row.spec.kind=="frame-generation"&&generationRequiresScene(row.spec.method))?sceneRejectionReason(inputReason,temporalSceneRejection(device)):inputReason;
         bool changed=false;{std::lock_guard<std::mutex>guard(failureLock);if(persistent)failures[row.spec.id]=reason;
             auto &last=reported[row.spec.id];if(last!=reason){last=reason;changed=true;}}
         RuntimeStatusEvent event;event.context=contextFor(row);event.processing=true;event.phase=row.warming?RuntimeStatusPhase::Preparing:RuntimeStatusPhase::Bypassed;event.planRevision=snapshot->revision;
