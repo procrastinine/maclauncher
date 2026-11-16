@@ -19,6 +19,8 @@ test("one CPU vocabulary: Mac code by Mac name, Intel on Apple Silicon with Rose
   assert.equal(cpuLabel("arm64", { hostArchitecture: "arm64" }), "Apple Silicon");
   assert.equal(cpuLabel("x86_64", { windows: true }), "x64"); assert.equal(cpuLabel("i386", { windows: true }), "x86");
   assert.equal(cpuLabel("aarch64", { windows: true }), "ARM64");
+  assert.equal(cpuLabel("arm64ec", { windows: true }), "ARM64EC"); assert.equal(cpuLabel("ARM64X", { windows: true }), "ARM64X");
+  assert.equal(cpuId("arm64ec"), "arm64ec"); assert.equal(cpuLabel("arm64ec"), "", "hybrid Windows code has no Mac label");
   assert.equal(cpuLabel(null), ""); assert.equal(cpuId("amd64"), "x64");
   assert.equal(Architecture.cpuBuildLabel("x86_64", { host: apple }), "Intel (Rosetta)");
   assert.equal(Architecture.cpuBuildLabel("x64", { host: intel }), "Intel");
