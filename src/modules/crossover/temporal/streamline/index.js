@@ -28,6 +28,14 @@ function interposer(sourcePath) {
   const exports = PE.inspect(sourcePath), names = new Set((exports || []).map(row => row.name));
   return APPLICATION_API.every(name => names.has(name));
 }
+// The core selects a camera only for evaluations made by
+// slEvaluateFeature(sl::kFeatureDLSS), which runs Streamline's DLSS plugin
+// from the interposer's folder. A game shipping the interposer without that
+// plugin (for example only DLSS Frame Generation and Reflex) calls NGX
+// directly, and its DLSS evaluations carry no camera.
+function dlssPlugin(sourcePath) {
+  try { return fs.statSync(path.join(path.dirname(sourcePath), "sl.dlss.dll")).isFile(); } catch { return false; }
+}
 function inspect(sourcePath, providerRoot) {
   const exports = PE.inspect(sourcePath);
   const payload = provider(providerRoot,exports);
@@ -108,4 +116,4 @@ function restore({ gameRoot, relativePath }) {
   if (current === record.proxySha256) Writable.atomicCopy(files.original, files.target, { root: gameRoot, preserveTimes: false });
   fs.unlinkSync(files.original);fs.unlinkSync(files.record);return true;
 }
-module.exports = { ORIGINAL, RECORD, provider, inspect, interposer, prepare, restore, recorded, ownership, sameExports };
+module.exports = { ORIGINAL, RECORD, provider, inspect, interposer, dlssPlugin, prepare, restore, recorded, ownership, sameExports };

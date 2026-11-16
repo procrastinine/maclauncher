@@ -473,6 +473,14 @@ test("the Vulkan DLSS route takes the camera from the game's own Streamline inte
   const entry = { gamePath: f.gameRoot, runtimeData: { crossover: { sourceRoot: f.gameRoot, windowsExecutablePath: exe, executableArchitecture: "x86_64", detectionComplete: true } } };
   fs.unlinkSync(f.target);fs.writeFileSync(f.target, pe(["slEvaluateFeature", "slGetNewFrameToken", "slInit", "slSetConstants", "slShutdown"]));
   const original = fs.readFileSync(f.target);
+  // The core selects a camera only inside slEvaluateFeature(kFeatureDLSS). An
+  // interposer shipped without Streamline's DLSS plugin (Deep Rock Galactic:
+  // DLSS Frame Generation and Reflex only, DLSS through UE's NGX plugin) leaves
+  // every DLSS evaluation without a camera, so the route declares none.
+  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true }), null);
+  fs.writeFileSync(path.join(path.dirname(f.target), "sl.dlss_g.dll"), pe(["slGetPluginFunction"]));
+  assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: true }), null);
+  fs.writeFileSync(path.join(path.dirname(f.target), "sl.dlss.dll"), pe(["slGetPluginFunction"]));
   // Without forwarding, the route declares no camera.
   assert.equal(Temporal.resolveVulkanCameraPlan(entry, {}, { forwarding: false }), null);
   // No camera adapter or graphics payload is needed: the NGX core captures the camera in process.

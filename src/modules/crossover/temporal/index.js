@@ -165,7 +165,7 @@ function resolveVulkanCameraPlan(entry, context = {}, { settings = context.runti
     const match = Detection.cachedWindowsExecutable(entry);if (!match) return null;
     const executable = settings.executable ? path.resolve(match.sourceRoot, settings.executable) : match.windowsExecutablePath;
     if (!Detection.inside(match.sourceRoot, executable)) return null;
-    if (!libraries(match, executable).some(sourcePath => libraryAdapter({ sourcePath }) === Streamline && Streamline.interposer(sourcePath))) return null;
+    if (!libraries(match, executable).some(sourcePath => libraryAdapter({ sourcePath }) === Streamline && Streamline.interposer(sourcePath) && Streamline.dlssPlugin(sourcePath))) return null;
     const route = { source: "streamline", depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: true, methods: ["fsr2", "fsr3"] };
     return { kind: "vulkan-camera", sourceRoot: match.sourceRoot, inputs: { ...route, routes: [route] } };
   } catch { return null; }

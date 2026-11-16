@@ -44,9 +44,14 @@ frame and viewport leave that evaluation without a camera.
 
 `index.js` `interposer()` identifies the game's interposer by its application
 API exports, beside the selected executable or in the supported Streamline
-plugin directories. `../index.js` `resolveVulkanCameraPlan` then declares camera
-projection whenever the route forwards, without a setting, and the game starts
-from its own folder.
+plugin directories. `dlssPlugin()` requires Streamline's DLSS plugin
+(`sl.dlss.dll`) in the interposer's folder: only evaluations made by
+`slEvaluateFeature(sl::kFeatureDLSS)` receive a camera, and a game that ships
+the interposer without that plugin, such as Unreal Engine games with only DLSS
+Frame Generation and Reflex, calls NGX directly through the engine's own DLSS
+plugin. `../index.js` `resolveVulkanCameraPlan` then declares camera projection
+whenever the route forwards, without a setting, and the game starts from its
+own folder.
 
 ## DXMT and D3DMetal
 
