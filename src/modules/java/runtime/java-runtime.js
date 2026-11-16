@@ -9,6 +9,8 @@ const Host = require("../../shared/runtime/host-capabilities");
 const Archive = require("../../shared/runtime/archive");
 const ReleaseFiles = require("../../shared/runtime/release-files");
 const Upstream = require("../../shared/runtime/upstream");
+const Native = require("../../shared/runtime/local-native");
+const Sources = require("../../../runtime-sources");
 const { attachAbortSignal, createAbortError, throwIfAborted } = require("../../shared/runtime/download-utils");
 
 const ADOPTIUM_API_BASE = "https://api.adoptium.net/v3";
@@ -75,7 +77,7 @@ function normalizeVersion(input) {
   const raw = String(input ?? "").trim().replace(/^jdk[-_]?/i, "").replace(/^v/i, "");
   if (!raw) throw new Error(`Invalid Java version: ${String(input ?? "")}`);
 
-  const legacy = raw.match(/^(\d+)u(\d+)-b(\d+)$/i);
+  const legacy = raw.match(/^(\d+)u(\d+)(?:-b|\+)(\d+)$/i);
   if (legacy) {
     return `${Number(legacy[1])}.0.${Number(legacy[2])}+${Number(legacy[3])}`;
   }
@@ -277,12 +279,16 @@ function listInstalled(userDataDir, line) {
       }
 
       for (const variantEntry of variants) {
-        const variant = normalizeVariant(variantEntry.name);
+        let variant = normalizeVariant(variantEntry.name);
         if (!variant) continue;
         const installDir = path.join(versionDir, variantEntry.name);
         const javaPath = resolveInstallJavaPath(installDir);
         if (!javaPath) continue;
         const meta = readInstallMeta(installDir);
+        let architectures = [];
+        try { architectures = Native.readMachOArchitectures(javaPath); } catch {}
+        if (architectures.length && !architectures.includes(variant === "x64" ? "x86_64" : variant))
+          variant = archToVariant(architectures[0]) || variant;
         out.push({
           line: runtimeLine,
           version,
@@ -290,6 +296,8 @@ function listInstalled(userDataDir, line) {
           installDir,
           javaPath,
           source: meta?.source || null,
+          ...(meta?.sourceId ? { sourceId: meta.sourceId } : {}),
+          ...(architectures.length ? { architectures } : {}),
           downloadUrl: meta?.downloadUrl || null,
           requiresRosetta: Architecture.requiresRosetta(variant)
         });
@@ -489,13 +497,49 @@ function lineSource(line, { pageSize = CATALOG_PAGE_SIZE, maxPages = CATALOG_MAX
   } });
 }
 
+// A declared Java source uses the same GitHub discovery and download transport
+// as other runtimes. The Java release tag determines its JVM line; its source
+// id and archive directory do not describe the installed CPU or Java version.
+function declaredLineSources(line) {
+  return Sources.loadSources().filter(source => source.kind === "java" && source.upstream?.github)
+    .sort((a, b) => (a.order || 0) - (b.order || 0)).map(source => Upstream.github({
+      repository: source.upstream.github, prerelease: source.upstream.prereleases === true, allArchitectures: true,
+      recognize(release) {
+        let version;
+        try { version = normalizeVersion(release.tag_name); } catch { return []; }
+        if (versionMajor(version) !== line) return [];
+        return Object.entries(source.upstream.assets || {}).flatMap(([cpu, pattern]) => {
+          const variant = archToVariant(cpu);
+          if (!variant) return [];
+          return (release.assets || []).filter(asset => new RegExp(pattern, "i").test(asset.name)).map(asset => ({
+            version, architecture: variant, assets: [asset], details: { line, version, variant,
+              sourceId: source.id, source: source.label, url: asset.browser_download_url, fileName: asset.name,
+              publishedAt: Date.parse(release.published_at) || 0 }
+          }));
+        });
+      }
+    }));
+}
+
+async function lineRows(line, options) {
+  // Preserve Adoptium's package on a same-version/CPU collision. Additional
+  // declared sources supply versions or CPU variants the first catalog lacks.
+  const catalogs = [lineSource(line, options), ...declaredLineSources(line)];
+  const results = await Promise.allSettled(catalogs.map(source => source.discover(options)));
+  const rows = results.flatMap((result, catalogOrder) => result.status === "fulfilled" ? result.value.map(row => ({ ...row, catalogOrder })) : []);
+  if (!rows.length && results.some(result => result.status === "rejected"))
+    throw results.find(result => result.status === "rejected").reason;
+  for (const result of results) if (result.status === "rejected") options.logger?.warn?.('[java] ' + result.reason.message);
+  return rows;
+}
+
 async function fetchLineAssets({ line, variant, logger, signal, pageSize, maxPages } = {}) {
   const runtimeLine = normalizeLine(line), runtimeVariant = normalizeVariant(variant) || defaultVariantForHost();
   const byVersion = new Map();
-  for (const row of await lineSource(runtimeLine, { pageSize, maxPages }).discover({ logger, signal })) {
+  for (const row of await lineRows(runtimeLine, { pageSize, maxPages, logger, signal })) {
     if (row.architecture !== runtimeVariant || !row.files[0]) continue;
-    const asset = { ...row.details, file: row.files[0] }, current = byVersion.get(asset.version);
-    if (!current || asset.publishedAt > current.publishedAt) byVersion.set(asset.version, asset);
+    const asset = { ...row.details, file: row.files[0], catalogOrder: row.catalogOrder }, current = byVersion.get(asset.version);
+    if (!current || asset.catalogOrder === current.catalogOrder && asset.publishedAt > current.publishedAt) byVersion.set(asset.version, asset);
   }
   return Array.from(byVersion.values()).sort((a, b) => compareVersionsDesc(a.version, b.version));
 }
@@ -504,16 +548,16 @@ async function fetchAvailableVersionsForLine({ line, logger, signal, latestOnly 
   const runtimeLine = normalizeLine(line);
   const source = `${ADOPTIUM_API_BASE}/assets/feature_releases/${runtimeLine}/ga`;
   logger?.info?.(`[java] fetching Adoptium catalog for Java ${runtimeLine}`);
-  const rows = await lineSource(runtimeLine, latestOnly === true ? { pageSize: 1, maxPages: 1 } : {}).discover({ logger, signal });
+  const rows = await lineRows(runtimeLine, { logger, signal, ...(latestOnly === true ? { pageSize: 1, maxPages: 1 } : {}) });
 
   const byVersion = new Map();
   const versionAliases = new Map();
   for (const row of rows) {
     if (!row.files[0]) continue;
-    const variant = row.architecture, asset = { ...row.details, file: row.files[0] };
+    const variant = row.architecture, asset = { ...row.details, file: row.files[0], catalogOrder: row.catalogOrder };
     if (asset.semverVersion && asset.semverVersion !== asset.version) versionAliases.set(asset.semverVersion, asset.version);
     const current = byVersion.get(asset.version) || { version: asset.version, line: runtimeLine, assets: { arm64: null, x64: null } };
-    if (!current.assets[variant] || asset.publishedAt > current.assets[variant].publishedAt) current.assets[variant] = asset;
+    if (!current.assets[variant] || asset.catalogOrder === current.assets[variant].catalogOrder && asset.publishedAt > current.assets[variant].publishedAt) current.assets[variant] = asset;
     byVersion.set(asset.version, current);
   }
 
@@ -676,7 +720,7 @@ async function installVersion({
   try {
     ensureDir(extractDir);
     logger?.info?.(`[java] downloading ${selection.asset.url}`);
-    // Adoptium's published SHA-256 and size verify the package.
+    // The selected publisher's stated digest and size verify the package.
     const file = selection.asset.file || Upstream.listedFile({ filename: fileName, url: selection.asset.url,
       sha256: selection.asset.checksum || undefined, bytes: selection.asset.size || undefined });
     if (!file) throw new Error(`The Java ${runtimeVersion} package has no HTTPS download.`);
@@ -690,6 +734,11 @@ async function installVersion({
     if (!extractedJavaPath) {
       throw new Error("Installed Java archive did not include a java executable.");
     }
+
+    const architectures = Native.readMachOArchitectures(extractedJavaPath);
+    const expectedCPU = runtimeVariant === "x64" ? "x86_64" : runtimeVariant;
+    if (!architectures.includes(expectedCPU))
+      throw new Error(`Java architecture mismatch: intended ${expectedCPU}; measured ${architectures.join(", ")}.`);
 
     const sourceRoot = path.dirname(path.dirname(extractedJavaPath));
     safeRm(installDir);
@@ -715,7 +764,9 @@ async function installVersion({
       line: runtimeLine,
       version: runtimeVersion,
       variant: runtimeVariant,
-      source: "Adoptium",
+      source: selection.asset.source || "Adoptium",
+      ...(selection.asset.sourceId ? { sourceId: selection.asset.sourceId } : {}),
+      architectures,
       downloadUrl: selection.asset.url,
       archiveSha256: sha256,
       integrity,
@@ -730,6 +781,9 @@ async function installVersion({
       variant: runtimeVariant,
       installDir,
       javaPath: installedJavaPath,
+      architectures,
+      source: selection.asset.source || "Adoptium",
+      ...(selection.asset.sourceId ? { sourceId: selection.asset.sourceId } : {}),
       requiresRosetta: Architecture.requiresRosetta(runtimeVariant)
     };
   } finally {

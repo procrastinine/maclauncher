@@ -427,7 +427,11 @@ function buildLineState(cfg, userDataDir, line) {
     // Each CPU's list declares the CPU of its builds, as every runtime catalog does.
     const versions = (catalogState.versions || []).filter(version => catalogState.entriesByVersion?.[version]?.[architecture]);
     return [architecture, {...state.catalog, architecture, versions, installableVersions: versions,
-      versionRequirements: Object.fromEntries(versions.map(version => [version, {architecture}]))}];
+      versionRequirements: Object.fromEntries(versions.map(version => [version, {architecture}])),
+      versionLabels: Object.fromEntries(versions.flatMap(version => {
+        const publisher = catalogState.entriesByVersion[version][architecture]?.source;
+        return publisher ? [[version, `${publisher} · ${version}`]] : [];
+      }))}];
   }));
   return state;
 }
