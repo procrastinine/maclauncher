@@ -226,6 +226,6 @@ async function resolve(install, runtime, context, { executableArchitecture, host
   }
   return plan;
 }
-return {resolve:(install,runtime,context,options)=>require('../launch-plan').resolvePlan({wine:{install,runtime,context,options},wineDependencies:{optionsInventory,sourceFor}}),resolveWine:resolve,driverRequirements};
+return {resolve,driverRequirements};
 }
-module.exports={createWineResolver,resolveWine:({install,runtime,context,options},dependencies)=>createWineResolver(dependencies).resolveWine(install,runtime,context,options)};
+module.exports={createWineResolver};

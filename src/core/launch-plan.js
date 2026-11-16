@@ -2,7 +2,6 @@
 const {acceptsBinary,normalizeHostArchitecture}=require('./binary-compatibility');
 const {selectLogicalLibraries,fileProvides}=require('./logical-libraries');
 function resolvePlan(input={}){
- if(input.wine)return require('./runtime-resolution/wine-plan').resolveWine(input.wine,input.wineDependencies);
  const {target={},system={},builds=[],sources=[],choices={}}=input;
  const sourceOf=build=>sources.find(source=>source.id===(build.sourceId||build.source))||{};
  const matches=(build,value)=>!value||['automatic','auto','inherit'].includes(value)||value==='source:'+(build.sourceId||build.source)||value==='build:'+build.id||value===build.id||build.aliases?.includes(value.replace(/^build:/,''));
