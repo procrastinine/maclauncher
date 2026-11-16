@@ -50,7 +50,19 @@ async function withPrivateWine(context, directory, helpers, callback, dependenci
       const env = { ...environment, WINEPREFIX: prefix };
       if (host.install.serverPath) {
         const runner = dependencies.runHelper || runHelper;
-        for (const args of [["-k"], ["-w"]]) await runner(host.install.serverPath, args, { env, environmentOnly: true, timeout: 15000, onSpawn });
+        const probe = dependencies.runningState || require("../runtime/wine-processes").runningState;
+        const running = async () => (await probe(prefix, { ...context.processOptions, environment: env })).running;
+        for (const args of [["-k"], ["-w"]]) {
+          // Short compiler/decoder processes can finish their server before
+          // cleanup starts. Check this owned prefix, including the stop race.
+          if (!await running()) break;
+          try { await runner(host.install.serverPath, args, { env, environmentOnly: true, timeout: 15000, onSpawn }); }
+          catch (error) {
+            if (error.code === "INSTALLER_HELPER" && error.result?.code === 1 && !await running()) break;
+            throw error;
+          }
+        }
+        if (await running()) throw installerError("The private installer Wine environment did not stop.");
       }
       Environments.assertPrivateEnvironment(owned, runtimeDirectory);
       await fs.promises.rm(prefix, { recursive: true, force: true });
