@@ -91,3 +91,13 @@ test("creating the existing source-backed managers reports no unknown source key
   require("../src/modules/shared/vulkan/managed");
   assert.deepEqual(warnings.filter(message => /Unknown runtime source key/.test(message)), []);
 });
+
+test("an installed file whose header cannot be read is measured as unknown, and unknown is usable", t => {
+  const root = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "measure-unknown-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(root, "notes.so"), "not a binary");
+  const { measureBuild } = require("../src/runtime-sources/installed-build");
+  const build = measureBuild({ source: { id: "fixture", kind: "d3d-translator" }, root, files: ["notes.so"], id: "fixture:1", version: "1" });
+  assert.deepEqual(build.binaries, [{ path: "notes.so", format: "unknown" }]);
+  assert.equal(require("../src/core/binary-compatibility").acceptsBinary("arm64", "x86_64", "native", build.binaries[0]).accepted, true);
+});

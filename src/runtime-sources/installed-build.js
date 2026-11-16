@@ -14,7 +14,8 @@ function measureBuild({source,root,files,declares,id,version,provenance={},paren
   if(seen.has(file))throw new TypeError('Installed binary paths must be unique.');seen.add(file);
   const absolute=fs.realpathSync(path.join(base,file));
   if(!absolute.startsWith(base+path.sep))throw new Error('An installed executable is outside its payload.');
-  return {path:file,...inspectBinary(absolute)};
+  // A file whose header cannot be read is unknown, and unknown is usable.
+  try{return {path:file,...inspectBinary(absolute)};}catch(error){if(!String(error.message).startsWith('Invalid binary:'))throw error;return {path:file,format:'unknown'};}
  });
  validateDeclared(intendedCPU,binaries);
  return validateBuild({id,sourceId:source.id,source:source.id,kind:source.kind,version,installed:true,measured:true,root:base,binaries,...(parts?{parts:structuredClone(parts)}:{}),

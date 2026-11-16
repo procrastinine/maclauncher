@@ -59,7 +59,7 @@ test('current Valve metadata selects content addresses without a fixed client ve
 
 test('managed preparation retains the selected bottle on both launches and writes no prefix files', async t => {
   const { packageFor } = require('./helpers/managed-tool-fixture.cjs');
-  const { image } = require('./fixtures/macho-image');
+  const { image } = require('./fixtures/macho-image'), { peFixture } = require('./helpers/pe-fixture');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'steam-bridge-managed-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const native = { x86_64: 'x86_64-unix/lsteamclient.so', aarch64: 'aarch64-unix/lsteamclient.so' };
@@ -69,7 +69,9 @@ test('managed preparation retains the selected bottle on both launches and write
   const paths = [...Object.values(native), ...Object.values(windows).flatMap(Object.values)];
   const fixture = packageFor(path.join(root, 'package'), { id: 'maclauncher-steam-bridge', version: '9.0.0', architecture: 'universal',
     manifest: { managerId: 'maclauncher-steam-bridge', executableRelative: 'steam.exe', dependencies: [], steamBridge: { native, windows, clientEnvironment: { i386: 'MACLAUNCHER_STEAM_CLIENT32', x86_64: 'MACLAUNCHER_STEAM_CLIENT64' } } },
-    entries: paths.map(name => ({ path: name, bytes: Buffer.from('package inspection input'), mode: 0o644 })) });
+    // Each library is a real image of its CPU; folder names are not CPU facts.
+    entries: paths.map(name => ({ path: name, mode: 0o644, bytes: name.endsWith('.so') ? image({ cpu: name.startsWith('aarch64') ? 0x0100000c : 0x01000007 })
+      : peFixture({ is64: !name.startsWith('i386') }).bytes })) });
   t.mock.method(Components, 'install', async options => { assert.deepEqual(Object.keys(options).sort(), ['onProgress', 'signal', 'userDataDir']); });
   t.mock.method(Components, 'current', () => ({ root: path.join(root, 'components'), clients: { i386: 'steamclient.dll', x86_64: 'steamclient64.dll' } }));
   const bridge = Bridge.create({ identifyGame: () => ({ appId: '123' }), discoverClient: () => '/native-client', isRunning: () => true,
