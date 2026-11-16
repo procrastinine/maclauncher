@@ -17,6 +17,7 @@ Each [game-type page](../game-types/README.md) describes the runtimes, settings 
 - [Native tool setup](NATIVE_TOOL_SETUP.md): package sources, system components and decompilers.
 - [Settings reference](SETTINGS_REFERENCE.md): every runtime setting and inspector action.
 - [System requirements](SYSTEM_REQUIREMENTS.md): macOS versions, CPU architectures and graphics requirements for each component.
+- [Processor compatibility](PROCESSOR_COMPATIBILITY.md): the processor code of each component and how it runs on Apple Silicon, natively, through Rosetta or through FEX inside an Apple Silicon Wine.
 
 ## Downloads and offline use
 
@@ -221,7 +222,7 @@ By default, each MacLauncher app lists and installs runtime builds for its own a
 
 Some catalogs also publish builds for a second architecture that the Mac can run. For these, a **Build** menu above the version lists switches between architectures, for example from **Automatic (Apple Silicon)** to **Intel (Rosetta)**. Choosing a version from that list with **Set default** saves the architecture as well, and a saved architecture can mean that the copy for that CPU has to be installed. Universal builds, and downloads published once for every Mac without naming a processor, appear in every list and need no menu. On Apple Silicon, an installed Intel copy of such a download runs through Rosetta and appears once in the **Installed** list, so the version is not downloaded again.
 
-An Intel Mac lists only Intel and Universal builds, and a runtime with no build it can run lists no version at all. Builds for both architectures can be installed side by side, and an installed version built for an architecture other than the automatic one carries an **Intel** or **Apple Silicon** label. When a source has been loaded but lists no build for the selected architecture, it shows a note and the small reload button; **Load versions** appears only for a source that has not been loaded yet. [System requirements](SYSTEM_REQUIREMENTS.md) lists the architectures of each runtime.
+An Intel Mac lists only Intel and Universal builds, and a runtime with no build it can run lists no version at all. Builds for both architectures can be installed side by side, and an installed version built for an architecture other than the automatic one carries an **Intel** or **Apple Silicon** label. When a source has been loaded but lists no build for the selected architecture, it shows a note and the small reload button; **Load versions** appears only for a source that has not been loaded yet. [System requirements](SYSTEM_REQUIREMENTS.md) lists the architectures of each runtime, and [Processor compatibility](PROCESSOR_COMPATIBILITY.md) lists the processor code of every component and its Apple Silicon alternative.
 
 Every label that names the CPU of a build uses the same terms:
 

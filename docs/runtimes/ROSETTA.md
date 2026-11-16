@@ -1,6 +1,6 @@
 # Rosetta
 
-MacLauncher runtimes that exist only as Intel (x86_64) builds need Rosetta, Apple's translation component, to run on Apple silicon. This page describes how Play installs Rosetta and how its status is reported. On Intel Macs and on hosts other than macOS, the check is skipped.
+MacLauncher runtimes that exist only as Intel (x86_64) builds need Rosetta, Apple's translation component, to run on Apple silicon. This page describes how Play installs Rosetta and how its status is reported. On Intel Macs and on hosts other than macOS, the check is skipped. [Processor compatibility](PROCESSOR_COMPATIBILITY.md) lists which components contain Intel code.
 
 ## Installation during Play
 

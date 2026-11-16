@@ -37,6 +37,7 @@ A game of another type that includes a compatible Windows executable can also us
 - [Web runtimes](runtimes/WEB_RUNTIMES.md): Electron and NW.js, including Greenworks.
 - [Wine runtimes](runtimes/WINE.md), [Sikarugir](runtimes/SIKARUGIR.md), [CrossOver](runtimes/CROSSOVER.md) and [WineCX](runtimes/WINECX.md): the Windows runtimes, their versions, environments and settings.
 - [Rosetta](runtimes/ROSETTA.md): installing Apple's Intel translation for Intel runtimes on Apple Silicon.
+- [Processor compatibility](runtimes/PROCESSOR_COMPATIBILITY.md): the processor code of every Wine, translator, Vulkan driver, graphics helper, engine and launcher helper, and how each runs on Apple Silicon.
 - [Game detection](library/DETECTION.md): how an imported file or folder is scanned, which engine it is assigned and how its version is found.
 - [Game preparation and storage](library/GAME_PREPARATION.md): original game paths, private adaptations, unavailable games, locating moved files and removing games.
 - [Game icons](library/GAME_ICONS.md): where each library entry's icon is read from and how it is cached.
