@@ -238,12 +238,9 @@ function environment(selection, directory) {
 // KosmicKrisp's Vulkan 1.1+ features (for example shaderDrawParameters) from
 // DXVK, so KosmicKrisp is declared as Vulkan 1.4.
 function apiVersion(selection) {
-  if(selection.apiVersion)return selection.apiVersion;
-  const source=require('../../../runtime-sources').loadSources().find(source=>source.kind==='vulkan-driver'&&source.manager.engine===selection.backend);
-  const token=source?.interfaces?.provides?.find(token=>token.startsWith('vulkan:'));
-  if(!token)return undefined;
-  const parts=token.slice(7).split('.');while(parts.length<3)parts.push('0');return parts.join('.');
+  return selection.apiVersion || (selection.backend === "kosmickrisp" ? "1.4.0" : "1.0.0");
 }
+
 function driverEnvironment(selection, directory) {
   const descriptor=selection.icd&&JSON.parse(fs.readFileSync(selection.icd,'utf8'));
   const driver=selection.driver||(selection.icd&&path.resolve(path.dirname(selection.icd),descriptor.ICD.library_path));
