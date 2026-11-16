@@ -1,17 +1,15 @@
 [
   {
     "version": "1.9.0",
-    "bridgeVersion": {
-      "includedPackage": "java-steamworks",
-      "arch": "x64"
-    },
+    "bridgeVersion": "1.9.0-MCLv8",
     "abiProfile": "steamworks4j-1.9.0-ml1",
     "helperAbiProfile": "steamworks4j-1.9.0-ml1-offline-abi0.5.0",
     "helperVersion": {
       "includedPackage": "steam-api-helper"
     },
     "architectures": [
-      "x86_64"
+      "x86_64",
+      "arm64"
     ],
     "symbols": [
       "SteamAPI_GetHSteamUser",

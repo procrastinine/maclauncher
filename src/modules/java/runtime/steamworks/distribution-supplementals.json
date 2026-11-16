@@ -6,5 +6,72 @@
   {
     "id": "java-steamworks",
     "arch": "x64"
+  },
+  {
+    "id": "java-steamworks",
+    "version": "1.9.0-MCLv8",
+    "arch": "universal",
+    "minimumMacOS": "11.0",
+    "launcherArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "sourceRelative": null,
+    "sourceSha256": "5e8bbb13e4ccf664b405f226927610576992d63520869fcf2427fdc14d051b1a",
+    "directoryRelative": "java-steamworks/1.9.0-MCLv8/universal",
+    "manifestRelative": "helper.json",
+    "manifestSha256": "d30543adc2e049d4ce037a5b7bf2be13d540aa93cf980f3bc528ac95baa08c83",
+    "files": [
+      {
+        "path": "libsteam_api.dylib",
+        "size": 396592,
+        "sha256": "d3253e2d2fd54e9f0e299a371af5481228e3bf77c2e2ab1d6c7e693aa21230cd",
+        "mode": 420,
+        "architectures": [
+          "x86_64",
+          "arm64"
+        ]
+      },
+      {
+        "path": "libsteamworks4j.dylib",
+        "size": 512096,
+        "sha256": "072ff0f542c21a9577cc4a589a400ff9664b0b9784480f721b4410118648656f",
+        "mode": 493,
+        "architectures": [
+          "x86_64",
+          "arm64"
+        ]
+      },
+      {
+        "path": "licenses/MacLauncher.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
+        "path": "licenses/components.txt",
+        "size": 72,
+        "sha256": "ab860f123e45ce21e8e3b1a2b08e4668b6abc49727ffbc27b6c1b75706f41db2",
+        "mode": 420
+      },
+      {
+        "path": "licenses/steamworks4j-1.9.0.txt",
+        "size": 1084,
+        "sha256": "171679b0302bc454889dd49220da633cbbb00f050fd6d81449019fa4cc7b0b8c",
+        "mode": 420
+      },
+      {
+        "path": "steam-agent.jar",
+        "size": 5599,
+        "sha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
+        "mode": 420
+      },
+      {
+        "path": "helper.json",
+        "size": 3668,
+        "sha256": "d30543adc2e049d4ce037a5b7bf2be13d540aa93cf980f3bc528ac95baa08c83",
+        "mode": 420
+      }
+    ]
   }
 ]

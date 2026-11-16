@@ -20,17 +20,18 @@ function nativeHostDependencies() {
   return Catalog.map(pin => ({ id: "java-steamworks", version: pin.bridgeVersion,
     file: "libsteamworks4j.dylib", dependency: "@loader_path/libsteam_api.dylib",
     provider: { id: "steam-api-helper", version: pin.helperVersion, file: "libsteam_api.dylib" },
-    installNames: pin.version === "1.9.0" ? ["/usr/local/lib/libsteamworks4j.dylib"]
+    installNames: pin.version === "1.9.0" ? ["/usr/local/lib/libsteamworks4j.dylib", "@rpath/libsteamworks4j.dylib"]
       : pin.architectures.map(architecture => `/usr/local/lib/libsteamworks4j-${architecture}.dylib`) }));
 }
 
 /** The wrapper selects its matching JNI; a newer JNI is never substituted. */
-function requiredVariant(entry, { hostArch = process.arch, explicitVariant, preferredVariant } = {}) {
+function requiredVariant(entry, { hostArch = process.arch, explicitVariant, preferredVariant, resourcesRoot } = {}) {
   // The launcher CPU is the default JVM preference; hardware decides which JVMs can run.
   const required = Consumer.requirement(entry);
   if (!required) return null;
   const hardwareArch = Host.getHostCapabilities().hardwareArch;
-  const available = required.pin.architectures.map(arch => arch === "x86_64" ? "x64" : arch);
+  const bridge = resolveBundle(required.pin, { resourcesRoot, verification: "status" });
+  const available = bridge.architectures.map(arch => arch === "x86_64" ? "x64" : arch);
   if (explicitVariant && !available.includes(explicitVariant))
     throw failure("JAVA_STEAM_CPU_MISMATCH", "This game's exact Java Steam bridge requires a different JVM CPU.");
   if (explicitVariant) {
@@ -55,14 +56,15 @@ function resolveBundle(pin, { resourcesRoot, verification = "full", native = Nat
         record.abiProfile !== pin.abiProfile || record.agentClassMajor !== 52)
       throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam bridge source or ABI changed.");
     const libraryPath = path.join(directory, "libsteamworks4j.dylib"), agentPath = path.join(directory, "steam-agent.jar");
+    const architectures = native.readMachOArchitectures(libraryPath, { allowLibrary: true });
     if (verification === "full") {
       Bundle.verifyPayload(directory, { ...record, files: [...record.files,
         { path: item.manifestRelative, size: manifest.size, sha256: item.manifestSha256, mode: 0o644 }] });
-      if (JSON.stringify(native.readMachOArchitectures(libraryPath, { allowLibrary: true }).sort()) !== JSON.stringify(pin.architectures.slice().sort()))
+      if (JSON.stringify(architectures.slice().sort()) !== JSON.stringify(pin.architectures.slice().sort()))
         throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam JNI has a different CPU.");
     } else if (![libraryPath, agentPath].every(file => (fs.lstatSync(file).isFile() || Boolean(Bundle.appAlias(file)))))
       throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam bridge files are invalid.");
-    return { ...pin, jniSha256: record.librarySha256, ready: true, directory, libraryPath, agentPath, source: "bundled", bundledExecution: "direct" };
+    return { ...pin, architectures, jniSha256: record.librarySha256, ready: true, directory, libraryPath, agentPath, source: "bundled", bundledExecution: "direct" };
   }
   throw failure("JAVA_STEAM_BRIDGE_UNAVAILABLE", "This app build does not include this game's exact Java Steam bridge.");
 }
@@ -148,8 +150,8 @@ async function prepareLaunch(entry, context, install, baseEnvironment = process.
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(entry.gameId || ""))
     throw failure("JAVA_STEAM_STATE_INVALID", "Java Steam setup requires this game's library identity.");
   const arch = install.variant === "x64" ? "x86_64" : install.variant;
-  if (!required.pin.architectures.includes(arch)) throw failure("JAVA_STEAM_CPU_MISMATCH", "The selected JVM CPU does not match this game's Java Steam bridge.");
   const bridge = resolveBundle(required.pin, { resourcesRoot: context.resourcesRoot });
+  if (!bridge.architectures.includes(arch)) throw failure("JAVA_STEAM_CPU_MISMATCH", "The selected JVM CPU does not match this game's Java Steam bridge.");
   if (typeof context.prepareSteamApi !== "function") throw failure("JAVA_STEAM_SERVICE_UNAVAILABLE", "The native Steam API launch service is unavailable.");
   const directory = ownedDirectory(context.userDataDir, GameData.resolveGameRuntimeDir(context.userDataDir, entry.gameId, "java"));
   const steam = await context.prepareSteamApi({ required: true, appId: required.evidence.appId.value, arch,
