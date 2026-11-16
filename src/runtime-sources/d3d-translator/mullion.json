@@ -1,0 +1,13 @@
+{
+  "id": "mullion",
+  "kind": "d3d-translator",
+  "label": "Mullion",
+  "upstream": {
+    "github": "dttdrv/mullion",
+    "assets": {
+      "arm64": "^mullion-v.*\\.tar\\.gz$",
+      "x86_64": "^mullion-v.*\\.tar\\.gz$"
+    },
+    "prereleases": true
+  }
+}

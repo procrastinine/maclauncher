@@ -10,42 +10,52 @@ const dxvkMacOS = { id: "macos", label: "DXVK-macOS", secondary: true, descripti
 const macOSOfferForms = { crossover: "builtin" };
 const dxvkTemplate = { id: "template", label: "Sikarugir Template", secondary: true, description: "Managed copies of one Sikarugir Template folder, with the folder's licence and no Wine engine. The dxvk variant supplies DXVK async and D9VK for MoltenVK; dxvk3 supplies DXVK for KosmicKrisp. Installed libraries supply their component versions and Direct3D API coverage." };
 const definitions = {
-  gstreamer: { label: "GStreamer codecs", groupId: "codecs", sourceName: "GStreamer", sourceDescription: "GStreamer runtime packages and prepared local codec folders. Included plugins remain with their source Wine runtime.",
-    upstreamUrl: "https://gstreamer.freedesktop.org/download/", upstreamLabel: "GStreamer downloads", memberOrder: 30,
-    names: ["gstreamer", "gstreamer-1.0"], entryLibrary: "libgstreamer-1.0.0.dylib", pluginDirectory: "gstreamer-1.0", sources: [require("./gstreamer-source").catalogSource] },
-  dxvk: { label: "DXVK", groupId: "directx-vulkan", memberOrder: 2, names: ["dxvk", "dxvk3", "d9vk"],
-    sources: [["upstream", "DXVK", "doitsujin/dxvk", name => !/^dxvk-native(?:[-_.]|$)/i.test(name), null, { group: dxvkUpstream, variantLabel: "DXVK" }],
-      ["macos", "DXVK-macOS", "Gcenx/DXVK-macOS", name => !/async/i.test(name), null, { group: dxvkMacOS, variantLabel: "Standard", optionsRuntimeForms: macOSOfferForms }],
-      ["async", "DXVK-macOS async", "Gcenx/DXVK-macOS", name => /async/i.test(name), null, { group: dxvkMacOS, variantLabel: "Async", optionsRuntimeForms: macOSOfferForms }],
-      ["d8vk", "D8VK", "AlpyneDreams/d8vk", null, null, { group: dxvkUpstream, variantLabel: "Historical D8VK", engine: "d8vk", componentLabel: "D8VK", description: "Historical D8VK releases published by AlpyneDreams/d8vk. Its Direct3D 8 work was merged into DXVK." }],
-      ["d9vk", "D9VK", "misyltoad/d9vk", null, null, { group: dxvkUpstream, variantLabel: "Historical D9VK", engine: "d9vk", componentLabel: "D9VK", description: "Historical D9VK releases published by misyltoad/d9vk. Its Direct3D 9 work was merged into DXVK." }],
-      ...["dxvk", "dxvk3", "d9vk"].map(component => ["template-" + component, "Sikarugir Template · " + component, "Sikarugir-App/Template", null, component,
-        { group: dxvkTemplate, variantLabel: component === "d9vk" ? "DXVK subset (d9vk)" : component,
-          description: `Managed DXVK copies taken from the ${component} folder of a Sikarugir Template release, with the folder's licence and no Wine engine. Its installed files determine version and API coverage.` }])] },
-  "vkd3d-proton": { label: "vkd3d-proton", groupId: "directx-vulkan", memberOrder: 3, names: ["vkd3d-proton"],
-    sources: [["upstream", "vkd3d-proton", "HansKristian-Work/vkd3d-proton", null, null, { description: "vkd3d-proton releases published by HansKristian-Work/vkd3d-proton. Direct3D 12 requires the Vulkan features used by the selected release; a Vulkan version alone does not establish KosmicKrisp driver support." }]] },
+  dxvk: { label: "DXVK", groupId: "directx-vulkan", memberOrder: 2, names: ["dxvk", "dxvk3", "d9vk"] },
   vkd3d: { label: "Wine vkd3d", groupId: "directx-vulkan", memberOrder: 4, referenceOnly: true, localOnly: true, names: [], sources: [],
     sourceName: "Wine vkd3d", sourceUrl: "https://gitlab.winehq.org/wine/vkd3d", sourceDescription: "Wine vkd3d copies included with registered Wine runtimes remain in their source runtime." },
+  "vkd3d-proton": { label: "vkd3d-proton", groupId: "directx-vulkan", memberOrder: 3, names: ["vkd3d-proton"] },
   d3dmetal: { label: "D3DMetal", groupId: "directx-metal", memberOrder: 1, names: ["d3dmetal", "apple_gptk", "redist"], importLicence: "Apple Game Porting Toolkit",
     sources: [{ id: "apple", label: "Apple Game Porting Toolkit", url: "https://developer.apple.com/games/game-porting-toolkit/", delivery: "local-files", registrationLabel: "Register Game Porting Toolkit…",
-      description: "Apple distributes Game Porting Toolkit. Its download may require an Apple account and licence agreement. The downloaded disk image or an extracted folder can be registered here or dropped on this card. D3DMetal is taken from the evaluation environment inside the disk image.", discover: async () => [] },
-      ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "d3dmetal"]] },
-  dxmt: { label: "DXMT", groupId: "directx-metal", memberOrder: 0, names: ["dxmt"],
-    sources: [["upstream", "DXMT", "3Shain/dxmt", name => /builtin/i.test(name)],
-      ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "dxmt"]] }
+      description: "Apple distributes Game Porting Toolkit. Its download may require an Apple account and licence agreement. The downloaded disk image or an extracted folder can be registered here or dropped on this card. D3DMetal is taken from the evaluation environment inside the disk image.", discover: async () => [] }] },
+  dxmt: { label: "DXMT", groupId: "directx-metal", memberOrder: 0, names: ["dxmt"] },
+  gstreamer: { label: "GStreamer codecs", groupId: "codecs", sourceName: "GStreamer", sourceDescription: "GStreamer runtime packages and prepared local codec folders. Included plugins remain with their source Wine runtime.",
+    upstreamUrl: "https://gstreamer.freedesktop.org/download/", upstreamLabel: "GStreamer downloads", memberOrder: 30,
+    names: ["gstreamer", "gstreamer-1.0"], entryLibrary: "libgstreamer-1.0.0.dylib", pluginDirectory: "gstreamer-1.0", sources: [require("./gstreamer-source").catalogSource] }
 };
-// Existing manager and publisher sections keep their backend presentation.
-const sourceIds = {
-  dxvk: ['dxvk-upstream','dxvk-macos','dxvk-macos-async','d8vk-upstream','d9vk-upstream','template-dxvk','template-dxvk3','template-d9vk'],
-  'vkd3d-proton': ['vkd3d-proton-upstream'],
-  d3dmetal: ['apple-gptk','template-d3dmetal'],
-  dxmt: ['dxmt-upstream','template-dxmt']
+// The catalog identity installed copies record for a translator source file,
+// the manager it belongs to and how its Runtimes card presents it. The
+// repository, asset patterns and prerelease policy come from the file itself.
+const template = component => ({ catalogId: "template-" + component, label: "Sikarugir Template · " + component, component,
+  group: dxvkTemplate, variantLabel: component === "d9vk" ? "DXVK subset (d9vk)" : component,
+  description: `Managed DXVK copies taken from the ${component} folder of a Sikarugir Template release, with the folder's licence and no Wine engine. Its installed files determine version and API coverage.` });
+const presentation = {
+  dxvk: { "dxvk-upstream": { catalogId: "upstream", group: dxvkUpstream, variantLabel: "DXVK" },
+    "dxvk-macos": { catalogId: "macos", group: dxvkMacOS, variantLabel: "Standard", optionsRuntimeForms: macOSOfferForms },
+    "dxvk-macos-async": { catalogId: "async", group: dxvkMacOS, variantLabel: "Async", optionsRuntimeForms: macOSOfferForms },
+    "d8vk-upstream": { catalogId: "d8vk", group: dxvkUpstream, variantLabel: "Historical D8VK", engine: "d8vk", componentLabel: "D8VK", description: "Historical D8VK releases published by AlpyneDreams/d8vk. Its Direct3D 8 work was merged into DXVK." },
+    "d9vk-upstream": { catalogId: "d9vk", group: dxvkUpstream, variantLabel: "Historical D9VK", engine: "d9vk", componentLabel: "D9VK", description: "Historical D9VK releases published by misyltoad/d9vk. Its Direct3D 9 work was merged into DXVK." },
+    "template-dxvk": template("dxvk"), "template-dxvk3": template("dxvk3"), "template-d9vk": template("d9vk") },
+  "vkd3d-proton": { "vkd3d-proton-upstream": { catalogId: "upstream", description: "vkd3d-proton releases published by HansKristian-Work/vkd3d-proton. Direct3D 12 requires the Vulkan features used by the selected release; a Vulkan version alone does not establish KosmicKrisp driver support." } },
+  d3dmetal: { "apple-gptk": {}, "template-d3dmetal": { catalogId: "template", label: "Sikarugir Template", component: "d3dmetal" } },
+  dxmt: { "dxmt-upstream": { catalogId: "upstream" }, "template-dxmt": { catalogId: "template", label: "Sikarugir Template", component: "dxmt" } }
 };
 definitions.dxmt.managerId = 'sikarugir-graphics-bridge';
 definitions.dxmt.formerIds = ['crossover-graphics-bridge'];
 const declaredSources = loadSources();
-for (const [engine, ids] of Object.entries(sourceIds))
-  definitions[engine].sourceDeclarations = ids.map(id => declaredSources.find(source => source.id === id)).filter(Boolean);
+// A translator source file no manager above claims is a translator of its own.
+for (const source of declaredSources) if (source.kind === "d3d-translator" && source.upstream?.github && !Object.values(presentation).some(map => map[source.id])) {
+  definitions[source.id] = { label: source.label, groupId: source.vulkan ? "directx-vulkan" : "directx-metal", memberOrder: 10 + (source.order || 0), names: [source.id] };
+  presentation[source.id] = { [source.id]: { catalogId: "upstream" } };
+}
+// Each GitHub source file becomes a catalog source of its manager.
+for (const [engine, map] of Object.entries(presentation)) {
+  const declared = Object.keys(map).map(id => declaredSources.find(source => source.id === id)).filter(Boolean);
+  definitions[engine].sourceDeclarations = declared;
+  definitions[engine].sources = [...(definitions[engine].sources || []), ...declared.filter(source => source.upstream?.github).map(source => {
+    const { catalogId, label = source.label, component = null, ...shown } = map[source.id], patterns = Object.values(source.upstream.assets || {}).map(pattern => new RegExp(pattern, "i"));
+    return [catalogId, label, source.upstream.github, name => patterns.some(pattern => pattern.test(name)), component, shown, source.upstream.prereleases === true];
+  })];
+}
 let versionOrder;
 const VersionOrder = () => versionOrder ||= require("./version-order.mjs");
 function assetName(asset) {
@@ -110,8 +120,8 @@ function versionLabel(pin, installed, label, references) {
     component || { engine: label }, catalogDescription(pin), pin?.catalogSourceId));
   return template || catalogVersion(pin);
 }
-function catalogSource([id, label, repository, filter, component, presentation = {}], projectLabel = component) {
-  const upstream = Upstream.github({ repository, prerelease: true, allArchitectures: true, recognize: release =>
+function catalogSource([id, label, repository, filter, component, presentation = {}, prerelease = true], projectLabel = component) {
+  const upstream = Upstream.github({ repository, prerelease, allArchitectures: true, recognize: release =>
     (release.assets || []).filter(asset => archiveFormat(asset.name) && (!filter || filter(asset.name)) &&
       (!component || /^Template-/i.test(asset.name))).map(asset => ({
         version: (id + "-" + asset.name.replace(/\.(?:tar\.(?:gz|xz|bz2)|t[gx]z|zip|tar)$/i, "")).replace(/[^a-z0-9._-]/ig, "-"),

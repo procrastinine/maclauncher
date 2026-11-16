@@ -1,2 +1,4 @@
 const { createManager } = require("../../runtime/translator-managers");
-module.exports = ["dxvk", "vkd3d", "vkd3d-proton", "d3dmetal", "gstreamer"].map(engine => createManager(engine));
+const { definitions } = require("../../runtime/translator-managers");
+// Every translator definition except DXMT, whose manager the camera support owns.
+module.exports = Object.keys(definitions).filter(engine => !definitions[engine].managerId).map(engine => createManager(engine));
