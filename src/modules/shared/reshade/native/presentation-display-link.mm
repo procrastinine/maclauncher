@@ -18,13 +18,14 @@ API_AVAILABLE(macos(14.0))
 - (void)applyState;
 - (void)applyDisplay;
 - (void)invalidate;
+- (void)retireLink;
 @end
 @implementation MacFXPresentationDisplayLink {
     CAMetalDisplayLink *_link;std::shared_ptr<DisplayLinkState> _state;
     macfx::PresentationRefreshClock _clock;std::atomic<unsigned>_nominal,_maximum;
     std::atomic<uint64_t>_displayRevision;uint64_t _appliedRevision;
     id _screenChanges;NSThread *_thread;
-    std::mutex _loopMutex;CFRunLoopRef _loop;
+    std::mutex _linkMutex;std::mutex _loopMutex;CFRunLoopRef _loop;
 }
 - (instancetype)initWithLayer:(CAMetalLayer*)layer state:(std::shared_ptr<DisplayLinkState>)state {
     if((self=[super init])){
@@ -50,6 +51,7 @@ API_AVAILABLE(macos(14.0))
     _nominal=nominal;_maximum=maximum;++_displayRevision;[self postState];
 }
 - (void)applyLoopState { // Display thread only.
+    std::lock_guard lock(_linkMutex);
     if(_state->invalidated)return;
     const auto revision=_displayRevision.load();
     if(_appliedRevision!=revision){
@@ -67,11 +69,11 @@ API_AVAILABLE(macos(14.0))
         CFRunLoopAddSource(loop,idle,kCFRunLoopCommonModes);
         {std::lock_guard lock(_loopMutex);_loop=(CFRunLoopRef)CFRetain(loop);}
         @try{try{
-            [self applyLoopState];[_link addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];
+            [self applyLoopState];{std::lock_guard lock(_linkMutex);if(!_state->invalidated)[_link addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];}
             while(!_state->invalidated){@autoreleasepool{CFRunLoopRunInMode(kCFRunLoopDefaultMode,1,true);}}
         }catch(const std::exception&){if(!_state->invalidated)_state->update(nil,0,0);}}
         @catch(NSException*){if(!_state->invalidated)_state->update(nil,0,0);}
-        [_link invalidate];_link.delegate=nil;
+        [self retireLink];
         {std::lock_guard lock(_loopMutex);CFRelease(_loop);_loop=nullptr;}
         CFRunLoopSourceInvalidate(idle);CFRelease(idle);
     }
@@ -85,11 +87,15 @@ API_AVAILABLE(macos(14.0))
         _thread.name=@"MacLauncher presentation timing";_thread.qualityOfService=NSQualityOfServiceUserInteractive;[_thread start];
     }else [self postState];
 }
+- (void)retireLink {
+    // Invalidation releases layer ownership before callers can use nextDrawable.
+    // Do not wait for the main queue or for an in-progress delegate callback.
+    std::lock_guard lock(_linkMutex);_state->invalidated=true;
+    [_link invalidate];_link.delegate=nil;_link=nil;
+}
 - (void)invalidate {
-    _state->invalidated=true;if(_screenChanges){[NSNotificationCenter.defaultCenter removeObserver:_screenChanges];_screenChanges=nil;}
+    [self retireLink];if(_screenChanges){[NSNotificationCenter.defaultCenter removeObserver:_screenChanges];_screenChanges=nil;}
     [self postState];
-    // Before first resume there is no display thread or registration to retire.
-    if(!_thread){[_link invalidate];_link.delegate=nil;}
 }
 - (void)metalDisplayLink:(CAMetalDisplayLink*)link needsUpdate:(CAMetalDisplayLinkUpdate*)update {
     if(_state->invalidated||_state->paused)return;
@@ -109,7 +115,8 @@ macfx::PresentationDisplayLink::PresentationDisplayLink(CAMetalLayer *layer,Upda
 macfx::PresentationDisplayLink::~PresentationDisplayLink(){invalidate();}
 void macfx::PresentationDisplayLink::resume(){if(!impl->state->invalidated&&impl->state->paused.exchange(false))impl->apply();}
 void macfx::PresentationDisplayLink::pause(){if(!impl->state->paused.exchange(true))impl->apply();}
-void macfx::PresentationDisplayLink::invalidate(){if(!impl||impl->state->invalidated.exchange(true))return;id retained=impl->driver;
+void macfx::PresentationDisplayLink::invalidate(){if(!impl)return;id retained=impl->driver;
+    if(@available(macOS 14.0,*))[(MacFXPresentationDisplayLink*)retained retireLink];
     dispatch_async(dispatch_get_main_queue(),^{if(@available(macOS 14.0,*))[(MacFXPresentationDisplayLink*)retained invalidate];});}
 void macfx::PresentationDisplayLink::setDisplay(uint32_t display){if(impl->state->display.exchange(display)==display)return;id retained=impl->driver;
     dispatch_async(dispatch_get_main_queue(),^{if(@available(macOS 14.0,*))[(MacFXPresentationDisplayLink*)retained applyDisplay];});}

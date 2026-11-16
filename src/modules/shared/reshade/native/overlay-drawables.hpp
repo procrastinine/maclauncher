@@ -22,7 +22,8 @@ class OverlayDrawables {
     class Hold {
         std::weak_ptr<State> owner;std::atomic<bool> released{false};
     public:
-        explicit Hold(std::weak_ptr<State> value):owner(std::move(value)){}
+        const bool displayLink;
+        explicit Hold(std::weak_ptr<State> value,bool link=false):owner(std::move(value)),displayLink(link){}
         Hold(const Hold&)=delete;Hold &operator=(const Hold&)=delete;
         ~Hold(){release();}
         bool active()const{return !released.load();}
@@ -34,6 +35,10 @@ public:
     void abandon(id<CAMetalDrawable>drawable)const{
         std::shared_ptr<Hold>hold;{std::lock_guard lock(state->mutex);const auto it=state->pending.find((__bridge void*)drawable);if(it!=state->pending.end()){hold=it->second.lock();state->pending.erase(it);}}
         if(hold)hold->release();
+    }
+    bool fromDisplayLink(id<CAMetalDrawable>drawable)const{
+        std::lock_guard lock(state->mutex);const auto it=state->pending.find((__bridge void*)drawable);
+        const auto hold=it==state->pending.end()?nullptr:it->second.lock();return hold&&hold->displayLink;
     }
     unsigned held()const{std::lock_guard<std::mutex>lock(state->mutex);return state->held;}
     // Duration of the current run of refusals; zero after any admission.
@@ -79,7 +84,7 @@ public:
     // frame. Its hold still counts toward the admission that acquire() applies.
     id<CAMetalDrawable> adopt(CAMetalLayer *layer,id<CAMetalDrawable> drawable){
         (void)layer;if(!drawable)return nil;
-        std::shared_ptr<Hold> hold;{std::lock_guard<std::mutex>lock(state->mutex);++state->held;state->refusing={};hold=std::make_shared<Hold>(state);}
+        std::shared_ptr<Hold> hold;{std::lock_guard<std::mutex>lock(state->mutex);++state->held;state->refusing={};hold=std::make_shared<Hold>(state,true);}
         return track(drawable,std::move(hold));
     }
     id<CAMetalDrawable> acquire(CAMetalLayer *layer){

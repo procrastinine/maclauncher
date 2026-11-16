@@ -97,6 +97,8 @@ std::string legacyInputIdentity(const macfx::LivePacket&packet){
 struct macfx::FramePresenter::Impl:std::enable_shared_from_this<Impl>{
  CAMetalLayer*layer;void*owner;PresenterConfig config;ImageColorSpace colorSpace=ImageColorSpace::LegacySDR;ImageRetry frameRetry;id<MTLCommandQueue>queue,displayQueue;id<MTLRenderPipelineState>flipPipeline,motionPipeline;dispatch_queue_t worker;dispatch_source_t wakeup=nullptr;CVDisplayLinkRef link=nullptr;
  std::unique_ptr<PresentationDisplayLink>metalLink;std::atomic<bool>metalTiming{false};bool metalTimingUnavailable=false;std::atomic<uint64_t>timingEpoch{0};
+ // Serializes link attachment/retirement with fallback layer acquisition.
+ std::recursive_mutex drawableRouteMutex;
  std::mutex displayDrawableMutex;id<CAMetalDrawable>displayDrawable=nil;
  ImageColorDescription sourceColor,outputColor;MTLPixelFormat graphFormat=MTLPixelFormatInvalid;std::shared_ptr<ColorEncoder>colorEncoder;std::atomic<float>displayHeadroom{1};
  std::atomic<PresenterPreparation>preparation{PresenterPreparation::Ready};
@@ -199,13 +201,14 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
  // Every output acquisition passes through the drawable count. A frame is
  // skipped while the layer's drawables are all in use, without requesting one.
  id<CAMetalDrawable> outputDrawable(CAMetalLayer *target){
+  std::lock_guard route(drawableRouteMutex);
   if(!outputVisible.load(std::memory_order_acquire)||outputIdleCut.load(std::memory_order_acquire))return nil;
   const auto size=target.drawableSize;
   DiagnosticScope scope(DiagnosticStage::MetalDrawable,reinterpret_cast<uintptr_t>((__bridge void*)target),unsigned(size.width),unsigned(size.height),"presentation.next-drawable");
   id<CAMetalDrawable>drawable=nil;
   if(metalTiming.load()){
    std::lock_guard lock(displayDrawableMutex);drawable=std::exchange(displayDrawable,nil);
-   if(drawable&&(drawable.texture.width!=unsigned(size.width)||drawable.texture.height!=unsigned(size.height)||drawable.texture.pixelFormat!=target.pixelFormat))drawable=nil;
+   if(drawable&&(drawable.texture.width!=unsigned(size.width)||drawable.texture.height!=unsigned(size.height)||drawable.texture.pixelFormat!=target.pixelFormat)){drawables.abandon(drawable);drawable=nil;}
   }else drawable=drawables.acquire(target);
   if(!drawable&&drawables.refusingSeconds()>=2&&!drawablesReported.exchange(true))
    nativeLog("Presentation output drawables have all been in use for 2 s: "+std::to_string(drawables.held())+" of "+std::to_string(drawables.capacity(target)));
@@ -214,6 +217,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
  // A due image is taken from the delivery plan only when it can be presented: on the Metal display-link
  // route the latest tick's drawable, otherwise a free drawable of the layer. Otherwise it stays due.
  bool outputDrawableReady(CAMetalLayer *target){
+  std::lock_guard route(drawableRouteMutex);
   if(!target)return false;
   if(metalTiming.load()){std::lock_guard lock(displayDrawableMutex);return displayDrawable!=nil;}
   return drawables.held()<drawables.capacity(target);
@@ -243,29 +247,32 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   if(!drawable&&target==0){
    const auto weak=weak_from_this();dispatch_async(worker,^{if(auto self=weak.lock()){
     std::lock_guard serial(self->submission);if(self->stopping.load()||epoch!=self->timingEpoch)return;
+    std::lock_guard route(self->drawableRouteMutex);
     self->metalTimingUnavailable=true;self->metalTiming=false;++self->timingEpoch;
     if(self->metalLink){self->metalLink->invalidate();self->metalLink.reset();}
-    {std::lock_guard lock(self->displayDrawableMutex);self->displayDrawable=nil;}
+    {std::lock_guard lock(self->displayDrawableMutex);self->drawables.abandon(self->displayDrawable);self->displayDrawable=nil;}
     self->start();
    }});return;
   }
   if(std::isfinite(target)&&target>0)refreshTime.store(target);if(rate>=20&&rate<=1000)displayHz.store(rate);
   CAMetalLayer *output=layerSnapshot();if(!output)return;
   {std::lock_guard lock(displayDrawableMutex);if(stopping.load()||epoch!=timingEpoch||!metalTiming.load())return;
-   if(displayDrawable!=drawable){displayDrawable=nil;displayDrawable=drawables.adopt(output,drawable);}}
+   if(displayDrawable!=drawable){drawables.abandon(displayDrawable);displayDrawable=nil;displayDrawable=drawables.adopt(output,drawable);}}
   schedule();
  }
  // A CAMetalDisplayLink, paused or running, keeps its layer from supplying -nextDrawable. While display
  // timing is not needed the link is released and presentation acquires drawables from the layer;
  // start() creates a new link.
  void pauseGenerationTiming(){
+  std::lock_guard route(drawableRouteMutex);
   if(metalLink){metalTiming=false;++timingEpoch;metalLink->invalidate();metalLink.reset();}
   if(link&&CVDisplayLinkIsRunning(link))CVDisplayLinkStop(link);
-  std::lock_guard lock(displayDrawableMutex);displayDrawable=nil;
+  std::lock_guard lock(displayDrawableMutex);drawables.abandon(displayDrawable);displayDrawable=nil;
  }
  void stopGenerationTiming(){
+  std::lock_guard route(drawableRouteMutex);
   ++timingEpoch;metalTiming=false;if(metalLink){metalLink->invalidate();metalLink.reset();}
-  {std::lock_guard lock(displayDrawableMutex);displayDrawable=nil;}
+  {std::lock_guard lock(displayDrawableMutex);drawables.abandon(displayDrawable);displayDrawable=nil;}
   if(link){CVDisplayLinkStop(link);CVDisplayLinkRelease(link);link=nullptr;}
   if(wakeup){dispatch_source_cancel(wakeup);wakeup=nullptr;}
  }
@@ -275,6 +282,7 @@ worker=dispatch_queue_create("macfx.presentation",DISPATCH_QUEUE_SERIAL);layer.f
   RuntimeStatusEvent event;event.context=reinterpret_cast<uintptr_t>(owner);event.processing=true;event.phase=RuntimeStatusPhase::Bypassed;event.stageId="frame-generation";event.requestedMethod=generator?generator->method():config.generationMethod.c_str();event.activeMethod="passthrough";event.reason=reason;observeRuntimeStatus(event);
  }
  bool start(bool enabled=true){
+  std::lock_guard route(drawableRouteMutex);
   if((!generator&&!outputPolicy.active())||generationUnavailable)return false;
   if(!enabled){pauseGenerationTiming();return true;}
   @try{try{
@@ -757,6 +765,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
     @catch(NSException*error){throw std::runtime_error(error.reason.UTF8String?:"Performance overlay failed");}}
    catch(const std::exception&error){hudFailed.store(true);nativeLog(std::string("Performance overlay disabled for this output: ")+error.what());}
   }else if(hudShown.exchange(false,std::memory_order_relaxed))hud.reset();
+  const bool linkDrawable=drawables.fromDisplayLink(drawable);
   const double encodedAt=CACurrentMediaTime();
   auto held=std::make_shared<std::optional<Display>>(display);std::weak_ptr<Impl>weak=shared_from_this();
   const auto generated=display.generated;const bool replay=display.replay;const auto subframe=display.subframe;const bool repeatedCycle=display.repeatedCycle;const auto frameWidth=display.batch->outputWidth,frameHeight=display.batch->outputHeight;const auto frameId=display.batch->id,frameEpoch=display.batch->epoch;const auto frameTime=display.batch->sourceTime;
@@ -843,7 +852,7 @@ fragment float4 motion_fragment(float4 p[[position]],texture2d<float,access::rea
     // a synchronous presented callback cannot acknowledge the barrier early.
     std::string failure;
     @try{try{DiagnosticScope driverScope(DiagnosticStage::MetalDrawable,reinterpret_cast<uintptr_t>(self->owner),frameWidth,frameHeight,"presentation.driver-present");
-     if(scheduleTime&&targettime::schedule(scheduleTime,CACurrentMediaTime()))[drawable presentAtTime:scheduleTime];else [drawable present];}
+     if(!linkDrawable&&scheduleTime&&targettime::schedule(scheduleTime,CACurrentMediaTime()))[drawable presentAtTime:scheduleTime];else [drawable present];}
      catch(const std::exception&error){failure=error.what();}}
     @catch(NSException*error){failure=error.reason.UTF8String?:"Drawable presentation failed";}
     if(!failure.empty()){presentationIssued->store(false,std::memory_order_release);if(scheduled.status>=MTLCommandBufferStatusCompleted)self->drawables.abandon(drawable);}
