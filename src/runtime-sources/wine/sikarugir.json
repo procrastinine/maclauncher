@@ -290,7 +290,16 @@
           }
         }
       },
-      "sikarugir-dxvk"
+      {
+        "embed": "sikarugir-dxvk",
+        "when": {
+          "not": true,
+          "selected": {
+            "role": "vulkan-driver",
+            "engine": "kosmickrisp"
+          }
+        }
+      }
     ]
   },
   "interfaces": {
