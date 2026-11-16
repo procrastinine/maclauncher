@@ -1,0 +1,131 @@
+{
+  "id": "winecx",
+  "kind": "wine",
+  "label": "WineCX",
+  "order": 202,
+  "labels": {
+    "source": "WineCX",
+    "automatic": "WineCX's automatic choice"
+  },
+  "discover": {
+    "type": "github-releases",
+    "repo": "dappermint/winecx-gptk",
+    "tag": "(?:^|[^\\d.])v?(?<version>[0-9]+\\.[0-9]+(?:\\.[0-9]+)?)$"
+  },
+  "verify": [
+    {
+      "type": "sums-file",
+      "match": ".*\\.sha256$"
+    }
+  ],
+  "layout": {
+    "type": "archive",
+    "entry": "Libraries/Wine/bin/wine"
+  },
+  "embeds": [
+    {
+      "id": "winecx-dxmt",
+      "kind": "d3d-translator",
+      "parts": [
+        {
+          "path": "Libraries/DXMT",
+          "name": "dxmt"
+        }
+      ],
+      "interfaces": {
+        "requires": [
+          "macos>=14.0",
+          "wine:winemetal"
+        ]
+      },
+      "engine": "dxmt",
+      "label": "DXMT"
+    },
+    {
+      "id": "winecx-dxvk",
+      "kind": "d3d-translator",
+      "parts": [
+        {
+          "path": "Libraries/DXVK",
+          "name": "dxvk"
+        }
+      ],
+      "interfaces": {
+        "requires": []
+      },
+      "engine": "dxvk",
+      "label": "DXVK"
+    },
+    {
+      "id": "winecx-moltenvk",
+      "kind": "vulkan-driver",
+      "parts": [
+        {
+          "path": "Libraries/Wine/lib/libMoltenVK.dylib",
+          "name": "moltenvk"
+        }
+      ],
+      "interfaces": {
+        "requires": []
+      },
+      "engine": "moltenvk",
+      "label": "MoltenVK"
+    },
+    {
+      "id": "winecx-gstreamer",
+      "kind": "media",
+      "parts": [
+        {
+          "path": "Libraries/Wine/lib/gstreamer-1.0",
+          "name": "plugins"
+        },
+        {
+          "path": "Libraries/Wine/lib/libgstreamer-1.0.0.dylib",
+          "name": "core",
+          "optional": true
+        }
+      ],
+      "engine": "gstreamer",
+      "label": "GStreamer"
+    },
+    {
+      "id": "winecx-wined3d",
+      "kind": "d3d-translator",
+      "engine": "wined3d",
+      "parts": [
+        {
+          "path": "Libraries/Wine/lib/wine",
+          "name": "builtins"
+        }
+      ],
+      "label": "WineD3D"
+    }
+  ],
+  "license": "LGPL-2.1-or-later",
+  "credits": {
+    "url": "https://github.com/dappermint/winecx-gptk"
+  },
+  "manager": {
+    "id": "winecx",
+    "memberOrder": 0,
+    "sectionLabel": "WineCX",
+    "tabLabel": "WineCX",
+    "category": "compatibility"
+  },
+  "wine": {
+    "invocation": "wine",
+    "prefixModel": "windowsVersion",
+    "downloads": true,
+    "graphicsSelector": false
+  },
+  "assets": [
+    {
+      "match": "\\.(?:tar\\.(?:xz|gz|bz2|zst)|t[gx]z|tar|zip|pkg)$",
+      "declares": {
+        "macho": [
+          "x86_64"
+        ]
+      }
+    }
+  ]
+}

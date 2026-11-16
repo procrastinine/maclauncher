@@ -4,23 +4,9 @@ const path = require("node:path");
 // A CrossOver application installed on this Mac. CrossOver's own wrapper and
 // bottle tool run its Wine, and its graphics selector chooses among the
 // translators the application includes.
-module.exports = Object.freeze({
-  id: "crossover", label: "CrossOver", runtimeLabel: "CrossOver", managerId: "crossover", invocation: "crossover",
-  order: 200,
+const Adapter = require("../../../runtime-adapters/wine");
+module.exports = Adapter.descriptor("crossover", {
   manager: () => require("../runtime/manager"),
-  labels: Object.freeze({ source: "CrossOver", automatic: "CrossOver's automatic choice", environment: "Bottle setting", environmentName: "CrossOver bottle" }),
-  environmentKind: "crossover-bottle", prefixModel: "bottleTemplate", downloads: false,
-  // Components from a CrossOver application stay with CrossOver launches.
-  ownComponents: true,
-  graphicsSelector: true,
-  vulkanLibrarySelector: () => true,
-  includedTranslators(install, add, { layout, requestedEngine, gstreamerVersion }) {
-    for (const engine of ["dxmt", "dxvk"]) add(path.join(layout.root, "lib", engine), engine, "d3d-renderer");
-    add(path.join(layout.root, "lib64/apple_gptk"), "d3dmetal", "d3d-renderer");
-    add(path.join(layout.root, "lib64/libMoltenVK.dylib"), "moltenvk", "vulkan-driver", { form: "dylib" });
-    if (!requestedEngine || requestedEngine === "gstreamer")
-      add(path.join(layout.root, "lib64/gstreamer-1.0"), "gstreamer", "video", { form: "dylib", version: gstreamerVersion(path.join(layout.root, "lib64/libgstreamer-1.0.0.dylib")) });
-  },
   // CrossOver's automatic selector can choose another renderer, so its DXMT is
   // the camera adapter's base only for an explicit DXMT selection.
   dxmtBase(install, { translator, settings = {} } = {}) {

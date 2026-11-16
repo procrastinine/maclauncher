@@ -80,3 +80,5 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
 }
 
 module.exports = { ROOT, WINE, REQUIRED, findRoot, readVersionFile, preparePayload, createPayloadResolver };
+
+module.exports.installDetail = (pin,selection) => (selection.repairRequired ? 'Reinstalls' : 'Downloads') + ' the WineCX Wine runtime' + (pin.downloadBytes ? ' (' + Math.ceil(pin.downloadBytes/1024/1024) + ' MB)' : '') + '.';

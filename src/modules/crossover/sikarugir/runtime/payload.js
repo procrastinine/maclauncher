@@ -113,3 +113,26 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
 }
 
 module.exports = { WINE_ROOT, SUPPORT_ROOT, INVENTORY, walk, inspectClosure, findWineRoot, hashAsync, preparePayload, createPayloadResolver };
+
+function configureCustom(manager, inspectPayload) {
+ const Custom = require("../../../shared/runtime/custom-runtime"), Payload=module.exports;
+  Custom.configure(manager, { defaultsPath: () => ["defaultVersion"], providers: [{ core: manager.core,
+    lists: { listInstalled: "default" }, resolves: { resolveInstalled: "default", resolveRegistered: "default" },
+    versions: ["normalizeVersion"], directories: ["getInstallDir"] }], inspect(runtimePath, { verification } = {}) {
+    let root = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath);
+    for (let depth = 0; depth < 7 && !fs.existsSync(path.join(root, Payload.INVENTORY)); depth += 1) root = path.dirname(root);
+    if (!fs.existsSync(path.join(root, Payload.INVENTORY))) throw new Error("Select the complete Sikarugir runtime directory, including its Wine engine and support libraries.");
+    const file = path.join(root, "runtime.json");
+    if (fs.statSync(file).size > 1024 * 1024) throw new Error("The Sikarugir runtime metadata exceeds its size limit.");
+    const record = JSON.parse(fs.readFileSync(file, "utf8"));
+    const native = Custom.inspectExecutable(path.join(root, Payload.WINE_ROOT, "bin", "wine"));
+    const selected = inspectPayload({ ...record, ...native, installDir: root }, { verification: verification === "status" ? "status" : "full" });
+    if (!selected.install) throw new Error(selected.reason);
+    return { ...selected.install, runtimeVersion: record.version };
+  } });
+}
+module.exports.configureCustom=configureCustom;
+
+module.exports.validateInstallIdentity = (install,pin) => !Catalog.validateEntry(pin) || (pin.asset.sha256 && install.archiveSha256 !== pin.asset.sha256) || (pin.template.asset.sha256 && install.installationMetadata?.template?.archiveSha256 !== pin.template.asset.sha256) ? 'Sikarugir archive identities changed. Remove and install this version again.' : null;
+module.exports.progress = (pin,onProgress) => onProgress && (row => onProgress({...row,total:pin.downloadBytes,detail:String(row?.detail || '').startsWith(pin.versionLabel) ? row.detail : pin.versionLabel + ' · ' + ({'Downloading…':'Downloading Wine engine…','Extracting files…':'Extracting Wine engine…'}[row?.detail || 'Downloading…'] || row.detail)}));
+module.exports.installDetail = (pin,selection) => (selection.repairRequired ? 'Reinstalls' : 'Downloads') + ' the Wine engine and its matching support libraries' + (pin.downloadBytes ? ' (' + Math.ceil(pin.downloadBytes/1024/1024) + ' MB total)' : '') + '.';

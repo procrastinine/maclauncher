@@ -1,0 +1,146 @@
+{
+  "id": "crossover",
+  "kind": "wine",
+  "label": "CrossOver",
+  "order": 200,
+  "labels": {
+    "source": "CrossOver",
+    "automatic": "CrossOver's automatic choice",
+    "environment": "Bottle setting",
+    "environmentName": "CrossOver bottle"
+  },
+  "discover": {
+    "type": "local-app"
+  },
+  "verify": [],
+  "layout": {
+    "type": "local-app",
+    "entry": "Contents/SharedSupport/CrossOver/bin/wine",
+    "paths": [
+      "/Applications/CrossOver.app",
+      "~/Applications/CrossOver.app"
+    ]
+  },
+  "embeds": [
+    {
+      "id": "crossover-dxmt",
+      "kind": "d3d-translator",
+      "parts": [
+        {
+          "path": "Contents/SharedSupport/CrossOver/lib/dxmt",
+          "name": "dxmt"
+        }
+      ],
+      "interfaces": {
+        "requires": [
+          "macos>=14.0",
+          "wine:winemetal"
+        ]
+      },
+      "engine": "dxmt",
+      "label": "DXMT"
+    },
+    {
+      "id": "crossover-dxvk",
+      "kind": "d3d-translator",
+      "parts": [
+        {
+          "path": "Contents/SharedSupport/CrossOver/lib/dxvk",
+          "name": "dxvk"
+        }
+      ],
+      "interfaces": {
+        "requires": []
+      },
+      "engine": "dxvk",
+      "label": "DXVK"
+    },
+    {
+      "id": "crossover-d3dmetal",
+      "kind": "d3d-translator",
+      "parts": [
+        {
+          "path": "Contents/SharedSupport/CrossOver/lib64/apple_gptk",
+          "name": "d3dmetal"
+        }
+      ],
+      "interfaces": {
+        "requires": [
+          "macos>=14.0",
+          "gpu:apple-physical"
+        ]
+      },
+      "engine": "d3dmetal",
+      "label": "D3DMetal"
+    },
+    {
+      "id": "crossover-moltenvk",
+      "kind": "vulkan-driver",
+      "parts": [
+        {
+          "path": "Contents/SharedSupport/CrossOver/lib64/libMoltenVK.dylib",
+          "name": "moltenvk"
+        }
+      ],
+      "interfaces": {
+        "requires": []
+      },
+      "engine": "moltenvk",
+      "label": "MoltenVK"
+    },
+    {
+      "id": "crossover-gstreamer",
+      "kind": "media",
+      "parts": [
+        {
+          "path": "Contents/SharedSupport/CrossOver/lib64/gstreamer-1.0",
+          "name": "plugins"
+        },
+        {
+          "path": "Contents/SharedSupport/CrossOver/lib64/libgstreamer-1.0.0.dylib",
+          "name": "core",
+          "optional": true
+        }
+      ],
+      "engine": "gstreamer",
+      "label": "GStreamer"
+    },
+    {
+      "id": "crossover-wined3d",
+      "kind": "d3d-translator",
+      "engine": "wined3d",
+      "parts": [
+        {
+          "path": "Contents/SharedSupport/CrossOver/lib/wine",
+          "name": "builtins"
+        }
+      ],
+      "label": "WineD3D"
+    }
+  ],
+  "license": "Proprietary; Wine LGPL-2.1-or-later",
+  "credits": {
+    "url": "https://www.codeweavers.com/crossover"
+  },
+  "manager": {
+    "id": "crossover",
+    "memberOrder": 0,
+    "sectionLabel": "CrossOver",
+    "tabLabel": "CrossOver",
+    "category": "compatibility"
+  },
+  "wine": {
+    "invocation": "crossover",
+    "prefixModel": "bottleTemplate",
+    "downloads": false,
+    "environmentKind": "crossover-bottle",
+    "ownComponents": true,
+    "graphicsSelector": true,
+    "vulkanLibrarySelector": true
+  },
+  "selector": {
+    "type": "environment",
+    "key": "CX_GRAPHICS_BACKEND",
+    "automatic": "auto"
+  }
+}

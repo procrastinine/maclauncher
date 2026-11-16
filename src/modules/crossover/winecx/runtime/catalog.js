@@ -3,7 +3,9 @@ const Upstream = require("../../../shared/runtime/upstream");
 const { ARCHIVE } = require("../../../shared/runtime/safe-archive");
 const { parseMachOLoadCommands } = require("../../../shared/runtime/macho-load-commands");
 
-const REPOSITORY = "dappermint/winecx-gptk";
+const SOURCE = require('../../../../runtime-sources/wine/winecx.json');
+const REPOSITORY = SOURCE.discover.repo;
+const archiveAsset = name => SOURCE.assets.some(asset => new RegExp(asset.match, 'i').test(name || ''));
 const SOURCE_URL = `https://github.com/${REPOSITORY}/releases`;
 
 // A release's runtime is the archive that has a published SHA-256 file named
@@ -12,14 +14,14 @@ const SOURCE_URL = `https://github.com/${REPOSITORY}/releases`;
 function runtimeAssets(release) {
   const assets = Array.isArray(release?.assets) ? release.assets : [];
   const byName = new Map(assets.map(asset => [asset?.name, asset]));
-  const archives = assets.filter(asset => ARCHIVE.test(asset?.name || "") && byName.has(`${asset.name}.sha256`));
+  const archives = assets.filter(asset => archiveAsset(asset?.name) && byName.has(`${asset.name}.sha256`));
   if (archives.length !== 1) return null;
   const [archive] = archives, checksum = byName.get(`${archive.name}.sha256`);
   const plists = assets.filter(asset => /\.plist$/i.test(asset?.name || ""));
   return { archive, checksum, ...(plists.length === 1 ? { plist: plists[0] } : {}) };
 }
 function releaseVersion(tag) {
-  return /(?:^|[^\d.])v?(\d+\.\d+(?:\.\d+)?)$/.exec(String(tag || ""))?.[1] || null;
+  return new RegExp(SOURCE.discover.tag).exec(String(tag || ''))?.groups?.version || null;
 }
 const source = Upstream.github({ repository: REPOSITORY, allArchitectures: true,
   recognize: release => {
@@ -32,7 +34,7 @@ const versionLabel = (pin, installed) => {
   return record?.version ? `WineCX ${record.version}${wine ? ` · Wine ${wine}` : ""}` : record?.versionLabel;
 };
 function entryFor(row) {
-  const archive = row.files.find(file => ARCHIVE.test(file.name) && row.files.some(other => other.name === `${file.name}.sha256`));
+  const archive = row.files.find(file => archiveAsset(file.name) && row.files.some(other => other.name === `${file.name}.sha256`));
   const checksum = archive && row.files.find(file => file.name === `${archive.name}.sha256`);
   if (!archive || !checksum) return null;
   const plist = row.files.find(file => /\.plist$/i.test(file.name));
@@ -130,3 +132,26 @@ async function withFloor(pins, options = {}) {
 const { readChecksum } = require("../../../../runtime-sources/verification");
 
 module.exports = { REPOSITORY, SOURCE_URL, source, runtimeAssets, releaseVersion, versionLabel, entryFor, validateEntry, discover, readChecksum, archiveFloor, wineExecutable };
+
+const Host = require('../../../shared/runtime/bundled-native');
+
+function describeRequirements(pins, requirements, installed, options, dependencies = {}) {
+ const Shared=require("../../sources/wine-payload");
+      for (const pin of pins) requirements[pin.version] = { ...requirements[pin.version],
+        downloadBytes: pin.downloadBytes, description: "Wine runtime with DXVK and DXMT",
+        contents: "The Wine and translator versions in this release are known after download.",
+        ...(pin.minimumMacOS ? { minimumMacOS: pin.minimumMacOS } : {}),
+        ...(pin.minimumMacOS && !Host.versionAtLeast((dependencies.systemVersionSync || Host.systemVersionSync)(), pin.minimumMacOS) ? { installReason: Shared.requiresMacOS(pin.minimumMacOS) } : {}) };
+
+}
+module.exports.describeRequirements = describeRequirements;
+
+async function prepareSelection(pin,options,dependencies={}) {
+ const Shared=require("../../sources/wine-payload");
+    const floor = pin.minimumMacOS || await (dependencies.archiveFloor || archiveFloor)(pin.asset, { signal: options.signal }).catch(error => {
+      if (error?.name === "AbortError") throw error;
+      options.logger?.warn?.(`[winecx] The macOS requirement of ${version} could not be read before download: ${error.message}`); return null;
+    });
+    if (floor && !Host.versionAtLeast((dependencies.systemVersionSync || Host.systemVersionSync)(), floor)) throw new Error(Shared.requiresMacOS(floor));
+}
+module.exports.prepareSelection=prepareSelection;

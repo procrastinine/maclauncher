@@ -8,7 +8,8 @@ const { readMachOArchitectures } = require("../../shared/runtime/local-native");
 const { imageRequiresRosetta } = require("../../shared/runtime/architecture");
 const { createRuntimeSettingsStore } = require("../../../core/runtime-settings");
 
-const AUTOMATIC_PATHS = ["/Applications/CrossOver.app", path.join(os.homedir(), "Applications", "CrossOver.app")];
+const Source = require('../../../runtime-sources/wine/crossover.json');
+const AUTOMATIC_PATHS = Source.layout.paths.map(value => value.startsWith('~/') ? path.join(os.homedir(),value.slice(2)) : value);
 const registryPath = userDataDir => path.join(userDataDir, "runtimes", "crossover", "registrations.json");
 const identity = appPath => "local-" + crypto.createHash("sha256").update(appPath).digest("hex").slice(0, 16);
 const applicationCache = new Map();
@@ -170,7 +171,7 @@ function resolveSelection(entry, settings, userDataDir, runtimeSettings) {
       ? "The selected CrossOver application is unavailable. Add its current location in Runtimes or select Automatic."
       : "CrossOver was not found. Add an installed CrossOver application in Runtimes.") };
 }
-const manager = { id: "crossover", label: "CrossOver", ui: { groupId: "crossover", tabLabel: "CrossOver", order: 200, memberOrder: 0 }, normalizeSettings, prepareLocalState, getState, importRuntime, uninstallRuntime, resolveSelection,
+const manager = { id: Source.manager.id, label: Source.label, ui: { ...Source.manager, groupId: Source.kind, order: Source.order }, normalizeSettings, prepareLocalState, getState, importRuntime, uninstallRuntime, resolveSelection,
   refreshCatalog: async ({ userDataDir } = {}) => {
     // An explicit Refresh offers a declined graphics integration again. The
     // Steam client bridge keeps Play Without Steam until it is installed.
@@ -190,4 +191,4 @@ const manager = { id: "crossover", label: "CrossOver", ui: { groupId: "crossover
   core: { listInstalled, inspectApplication, identity, knownApplications },
   __test: { AUTOMATIC_PATHS, readRegistry, writeRegistry, registryPath, compareApplications } };
 require("../../shared/runtime/custom-runtime").configure(manager, { inspect: inspectApplication });
-module.exports = manager;
+module.exports = require('../../../runtime-sources/manager').createSourceBackedManager({source:Source,adapter:require('../../../runtime-adapters/wine'),backend:manager});

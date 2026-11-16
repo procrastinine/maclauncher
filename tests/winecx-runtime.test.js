@@ -269,5 +269,6 @@ test("all three Wine sources share one settings definition", () => {
   assert.deepEqual(without("crossover", "bottleTemplate").sort(), without("sikarugir", "cncDdraw").sort(),
     "CrossOver adds only its bottle type, which names the bottle that holds its saves");
   for (const id of Sources.IDS) assert.equal(manifest.runtime.managerUi[id].tabLabel, Sources.get(id).label);
-  assert.equal(manifest.runtime.entries.winecx.graphicsArchitecture, "x86_64");
+  assert.equal(Object.hasOwn(manifest.runtime.entries.winecx, "graphicsArchitecture"), false,
+    "source metadata never supplies a fixed process CPU; the selected build carries measured facts");
 });

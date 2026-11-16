@@ -3,7 +3,8 @@ const Upstream = require("../../../shared/runtime/upstream");
 const { versionAtLeast } = require("../../../shared/runtime/bundled-native");
 const { ARCHIVE } = require("./archive");
 
-const SOURCE_URL = "https://github.com/Sikarugir-App/Engines/releases";
+const SOURCE = require('../../../../runtime-sources/wine/sikarugir.json');
+const SOURCE_URL = 'https://github.com/' + SOURCE.discover.repo + '/releases';
 
 // Asset names follow upstream: any WSnn wrapper generation, an optional
 // platform suffix and any archive the extractor reads. Files for other
@@ -21,12 +22,11 @@ function parseTemplateName(name) {
 // Wine engines from 10.0_8 on, except the first 11.0 build. The WSnn number
 // names the wrapper generation the engine was built for.
 function parseEngineName(name) {
-  const match = /^WS(\d+)WineSikarugir((\d+)\.(\d+)(?:_(\d+))?)(?:[-_.][A-Za-z][\w.-]*)?$/.exec(archiveStem(name) || "");
+  const match = new RegExp(SOURCE.assets[0].match, 'i').exec(String(name || ''));
   if (!match) return null;
-  const [major, minor, revision] = [Number(match[3]), Number(match[4]), Number(match[5] || 0)];
-  if (![major, minor, revision].every(Number.isSafeInteger) || major < 10 || major === 10 && (minor === 0 && revision < 8) ||
-    major === 11 && minor === 0 && revision < 1) return null;
-  return { version: match[2], major, minor, revision, wrapper: Number(match[1]) };
+  const version = match.groups.version, [base, revisionText] = version.split('_'), [major,minor] = base.split('.').map(Number), revision=Number(revisionText||0);
+  if (![major,minor,revision].every(Number.isSafeInteger)) return null;
+  return {version,major,minor,revision,wrapper:Number(match.groups.wrapper)};
 }
 // One archive per version and release: the newest wrapper generation, then
 // a name without a variant suffix, then the publisher's current .tar.xz form.
@@ -43,7 +43,7 @@ function archives(release, parse) {
 }
 // Engines are assets of the Engines releases, support libraries assets of the
 // Template releases. The rolling release tag is not a Wine version.
-const engines = Upstream.github({ repository: "Sikarugir-App/Engines", prerelease: true, allArchitectures: true,
+const engines = Upstream.github({ repository: SOURCE.discover.repo, prerelease: SOURCE.discover.includePrereleases, allArchitectures: true,
   recognize: release => archives(release, parseEngineName) });
 const templates = Upstream.github({ repository: "Sikarugir-App/Template", prerelease: true, allArchitectures: true,
   recognize: release => archives(release, parseTemplateName) });
@@ -118,3 +118,16 @@ discover.allArchitectures = true;
 
 module.exports = { SOURCE_URL, engines, templates,
   parseEngineName, parseTemplateName, archives, snapshotVersion, versionLabel, entryFor, validateEntry, discover };
+
+function describeRequirements(pins, requirements, installed, options, dependencies = {}) {
+      const templates = new Map(installed.filter(row => row.componentSummary).map(row => [row.templateVersion || row.catalogEntry?.template?.version, row.componentSummary]));
+      for (const pin of pins) requirements[pin.version] = { ...requirements[pin.version],
+        downloadBytes: pin.downloadBytes, engineVersion: pin.engineVersion, templateVersion: pin.template?.version,
+        description: "Wine engine and matching support libraries",
+        contents: templates.has(pin.template?.version) ? `Includes ${templates.get(pin.template.version)}.`
+          : `The translator versions in Template ${pin.template?.version || "releases"} are known after download.` };
+
+}
+module.exports.describeRequirements = describeRequirements;
+module.exports.sources = [engines, templates];
+module.exports.artifacts = pin => [pin.asset,pin.template.asset];

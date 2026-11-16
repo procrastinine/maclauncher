@@ -3,22 +3,13 @@ const { cloneOrCopy } = require("../../../shared/copy-file");
 const path = require("node:path");
 const { readMachOLoadCommands } = require("../../../shared/runtime/macho-load-commands");
 const { versionAtLeast } = require("../../../shared/runtime/bundled-native");
-const { TEMPLATE_RENDERERS, WINE_BACKENDS } = require("../../../shared/runtime/feature-requirements");
-
-// Installed support copies always use this layout, whatever the Template's own.
-const RELATIVE_PATHS = Object.freeze({ frameworks: "Frameworks", renderers: "Frameworks/renderer", vulkan: "Resources/vulkan/icd.d" });
+const facts = require('../../../../runtime-adapters/wine').supportFacts('sikarugir');
+const RELATIVE_PATHS = Object.freeze(facts.relativePaths);
+const MINIMUM_MACOS = Object.freeze(facts.minimumMacOS);
 function gstreamerPaths(support) {
-  const root = path.join(support, RELATIVE_PATHS.frameworks, 'GStreamer.framework/Versions/1.0');
-  const lib = path.join(root, 'lib');
-  return { root, lib, plugins: path.join(lib, 'gstreamer-1.0'), scanner: path.join(root, 'libexec/gstreamer-1.0/gst-plugin-scanner') };
+  const core=path.join(support,facts.media.core), lib=path.dirname(core);
+  return {root:path.dirname(lib),lib,plugins:path.join(support,facts.media.plugins),scanner:path.join(support,facts.media.scanner)};
 }
-// Lowest macOS versions for optional components. A component library that
-// declares a later deployment target raises its floor. DXMT and D3DMetal have
-// the one requirement every Wine source uses, raised by their own libraries,
-// such as D3DMetal's shader compiler container library.
-const fullVersion = version => [...String(version).split("."), "0", "0"].slice(0, 3).join(".");
-const MINIMUM_MACOS = Object.freeze(Object.fromEntries(Object.entries({ ...TEMPLATE_RENDERERS, ...WINE_BACKENDS })
-  .map(([name, required]) => [name, fullVersion(required.minimumMacOS)])));
 const MAGIC = new Set([0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe, 0xcafebabe, 0xbebafeca, 0xcafebabf, 0xbfbafeca]);
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
 function fail(message) { throw new Error(`Sikarugir graphics: ${message}`); }

@@ -4,7 +4,8 @@ const Detection = require("../detect");
 const WineLaunch = require("./wine-launch");
 const Writable = require("../../shared/writable-input");
 const Environments = require("../../shared/runtime/wine-environment");
-const Processes = require("../../shared/runtime/wine-processes");
+const WineAdapter = require("../../../runtime-adapters/wine");
+const { createLog } = WineAdapter;
 const Translators = require("../../shared/runtime/wine-translators");
 
 // Every Windows runtime shares the executable evidence that detection records.
@@ -30,25 +31,6 @@ function resolveSaveLocations(entry, context, { source }) {
     }
   }
   return { primaryDirectory: directories[0]?.directory || null, directories };
-}
-function createLog(directory) {
-  const file = path.join(directory, "wine.log");
-  const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | (fs.constants.O_NOFOLLOW || 0), 0o600);
-  let bytes = 0, closed = false;
-  const write = chunk => {
-    if (closed) return;
-    const size = Math.min(chunk.length, 512 * 1024 - bytes);
-    if (size > 0) {
-      try { fs.writeSync(fd, chunk, 0, size); bytes += size; }
-      catch { close(); }
-    }
-  };
-  const close = () => { if (!closed) { closed = true; try { fs.closeSync(fd); } catch {} } };
-  return { close, attach: child => {
-    child.stdout?.on("data", write); child.stderr?.on("data", write);
-    child.once("close", close); child.once("error", close);
-    if (child.exitCode != null || child.signalCode != null) close();
-  } };
 }
 // The runtime provider of a Wine source that runs its own Wine loader.
 function createProvider({ source, manager, launch = WineLaunch.forSource(source), platform = process.platform, launchDependencies } = {}) {
@@ -108,17 +90,7 @@ function createProvider({ source, manager, launch = WineLaunch.forSource(source)
       if (platform !== "darwin") throw new Error(`${source.label} requires macOS.`);
       if (!supportsEntry(entry)) throw new Error(notSupported);
       const plan = await launch.prepareLaunch(entry, context, { ...launchDependencies, manager: runtimeManager() });
-      const log = createLog(plan.directory);
-      try {
-        Processes.installStopHandler(context, plan);
-        const args = plan.existingEnvironment ? Processes.externalArguments(plan.winePath, plan.args, plan.environment, plan.sessionPath) :
-          launch.supervisorArguments(plan.winePath, plan.serverPath, "play", plan.args, plan.environment, plan.sessionPath);
-        const child = await context.spawnDetachedChecked("/bin/sh", args,
-        { cwd: plan.workingDirectory || path.dirname(plan.executablePath), env: plan.environment, stdio: ["ignore", "pipe", "pipe"], graphicsExecutable: plan.winePath }, false);
-        log.attach(child);
-        require("../../shared/runtime/wine-activation").followWineActivation(child, context);
-        return child;
-      } catch (error) { log.close(); throw error; }
+      return WineAdapter.launch(plan, context, { supervisorArguments: launch.supervisorArguments });
     }
   };
 }

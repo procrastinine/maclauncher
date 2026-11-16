@@ -2,7 +2,8 @@
 // only what differs per source: where its Wine tree comes from, its layout and
 // included translators, and its Runtimes row. Every other part of preparing and
 // launching a game is shared.
-const IDS = Object.freeze(["crossover", "sikarugir", "winecx"]);
+const definitions = require('../../../runtime-sources').loadSources().filter(source => source.kind === 'wine').sort((a,b) => a.order - b.order);
+const IDS = Object.freeze(definitions.map(source => source.id));
 const loaded = new Map();
 function get(id) {
   if (!IDS.includes(id)) return null;
