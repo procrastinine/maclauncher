@@ -7,12 +7,12 @@ function getState(context={}){
  const catalog={status:'success',delivery:'download',versions:[descriptor.version],versionLabels:{[descriptor.version]:'FSR 4.1.2 Lite'},
   installable:available,installableVersions:available?[descriptor.version]:[],includedVersions:[],buildableVersions:[],
   versionRequirements:{[descriptor.version]:{requiresDownload:!current,requiresBuild:false,available:!!current,included:false,downloadBytes:descriptor.downloadBytes,
-   ...(!available?{reason:'Install an FSR 4 v3.2 provider first.'}:{})}},
+   ...(!available?{reason:'The selected graphics processor does not include FSR 4.1.2 Lite.'}:{})}},
   importable:available,importInputKinds:['file','directory'],importExtensions:['zip'],importLabel:'Import FSR 4 model data…',
   importDescription:'Imports the original fsr4-native-macos v3.2 release zip or its fsr412_model directory. A sibling fsr412_lossy directory supplies Lite Lossy data.',
   sourceUrl:descriptor.sourceUrl,source:descriptor.sourceUrl,refreshLabel:'Reload available model data',supportsLatestOnly:false,fetchedAt:null,error:null,
   latestInstalledVersion:current?.version||null,latestAvailableVersion:descriptor.version,updateAvailable:false};
- const section={id:'default',label:'FSR 4 models',managementTitle:descriptor.label,supportsDefault:false,installed:current?[{...current,runtimePath:current.directory,sourcePath:current.directory,versionLabel:'FSR 4.1.2 Lite',removalLabel:'Remove'}]:[],variants:[],installing:null,catalog,sourceLinks:[{label:'Upstream release',url:descriptor.sourceUrl}]};
+ const section={id:'default',label:'FSR 4 models',managementTitle:descriptor.label,supportsDefault:false,installed:current?[{...current,runtimePath:current.directory,sourcePath:current.directory,versionLabel:'FSR 4.1.2 Lite',removalLabel:'Remove'}]:[],variants:[],installing:null,catalog,sourceLinks:[{label:'Upstream release',url:descriptor.sourceUrl}],description:'AMD FSR 4.1.2 model data for the FSR 4 4.1.2 Lite and Lite Lossy profiles, from the fsr4-native-macos release. It is downloaded or imported, then prepared in the launcher profile.'};
  return {...section,id:descriptor.managerId,sections:[section]};
 }
 async function remove(context={}){const root=Library.directory(context.userDataDir);require('../../writable-input').assertOwnDirectory(context.userDataDir,root,{create:false});return require('../../../../core/coordinated-runtime-managers').withRuntimeMutation({...descriptor,sourcePath:root},()=>require('node:fs').promises.rm(root,{recursive:true,force:true}),{userDataDir:context.userDataDir});}

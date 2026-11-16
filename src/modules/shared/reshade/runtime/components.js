@@ -7,9 +7,10 @@ const FSR = require("../temporal/fsr");
 const FSRSource = require("../temporal/fsr/source.json");
 const FSR4 = require("../temporal/fsr4");
 const FSR4Source = require("../temporal/fsr4/source.json");
+const ANR = require("../generation/anr");
 
 function getComponents({ root = require("../index").runtimeRoot(), platform = process.platform, macOSVersion, hardwareArch,
-  installed = [] } = {}) {
+  installed = [], userDataDir } = {}) {
   const host = Host.getHostCapabilities();
   const systemVersion = macOSVersion === undefined ? (platform === "darwin" ? Native.systemVersionSync() : null) : macOSVersion;
   const actual = { platform, macOSVersion: systemVersion, hardwareArch: hardwareArch === undefined ? host.hardwareArch : hardwareArch };
@@ -64,7 +65,7 @@ function getComponents({ root = require("../index").runtimeRoot(), platform = pr
   const fsr4Present = hasProcessor && temporal.includes("fsr4") && fsr4, fsr4Floor = fsr4?.minimumMacOS || FSR4Source.minimumMacOS;
   rows.push({ id: "fsr4", label: "AMD FSR 4.1", version: fsr4Present ? fsr4.version : null,
     status: status(fsr4Present, fsr4Floor, Requirements.FSR4), available: nativeAvailable(fsr4Present) && hostSupports(fsr4Floor, Requirements.FSR4),
-    description: "Native Metal neural temporal upscaling. The compatible model is included.",
+    description: "Native Metal neural temporal upscaling. The FSR 4.1.1 profiles are included; the FSR 4.1.2 Lite profiles use model data that is downloaded or imported separately.",
     requirements: `macOS ${fsr4Floor} or later and an Apple Silicon GPU, for ARM and Intel game processes. Requires renderer-provided depth, motion vectors and camera jitter.`
   }, {
     id:"xess",label:"Intel XeSS",version:xess?record.version:null,
@@ -73,6 +74,19 @@ function getComponents({ root = require("../index").runtimeRoot(), platform = pr
     description:"Included macOS GPU adapter for XeSS super resolution"+(xess?.generation?" and frame generation":"")+". Original Intel runtime files are managed separately.",
     requirements:"The adapter follows the MacLauncher graphics package version. Its declared Intel SDK dependency and a compatible GPU compute host are required.",
     ...(xess?{providerABI:xess.descriptor.providerABI,sdkRevision:xess.descriptor.sdk.commit,operations:["superresolution",...(xess.generation?["interpolate"]:[])]}:{})
+  });
+  // ANR models are prepared in the launcher profile; the payload ships only
+  // the runtime that runs them.
+  const anrIncluded = hasProcessor && graphics.anrGenerationAPI === 1 && Boolean(ANR.resolve(root, {platform: "darwin", hardwareArch: "arm64"}));
+  const anrFloor = ANR.Source.minimumMacOS, anrHost = {hardwareArchitectures: ["arm64"]};
+  const anrModels = anrIncluded && userDataDir ? require("../generation/anr/library").read(userDataDir) : null;
+  const anrStatus = status(anrIncluded, anrFloor, anrHost);
+  rows.push({
+    id: "anr", label: "Apex Neural Rendering", version: anrModels ? ANR.Source.version : null,
+    status: anrStatus === "Included" ? anrModels ? "Models installed" : "Models required" : anrStatus,
+    available: nativeAvailable(anrIncluded) && hostSupports(anrFloor, anrHost) && Boolean(anrModels),
+    description: "Neural scene frame generation from 2× to 5× at 1920×1080, 2560×1440 or 3840×2160 output. The models come from Apex's macOS kit, which is downloaded or imported separately.",
+    requirements: `macOS ${anrFloor} or later on Apple Silicon. Requires renderer-provided depth, motion vectors, jitter and camera near and far planes.`
   }, {
     id: "lossless", label: "Lossless Scaling", status: installed.length ? `${installed.length} ${installed.length === 1 ? "model file imported" : "model files imported"}` : "Models required",
     available: installed.length > 0,

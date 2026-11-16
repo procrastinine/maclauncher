@@ -65,8 +65,8 @@ function resolve(root, {platform = process.platform, macOSVersion, hardwareArch}
     ? null : installed;
 }
 function profileOptions(installed, userDataDir) {
-  const labels={'exact-fast':'Exact Fast',lite:'Lite (4.1.1)',lite2:'Lite2 (4.1.1)',
-    'int8-lite':'FSR 4.1.2 Lite','lossy2-412':'FSR 4.1.2 Lossy','int8-lite-lossy':'FSR 4.1.2 Lite Lossy'};
+  const labels={'exact-fast':'Exact Fast (4.1.1)',lite:'Lite (4.1.1)',lite2:'Lite 2 (4.1.1)',
+    'int8-lite':'Lite (4.1.2)','lossy2-412':'Lossy (4.1.2)','int8-lite-lossy':'Lite Lossy (4.1.2)'};
   return SOURCE.profiles.map(profile=>{
     const supported=installed?.profiles?.includes(profile.id)===true;
     const data=profile.userData?require('./models').read(userDataDir):null;

@@ -78,3 +78,19 @@ test("component presence stays visible across CPU, unknown-host and per-method d
   assert.equal(unknown.status, "Included");assert.equal(unknown.available, true);
   assert.equal(unknownRows.find(row => row.id === "metalfx").version, null);
 });
+test("the ANR provider row separates the included runtime, the host floor and models prepared in the profile", t => {
+  t.mock.method(globalThis, "fetch", () => assert.fail("Opening Runtimes must stay offline"));
+  const root = fixture(t), userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "graphics-components-profile-"));
+  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  const options = { root, platform: "darwin", macOSVersion: "26.1", hardwareArch: "arm64", userDataDir };
+  const anr = (overrides = {}) => Components.getComponents({ ...options, ...overrides }).find(row => row.id === "anr");
+  assert.equal(anr().status, "Not included");assert.equal(anr().available, false);
+  const record = path.join(root, "runtime.json"), current = JSON.parse(fs.readFileSync(record, "utf8"));
+  fs.writeFileSync(record, JSON.stringify({ ...current, features: { graphics: { ...current.features.graphics, anrGenerationAPI: 1 } } }));
+  const directory = path.join(root, "generation/anr");fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, "provider.json"), JSON.stringify({ method: "anr", providerABI: 1, complete: true, preparation: 1 }));
+  for (const name of ["libmaclauncher-anr-generation.dylib", "helpers.metallib", "anr-convert-dxil", "anr-verify"]) fs.writeFileSync(path.join(directory, name), "provider");
+  assert.equal(anr().status, "Models required");assert.equal(anr().available, false);
+  assert.match(anr().requirements, /macOS 26\.0 or later on Apple Silicon/);
+  assert.equal(anr({ macOSVersion: "15.5" }).status, "Requires macOS 26.0");
+});

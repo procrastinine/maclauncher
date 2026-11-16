@@ -40,7 +40,7 @@ async function prepareKit(context,kit,root,provider){
 async function acquire(context,local){
  const current=read(context.userDataDir);if(current)return resolve(context.userDataDir,context);
  const provider=Provider.resolve(context.root||require('../..').runtimeRoot(context.app),context);if(!provider)throw Error('A compatible ANR graphics provider is required.');
- if(!local&&!await downloadApproved(context,{managerId:Source.managerId,version:Source.version,label:'Apex Neural Rendering',message:'Download Apex Neural Rendering frame generation?',detail:'Downloads the macOS kit from Apex and prepares verified models in the launcher profile. The kit is removed after preparation.',requiresDownload:true,downloadBytes:Source.bytes,kind:'tool',sourceUrl:Source.sourceUrl,confirmLabel:'Download and Continue'}))return null;
+ if(!local&&!await downloadApproved(context,{managerId:Source.managerId,version:Source.version,label:'Apex Neural Rendering',message:'Download Apex Neural Rendering frame generation?',detail:'Downloads the macOS kit from Apex (445.2 MB), prepares the models in the launcher profile and checks them against the kit\'s reference frames. The kit is removed afterwards; the prepared models use about 8 MB.',requiresDownload:true,downloadBytes:Source.bytes,kind:'tool',sourceUrl:Source.sourceUrl,confirmLabel:'Download and Continue'}))return null;
  return withRuntimeMutation({managerId:Source.managerId,version:Source.version},async()=>{
   if(read(context.userDataDir))return resolve(context.userDataDir,context);
   const root=directory(context.userDataDir);Writable.assertOwnDirectory(context.userDataDir,path.dirname(root));

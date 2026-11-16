@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from "react";
-import type {EffectCatalogRow, EffectExtent, GameGraphicsSettings, GraphicsDepthInput, NeuralEffectSettings, ReShadeState, VideoEffectNode} from "../types";
+import type {EffectCatalogRow, EffectExtent, GameGraphicsSettings, GraphicsDepthInput, NeuralEffectSettings, ReShadeState, TemporalProfileOption, VideoEffectNode} from "../types";
 import type {EffectsEditor} from "../useEffectsEditor";
 import {shaderGeometry} from "../../../../modules/shared/effects/contracts.mjs";
 import {NEURAL, MODEL_OPERATIONS} from "../../../../modules/shared/effects/operation-contracts.mjs";
@@ -12,12 +12,25 @@ import {ShaderParameters, type ShaderOptionsTransfer} from "./ShaderParameters";
 import {GraphicsNumber, GraphicsRange} from "./GraphicsNumber";
 import {AdaptiveQualityControls} from "./AdaptiveQualityControls";
 import {HelpTip} from "./HelpTip";
+import {availabilityLabel, formatBytes} from "../ui-helpers";
 
 const resizeHeightPresets = [540, 720, 1080];
 // A declared multiplier list narrows the maximum to the phases a method produces.
 const multiplierSupported = (choice: EffectCatalogRow | undefined, factor: number) =>
   factor <= (choice?.outputContract?.maximumMultiplier || 5) && (!choice?.outputContract?.multipliers || choice.outputContract.multipliers.includes(factor));
 const NEURAL_DEFAULTS = {modelPath: null, temporal: false, intensity: 1};
+const openRuntimes = (managerId: string) => void window.MacLauncher?.launcher.openUtilityWindow({view: "runtimes", managerId});
+// A provider without a profile list offers the original FSR 4.1.1 profiles.
+const FSR4_PROFILES = [["exact-fast", "Exact Fast (4.1.1)"], ["lite", "Lite (4.1.1)"], ["lite2", "Lite 2 (4.1.1)"]] as const;
+function fsr4Profiles(choice?: EffectCatalogRow): TemporalProfileOption[] {
+  if (choice?.profileOptions?.length) return choice.profileOptions;
+  return FSR4_PROFILES.map(([id, label]) => {
+    const available = choice?.profiles?.includes(id) ?? (id === "exact-fast" && choice?.available === true);
+    return {id, label, model: "4.1.1", available, reason: available ? null : "The selected graphics processor does not include this profile."};
+  });
+}
+const sizeList = (sizes: Array<{width: number; height: number}>) => sizes.map(size => `${size.width} × ${size.height}`)
+  .join(", ").replace(/, ([^,]*)$/, " or $1");
 // Preset files are read by the main process; the clipboard is the system pasteboard.
 function shaderOptionsTransfer(): ShaderOptionsTransfer | undefined {
   const api = window.MacLauncher?.launcher;
@@ -254,15 +267,8 @@ function EffectGraphicsSettings({node, choice, status, staticContent = false, on
         {choice.reason && <HelpTip label="About XeSS availability">{choice.reason}</HelpTip>}</div>}
     </>}
     {node.kind === "temporal" && <>
-      {node.method === "fsr4" && <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor={id("fsr4-profile")}>Profile
-        <HelpTip label="About FSR 4 profiles">Selects the original shader profile. Input and output sizes remain independent.</HelpTip></label>
-        <select id={id("fsr4-profile")} className="input" value={value.fsr4Profile || "exact-fast"}
-          onChange={event => onChange({fsr4Profile: event.target.value as GameGraphicsSettings["fsr4Profile"]})}>
-          {([["exact-fast", "Exact Fast"], ["lite", "Lite"], ["lite2", "Lite 2"]] as const).filter(([profile]) => choice?.profiles?.includes(profile) || profile === (value.fsr4Profile || "exact-fast")).map(([profile, label]) => {
-            const installed = choice?.profiles?.includes(profile) ?? (profile === "exact-fast" && choice?.available === true);
-            return <option key={profile} value={profile} disabled={!installed}>{label}{installed ? "" : " · Not installed"}</option>;
-          })}
-        </select></div>}
+      {node.method === "fsr4" && <FSR4ProfileControls id={id} choice={choice} value={value.fsr4Profile || "exact-fast"}
+        onChange={fsr4Profile => onChange({fsr4Profile})} />}
       {node.method === "asr" && <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor={id("asr-quality")}>Quality</label>
         <select id={id("asr-quality")} className="input" value={value.asrQuality || "quality"}
           onChange={event => onChange({asrQuality: event.target.value as GameGraphicsSettings["asrQuality"]})}>
@@ -275,6 +281,15 @@ function EffectGraphicsSettings({node, choice, status, staticContent = false, on
       <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor={id("multiplier")}>Frame multiplier<HelpTip label="About frame multiplication">{node.method === "lsfg" && "Requires compatible Lossless Scaling models and an opaque image. "}Generated frames can add delay and artifacts. Displayed frame rate depends on the game, processing and display.</HelpTip></label>
         {choice?.outputContract?.maximumMultiplier === 2 && (value.frameMultiplier ?? 2) === 2 ? <span className="detailValue">2× frame rate</span> : <select id={id("multiplier")} className="input" value={value.frameMultiplier ?? 2} onChange={event => onChange({frameMultiplier: Number(event.target.value)})}>
           {[2, 3, 4, 5].filter(factor => multiplierSupported(choice, factor) || factor === value.frameMultiplier).map(factor => <option key={factor} value={factor} disabled={!multiplierSupported(choice, factor)}>{factor}× frame rate{!multiplierSupported(choice, factor) ? " · Unsupported" : ""}</option>)}</select>}</div>
+      {node.method === "anr" && <>
+        {choice?.sizes?.length ? <div className="detailRow"><span className="detailLabel">Output size</span><span className="detailValue">{sizeList(choice.sizes)}
+          <HelpTip label="About ANR output sizes">The prepared models run only at these exact output sizes. At any other size this row stays inactive and the game's frames are shown unchanged. Set the game's resolution, or an earlier resize row, to one of these sizes.</HelpTip></span></div> : null}
+        {choice?.runtimeManagerId && <div className="detailRow"><span className="detailLabel">Models</span>
+          <span className="detailValue">{choice.runtimeInstalled ? availabilityLabel("installed") : `${availabilityLabel("notInstalled")}${choice.downloadBytes ? ` · ${formatBytes(choice.downloadBytes)} download` : ""}`}
+            <HelpTip label="About ANR models">{choice.runtimeInstalled ? "The models are prepared in the launcher profile and checked against Apex's reference frames."
+              : "Play asks before downloading Apex's macOS kit. The models are prepared in the launcher profile and checked against Apex's reference frames, then the kit is removed. A downloaded kit can also be imported in Runtimes."}</HelpTip></span>
+          <button className="btn small" onClick={() => openRuntimes(choice.runtimeManagerId!)}>Get / manage models…</button></div>}
+      </>}
       {staticContent && choice?.inputContract?.domain === "image-pair" && <label className="inlineCheck"><input type="checkbox" checked={value.keepStaticContent !== false}
         onChange={event => onChange({keepStaticContent: event.target.checked})} />Keep static content
         <HelpTip label="About static content">Generated pixels return to the real frames wherever both real frames match locally, so interface elements and text stay sharp. A small object that moves quickly across a detailed unchanged area can disappear from generated images.</HelpTip></label>}
@@ -299,5 +314,32 @@ function EffectGraphicsSettings({node, choice, status, staticContent = false, on
         {status?.models?.filter(model => model.capabilities.includes(required) || model.version === value.modelVersion).map(model => <option key={model.version} value={model.version} disabled={!model.capabilities.includes(required)}>{model.label}{model.capabilities.includes(required) ? "" : " · Incompatible"}</option>)}
         {onManageModels && <option value="__manage">Get / manage models…</option>}
       </select></div></div>}
+  </>;
+}
+
+// FSR 4 profiles as the provider reports them. A 4.1.2 profile whose model
+// data is missing stays selectable when the provider supports it: Play asks
+// before downloading the data, and Runtimes can import it instead.
+function FSR4ProfileControls({id, choice, value, onChange}: {id: (name: string) => string; choice?: EffectCatalogRow;
+  value: NonNullable<GameGraphicsSettings["fsr4Profile"]>; onChange: (profile: NonNullable<GameGraphicsSettings["fsr4Profile"]>) => void}) {
+  const options = fsr4Profiles(choice), selected = options.find(option => option.id === value);
+  const supported = (option: TemporalProfileOption) => choice?.profiles ? choice.profiles.includes(option.id) : option.available;
+  const selectable = (option: TemporalProfileOption) => option.available || Boolean(option.delivery) && supported(option);
+  const state = (option: TemporalProfileOption) => option.available ? "" : ` · ${availabilityLabel(selectable(option) ? "notInstalled" : "unavailable")}`;
+  const delivery = selected?.delivery && supported(selected) ? selected.delivery : undefined;
+  return <>
+    <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor={id("fsr4-profile")}>Profile
+      <HelpTip label="About FSR 4 profiles">The 4.1.1 profiles use the model included with MacLauncher. The 4.1.2 profiles use AMD's FSR 4.1.2 model; Lite and Lite Lossy need its model data, which Play downloads after asking or which can be imported in Runtimes. Input and output sizes remain independent.</HelpTip></label>
+      <select id={id("fsr4-profile")} className="input" value={value}
+        onChange={event => onChange(event.target.value as NonNullable<GameGraphicsSettings["fsr4Profile"]>)}>
+        {options.filter(option => supported(option) || option.id === value).map(option =>
+          <option key={option.id} value={option.id} disabled={!selectable(option)} title={option.reason || undefined}>{option.label}{state(option)}</option>)}
+        {!selected && <option value={value} disabled>{value} · {availabilityLabel("unavailable")}</option>}
+      </select></div>
+    {delivery && <div className="detailRow"><span className="detailLabel">Model data</span>
+      <span className="detailValue">{selected?.available ? availabilityLabel("installed") : `${availabilityLabel("notInstalled")} · ${formatBytes(delivery.downloadBytes)} download`}
+        <HelpTip label="About FSR 4.1.2 model data">{selected?.available ? "The FSR 4.1.2 model data is prepared in the launcher profile."
+          : "Play asks before downloading the model data from the fsr4-native-macos release and prepares it in the launcher profile. The release archive can also be imported in Runtimes."}</HelpTip></span>
+      <button className="btn small" onClick={() => openRuntimes(delivery.managerId)}>Get / manage models…</button></div>}
   </>;
 }

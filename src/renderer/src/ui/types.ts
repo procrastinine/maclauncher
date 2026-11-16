@@ -1,4 +1,3 @@
-export type TemporalProfileOption = {id:string;label:string;model:string;available:boolean;reason:string|null;delivery?:{managerId:string;version:string;label:string;sourceUrl:string;downloadBytes:number;requiresDownload:boolean;canImport:boolean}};
 import type { TranslatorEnvironmentDeclaration, TranslatorEnvironmentStore, TranslatorEnvironmentValues }
   from "../../../modules/shared/runtime/translator-environment.mjs";
 
@@ -282,7 +281,10 @@ export type GraphicsInputs = { cameraProjection: boolean; source: string; method
   sourceResolution?: false | { heights: boolean; multipliers: number[]; percentages?:boolean;processing?:boolean;control?: string; live?: boolean; methods?: string[]; methodLabels?: Record<string, string>; filterExclusiveWithTemporal?: boolean }; spatialBindingsNextLaunch?: boolean;
   depth?: boolean; motionVectors?: boolean; viewMatrix?: boolean; projectionMatrix?: boolean; sceneAovAPI?:1;sceneAovs?:string[];noisyColor?:boolean;architecture?: "arm64" | "x86_64";
   temporalSource?: string; temporalOutput?: string; commandBuffer?: string };
-export type GraphicsCapabilities = { hardware?:GraphicsHardware; spatial: boolean; temporal?: boolean; temporalMethods?: string[]; temporalProfiles?: Record<string,string[]>; temporalProfileOptions?: Record<string,TemporalProfileOption[]>; cameraTemporalMethods?: string[]; effectPlacement?: boolean; frameGeneration: boolean; adaptive?: boolean; motionClarity?: boolean; depthInput?: boolean; comparison?: boolean; adaptiveQuality?: boolean; staticContent?: boolean; performanceHud?: boolean; frameRateCap?: boolean; presentationOptions?: boolean; outputColor?: boolean; lsfgHDR?: boolean; shaderInputPolicy?: boolean; liveSwitching?: boolean; virtualWindow?: boolean | {activationAPI: 1; autoAPI?: 1; percentageAPI?: 1; channelAPI?: 1}; spatialMethods: string[]; spatialMethodLabels?: Record<string, string>; frameGenerationMethods: string[]; resolutionMultipliers?: number[]; resolutionScope?: "metal" };
+// One FSR 4 profile as the provider reports it. A profile with a delivery
+// downloads its model data after consent, or imports it in Runtimes.
+export type TemporalProfileOption = {id:string;label:string;model:string;available:boolean;reason:string|null;delivery?:{managerId:string;version:string;label:string;sourceUrl:string;downloadBytes:number;requiresDownload:boolean;canImport:boolean}};
+export type GraphicsCapabilities = { hardware?:GraphicsHardware; spatial: boolean; temporal?: boolean; temporalMethods?: string[]; temporalProfiles?: Record<string,string[]>; temporalProfileOptions?: Record<string,TemporalProfileOption[]>; generationRuntimes?: Record<string,{installed:boolean}>; cameraTemporalMethods?: string[]; effectPlacement?: boolean; frameGeneration: boolean; adaptive?: boolean; motionClarity?: boolean; depthInput?: boolean; comparison?: boolean; adaptiveQuality?: boolean; staticContent?: boolean; performanceHud?: boolean; frameRateCap?: boolean; presentationOptions?: boolean; outputColor?: boolean; lsfgHDR?: boolean; shaderInputPolicy?: boolean; liveSwitching?: boolean; virtualWindow?: boolean | {activationAPI: 1; autoAPI?: 1; percentageAPI?: 1; channelAPI?: 1}; spatialMethods: string[]; spatialMethodLabels?: Record<string, string>; frameGenerationMethods: string[]; resolutionMultipliers?: number[]; resolutionScope?: "metal" };
 export type NeuralEffectSettings = {modelPath: string | null; temporal: boolean; intensity: number; denoiseStrength?: number};
 /** A sizing helper names the row that owns it. Only resize rows carry it; the edit operations keep it consistent. */
 export type EffectOwnership = {id: string; role: "input" | "fit"};
@@ -304,6 +306,9 @@ export type EffectCatalogRow = { id: string; kind: VideoEffectNode["kind"]; labe
   recommendedPlacement?:"after-upscale"|"during-upscale";
   profiles?: string[];
   profileOptions?: TemporalProfileOption[];
+  // Fixed output sizes a frame-generation model was prepared for, its
+  // download size and whether its models are prepared in the profile.
+  sizes?: Array<{id: string; width: number; height: number}>; downloadBytes?: number; runtimeInstalled?: boolean;
   intrinsicScale?: number;
   intrinsicScales?: number[];
   nodeId?: string; selectionKey?: string;

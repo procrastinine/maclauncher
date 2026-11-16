@@ -168,14 +168,14 @@ function catalog({ reshadeState = {}, graphicsCapabilities = {}, graphicsInputs 
       const runtimeReason = hardwareReason || (!supported ? method.startsWith("metalfx") ? "The selected graphics processor does not include this MetalFX operation." : "This method is unavailable for the current graphics runtime." :
         method==="fsr4"&&!(support.temporalProfiles?.fsr4||["exact-fast"]).includes(settings.fsr4Profile)?"This FSR 4 profile is not included in the selected graphics processor.":null);
       const reason = runtimeReason || (method==="xess"&&xess?.available!==true?xess?.reason||"Install the Intel XeSS runtime and a compatible GPU compute host.":null) || (requiredModel && !model ? "Compatible Lossless Scaling models are required." : null);
-      const category = method.startsWith("metalfx") ? "MetalFX" : method==="xess"?"Intel XeSS":/^fsr\d$/.test(method) ? "AMD FidelityFX" : ["ls1", "lsfg"].includes(method) ? "Lossless Scaling" :
+      const category = method.startsWith("metalfx") ? "MetalFX" : method==="xess"?"Intel XeSS":method==="anr"?"Apex Neural Rendering":/^fsr\d$/.test(method) ? "AMD FidelityFX" : ["ls1", "lsfg"].includes(method) ? "Lossless Scaling" :
         ["vt-interpolation","vision-flow","auto"].includes(method) ? "macOS frameworks" : "Standard filters";
       const midpoint=operation?.maximumMultiplier===2;
       rows.push({ id: kind + ":" + method, kind, label: method === "downsample" ? "Downsample" : support.spatialMethodLabels?.[method] || METHODS[method]?.label || (method.startsWith("libplacebo:") ? require("./presentation.mjs").libplaceboFilterLabel(method.slice(11)) : method),
         group: resize ? "Resize" : "Temporal", category,
-        ...(["ls1","lsfg"].includes(method)?{traits:{neural:true}}:{}),
+        ...(["ls1","lsfg","anr"].includes(method)?{traits:{neural:true}}:{}),
         ...(method==="fsr4"?{profiles:support.temporalProfiles?.fsr4||["exact-fast"],profileOptions:support.temporalProfileOptions?.fsr4||[]}:{}),
-        ...(method==="anr"?{...require("../reshade/generation/anr").descriptor(),id:kind+":"+method,runtimeManagerId:"anr"}:{}),
+        ...(method==="anr"?{...require("../reshade/generation/anr").descriptor(),id:kind+":"+method,runtimeManagerId:"anr",runtimeInstalled:support.generationRuntimes?.anr?.installed===true}:{}),
         ...(method==="xess"?{backends:xess?.backends||[],runtimeManagerId:"graphics-xess",availableWithoutRuntime:xess?.availableWithoutRuntime===true}:{}),
         ...(support.colorPipeline&&["ls1","lsfg"].includes(method)?{colorPolicy:method==="lsfg"&&support.lsfgHDR?Providers.SCRGB_COLOR_POLICY:Providers.SDR_COLOR_POLICY}:{}),
         inputContract:{domain:scene?"scene":kind==="frame-generation"?"image-pair":"image",color:"rgb",requires:[...sceneRequirements,...(kind==="frame-generation"?["opaque"]:[])],acceptsSynthetic:!scene},

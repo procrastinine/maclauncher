@@ -1,4 +1,26 @@
 {
-  "graphics-models": {"sectionGroupId":"providers","sectionGroupLabel":"Providers","sectionLabel":"Lossless Scaling","componentId":"lossless"},
-  "graphics-xess": {"sectionGroupId":"providers","sectionGroupLabel":"Providers","sectionLabel":"XeSS","componentId":"xess"}
+  "graphics-models": {
+    "sectionGroupId": "providers",
+    "sectionGroupLabel": "Providers",
+    "sectionLabel": "Lossless Scaling",
+    "componentId": "lossless"
+  },
+  "graphics-xess": {
+    "sectionGroupId": "providers",
+    "sectionGroupLabel": "Providers",
+    "sectionLabel": "XeSS",
+    "componentId": "xess"
+  },
+  "graphics-fsr4-models": {
+    "sectionGroupId": "providers",
+    "sectionGroupLabel": "Providers",
+    "sectionLabel": "FSR 4 models",
+    "componentId": "fsr4"
+  },
+  "anr": {
+    "sectionGroupId": "providers",
+    "sectionGroupLabel": "Providers",
+    "sectionLabel": "Apex Neural Rendering",
+    "componentId": "anr"
+  }
 }

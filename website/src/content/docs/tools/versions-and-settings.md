@@ -43,7 +43,7 @@ When a version you already have can play the game, Play uses it instead of downl
 
 Downloads run in the background while you keep using the launcher, and a download button in the Runtimes window lists everything in progress, with a progress bar and a cancel button for each.
 
-The graphics components are installed the same way, under **Runtimes → Effects**: shader collections, neural models, the upscaling and frame-generation components, and the pieces that pass a game's scene data to them. See [Graphics and effects](/maclauncher/graphics/).
+The graphics components are installed the same way, under **Runtimes → Effects**: shader collections, neural models, the upscaling and frame-generation components, and the pieces that pass a game's scene data to them. Some components need model data that MacLauncher doesn't ship: the FSR 4.1.2 Lite profiles and Apex Neural Rendering download theirs the first time a game uses them, after you agree, and **Runtimes → Effects → Providers** can download or import it ahead of time. See [Graphics and effects](/maclauncher/graphics/).
 
 ### Downloaded files
 

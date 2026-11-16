@@ -91,6 +91,7 @@ function normalizeCapabilities(graphics, presentation) {
     temporal: presentation?.temporal === true,
     temporalProfiles:graphics?.temporalProfiles||{},
     temporalProfileOptions:graphics?.temporalProfileOptions||{},
+    generationRuntimes:graphics?.generationRuntimes||{},
     providerTemporalMethods:Array.isArray(graphics?.temporalMethods)?TEMPORAL_METHODS.filter(method=>method!=="off"&&graphics.temporalMethods.includes(method)):[],
     effectPlacement: presentation?.effectPlacement === true,
     temporalMethods: presentation?.temporal === true && Array.isArray(graphics?.temporalMethods)
@@ -126,7 +127,7 @@ function capabilities(root, host, options = {}) {
     const hardware = options.graphicsHardware || require("./hardware-support").snapshot(root, options);
     if(graphics.generationProviderAPI===1&&(!options.selectedMethods||options.selectedMethods.generation?.includes("fsr3"))&&require("./generation/fsr3").resolve(root,options))graphics.frameGenerationMethods=[...new Set([...(graphics.frameGenerationMethods||[]),"fsr3"])];
     else graphics.frameGenerationMethods=graphics.frameGenerationMethods?.filter(method=>method!=="fsr3");
-    if(graphics.anrGenerationAPI===1&&(!options.selectedMethods||options.selectedMethods.generation?.includes("anr"))&&require("./generation/anr").resolve(root,options))graphics.frameGenerationMethods=[...new Set([...(graphics.frameGenerationMethods||[]),"anr"])];
+    if(graphics.anrGenerationAPI===1&&(!options.selectedMethods||options.selectedMethods.generation?.includes("anr"))&&require("./generation/anr").resolve(root,options)){graphics.frameGenerationMethods=[...new Set([...(graphics.frameGenerationMethods||[]),"anr"])];graphics.generationRuntimes={...graphics.generationRuntimes,anr:{installed:require("./generation/anr/library").read(options.userDataDir)!==null}};}
     else graphics.frameGenerationMethods=graphics.frameGenerationMethods?.filter(method=>method!=="anr");
     if(graphics.xessGenerationAPI===1&&(!options.selectedMethods||options.selectedMethods.generation?.includes("xess"))&&require("./xess").resolve(root,options)?.generation)
       graphics.frameGenerationMethods=[...new Set([...(graphics.frameGenerationMethods||[]),"xess"])];

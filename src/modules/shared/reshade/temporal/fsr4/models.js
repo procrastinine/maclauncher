@@ -66,7 +66,7 @@ async function downloadPinned(source,file,signal,onProgress){
 }
 async function install(context={}){
  const current=read(context.userDataDir),needsLossy=context.fsr4Profile==='int8-lite-lossy';if(current&&(!needsLossy||current.profiles.includes('int8-lite-lossy')))return current;
- if(!await downloadApproved(context,{...descriptor,downloadBytes:spec.archiveBytes+(needsLossy?spec.lossy.archiveBytes:0),message:'Download FSR 4.1.2 model data?',detail:needsLossy?'Includes the upstream Lite model kit and GPL Lite Lossy training release. Windows code is read as data.':'Model data and translated shaders come from fsr4-native-macos. Download size: 29 MB.',requiresDownload:true,kind:'tool',confirmLabel:'Download and Continue'}))return null;
+ if(!await downloadApproved(context,{...descriptor,downloadBytes:spec.archiveBytes+(needsLossy?spec.lossy.archiveBytes:0),message:'Download FSR 4.1.2 model data?',detail:needsLossy?'Downloads the fsr4-native-macos release and the Lite Lossy weights (37.1 MB) and prepares the FSR 4.1.2 Lite and Lite Lossy models in the launcher profile.':'Downloads the fsr4-native-macos release (27.6 MB) and prepares the FSR 4.1.2 Lite model in the launcher profile.',requiresDownload:true,kind:'tool',confirmLabel:'Download and Continue'}))return null;
  return runDownloadTask(context.downloads,{...descriptor,kind:'download',dedupeKey:'fsr4-models:'+context.userDataDir},async task=>{
   const root=directory(context.userDataDir);Writable.assertOwnDirectory(context.userDataDir,root);const file=path.join(root,'.release-'+crypto.randomUUID()+'.zip');
   const signal=context.signal&&task.signal?AbortSignal.any([context.signal,task.signal]):context.signal||task.signal;

@@ -954,7 +954,45 @@ test('adaptive status names the measured scope and never presents zero as a timi
 });
 test('FSR4 profile options retain saved choices and disable only uninstalled profiles',()=>{
  const node={id:'scene',kind:'temporal',method:'fsr4',enabled:true,settings:{fsr4Profile:'lite2'}},plan={schema:2,mode:'advanced',enabled:true,video:[node]},catalog=[{id:'temporal:fsr4',kind:'temporal',label:'FSR 4',group:'Temporal',available:true,profiles:['exact-fast','lite'],template:node}],harness=componentHarness(EffectsControls,{game:{gamePath:'preset',effects:plan},running:false,editor:{info:{plan,catalog},onChange:()=>assert.fail('Reading profile choices cannot save')}});
- try{const settings=elements(harness.render()).find(n=>n.props.node?.id==='scene'&&n.props.onExtentChange),picker=elements(settings.type(settings.props)).find(n=>n.props.id==='effect-scene-fsr4-profile');assert.equal(picker.props.value,'lite2');const options=elements(picker).filter(n=>n.type==='option');assert.deepEqual(options.map(n=>[n.props.value,n.props.disabled]),[['exact-fast',false],['lite',false],['lite2',true]]);}finally{harness.close();}
+ try{const picker=fsr4Picker(harness,'scene');assert.equal(picker.props.value,'lite2');const options=elements(picker).filter(n=>n.type==='option');assert.deepEqual(options.map(n=>[n.props.value,n.props.disabled]),[['exact-fast',false],['lite',false],['lite2',true]]);}finally{harness.close();}
+});
+// The profile picker is its own component inside the row settings.
+function rowSettings(harness,nodeId){const settings=elements(harness.render()).find(n=>n.props.node?.id===nodeId&&n.props.onExtentChange);return settings.type(settings.props);}
+function fsr4Picker(harness,nodeId){const profile=elements(rowSettings(harness,nodeId)).find(n=>typeof n.type==='function'&&n.type.name==='FSR4ProfileControls');return elements(profile.type(profile.props)).find(n=>n.props.id===`effect-${nodeId}-fsr4-profile`);}
+test('FSR 4.1.2 profiles stay selectable before their model data is installed and link to their Runtimes entry',t=>{
+ const previous=global.window;t.after(()=>{global.window=previous;});const opened=[];global.window={MacLauncher:{launcher:{openUtilityWindow:async request=>{opened.push(request);return true;}}}};
+ const delivery={managerId:'graphics-fsr4-models',version:'3.2',label:'FSR 4.1.2 model data',sourceUrl:'https://example.invalid/release',downloadBytes:28985410,requiresDownload:true,canImport:true};
+ const profileOptions=[{id:'exact-fast',label:'Exact Fast (4.1.1)',model:'4.1.1.2740',available:true,reason:null},{id:'int8-lite',label:'Lite (4.1.2)',model:'4.1.2',available:false,reason:'Download or import the FSR 4.1.2 model data.',delivery},
+  {id:'lossy2-412',label:'Lossy (4.1.2)',model:'4.1.2',available:true,reason:null},{id:'int8-lite-lossy',label:'Lite Lossy (4.1.2)',model:'4.1.2',available:false,reason:'The installed FSR 4 provider does not support this profile.',delivery}];
+ const node={id:'scene',kind:'temporal',method:'fsr4',enabled:true,settings:{fsr4Profile:'int8-lite'}},plan={schema:2,mode:'advanced',enabled:true,video:[node]};
+ const catalog=[{id:'temporal:fsr4',kind:'temporal',label:'FSR 4',group:'Temporal',available:true,profiles:['exact-fast','int8-lite','lossy2-412'],profileOptions,template:node}];
+ const harness=componentHarness(EffectsControls,{game:{gamePath:'preset',effects:plan},running:false,editor:{info:{plan,catalog},onChange:()=>assert.fail('Reading profile choices cannot save')}});
+ try{const picker=fsr4Picker(harness,'scene');assert.equal(picker.props.value,'int8-lite');
+  assert.deepEqual(elements(picker).filter(n=>n.type==='option').map(n=>[n.props.value,n.props.disabled,[].concat(n.props.children).join('')]),
+   [['exact-fast',false,'Exact Fast (4.1.1)'],['int8-lite',false,'Lite (4.1.2) · Not installed'],['lossy2-412',false,'Lossy (4.1.2)']]);
+  const profile=elements(rowSettings(harness,'scene')).find(n=>typeof n.type==='function'&&n.type.name==='FSR4ProfileControls'),markup=renderToStaticMarkup(React.createElement(profile.type,profile.props));
+  assert.match(markup,/Model data/);assert.match(markup,/Not installed · 27\.6 MB download/);
+  elements(profile.type(profile.props)).find(n=>n.type==='button'&&n.props.children==='Get / manage models…').props.onClick();
+  assert.deepEqual(opened,[{view:'runtimes',managerId:'graphics-fsr4-models'}]);
+ }finally{harness.close();}
+});
+test('ANR rows name their fixed output sizes and model state and open the ANR Runtimes entry',t=>{
+ const previous=global.window;t.after(()=>{global.window=previous;});const opened=[];global.window={MacLauncher:{launcher:{openUtilityWindow:async request=>{opened.push(request);return true;}}}};
+ const node={id:'gen',kind:'frame-generation',method:'anr',enabled:true,settings:{frameMultiplier:3}},plan={schema:2,mode:'advanced',enabled:true,video:[node]};
+ const sizes=[{id:'1080p',width:1920,height:1080},{id:'1440p',width:2560,height:1440},{id:'2160p',width:3840,height:2160}];
+ const row={id:'frame-generation:anr',kind:'frame-generation',label:'Apex Neural Rendering',group:'Temporal',available:true,runtimeManagerId:'anr',sizes,downloadBytes:466791077,runtimeInstalled:false,
+  outputContract:{domain:'timeline',sizing:'preserve',phases:'explicit',maximumMultiplier:5},inputContract:{domain:'scene',color:'rgb',requires:['depth','motion','camera','opaque'],acceptsSynthetic:false},template:node};
+ for(const installed of [false,true]){
+  const harness=componentHarness(EffectsControls,{game:{gamePath:'preset',effects:plan},running:false,editor:{info:{plan,catalog:[{...row,runtimeInstalled:installed}]},onChange:()=>assert.fail('Reading ANR settings cannot save')}});
+  try{const settings=elements(harness.render()).find(n=>n.props.node?.id==='gen'&&n.props.onExtentChange),markup=renderToStaticMarkup(React.createElement(settings.type,settings.props));
+   assert.match(markup,/1920 × 1080, 2560 × 1440 or 3840 × 2160/);
+   assert.match(markup,installed?/>Installed</:/Not installed · 445\.2 MB download/);
+   const multiplier=elements(settings.type(settings.props)).find(n=>n.props.id==='effect-gen-multiplier');
+   assert.deepEqual(elements(multiplier).filter(n=>n.type==='option').map(n=>n.props.value),[2,3,4,5]);
+   elements(settings.type(settings.props)).find(n=>n.type==='button'&&n.props.children==='Get / manage models…').props.onClick();
+  }finally{harness.close();}
+ }
+ assert.deepEqual(opened,[{view:'runtimes',managerId:'anr'},{view:'runtimes',managerId:'anr'}]);
 });
 test('ordinary implementation menus show installed capabilities and retain only the selected unavailable row',async t=>{
  const previous=global.window;t.after(()=>{global.window=previous;});global.window={};

@@ -10,6 +10,6 @@ function resolve(root,{platform=process.platform,hardwareArch=require("../../../
 }
 function descriptor({width,height}={}){
  const supported=!width&&!height||Source.sizes.some(s=>s.width===width&&s.height===height);
- return {id:'anr',label:'Apex Neural Rendering',managerId:Source.managerId,version:Source.version,minimumMacOS:Source.minimumMacOS,architectures:Source.architectures,hardwareArchitectures:["arm64"],multipliers:[2,3,4,5],sizes:Source.sizes.map(({id,width,height})=>({id,width,height})),requires:{depth:true,motion:true,camera:true},sourceUrl:Source.sourceUrl,requiresDownload:true,importInputKinds:['directory','file'],importExtensions:['gz'],...(!supported?{reason:'ANR requires an exact 1920×1080, 2560×1440 or 3840×2160 output.'}:{})};
+ return {id:'anr',label:'Apex Neural Rendering',managerId:Source.managerId,version:Source.version,minimumMacOS:Source.minimumMacOS,architectures:Source.architectures,hardwareArchitectures:["arm64"],multipliers:[2,3,4,5],sizes:Source.sizes.map(({id,width,height})=>({id,width,height})),requires:{depth:true,motion:true,camera:true},sourceUrl:Source.sourceUrl,downloadBytes:Source.bytes,requiresDownload:true,importInputKinds:['directory','file'],importExtensions:['gz'],...(!supported?{reason:'ANR requires an exact 1920×1080, 2560×1440 or 3840×2160 output.'}:{})};
 }
 module.exports={resolve,descriptor,Source};
