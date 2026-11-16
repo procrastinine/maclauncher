@@ -5,122 +5,47 @@ const { archiveFormat } = require("./release-files");
 const {loadSources}=require("../../../runtime-sources");
 const {createSourceBackedManager}=require("../../../runtime-sources/manager");
 const Adapter=require("../../../runtime-adapters/d3d-translator");
-// Existing presentation compatibility remains until core consumes the measured
-// form contract. Publisher identity, discovery and requirements come from JSON.
-const presentation={
-  "doitsujin/dxvk#upstream": {
-    "group": {
-      "id": "upstream",
-      "label": "DXVK",
-      "description": "Windows PE builds from DXVK and its historical projects. DXVK 2.x and 3.x require Vulkan 1.3 and the driver features supplied by compatible KosmicKrisp builds."
-    },
-    "variantLabel": "DXVK"
-  },
-  "Gcenx/DXVK-macOS#macos": {
-    "group": {
-      "id": "macos",
-      "label": "DXVK-macOS",
-      "secondary": true,
-      "description": "DXVK-macOS targets MoltenVK. CrossOver uses builtin-layout async packages; plain-layout packages are separate."
-    },
-    "variantLabel": "Standard",
-    "optionsRuntimeForms": {
-      "crossover": "builtin"
-    }
-  },
-  "Gcenx/DXVK-macOS#async": {
-    "group": {
-      "id": "macos",
-      "label": "DXVK-macOS",
-      "secondary": true,
-      "description": "DXVK-macOS targets MoltenVK. CrossOver uses builtin-layout async packages; plain-layout packages are separate."
-    },
-    "variantLabel": "Async",
-    "optionsRuntimeForms": {
-      "crossover": "builtin"
-    }
-  },
-  "AlpyneDreams/d8vk#d8vk": {
-    "group": {
-      "id": "upstream",
-      "label": "DXVK",
-      "description": "Windows PE builds from DXVK and its historical projects. DXVK 2.x and 3.x require Vulkan 1.3 and the driver features supplied by compatible KosmicKrisp builds."
-    },
-    "variantLabel": "Historical D8VK",
-    "engine": "d8vk",
-    "componentLabel": "D8VK",
-    "description": "Historical D8VK releases published by AlpyneDreams/d8vk. Its Direct3D 8 work was merged into DXVK."
-  },
-  "misyltoad/d9vk#d9vk": {
-    "group": {
-      "id": "upstream",
-      "label": "DXVK",
-      "description": "Windows PE builds from DXVK and its historical projects. DXVK 2.x and 3.x require Vulkan 1.3 and the driver features supplied by compatible KosmicKrisp builds."
-    },
-    "variantLabel": "Historical D9VK",
-    "engine": "d9vk",
-    "componentLabel": "D9VK",
-    "description": "Historical D9VK releases published by misyltoad/d9vk. Its Direct3D 9 work was merged into DXVK."
-  },
-  "Sikarugir-App/Template#template-dxvk": {
-    "group": {
-      "id": "template",
-      "label": "Sikarugir Template",
-      "secondary": true,
-      "description": "Managed copies of one Sikarugir Template folder, with the folder's licence and no Wine engine. The dxvk variant supplies DXVK async and D9VK for MoltenVK; dxvk3 supplies DXVK for KosmicKrisp. Installed libraries supply their component versions and Direct3D API coverage."
-    },
-    "variantLabel": "dxvk",
-    "description": "Managed DXVK copies taken from the dxvk folder of a Sikarugir Template release, with the folder's licence and no Wine engine. Its installed files determine version and API coverage."
-  },
-  "Sikarugir-App/Template#template-dxvk3": {
-    "group": {
-      "id": "template",
-      "label": "Sikarugir Template",
-      "secondary": true,
-      "description": "Managed copies of one Sikarugir Template folder, with the folder's licence and no Wine engine. The dxvk variant supplies DXVK async and D9VK for MoltenVK; dxvk3 supplies DXVK for KosmicKrisp. Installed libraries supply their component versions and Direct3D API coverage."
-    },
-    "variantLabel": "dxvk3",
-    "description": "Managed DXVK copies taken from the dxvk3 folder of a Sikarugir Template release, with the folder's licence and no Wine engine. Its installed files determine version and API coverage."
-  },
-  "Sikarugir-App/Template#template-d9vk": {
-    "group": {
-      "id": "template",
-      "label": "Sikarugir Template",
-      "secondary": true,
-      "description": "Managed copies of one Sikarugir Template folder, with the folder's licence and no Wine engine. The dxvk variant supplies DXVK async and D9VK for MoltenVK; dxvk3 supplies DXVK for KosmicKrisp. Installed libraries supply their component versions and Direct3D API coverage."
-    },
-    "variantLabel": "DXVK subset (d9vk)",
-    "description": "Managed DXVK copies taken from the d9vk folder of a Sikarugir Template release, with the folder's licence and no Wine engine. Its installed files determine version and API coverage."
-  },
-  "HansKristian-Work/vkd3d-proton#upstream": {
-    "description": "vkd3d-proton releases published by HansKristian-Work/vkd3d-proton. Direct3D 12 requires the Vulkan features used by the selected release; a Vulkan version alone does not establish KosmicKrisp driver support."
-  }
+const dxvkUpstream = { id: "upstream", label: "DXVK", description: "Windows PE builds from DXVK and its historical projects. DXVK 2.x and 3.x require Vulkan 1.3 and the driver features supplied by compatible KosmicKrisp builds." };
+const dxvkMacOS = { id: "macos", label: "DXVK-macOS", secondary: true, description: "DXVK-macOS targets MoltenVK. CrossOver uses builtin-layout async packages; plain-layout packages are separate." };
+const macOSOfferForms = { crossover: "builtin" };
+const dxvkTemplate = { id: "template", label: "Sikarugir Template", secondary: true, description: "Managed copies of one Sikarugir Template folder, with the folder's licence and no Wine engine. The dxvk variant supplies DXVK async and D9VK for MoltenVK; dxvk3 supplies DXVK for KosmicKrisp. Installed libraries supply their component versions and Direct3D API coverage." };
+const definitions = {
+  gstreamer: { label: "GStreamer codecs", groupId: "codecs", sourceName: "GStreamer", sourceDescription: "GStreamer runtime packages and prepared local codec folders. Included plugins remain with their source Wine runtime.",
+    upstreamUrl: "https://gstreamer.freedesktop.org/download/", upstreamLabel: "GStreamer downloads", memberOrder: 30,
+    names: ["gstreamer", "gstreamer-1.0"], entryLibrary: "libgstreamer-1.0.0.dylib", pluginDirectory: "gstreamer-1.0", sources: [require("./gstreamer-source").catalogSource] },
+  dxvk: { label: "DXVK", groupId: "directx-vulkan", memberOrder: 2, names: ["dxvk", "dxvk3", "d9vk"],
+    sources: [["upstream", "DXVK", "doitsujin/dxvk", name => !/^dxvk-native(?:[-_.]|$)/i.test(name), null, { group: dxvkUpstream, variantLabel: "DXVK" }],
+      ["macos", "DXVK-macOS", "Gcenx/DXVK-macOS", name => !/async/i.test(name), null, { group: dxvkMacOS, variantLabel: "Standard", optionsRuntimeForms: macOSOfferForms }],
+      ["async", "DXVK-macOS async", "Gcenx/DXVK-macOS", name => /async/i.test(name), null, { group: dxvkMacOS, variantLabel: "Async", optionsRuntimeForms: macOSOfferForms }],
+      ["d8vk", "D8VK", "AlpyneDreams/d8vk", null, null, { group: dxvkUpstream, variantLabel: "Historical D8VK", engine: "d8vk", componentLabel: "D8VK", description: "Historical D8VK releases published by AlpyneDreams/d8vk. Its Direct3D 8 work was merged into DXVK." }],
+      ["d9vk", "D9VK", "misyltoad/d9vk", null, null, { group: dxvkUpstream, variantLabel: "Historical D9VK", engine: "d9vk", componentLabel: "D9VK", description: "Historical D9VK releases published by misyltoad/d9vk. Its Direct3D 9 work was merged into DXVK." }],
+      ...["dxvk", "dxvk3", "d9vk"].map(component => ["template-" + component, "Sikarugir Template · " + component, "Sikarugir-App/Template", null, component,
+        { group: dxvkTemplate, variantLabel: component === "d9vk" ? "DXVK subset (d9vk)" : component,
+          description: `Managed DXVK copies taken from the ${component} folder of a Sikarugir Template release, with the folder's licence and no Wine engine. Its installed files determine version and API coverage.` }])] },
+  "vkd3d-proton": { label: "vkd3d-proton", groupId: "directx-vulkan", memberOrder: 3, names: ["vkd3d-proton"],
+    sources: [["upstream", "vkd3d-proton", "HansKristian-Work/vkd3d-proton", null, null, { description: "vkd3d-proton releases published by HansKristian-Work/vkd3d-proton. Direct3D 12 requires the Vulkan features used by the selected release; a Vulkan version alone does not establish KosmicKrisp driver support." }]] },
+  vkd3d: { label: "Wine vkd3d", groupId: "directx-vulkan", memberOrder: 4, referenceOnly: true, localOnly: true, names: [], sources: [],
+    sourceName: "Wine vkd3d", sourceUrl: "https://gitlab.winehq.org/wine/vkd3d", sourceDescription: "Wine vkd3d copies included with registered Wine runtimes remain in their source runtime." },
+  d3dmetal: { label: "D3DMetal", groupId: "directx-metal", memberOrder: 1, names: ["d3dmetal", "apple_gptk", "redist"], importLicence: "Apple Game Porting Toolkit",
+    sources: [{ id: "apple", label: "Apple Game Porting Toolkit", url: "https://developer.apple.com/games/game-porting-toolkit/", delivery: "local-files", registrationLabel: "Register Game Porting Toolkit…",
+      description: "Apple distributes Game Porting Toolkit. Its download may require an Apple account and licence agreement. The downloaded disk image or an extracted folder can be registered here or dropped on this card. D3DMetal is taken from the evaluation environment inside the disk image.", discover: async () => [] },
+      ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "d3dmetal"]] },
+  dxmt: { label: "DXMT", groupId: "directx-metal", memberOrder: 0, names: ["dxmt"],
+    sources: [["upstream", "DXMT", "3Shain/dxmt", name => /builtin/i.test(name)],
+      ["template", "Sikarugir Template", "Sikarugir-App/Template", null, "dxmt"]] }
 };
-const sourceDeclarations=loadSources().filter(source=>source.kind==='d3d-translator'&&(source.manager.id.startsWith('translator-')||source.manager.id==='sikarugir-graphics-bridge'));
-const definitions={};
-for(const source of [...sourceDeclarations].sort((a,b)=>a.order-b.order)) {
- const id=source.manager.id;
- let definition=Object.values(definitions).find(item=>item.managerId===id);
- if(!definition) {
-  definition={managerId:id,label:source.manager.sectionLabel||source.label,groupId:source.kind,memberOrder:source.manager.memberOrder,
-   names:[],engine:source.manager.engine,formerIds:source.manager.formerIds||[],sources:[],sourceDeclarations:[]};
-  definitions[definition.engine]=definition;
- }
- definition.sourceDeclarations.push(source);
- for(const part of (source.assets||[]).flatMap(asset=>asset.parts||[]))if(part.name==='component-root'&&!definition.names.includes(part.path))definition.names.push(part.path);
- if(source.discover.type==='local-app') {
-  definition.importLicence=source.labels?.source;
-  definition.sources.push({id:source.manager.sectionId,label:source.label,url:source.credits.url,delivery:'local-files',registrationLabel:'Register '+source.labels.source+'…',discover:async()=>[]});
- } else {
-  const patterns=source.assets.map(asset=>new RegExp(asset.match));
-  definition.sources.push([source.manager.sectionId,source.label,source.discover.repo,name=>patterns.some(pattern=>pattern.test(name)),source.discover.component,
-   {...presentation[source.discover.repo+'#'+source.manager.sectionId],...(source.manager.engine!==definition.engine?{engine:source.manager.engine}:{})}]);
- }
-}
-// These existing backends are not mislabeled as a supported source transport.
-// Media owns GStreamer's pending HTTPS-index declaration and Wine owns embeds.
-definitions.gstreamer={label:'GStreamer codecs',groupId:'codecs',sourceName:'GStreamer',sourceDescription:'GStreamer runtime packages and prepared local codec folders. Included plugins remain with their source Wine runtime.',upstreamUrl:'https://gstreamer.freedesktop.org/download/',upstreamLabel:'GStreamer downloads',memberOrder:30,names:['gstreamer','gstreamer-1.0'],entryLibrary:'libgstreamer-1.0.0.dylib',pluginDirectory:'gstreamer-1.0',sources:[require('./gstreamer-source').catalogSource]};
-definitions.vkd3d={label:'Wine vkd3d',groupId:'directx-vulkan',memberOrder:4,referenceOnly:true,localOnly:true,names:[],sources:[],sourceName:'Wine vkd3d',sourceUrl:'https://gitlab.winehq.org/wine/vkd3d',sourceDescription:'Wine vkd3d copies included with registered Wine runtimes remain in their source runtime.'};
+// Existing manager and publisher sections keep their backend presentation.
+const sourceIds = {
+  dxvk: ['dxvk-upstream','dxvk-macos','dxvk-macos-async','d8vk-upstream','d9vk-upstream','template-dxvk','template-dxvk3','template-d9vk'],
+  'vkd3d-proton': ['vkd3d-proton-upstream'],
+  d3dmetal: ['apple-gptk','template-d3dmetal'],
+  dxmt: ['dxmt-upstream','template-dxmt']
+};
+definitions.dxmt.managerId = 'sikarugir-graphics-bridge';
+definitions.dxmt.formerIds = ['crossover-graphics-bridge'];
+const declaredSources = loadSources();
+for (const [engine, ids] of Object.entries(sourceIds))
+  definitions[engine].sourceDeclarations = ids.map(id => declaredSources.find(source => source.id === id)).filter(Boolean);
 let versionOrder;
 const VersionOrder = () => versionOrder ||= require("./version-order.mjs");
 function assetName(asset) {
@@ -233,11 +158,6 @@ function createManager(engine, { dependencies = {} } = {}) {
     versionContents: (pin, options) => templateName(pin) && !templateComponentLabel(pin, options?.includedReferences)
       ? `The ${catalogSources.find(source => source.id === pin.catalogSourceId)?.componentLabel || definition.label} version in this Template release is known after download.` : null,
     discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: definition.sourceUrl || downloadSource?.url || catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, supportsDefault: false, customRuntime: !definition.referenceOnly,
-    ...(definition.sourceDeclarations?.length?{verifyArtifact(options) {
-      const source=definition.sourceDeclarations.find(source=>source.manager.sectionId===options.pin.catalogSourceId);
-      if(!source)throw new Error('The selected translator source is not declared.');
-      return require('../../../runtime-adapters/publisher-verification').verifyPublisher(source,options);
-    }}:{}),
     resolveExecutable(root, _pin, { installationMetadata } = {}) {
       const stored = installationMetadata?.translator;
       const selected = stored ? path.join(root, installationMetadata.translatorRelative || '') : Component.componentRoot(root, definition);
@@ -288,6 +208,10 @@ function createManager(engine, { dependencies = {} } = {}) {
   }
   const backend = Component.withIncludedReferences(definition.referenceOnly ? manager : Component.configure(manager, {
     ...definition, catalogDescription: pin => catalogDescription(pin, installedSource(pin)) }));
-  return definition.sourceDeclarations?.length ? createSourceBackedManager({id:manager.id,sources:definition.sourceDeclarations,adapter:Adapter,backend}) : backend;
+  if (!definition.sourceDeclarations?.length) return backend;
+  const facade = createSourceBackedManager({id:manager.id,sources:definition.sourceDeclarations,adapter:Adapter,backend});
+  // Module exports retain the backend metadata when they spread a manager.
+  for (const [key,value] of Object.entries(backend)) if (typeof value !== "function") facade[key] = value;
+  return facade;
 }
 module.exports = { definitions, catalogSource, createManager, compatibleTranslatorVersion, assetName, templateName, catalogVersion, catalogDescription, versionLabel };

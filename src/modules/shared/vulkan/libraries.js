@@ -10,7 +10,7 @@ const run = promisify(execFile);
 const MoltenVKSource=require('../../../runtime-sources/vulkan-driver/khronos-moltenvk.json');
 const {createSourceBackedManager}=require('../../../runtime-sources/manager');
 const definitions = {
-  moltenvk: { label: MoltenVKSource.label, sourceName: MoltenVKSource.labels.source, library: MoltenVKSource.layout.entry, source: MoltenVKSource.credits.url+'/releases' },
+  moltenvk: { label: "MoltenVK", sourceName: "MoltenVK", sourceDescription: "MoltenVK releases published by KhronosGroup/MoltenVK.", library: "libMoltenVK.dylib", source: "https://github.com/KhronosGroup/MoltenVK/releases" },
   kosmickrisp: { label: "KosmicKrisp", sourceName: "KosmicKrisp (LWJGL build)", sourceDescription: "KosmicKrisp Vulkan drivers published by LWJGL.", library: "libvulkan_kosmickrisp.dylib", source: "https://www.lwjgl.org/browse/release" }
 };
 
@@ -192,7 +192,7 @@ function createManager(backend, dependencies = {}) {
       return { ...inspected, translator, translatorRoot: translator.root };
   } });
   const backendManager=Component.withIncludedReferences(result);
-  return backend==='moltenvk'?createSourceBackedManager({source:MoltenVKSource,adapter:require('../../../runtime-adapters/vulkan-driver'),backend:backendManager}):backendManager;
+  return backend==='moltenvk'?createSourceBackedManager({id:backendManager.id,source:MoltenVKSource,adapter:require('../../../runtime-adapters/vulkan-driver'),backend:backendManager}):backendManager;
 }
 const managers = Object.keys(definitions).map(backend => createManager(backend));
 module.exports = { managers, definitions, createManager, inspect, moltenvkAsset, findFile, sources: { moltenvk, kosmickrisp }, loaderSource };
