@@ -34,4 +34,20 @@ function validateDeclared(declared,binaries) {
  for(const [format,arches] of Object.entries(declared))for(const arch of arches)if(!measured[format]?.has(arch))throw new Error(`Runtime architecture mismatch: declared ${JSON.stringify(declared)}; measured ${JSON.stringify(Object.fromEntries(Object.entries(measured).map(([f,a])=>[f,[...a]])))}`);
  return true;
 }
-module.exports={FORMATS,DISCOVERY_TYPES,validateSource,validateReach,validateDeclared};
+function validateBuild(value) {
+ object(value,'build');for(const key of ['id','source','kind','version'])string(value[key],key);
+ if(!getKind(value.kind))invalid('unknown build kind');
+ if(typeof value.installed!=='boolean')invalid('build.installed must be boolean');
+ if(!Array.isArray(value.binaries))invalid('build.binaries must be measured binary facts');
+ for(const binary of value.binaries){
+  object(binary,'binary');if(!FORMATS[binary.format])invalid('unknown binary format');
+  if(binary.path!==undefined)relative(binary.path,'binary.path');
+  if(binary.format==='macho'){strings(binary.architectures,'binary.architectures');if(!binary.architectures.length||binary.architectures.some(a=>!FORMATS.macho.includes(a)))invalid('invalid Mach-O facts');}
+  else if(!FORMATS[binary.format].includes(binary.machine))invalid('invalid measured machine');
+ }
+ interfaces(value.interfaces,'build.interfaces');if(value.reach){if(!Array.isArray(value.reach))invalid('reach must be an array');value.reach.forEach(validateReach);}
+ if(value.available===false)string(value.unavailableReason,'build.unavailableReason');
+ if(value.parent!==undefined)string(value.parent,'build.parent');
+ return value;
+}
+module.exports={FORMATS,DISCOVERY_TYPES,validateSource,validateReach,validateDeclared,validateBuild};
