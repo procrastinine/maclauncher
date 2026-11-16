@@ -39,6 +39,8 @@ var canvas_layers: Array[WeakRef] = []
 # interface. Without that demand no layer, canvas attachment or extra draw
 # exists, and the game's nodes, drawing and input are never changed.
 class UILayer extends RefCounted:
+	const MIRRORED := ["msaa_2d", "canvas_item_default_texture_filter", "canvas_item_default_texture_repeat",
+		"snap_2d_transforms_to_pixel", "snap_2d_vertices_to_pixel", "use_hdr_2d", "canvas_cull_mask"]
 	var target: WeakRef
 	var viewport: SubViewport
 	var canvases := {}
@@ -68,6 +70,17 @@ class UILayer extends RefCounted:
 			viewport.world_2d = window.world_2d
 		viewport.global_canvas_transform = window.get_final_transform()
 		viewport.canvas_transform = window.canvas_transform
+		# The same 2D rasterization as the window: antialiasing, filtering,
+		# pixel snapping, HDR 2D and, where Godot has per-viewport oversampling,
+		# the window's font oversampling, so each label has identical coverage.
+		for property in MIRRORED:
+			var value = window.get(property)
+			if viewport.get(property) != value:
+				viewport.set(property, value)
+		if window.has_method("get_oversampling"):
+			var oversampling: float = window.call("get_oversampling")
+			if viewport.get("oversampling_override") != oversampling:
+				viewport.set("oversampling_override", oversampling)
 		var rid := viewport.get_viewport_rid()
 		var current := {}
 		for reference in layers:

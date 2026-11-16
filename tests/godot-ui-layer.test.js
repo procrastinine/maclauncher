@@ -198,6 +198,17 @@ func _check(source) -> void:
 	assert(layer.viewport.world_2d == root.world_2d)
 	assert(layer.viewport.size == Vector2i(root.get_texture().get_size()))
 	assert(layer.canvases.has(hud.get_canvas()), "canvas layers attached")
+	root.msaa_2d = Viewport.MSAA_4X
+	root.snap_2d_transforms_to_pixel = true
+	root.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+	layer.update(bridge, layers)
+	assert(layer.viewport.msaa_2d == Viewport.MSAA_4X and layer.viewport.snap_2d_transforms_to_pixel, "2D rasterization mirrored")
+	assert(layer.viewport.canvas_item_default_texture_filter == Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST)
+	if root.has_method("get_oversampling"):
+		root.oversampling_override = 2.5
+		layer.update(bridge, layers)
+		assert(is_equal_approx(layer.viewport.get("oversampling_override"), root.get_oversampling()), "font oversampling mirrored")
+		root.oversampling_override = 0.0
 	assert(not layer.canvases.has(root.world_2d.canvas), "the shared world canvas is drawn by the shared world")
 	bridge.demand = 0
 	layer.update(bridge, layers)
