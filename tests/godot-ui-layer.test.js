@@ -169,6 +169,38 @@ func _init() -> void:
   assert.doesNotMatch(result.stderr, /SCRIPT ERROR|Parse Error/);
 });
 
+// Godot's ViewportTexture::get_size() multiplies a Window's render target by its
+// stretch transform, so a 3840x2160 window over a 1152x648 canvas_items base
+// reports 12800x7200. The core uses a layer only at the drawable's exact size.
+// This check reads the script and runs without a Godot process.
+test('The Godot UI layer and source extent use the window render target size, not the stretched texture size', () => {
+  const source = fs.readFileSync(path.join(graphics, 'autoload.gd'), 'utf8');
+  const body = (signature) => {
+    const start = source.indexOf(signature);
+    assert.notEqual(start, -1, `${signature} exists`);
+    const indent = source.slice(source.lastIndexOf('\n', start) + 1, start);
+    const lines = source.slice(start).split('\n');
+    const end = lines.findIndex((line, index) => index > 0 && line.trim() && !line.startsWith(indent + '\t') && !line.startsWith(indent + '#'));
+    return lines.slice(0, end === -1 ? undefined : end).join('\n');
+  };
+  const sizeHelper = body('static func render_target_size(');
+  assert.match(sizeHelper, /get_stretch_transform\(\)\.get_scale\(\)/, 'the helper removes the stretch scale');
+  assert.match(sizeHelper, /scaled\.x \/ scale\.x/);
+  const stretched = [...source.matchAll(/get_texture\(\)\.get_size\(\)/g)].map(match => match.index);
+  const helperStart = source.indexOf(sizeHelper);
+  for (const index of stretched) assert.ok(index > helperStart && index < helperStart + sizeHelper.length, `get_texture().get_size() at offset ${index} is used outside render_target_size`);
+  const update = body('func update(demand_source');
+  assert.match(update, /var size := render_target_size\(window\)/);
+  assert.match(update, /\(window as Window\)\.size != size/, 'a window whose render target is not its drawable has no layer');
+  assert.match(body('func _source_extent('), /UILayer\.render_target_size\(viewport\)/);
+  // ViewportTexture::get_size() and the inverse the helper applies, for the
+  // Truck Town window: base 1152x648, window 3840x2160.
+  const scale = [3840 / 1152, 2160 / 648];
+  const texture = [Math.ceil(3840 * scale[0]), Math.ceil(2160 * scale[1])];
+  assert.deepEqual(texture, [12800, 7200]);
+  assert.deepEqual([Math.round(texture[0] / scale[0]), Math.round(texture[1] / scale[1])], [3840, 2160]);
+});
+
 test('The Godot UI layer exists only while a scene frame-generation row asks for it', t => {
   if (!fs.existsSync(godot)) { t.skip('A local Godot runtime is required for GDScript execution.'); return; }
   const directory = temporary(t);
@@ -209,8 +241,20 @@ func _check(source) -> void:
 	check(layer.viewport != null, "layer while demanded")
 	check(layer.viewport.transparent_bg and layer.viewport.disable_3d and layer.viewport.gui_disable_input, "layer.viewport.transparent_bg and layer.viewport.disable_3d ")
 	check(layer.viewport.world_2d == root.world_2d, "layer.viewport.world_2d == root.world_2d")
-	check(layer.viewport.size == Vector2i(root.get_texture().get_size()), "layer.viewport.size == Vector2i(root.get_texture().get_size(")
+	check(layer.viewport.size == root.size, "the layer has the window's size")
 	check(layer.canvases.has(hud.get_canvas()), "canvas layers attached")
+	root.size = Vector2i(1152, 648)
+	root.content_scale_size = Vector2i(576, 324)
+	root.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	layer.update(bridge, layers)
+	check(Vector2i(root.get_texture().get_size()) == Vector2i(2304, 1296), "the stretched texture size is scaled by the stretch transform")
+	check(layer.viewport != null and layer.viewport.size == Vector2i(1152, 648), "canvas_items stretch keeps the layer at the window's size")
+	root.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
+	layer.update(bridge, layers)
+	check(layer.viewport == null, "no layer while the window scales a smaller render target")
+	root.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
+	layer.update(bridge, layers)
+	check(layer.viewport != null and layer.viewport.size == root.size, "the layer returns at the window's size")
 	root.msaa_2d = Viewport.MSAA_4X
 	root.snap_2d_transforms_to_pixel = true
 	root.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST

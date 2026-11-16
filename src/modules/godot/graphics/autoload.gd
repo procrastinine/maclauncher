@@ -49,9 +49,30 @@ class UILayer extends RefCounted:
 	func _init(window: Viewport) -> void:
 		target = weakref(window)
 
+	# The size of the image a viewport renders. For a Window,
+	# ViewportTexture.get_size() is that size multiplied by the stretch
+	# transform (Godot scene/main/viewport.cpp, ViewportTexture::get_size): a
+	# 3840x2160 window over a 1152x648 canvas_items base reports 12800x7200.
+	static func render_target_size(source: Viewport) -> Vector2i:
+		if source is SubViewport:
+			return (source as SubViewport).size
+		var scaled: Vector2 = source.get_texture().get_size()
+		var scale: Vector2 = source.get_stretch_transform().get_scale()
+		if scale.x <= 0.0 or scale.y <= 0.0:
+			return Vector2i(scaled)
+		return Vector2i(roundi(scaled.x / scale.x), roundi(scaled.y / scale.y))
+
 	func update(demand_source: Object, layers: Array[WeakRef] = []) -> void:
 		var window := target.get_ref() as Viewport
 		if demand_source == null or not demand_source.has_method("ui_layer_demand") or int(demand_source.ui_layer_demand()) == 0 or window == null or not window.is_inside_tree():
+			detach()
+			return
+		# The layer has the size of the presented drawable, which for a window is
+		# its size in pixels. A window whose 2D renders at another size (the
+		# viewport stretch mode scales the whole image into the window) has no
+		# layer, because its interface pixels are not at drawable positions.
+		var size := render_target_size(window)
+		if size.x <= 0 or size.y <= 0 or (window is Window and (window as Window).size != size):
 			detach()
 			return
 		if viewport == null:
@@ -63,8 +84,7 @@ class UILayer extends RefCounted:
 			viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 			viewport.world_2d = window.world_2d
 			window.add_child(viewport, false, Node.INTERNAL_MODE_BACK)
-		var size := Vector2i(window.get_texture().get_size())
-		if size.x > 0 and size.y > 0 and viewport.size != size:
+		if viewport.size != size:
 			viewport.size = size
 		if viewport.world_2d != window.world_2d:
 			viewport.world_2d = window.world_2d
@@ -325,7 +345,7 @@ func _source_scale(extent: Vector2, original: float) -> float:
 	return clampf(desired, 0.1, 2.0)
 
 func _source_extent(viewport: Viewport) -> Vector2:
-	return viewport.get_texture().get_size()
+	return Vector2(UILayer.render_target_size(viewport))
 
 func _source_scaling_mode(driver: String) -> int:
 	match source_spatial_method:
