@@ -1,7 +1,7 @@
 {
   "id": "template-d3dmetal",
   "kind": "d3d-translator",
-  "label": "Sikarugir Template",
+  "label": "Sikarugir Template D3DMetal",
   "order": 1,
   "upstream": {
     "github": "Sikarugir-App/Template",

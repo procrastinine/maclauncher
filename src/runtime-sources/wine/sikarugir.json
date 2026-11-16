@@ -21,7 +21,7 @@
         }
       ],
       "engine": "dxmt",
-      "label": "DXMT"
+      "label": "Sikarugir DXMT"
     },
     {
       "id": "sikarugir-dxvk",
@@ -33,7 +33,7 @@
         }
       ],
       "engine": "dxvk",
-      "label": "DXVK"
+      "label": "Sikarugir DXVK"
     },
     {
       "id": "sikarugir-dxvk3",
@@ -45,7 +45,7 @@
         }
       ],
       "engine": "dxvk",
-      "label": "DXVK"
+      "label": "Sikarugir DXVK 3"
     },
     {
       "id": "sikarugir-d9vk",
@@ -57,7 +57,7 @@
         }
       ],
       "engine": "dxvk",
-      "label": "D9VK"
+      "label": "Sikarugir D9VK"
     },
     {
       "id": "sikarugir-d3dmetal",
@@ -69,7 +69,7 @@
         }
       ],
       "engine": "d3dmetal",
-      "label": "D3DMetal"
+      "label": "Sikarugir D3DMetal"
     },
     {
       "id": "sikarugir-cnc-ddraw",
@@ -81,7 +81,7 @@
         }
       ],
       "engine": "cnc_ddraw",
-      "label": "CNC-DDraw"
+      "label": "Sikarugir CNC-DDraw"
     },
     {
       "id": "sikarugir-moltenvk",
@@ -103,7 +103,7 @@
         }
       ],
       "engine": "moltenvk",
-      "label": "MoltenVK"
+      "label": "Sikarugir MoltenVK"
     },
     {
       "id": "sikarugir-kosmickrisp",
@@ -125,7 +125,7 @@
         }
       ],
       "engine": "kosmickrisp",
-      "label": "KosmicKrisp"
+      "label": "Sikarugir KosmicKrisp"
     },
     {
       "id": "sikarugir-gstreamer",
@@ -153,7 +153,7 @@
         }
       ],
       "engine": "gstreamer",
-      "label": "GStreamer"
+      "label": "Sikarugir GStreamer"
     },
     {
       "id": "sikarugir-wined3d",
@@ -165,7 +165,7 @@
           "name": "builtins"
         }
       ],
-      "label": "WineD3D"
+      "label": "Sikarugir WineD3D"
     }
   ]
 }

@@ -20,7 +20,7 @@
         }
       ],
       "engine": "dxmt",
-      "label": "DXMT"
+      "label": "WineCX DXMT"
     },
     {
       "id": "winecx-dxvk",
@@ -32,7 +32,7 @@
         }
       ],
       "engine": "dxvk",
-      "label": "DXVK"
+      "label": "WineCX DXVK"
     },
     {
       "id": "winecx-moltenvk",
@@ -44,7 +44,7 @@
         }
       ],
       "engine": "moltenvk",
-      "label": "MoltenVK"
+      "label": "WineCX MoltenVK"
     },
     {
       "id": "winecx-gstreamer",
@@ -61,7 +61,7 @@
         }
       ],
       "engine": "gstreamer",
-      "label": "GStreamer"
+      "label": "WineCX GStreamer"
     },
     {
       "id": "winecx-wined3d",
@@ -73,7 +73,7 @@
           "name": "builtins"
         }
       ],
-      "label": "WineD3D"
+      "label": "WineCX WineD3D"
     }
   ]
 }

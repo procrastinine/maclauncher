@@ -1,7 +1,7 @@
 {
   "id": "template-dxmt",
   "kind": "d3d-translator",
-  "label": "Sikarugir Template (template-dxmt)",
+  "label": "Sikarugir Template DXMT",
   "order": 1,
   "upstream": {
     "github": "Sikarugir-App/Template",

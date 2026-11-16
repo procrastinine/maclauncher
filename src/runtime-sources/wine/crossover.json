@@ -17,7 +17,7 @@
         }
       ],
       "engine": "dxmt",
-      "label": "DXMT"
+      "label": "CrossOver DXMT"
     },
     {
       "id": "crossover-dxvk",
@@ -29,7 +29,7 @@
         }
       ],
       "engine": "dxvk",
-      "label": "DXVK"
+      "label": "CrossOver DXVK"
     },
     {
       "id": "crossover-d3dmetal",
@@ -41,7 +41,7 @@
         }
       ],
       "engine": "d3dmetal",
-      "label": "D3DMetal"
+      "label": "CrossOver D3DMetal"
     },
     {
       "id": "crossover-moltenvk",
@@ -53,7 +53,7 @@
         }
       ],
       "engine": "moltenvk",
-      "label": "MoltenVK"
+      "label": "CrossOver MoltenVK"
     },
     {
       "id": "crossover-gstreamer",
@@ -70,7 +70,7 @@
         }
       ],
       "engine": "gstreamer",
-      "label": "GStreamer"
+      "label": "CrossOver GStreamer"
     },
     {
       "id": "crossover-wined3d",
@@ -82,7 +82,7 @@
           "name": "builtins"
         }
       ],
-      "label": "WineD3D"
+      "label": "CrossOver WineD3D"
     }
   ]
 }
