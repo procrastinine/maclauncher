@@ -60,14 +60,17 @@ async function driverRequirements(context, { host = {} } = {}) {
     const { optional, cancelLabel, ...required } = offer;
     return [{ ...required, detail: 'MacLauncher\'s vkd3d-proton runs on KosmicKrisp, which also forwards DLSS frames.' }];
   }
+  // With another download of this Play, the offer is a line of that dialog,
+  // and clearing its checkbox skips it.
+  const companion = { companion: true, companionCheckbox: 'Use MacLauncher KosmicKrisp' };
   // DXVK 2.0 and later do not start on MoltenVK: skipping keeps the runtime's
   // own automatic Direct3D choice and Vulkan driver for this Play.
   if (pending.moltenVK === false) {
     const automatic = Plan.sourceLabels(context.runtimeId || context.translatorPlan?.runtime).automatic;
-    return [{ ...offer, cancelLabel: 'Use ' + automatic.replace(/\b(automatic|choice)\b/g, word => word[0].toUpperCase() + word.slice(1)),
+    return [{ ...offer, ...companion, cancelLabel: 'Use ' + automatic.replace(/\b(automatic|choice)\b/g, word => word[0].toUpperCase() + word.slice(1)),
       declines: [KOSMICKRISP_DECLINED], detail: `MacLauncher's DXVK runs on KosmicKrisp, which also forwards DLSS frames. Skipping uses ${automatic} instead of MacLauncher's DXVK.` }];
   }
-  return [{ ...offer, detail: 'MacLauncher\'s DXVK runs on KosmicKrisp, which also forwards DLSS frames. Skipping uses MacLauncher\'s MoltenVK build.',
+  return [{ ...offer, ...companion, detail: 'MacLauncher\'s DXVK runs on KosmicKrisp, which also forwards DLSS frames. Skipping uses MacLauncher\'s MoltenVK build.',
     ...(carrier ? { fallback: carrier } : {}) }];
 }
 async function resolve(install, runtime, context, { executableArchitecture, host = {}, ...dependencies } = {}) {

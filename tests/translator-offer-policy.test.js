@@ -144,6 +144,30 @@ test('the paired Vulkan driver downloads after consent: optional KosmicKrisp for
   assert.deepEqual(await Translators.driverRequirements({ translatorPlan: { vulkanPending: null } }), []);
 });
 
+test('with another Play download, the paired KosmicKrisp offer is a line of the one dialog and its checkbox declines only it', async () => {
+  const { prepareForLaunch } = require('../src/core/runtime-preparation');
+  const capable = { hardwareArch: 'arm64', macOSVersion: '26.1', physicalAppleGPU: true, metal4: true };
+  const context = pending => ({ settings: { runtimes: {} }, userDataDir: '/profile', runtimeId: 'crossover', translatorPlan: { runtime: 'crossover', vulkanPending: pending } });
+  const [listed] = await Translators.driverRequirements(context({ architecture: 'x64', kosmicKrisp: true, vkd3d: false, carrier: false, moltenVK: false }), { host: capable });
+  assert.ok(listed, 'a KosmicKrisp offer'); assert.equal(listed.companion, true);
+  const { discoveryRequired, ...offer } = { ...listed, version: '27.0.0' };
+  const run = async answer => {
+    const dialogs = [], installs = [], ctx = { ...context(null), confirmRuntimeInstall: async plan => { dialogs.push(plan); return answer; } };
+    const manager = id => ({ id, label: id, getState: () => ({ installed: [] }), installRuntime() {} });
+    const result = await prepareForLaunch({ entry: { name: 'Fixture' }, info: {}, context: ctx,
+      mod: { getRuntimeRequirements: async () => [{ managerId: 'wine', version: '11.0', label: 'Wine' }, offer] },
+      registry: { listModuleIds: () => [], listSharedRuntimeManagers: () => [manager('wine'), manager(offer.managerId)] },
+      install: async (item, payload) => { installs.push(item.id + ' ' + payload.version); } });
+    return { result, dialogs, installs, declined: ctx.declinedChoices };
+  };
+  const cleared = await run({ approved: true, companionsDeclined: true });
+  assert.equal(cleared.dialogs.length, 1, 'one dialog');
+  assert.deepEqual(cleared.dialogs[0].companions.map(item => [item.label, item.checkboxLabel]), [[offer.label, 'Use MacLauncher KosmicKrisp']]);
+  assert.deepEqual([cleared.result, cleared.installs, [...cleared.declined]], [true, ['wine 11.0'], ['kosmickrisp-pairing']]);
+  const accepted = await run(true);
+  assert.deepEqual([accepted.dialogs.length, accepted.installs.length, accepted.declined], [1, 2, undefined]);
+});
+
 test('declining the paired KosmicKrisp download continues Play and marks the decline for the launch plan', async () => {
   const { prepareForLaunch } = require('../src/core/runtime-preparation');
   const offer = { managerId: 'maclauncher-kosmickrisp', version: '27.0.0', requiresDownload: true, optional: true,

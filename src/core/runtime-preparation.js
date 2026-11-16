@@ -259,7 +259,9 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
         approved.add(key);
         grant(plan);
         for (const item of listed) {
-          if (item === optional && consent?.companionsDeclined === true) { declined.add(consentKey(item.plan)); skipped(item.plan); }
+          if (item === optional && consent?.companionsDeclined === true) {
+            declined.add(consentKey(item.plan)); skipped(item.plan); decline(item.plan); fallbackRequired ||= Boolean(item.plan.fallback);
+          }
           else { approved.add(consentKey(item.plan)); grant(item.plan); }
         }
       }
