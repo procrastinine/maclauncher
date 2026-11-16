@@ -8,6 +8,14 @@
 #include <cmath>
 #include <cstddef>
 namespace macfx {
+// An SDK already owns the interval and presentation. Off does not inspect its
+// inputs; a declined or throwing optional replacement preserves one original
+// encode. Exceptions from the original are never retried.
+template<class Replacement,class Original>bool encodeCallerOwnedInterval(bool requested,Replacement&&replace,Original&&original){
+ if(requested){try{if(replace())return true;}catch(...){}}
+ original();return false;
+}
+
 // A display refreshing refreshHz times per second shows about
 // refreshHz*sourcePeriod images from one source interval, with a quarter
 // refresh of tolerance so that 24 fps at 60 Hz keeps two images. The count

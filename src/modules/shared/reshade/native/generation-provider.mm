@@ -20,6 +20,15 @@
 #include <stdexcept>
 #include <utility>
 namespace macfx {
+GenerationResult GenerationEncoder::encodeInterval(id<MTLCommandBuffer>commands,id<MTLTexture>previous,id<MTLTexture>current,const std::vector<id<MTLTexture>>&outputs,uint64_t sequence,const InterpolationPlan&phases){
+ std::lock_guard guard(callerMutex);
+ const bool matched=callerPrevious&&previous==callerPrevious&&sequence==callerFrame+1;
+ callerSequence+=matched?1:2;
+ auto result=encode(commands,current,outputs,callerSequence,phases);
+ if(result.encoded){callerPrevious=current;callerFrame=sequence;}else callerPrevious=nil;
+ if(result.encoded&&!matched){result.ready=false;result.generated=0;result.reason="The caller pair does not match this provider's preceding real endpoint; history is warming";}
+ return result;
+}
 namespace {
 class LosslessGeneration final:public GenerationEncoder {
  struct State {
@@ -79,7 +88,7 @@ public:
  // The prepared Graph owns its admitted images through its actual GPU lease.
  uint64_t imageBytes(unsigned,unsigned,const GenerationMeasure&)const override{return 0;}
 };
-enum class InterpolatorUI:unsigned { None,Composited,Separate };
+enum class InterpolatorUI:unsigned { None,Composited,Separate,NativeSeparate };
 struct InterpolatorState {
  id interpolator=nil;id<MTLTexture>history[2]={nil,nil};__weak id<MTLCommandBuffer>commands=nil;
  unsigned inputW=0,inputH=0,outputW=0,outputH=0;MTLPixelFormat color=MTLPixelFormatInvalid,depth=MTLPixelFormatInvalid,motion=MTLPixelFormatInvalid;
@@ -115,6 +124,7 @@ class MetalGeneration final:public GenerationEncoder {
  std::optional<RSSceneMatrices>sceneMatrices;
  std::optional<ImageColorDescription>sourceColor;
  FrameOrigin sceneOrigin=FrameOrigin::TopLeft;
+ id<MTLTexture>intervalUI=nil;bool intervalUIComposited=false;float intervalAspect=0;
  static dispatch_queue_t preparationQueue(){static dispatch_queue_t queue=dispatch_queue_create("org.maclauncher.graphics.metalfx.prepare",dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,QOS_CLASS_USER_INITIATED,0));return queue;}
  static std::shared_ptr<InterpolatorState>createState(){return {new InterpolatorState,[](InterpolatorState*retired){dispatch_async(preparationQueue(),^{@autoreleasepool{delete retired;}});}};}
  std::string inspect(id<MTLCommandBuffer>commands,id<MTLTexture>source,InterpolatorInputs&inputs)const{
@@ -174,6 +184,7 @@ class MetalGeneration final:public GenerationEncoder {
     }
    }
   }
+  if(intervalUI){if(intervalUI.device!=device||intervalUI.width!=source.width||intervalUI.height!=source.height||intervalUI.pixelFormat!=source.pixelFormat||intervalUI.textureType!=MTLTextureType2D||intervalUI.sampleCount!=1||intervalUI.framebufferOnly)return "The native UI texture must match the complete caller color image";inputs.color=source;inputs.ui=intervalUI;inputs.uiMode=intervalUIComposited?InterpolatorUI::Composited:InterpolatorUI::NativeSeparate;}
   inputs.frame=actual;inputs.depth=depth;inputs.motion=motion;
   if(@available(macOS 27.0,*))if(sceneResources&&sceneResources->distortion.texture&&sceneResources->distortion.texture.width==source.width&&sceneResources->distortion.texture.height==source.height)inputs.distortion=sceneResources->distortion;
   auto&key=inputs.contract;key={uint64_t(reinterpret_cast<uintptr_t>((__bridge void*)commands.commandQueue)),depth.width,depth.height,actual.renderWidth,actual.renderHeight,source.width,source.height,uint64_t(source.pixelFormat),uint64_t(depth.pixelFormat),uint64_t(motion.pixelFormat),actual.depthX,actual.depthY,actual.motionX,actual.motionY,actual.outputX,actual.outputY,uint64_t(bool(inputs.matrices)),uint64_t(inputs.perspective),uint64_t(inputs.uiMode),uint64_t(sceneOrigin),actual.flags&uint32_t(RS_TEMPORAL_DEPTH_REVERSED),sceneAovs?sceneAovs->value.epoch:0,sceneAovs?sceneAovs->value.imageRevision:0,inputs.matrices?inputs.matrices->flags:0,source.usage,inputs.color.usage,uint64_t(inputs.ui.pixelFormat),inputs.ui.usage,uint64_t(inputs.uiFlipY)};
@@ -276,6 +287,7 @@ public:
  void setColorDescription(const ImageColorDescription&value)override{if(!value.valid())throw std::runtime_error("MetalFX interpolation requires valid source color metadata");std::lock_guard lock(mutex);sourceColor=value;}
  void setScene(const RSTemporalFrame&frame)override{std::lock_guard lock(mutex);scene=frame;sceneDepth=(__bridge id<MTLTexture>)frame.depth;sceneMotion=(__bridge id<MTLTexture>)frame.motion;sceneCommands=(__bridge id<MTLCommandBuffer>)frame.commandBuffer;sceneAovs=temporalSceneAovs(frame);sceneMatrices=temporalSceneMatrices(frame);sceneResources=metalFxGenerationResources(frame);}
  void setSceneOrigin(FrameOrigin value)override{std::lock_guard lock(mutex);sceneOrigin=value;}
+ ShaderResult setIntervalUI(id<MTLTexture>ui,bool composited,float aspect)override{std::lock_guard guard(mutex);intervalUI=ui;intervalUIComposited=composited;intervalAspect=aspect;return {true,{}};}
  uint64_t imageBytes(unsigned,unsigned,const GenerationMeasure&)const override{
   // Owned source history is allocated through newAdmittedTexture. MetalFX's
   // opaque internal resources remain covered by actual device-headroom checks.
@@ -287,7 +299,11 @@ public:
   InterpolatorInputs inputs;if(auto reason=inspect(commands,source,inputs);!reason.empty()){result.reason=reason;return result;}
   return ensurePrepared(commands,source,inputs);
  }
- GenerationResult encode(id<MTLCommandBuffer>commands,id<MTLTexture>source,const std::vector<id<MTLTexture>>&outputs,uint64_t sequence,const InterpolationPlan&phases)override{
+ bool acceptsExplicitIntervals()const noexcept override{return true;}
+ bool usesExplicitPreviousImage()const noexcept override{return true;}
+ GenerationResult encodeInterval(id<MTLCommandBuffer>commands,id<MTLTexture>previous,id<MTLTexture>source,const std::vector<id<MTLTexture>>&outputs,uint64_t sequence,const InterpolationPlan&phases)override{return encodePair(commands,previous,source,outputs,sequence,phases);}
+ GenerationResult encode(id<MTLCommandBuffer>commands,id<MTLTexture>source,const std::vector<id<MTLTexture>>&outputs,uint64_t sequence,const InterpolationPlan&phases)override{return encodePair(commands,nil,source,outputs,sequence,phases);}
+ GenerationResult encodePair(id<MTLCommandBuffer>commands,id<MTLTexture>explicitPrevious,id<MTLTexture>source,const std::vector<id<MTLTexture>>&outputs,uint64_t sequence,const InterpolationPlan&phases){
   GenerationResult result;result.frameId=sequence;
   const auto reject=[&](const char*reason){result.reason=reason;return result;};
   if(phases.count>1||outputs.size()!=phases.count||phases.count&&std::abs(phases.timestamps[0]-.5f)>.00001f)return reject("MetalFX interpolation supports the midpoint phase only");
@@ -299,12 +315,15 @@ public:
   if(@available(macOS 26.0,*)){
    const auto actual=inputs.frame;
    auto current=state;id<MTLFXFrameInterpolator>interpolator=current->interpolator;
+   if(explicitPrevious&&intervalUI&&current->uiMode!=inputs.uiMode)return reject("MetalFX could not preserve the native caller UI contract");
    if(current->uiMode==InterpolatorUI::None){inputs.color=source;inputs.ui=nil;}
-   if((inputs.color.usage&interpolator.colorTextureUsage)!=interpolator.colorTextureUsage||(inputs.depth.usage&interpolator.depthTextureUsage)!=interpolator.depthTextureUsage||(inputs.motion.usage&interpolator.motionTextureUsage)!=interpolator.motionTextureUsage||current->uiMode==InterpolatorUI::Composited&&inputs.ui&&(inputs.ui.usage&interpolator.uiTextureUsage)!=interpolator.uiTextureUsage)return reject("Scene textures do not satisfy MetalFX interpolation usage requirements");
+   if((inputs.color.usage&interpolator.colorTextureUsage)!=interpolator.colorTextureUsage||(inputs.depth.usage&interpolator.depthTextureUsage)!=interpolator.depthTextureUsage||(inputs.motion.usage&interpolator.motionTextureUsage)!=interpolator.motionTextureUsage||(current->uiMode==InterpolatorUI::Composited||current->uiMode==InterpolatorUI::NativeSeparate)&&inputs.ui&&(inputs.ui.usage&interpolator.uiTextureUsage)!=interpolator.uiTextureUsage)return reject("Scene textures do not satisfy MetalFX interpolation usage requirements");
    for(auto output:outputs)if(!output||output==source||output.device!=device||output.width!=source.width||output.height!=source.height||output.pixelFormat!=source.pixelFormat||output.storageMode!=MTLStorageModePrivate||(output.usage&interpolator.outputTextureUsage)!=interpolator.outputTextureUsage)return reject("MetalFX interpolation output must be a distinct matching private texture");
+   if(explicitPrevious&&inputs.color!=source)return reject("The caller interval previous color does not declare the separated HUD-less domain");
+   if(explicitPrevious&&(explicitPrevious.device!=device||explicitPrevious.width!=inputs.color.width||explicitPrevious.height!=inputs.color.height||explicitPrevious.pixelFormat!=inputs.color.pixelFormat||explicitPrevious.textureType!=MTLTextureType2D||explicitPrevious.sampleCount!=1||explicitPrevious.framebufferOnly||(explicitPrevious.usage&interpolator.colorTextureUsage)!=interpolator.colorTextureUsage))return reject("The caller interval previous image does not match its current color contract");
    const bool reset=current->previousSlot<0||sequence!=current->frame+1||bool(actual.flags&RS_TEMPORAL_RESET);
    const int slot=current->previousSlot<0?0:1-current->previousSlot;
-   id<MTLTexture>snapshot=current->history[slot],previous=reset?snapshot:current->history[current->previousSlot];
+   id<MTLTexture>snapshot=current->history[slot],previous=explicitPrevious?:reset?snapshot:current->history[current->previousSlot];
    auto depth=inputs.depth,motion=inputs.motion,color=inputs.color,ui=inputs.ui;const auto aovs=sceneAovs;auto linkedClaim=current->linked?inputs.claim:nullptr;auto field=current->distortion;auto receipt=std::make_shared<InterpolatorCompletion>();
    current->commands=commands;current->busy.store(true);
    const std::weak_ptr<InterpolatorState>weak=current;auto held=current->linked?std::shared_ptr<InterpolatorState>{}:current;
@@ -323,7 +342,7 @@ public:
    interpolator.motionVectorScaleX=actual.motionScaleX;interpolator.motionVectorScaleY=actual.motionScaleY;
    interpolator.jitterOffsetX=actual.jitterX;interpolator.jitterOffsetY=actual.jitterY;interpolator.deltaTime=actual.frameTimeMs/1000;
    if(inputs.perspective){interpolator.nearPlane=actual.nearPlane;interpolator.farPlane=actual.farPlane;interpolator.fieldOfView=actual.verticalFov*180/3.14159265358979323846;}
-   interpolator.aspectRatio=float(source.width)/source.height;interpolator.depthReversed=bool(actual.flags&RS_TEMPORAL_DEPTH_REVERSED);interpolator.shouldResetHistory=reset;
+   interpolator.aspectRatio=explicitPrevious&&intervalAspect>0?intervalAspect:float(source.width)/source.height;interpolator.depthReversed=bool(actual.flags&RS_TEMPORAL_DEPTH_REVERSED);interpolator.shouldResetHistory=reset;
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
    if(@available(macOS 27.0,*)){
     interpolator.distortionTexture=field;interpolator.distortionOffsetX=field?inputs.distortion.x:0;interpolator.distortionOffsetY=field?inputs.distortion.y:0;interpolator.distortionWidth=field?inputs.distortion.width:0;interpolator.distortionHeight=field?inputs.distortion.height:0;

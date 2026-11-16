@@ -1,5 +1,9 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "generation-execution.hpp"
+#include "metalfx-image-ingress.hpp"
+#include "metal4-classic-bridge.hpp"
+#include "scene-aovs.hpp"
+#include <mutex>
 #include "source-timing.hpp"
 #include "image-admission.hpp"
 #include "image-color.hpp"
@@ -95,5 +99,94 @@ GenerationSequenceResult encodeGenerationSequence(const GenerationSequenceInput&
  if(events.empty()||events.back().synthetic||std::abs(events.back().phase-1)>1e-6)return fail("The generation interval lost its original real-frame endpoint");
  if(!sharedCost.empty()){const auto execution=input.execution;[input.commands addCompletedHandler:^(id<MTLCommandBuffer>completed){if(completed.status==MTLCommandBufferStatusCompleted)for(const auto&name:sharedCost)execution->recordRowCost(name,(completed.GPUEndTime-completed.GPUStartTime)*1000,true,1);}];}
  output.displayLimited=displayLimited&&capacity==1;output.events=std::move(events);output.result={true,{}};return output;
+}
+}
+
+namespace macfx {
+struct SdkIntervalBridgeState {std::shared_ptr<Metal4ClassicBridge>bridge;std::atomic<bool>ready{false},preparing{false};std::mutex mutex;std::string error;struct Slot{id<MTLTexture>image=nil;std::atomic<bool>busy{false};};std::array<std::shared_ptr<Slot>,4>slots;explicit SdkIntervalBridgeState(id<MTLDevice>device):bridge(std::make_shared<Metal4ClassicBridge>(device)){for(auto&slot:slots)slot=std::make_shared<Slot>();}};
+struct SdkInterpolationProcessor::Impl {EffectPlanExecutor plan;std::mutex mutex;void*owner=nullptr;std::shared_ptr<SdkIntervalBridgeState>bridge;~Impl(){if(owner){rsReleaseTemporalSceneMatrices(owner);rsReleaseTemporalSceneAovs(owner);}}};
+SdkInterpolationProcessor::SdkInterpolationProcessor():impl(std::make_unique<Impl>()){}
+SdkInterpolationProcessor::~SdkInterpolationProcessor()=default;
+ShaderResult SdkInterpolationProcessor::encode(const MetalFxImageInputs&input,const std::shared_ptr<const SceneAovLease>&metadata,bool*recorded,std::function<ShaderResult()>*completion){
+ if(recorded)*recorded=false;
+ if(!effectPlanDemands(PlanDemandGeneration))return {false,{}};
+ const auto snapshot=currentEffectPlan();if(!snapshot||snapshot->mode!="advanced")return {false,{}};
+ auto selected=std::make_shared<EffectPlanSnapshot>(*snapshot);selected->nodes.clear();selected->output={};selected->quality.reset();
+ for(const auto&node:snapshot->nodes)if(node.enabled&&node.kind=="frame-generation")selected->nodes.push_back(node);
+ if(selected->nodes.size()!=1)return {false,"A caller-owned midpoint requires exactly one enabled Frame generation row"};
+ if(selected->nodes.front().settings.number("frameMultiplier",2)!=2)return {false,"The SDK caller requests one midpoint; the enabled row requests another interval multiplier"};
+ auto scene=input.frame;auto commands=(__bridge id<MTLCommandBuffer>)scene.commandBuffer;
+ auto current=(__bridge id<MTLTexture>)scene.color,output=(__bridge id<MTLTexture>)scene.output,previous=input.previousColor;
+ if(!commands||scene.commandBufferKind||!commands.retainedReferences||commands.status>=MTLCommandBufferStatusCommitted)return {false,"The caller interval requires an unsubmitted retaining classic Metal command buffer"};
+ if(!metadata)return {false,"The caller interval needs the exact source color description"};
+ const auto resolved=[&](id<MTLTexture>image){return image&&image.device==commands.device&&image.textureType==MTLTextureType2D&&image.sampleCount==1&&!image.framebufferOnly&&image.storageMode!=MTLStorageModeMemoryless;};
+ if(!resolved(current)||!resolved(previous)||!resolved(output)||!resolved(input.depth)||!resolved(input.motion))return {false,"The caller interval needs resolved readable images on its command device"};
+ if(output==input.depth||output==input.motion||output==input.uiColor)return {false,"The caller interval output aliases a scene input"};
+ if(!std::isfinite(scene.frameTimeMs)||scene.frameTimeMs<=0||!std::isfinite(scene.jitterX)||!std::isfinite(scene.jitterY)||!std::isfinite(scene.motionScaleX)||!std::isfinite(scene.motionScaleY))return {false,"The caller interval motion and duration must be finite"};
+ if(!std::isfinite(input.aspectRatio)||input.aspectRatio<=0)return {false,"The caller interval camera aspect is invalid"};
+ if(scene.flags&RS_TEMPORAL_DEPTH_INFINITE)scene.farPlane=0;
+ if(scene.flags&RS_TEMPORAL_RESET)return {false,"The caller reset keeps its original interpolation encode"};
+ if(!previous||!current||!output||previous==output||current==output||previous.device!=commands.device||current.device!=commands.device||output.device!=commands.device||previous.width!=current.width||previous.height!=current.height||previous.pixelFormat!=current.pixelFormat||output.pixelFormat!=current.pixelFormat||output.width!=current.width||output.height!=current.height)return {false,"The caller interval requires a complete matching real color pair and a distinct output"};
+ if(input.distortion)return {false,"The caller distortion field needs an exact provider distortion binding"};
+ if(input.outputRegion.x||input.outputRegion.y||input.outputRegion.width!=output.width||input.outputRegion.height!=output.height)return {false,"The caller interval output region is not a complete image"};
+ if(!input.depth||!input.motion||input.depthRegion.x||input.depthRegion.y||input.motionRegion.x||input.motionRegion.y||input.depthRegion.width!=input.motionRegion.width||input.depthRegion.height!=input.motionRegion.height)return {false,"The caller interval guide regions cannot be represented by the selected scene provider"};
+ scene.renderWidth=scene.maxRenderWidth=input.depthRegion.width;scene.renderHeight=scene.maxRenderHeight=input.depthRegion.height;
+ scene.depth=(__bridge void*)input.depth;scene.motion=(__bridge void*)input.motion;
+ if(!scene.renderWidth||!scene.renderHeight||input.depth.width<scene.renderWidth||input.depth.height<scene.renderHeight||input.motion.width<scene.renderWidth||input.motion.height<scene.renderHeight)return {false,"The caller interval guides do not cover their declared render extent"};
+ if(!std::isfinite(input.aspectRatio)||input.aspectRatio<=0)return {false,"The caller interval camera aspect is invalid"};
+ if(selected->nodes.front().method!="metalfx"&&std::abs(input.aspectRatio-float(current.width)/current.height)>1e-4f)return {false,"The caller camera aspect differs from the selected provider image contract"};
+ std::unique_lock guard(impl->mutex,std::try_to_lock);if(!guard)return {false,"The caller interval owner is busy",true};
+ const auto color=readImageColor(metadata->value.color);
+ if(imageColorIsHDR(color))scene.flags|=RS_TEMPORAL_HDR;else scene.flags&=~RS_TEMPORAL_HDR;
+ impl->owner=scene.owner;
+ if(bindSceneAovLease(scene,metadata)!=RS_TEMPORAL_OK)return {false,"The caller interval attachments no longer match"};
+ if(input.matricesValid&&rsBindTemporalSceneMatrices(&scene,&input.matrices)!=RS_TEMPORAL_OK)return {false,"The caller interval camera matrices could not be bound"};
+ observeRuntimeFrameSource(reinterpret_cast<uintptr_t>(scene.owner),RuntimeFrameSource::RendererScene,temporalSceneInputMask(scene));
+ impl->plan.setStatusContext(reinterpret_cast<uintptr_t>(scene.owner));
+ ShaderFrame frame{commands,current,output,scene.frameId,0,scene.frameTimeMs,FrameOrigin::TopLeft,spatialColorForDescription(color),nullptr,color.alpha==ColorAlpha::Opaque};
+ const auto prepared=impl->plan.prepareSceneContinuation(frame,&scene,imageColorLabel(color),color,selected,"sdk-owned-midpoint");
+ if(prepared.holdPrevious||prepared.preparing||!prepared.execution)return {false,prepared.error.empty()?"The caller interval provider is preparing":prepared.error,true};
+ const auto&stages=prepared.execution->generationStages();if(stages.size()!=1)return {false,"The selected generation row lacks required caller-interval inputs"};
+ const auto&stage=stages.front();if(!stage.encoder->acceptsExplicitIntervals())return {false,"The selected provider does not accept an explicit caller-owned interval"};
+ const auto ui=stage.encoder->setIntervalUI(input.uiColor,input.uiComposited,input.aspectRatio);if(!ui.encoded)return ui;
+ stage.encoder->setScene(scene);stage.encoder->setSceneOrigin(FrameOrigin::TopLeft);
+ InterpolationPlan phases{};phases.count=1;phases.timestamps[0]=.5f;
+ if(input.fence){auto wait=[commands computeCommandEncoder];if(!wait)return {false,"The caller interval fence encoder is unavailable"};[wait waitForFence:input.fence];[wait endEncoding];}
+ const auto encoded=stage.encoder->encodeInterval(commands,previous,current,{output},scene.frameId,phases);
+ if(recorded)*recorded=encoded.encoded;if(completion)*completion=encoded.completion;
+ const bool owned=encoded.encoded&&encoded.ready&&encoded.generated==1;
+ if(encoded.encoded){
+  auto retained=std::make_shared<MetalFxImageInputs>(input);auto execution=prepared.execution;auto complete=encoded.completion;
+  const auto context=reinterpret_cast<uintptr_t>(scene.owner);const auto revision=selected->revision,stageId=stage.id,method=std::string(stage.encoder->activeMethod());const auto frameId=scene.frameId;
+  [commands addCompletedHandler:^(id<MTLCommandBuffer>done){(void)retained;(void)metadata;(void)execution;auto result=done.status==MTLCommandBufferStatusCompleted?(complete?complete():ShaderResult{true,{}}):ShaderResult{false,"The caller interpolation command buffer failed"};if(owned){RuntimeStatusEvent event;event.context=context;event.processing=event.generated=true;event.phase=result.encoded?RuntimeStatusPhase::Completed:RuntimeStatusPhase::Failed;event.frameId=frameId;event.planRevision=revision;event.stageId=stageId;event.activeMethod=method;event.reason=result.reason;observeRuntimeStatus(event);}}];
+ }
+ if(!owned)return {false,encoded.reason.empty()?"The selected provider did not encode the requested midpoint":encoded.reason,encoded.busy};
+ if(input.fence){auto update=[commands computeCommandEncoder];[update updateFence:input.fence];[update endEncoding];}
+ RuntimeStatusEvent event;event.context=reinterpret_cast<uintptr_t>(scene.owner);event.processing=event.generated=true;event.phase=RuntimeStatusPhase::Encoded;event.frameId=scene.frameId;event.planRevision=selected->revision;event.stageId=stage.id;event.requestedMethod=selected->nodes.front().method;event.activeMethod=stage.encoder->activeMethod();observeRuntimeStatus(event);
+ return {true,{}};
+}
+}
+namespace macfx {
+ShaderResult SdkInterpolationProcessor::encodeMetal4(id logical,const MetalFxImageInputs&input,const std::shared_ptr<const SceneAovLease>&metadata,bool*owned){
+ if(owned)*owned=false;
+ if(!effectPlanDemands(PlanDemandGeneration))return {false,{}};
+ if(!logical||!metadata)return {false,"The Metal 4 caller interval needs its exact source description"};
+ auto target=(__bridge id<MTLTexture>)input.frame.output;if(!target)return {false,"The Metal 4 caller interval output is absent"};
+ if(!impl->bridge)impl->bridge=std::make_shared<SdkIntervalBridgeState>(target.device);auto state=impl->bridge;
+ if(!state->ready.load(std::memory_order_acquire)){
+  if(!state->preparing.exchange(true)){static auto queue=dispatch_queue_create("org.maclauncher.graphics.sdk-interval.prepare",DISPATCH_QUEUE_SERIAL);dispatch_async(queue,^{@autoreleasepool{try{const auto result=state->bridge->prepare(4);{std::lock_guard guard(state->mutex);state->error=result.reason;}state->ready.store(result.encoded,std::memory_order_release);}catch(const std::exception&error){std::lock_guard guard(state->mutex);state->error=error.what();}state->preparing.store(false);}});}
+  std::lock_guard guard(state->mutex);return {false,state->error.empty()?"Preparing the Metal 4 caller interval bridge":state->error,true};
+ }
+ std::shared_ptr<SdkIntervalBridgeState::Slot>slot;{std::lock_guard guard(state->mutex);for(auto&candidate:state->slots){bool free=false;if(candidate->busy.compare_exchange_strong(free,true)){slot=candidate;break;}}}
+ if(!slot)return {false,"The Metal 4 caller interval pool is busy",true};
+ struct Release{std::shared_ptr<SdkIntervalBridgeState::Slot>slot;bool accepted=false;~Release(){if(!accepted)slot->busy=false;}}release{slot};
+ if(!slot->image||slot->image.width!=target.width||slot->image.height!=target.height||slot->image.pixelFormat!=target.pixelFormat){auto descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:target.pixelFormat width:target.width height:target.height mipmapped:NO];descriptor.storageMode=MTLStorageModePrivate;descriptor.usage=MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite|MTLTextureUsageRenderTarget;slot->image=newAdmittedTexture(target.device,descriptor,reinterpret_cast<uintptr_t>(input.frame.owner),"SDK caller interval output");if(!slot->image)return {false,"Cannot prepare the Metal 4 caller interval output"};}
+ struct Flight{bool owned=false;std::function<ShaderResult()>complete;std::shared_ptr<MetalFxImageInputs>inputs;};auto flight=std::make_shared<Flight>();flight->inputs=std::make_shared<MetalFxImageInputs>(input);
+ Metal4ClassicJob job;job.completeProducerImage=true;job.producerFence=input.fence;
+ job.encode=[this,flight,slot,metadata](id<MTLCommandBuffer>commands){auto copied=*flight->inputs;copied.frame.commandBuffer=(__bridge void*)commands;copied.frame.commandBufferKind=0;copied.frame.output=(__bridge void*)slot->image;copied.fence=nil;bool recorded=false;auto result=encode(copied,metadata,&recorded,&flight->complete);flight->owned=result.encoded;return recorded?ShaderResult{true,{}}:result;};
+ job.completion=[flight]{return flight->complete?flight->complete():ShaderResult{true,{}};};
+ job.publish=[flight,slot,target](id<MTLCommandBuffer>commands,bool success){if(!success||!flight->owned)return ShaderResult{true,{}};auto copy=[commands blitCommandEncoder];if(!copy)return ShaderResult{false,"The SDK interval publication encoder is unavailable"};[copy copyFromTexture:slot->image sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(target.width,target.height,1) toTexture:target destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[copy endEncoding];return ShaderResult{true,{}};};
+ job.retired=[slot,flight,state](ShaderResult){slot->busy=false;};
+ auto result=state->bridge->encode(logical,std::move(job));release.accepted=result.encoded;if(owned)*owned=result.encoded&&flight->owned;return result;
 }
 }

@@ -280,3 +280,13 @@ A scene used for frame generation identifies a real rendered frame. An image pro
 HUD-less and UI textures belong to the same declared composition pass as their real frame, with explicit regions, color descriptions and alpha conventions. Camera matrices retain their declared coordinate convention. Unknown metadata stays absent or unknown; a reserved carrier slot does not establish a valid attachment.
 
 Only one presenter schedules generated images. A game API whose plugin or swapchain schedules interpolation keeps that behavior unless an input adapter explicitly transfers presentation ownership. Exposing a game frame-generation capability requires that ownership contract in addition to an available provider and matching scene inputs.
+
+### Caller-owned interpolation intervals
+
+A MetalFX frame-interpolation call supplies a real color pair and requests one midpoint in its output texture. `SdkInterpolationProcessor` selects one enabled 2× Frame generation row and uses the same generation provider registry as presentation processing. It records no presentation, submission or CPU wait. The caller keeps its output texture and presentation schedule.
+
+`GenerationEncoder::encodeInterval` accepts both real endpoints. A provider with explicit previous-image support reads that image directly. Other providers use their rolling history only after the previous texture and consecutive caller-frame identity match the preceding accepted real endpoint. An unproved pair warms history while the original SDK operation supplies the output. Color conversion retains separate storage for the two endpoints.
+
+The classic observer preserves one original encode when a replacement declines or throws, and does no input capture without generation demand. Resuming an original interpolator after replacement resets its skipped native history once. The Metal 4 recording bridge retains the original SDK output and publishes a replacement only after successful shared GPU work; warming and failed work leave the original output in place.
+
+The interval requires a complete matching color pair and output, representable guide regions and exact source color metadata. Raw native UI is distinct from a premultiplied alpha overlay; a provider that cannot preserve that contract declines it. Unsupported distortion fields, output regions, multiple generation rows or other multipliers retain the caller's original operation.

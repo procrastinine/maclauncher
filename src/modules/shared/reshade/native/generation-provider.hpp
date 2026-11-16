@@ -7,6 +7,7 @@
 #include "generation-methods.hpp"
 #include <functional>
 #include <string_view>
+#include <mutex>
 namespace macfx {
 struct GenerationResult:LsfgResult {
  bool preparing=false; // Replacement preparation is not evidence of overload.
@@ -16,15 +17,25 @@ struct GenerationResult:LsfgResult {
  GenerationResult(LsfgResult value):LsfgResult(std::move(value)){}
 };
 using GenerationMeasure=std::function<uint64_t(unsigned,unsigned,unsigned)>;
-// One provider owns algorithm/history only. The existing presenter owns all
-// submission, timestamps and final real/generated display scheduling.
+// One provider owns algorithm/history only. Its host owns submission and
+// scheduling: the presenter for graph intervals, or the original SDK caller
+// for an interval written into the caller's requested output.
 class GenerationEncoder {
+ std::mutex callerMutex;id<MTLTexture>callerPrevious=nil;uint64_t callerFrame=0,callerSequence=0;
 public:
  virtual ~GenerationEncoder()=default;
  virtual const char *method()const noexcept=0;
  virtual bool requiresScene()const noexcept{return false;}
  virtual bool acceptsSynthetic()const noexcept{return !requiresScene();}
  virtual bool requiresOpaque()const noexcept{return true;}
+ // Caller-owned interpolation: exact real pair and requested phases, with no
+ // presenter, submission or implicit replacement of the previous endpoint.
+ virtual bool acceptsExplicitIntervals()const noexcept{return true;}
+ // Most providers use verified contiguous real-endpoint history. Providers
+ // overriding this consume the explicit previous texture directly.
+ virtual bool usesExplicitPreviousImage()const noexcept{return false;}
+ virtual ShaderResult setIntervalUI(id<MTLTexture>ui,bool,float){return {!ui,ui?"This provider needs a declared alpha UI image rather than a raw SDK UI texture":""};}
+ virtual GenerationResult encodeInterval(id<MTLCommandBuffer>,id<MTLTexture>,id<MTLTexture>,const std::vector<id<MTLTexture>>&,uint64_t,const InterpolationPlan&);
  virtual void setColorDescription(const ImageColorDescription&){}
  virtual ShaderResult preparationStatus()const{return {true,{}};}
  virtual GenerationResult prepare(id<MTLCommandBuffer>,id<MTLTexture>,const RSTemporalFrame*){GenerationResult result;result.encoded=true;return result;}

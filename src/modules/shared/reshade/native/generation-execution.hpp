@@ -6,6 +6,19 @@
 #include "runtime-status.hpp"
 #include <functional>
 namespace macfx {
+struct MetalFxImageInputs;
+struct SceneAovLease;
+// Shared row/provider processing for an SDK-owned interval. It writes only the
+// SDK output and never creates a presenter, commits or waits for commands.
+class SdkInterpolationProcessor {
+ struct Impl;std::unique_ptr<Impl>impl;
+public:
+ SdkInterpolationProcessor();~SdkInterpolationProcessor();
+ ShaderResult encode(const MetalFxImageInputs&,const std::shared_ptr<const SceneAovLease>&,bool*recorded=nullptr,std::function<ShaderResult()>*completion=nullptr);
+ // Original native output is already recorded; publish a replacement only
+ // after the observed Metal 4 submission and successful classic completion.
+ ShaderResult encodeMetal4(id logical,const MetalFxImageInputs&,const std::shared_ptr<const SceneAovLease>&,bool*owned=nullptr);
+};
 struct GenerationSequenceInput {
  id<MTLCommandBuffer>commands=nil;id<MTLTexture>source=nil;
  std::shared_ptr<EffectExecution>execution;

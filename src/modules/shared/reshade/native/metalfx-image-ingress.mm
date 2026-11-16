@@ -121,7 +121,8 @@ ShaderResult captureInterpolation(id sdk,id commands,id<MTLDevice>device,void*ow
                 const auto view=source.worldToViewMatrix,projection=source.viewToClipMatrix;
                 if(matrixValid(view)&&matrixValid(projection)){
                     auto&matrices=result.matrices;matrices.size=sizeof(matrices);matrices.version=RS_SCENE_MATRICES_ABI_VERSION;matrices.frameId=frameId;
-                    matrices.flags=RS_SCENE_VIEW_VALID|RS_SCENE_PROJECTION_VALID;rowMatrix(view,matrices.view);rowMatrix(projection,matrices.projection);result.matricesValid=true;
+                    // MetalFX declares a [0,1] depth interval for this actual projection.
+                    matrices.flags=RS_SCENE_VIEW_VALID|RS_SCENE_PROJECTION_VALID|RS_SCENE_CLIP_ZERO_TO_ONE;rowMatrix(view,matrices.view);rowMatrix(projection,matrices.projection);result.matricesValid=true;
                 }
             }
         }

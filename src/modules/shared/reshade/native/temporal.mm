@@ -20,6 +20,7 @@
 #include "metal4-sdk-history.hpp"
 #include "metalfx-image-ingress.hpp"
 #include "metalfx-generation-resources.hpp"
+#include "generation-execution.hpp"
 #include "presentation-hold.hpp"
 #include "runtime-status.hpp"
 #include "recorded-scene.h"
@@ -676,6 +677,8 @@ extern "C" void rsReleaseTemporalOwner(void *key){
     std::shared_ptr<macfx::Metal4SceneIngress>metal4;
     std::shared_ptr<macfx::Metal4SdkHistory>sdkHistory;
     unsigned imageKind;
+    std::shared_ptr<macfx::SdkInterpolationProcessor>sdkInterval;
+    std::mutex sdkIntervalMutex;
 }
 @end
 @implementation MLTemporalOwner
@@ -733,7 +736,15 @@ void encodeDenoisedTemporal(id scaler,SEL selector,id<MTLCommandBuffer>commands,
  }catch(const std::exception&error){if(state->kind)sdk.fallback(commands);else if(!originalRecorded)invokeOriginal(scaler,selector,commands,original,true);macfx::nativeLog(std::string("Original denoised scaler retained: ")+error.what());}}@catch(NSException*error){if(state->kind)sdk.fallback(commands);else if(!originalRecorded)invokeOriginal(scaler,selector,commands,original,true);macfx::nativeLog(std::string("Original denoised scaler retained: ")+(error.reason.UTF8String?:"Metal rejected the optional scene"));}}}else invokeOriginal(scaler,selector,commands,original,false);
 }
 void encodeMetal4Image(id scaler,SEL selector,id commands,IMP original,MLTemporalOwner*state){
- Metal4OriginalFrame sdk(scaler,selector,original,state);if(state->imageKind==2||!macfx::effectPlanRequested())sdk.fallback(commands);if(!macfx::effectPlanRequested())return;
+ Metal4OriginalFrame sdk(scaler,selector,original,state);if(state->imageKind==2||!macfx::effectPlanRequested())sdk.fallback(commands);
+ if(state->imageKind==2&&state->sdkInterval&&!macfx::effectPlanDemands(macfx::PlanDemandGeneration)){std::unique_lock guard(state->sdkIntervalMutex,std::try_to_lock);if(guard&&state->sdkInterval){auto retired=std::move(state->sdkInterval);static auto queue=dispatch_queue_create("org.maclauncher.graphics.sdk-interval.retire",DISPATCH_QUEUE_SERIAL);dispatch_async(queue,^{(void)retired;});}}
+ if(!macfx::effectPlanRequested())return;
+ if(state->imageKind==2&&macfx::effectPlanDemands(macfx::PlanDemandGeneration)){
+  std::unique_lock guard(state->sdkIntervalMutex,std::try_to_lock);if(guard){@try{try{
+   if(!state->sdkInterval)state->sdkInterval=std::make_shared<macfx::SdkInterpolationProcessor>();
+   macfx::MetalFxImageInputs pair;auto captured=macfx::captureMetalFxImageInputs(scaler,macfx::MetalFxImageKind::Interpolation,commands,(__bridge void*)state,++state->frame,pair);
+   if(captured.encoded){auto lookup=pair.frame;lookup.depth=(__bridge void*)pair.depth;lookup.motion=(__bridge void*)pair.motion;std::shared_ptr<const macfx::SceneAovLease>metadata;void*owner=nullptr;macfx::peekTemporalAovsForTextures(lookup,metadata,owner);if(metadata){pair.frame.frameId=metadata->value.frameId;pair.matrices.frameId=pair.frame.frameId;}pair.frame.commandBufferKind=1;bool owned=false;const auto result=state->sdkInterval->encodeMetal4(commands,pair,metadata,&owned);if(result.encoded&&owned)return;}
+  }catch(const std::exception&e){macfx::nativeLog(std::string("Original Metal 4 caller interval retained: ")+e.what());}}@catch(NSException*){}}}
  @autoreleasepool{@try{try{macfx::MetalFxImageInputs inputs;auto kind=state->imageKind==1?macfx::MetalFxImageKind::Spatial:macfx::MetalFxImageKind::Interpolation;auto captured=macfx::captureMetalFxImageInputs(scaler,kind,commands,(__bridge void*)state,++state->frame,inputs);if(!captured.encoded){if(!state->reported)macfx::nativeLog("Original Metal 4 SDK image retained: "+captured.reason);state->reported=true;sdk.fallback(commands);return;}
  auto lookup=inputs.frame;lookup.depth=(__bridge void*)inputs.depth;lookup.motion=(__bridge void*)inputs.motion;std::shared_ptr<const macfx::SceneAovLease>metadata;if(macfx::takeTemporalAovsForTextures(lookup,metadata)!=RS_TEMPORAL_OK||!metadata){if(!state->reported)macfx::nativeLog("Original Metal 4 SDK image retained: needs the exact source color/frame description");state->reported=true;sdk.fallback(commands);return;}lookup.frameId=metadata->value.frameId;if(state->imageKind!=2)inputs.frame.frameId=metadata->value.frameId;inputs.frame.commandBufferKind=1;const double now=CACurrentMediaTime();if(!(inputs.frame.frameTimeMs>0)){inputs.frame.frameTimeMs=float(std::clamp((state->previousTime?now-state->previousTime:1./60)*1000.,.001,1000.));state->previousTime=now;}
  auto matrices=macfx::takeTemporalMatricesForTextures(lookup);if(!matrices&&inputs.matricesValid){inputs.matrices.frameId=lookup.frameId;matrices=inputs.matrices;}auto destination=macfx::takeTemporalSceneDestination(lookup);

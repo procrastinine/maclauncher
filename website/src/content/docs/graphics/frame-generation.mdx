@@ -32,6 +32,8 @@ In the example below, [RIFE](https://github.com/hzwer/Practical-RIFE) fills the 
 
 Frame generation changes only what the display shows, so the game still runs at its own speed and handles input at its original rate. The generated frames do add a little latency, because the generator has to wait for the next real frame before it can draw the ones in between. For exploration and story games that trade usually pays off, whereas competitive and rhythm games tend to play better with frame generation off.
 
+A native MetalFX interpolation call can also supply its real frame pair and scene inputs to a compatible 2× Frame generation row. The selected provider writes the output requested by that call, and the game keeps presenting it as before. Missing inputs retain the original interpolation.
+
 A game API such as DLSS, FidelityFX or XeSS supplies inputs independently of the selected generator. The same generator can serve native and translated games when their scene producers provide the data it needs. A game's own frame-generation plugin can also control presentation, so its generated output is not treated as another real frame. The [input reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/INPUTS_AND_ADAPTERS.md#windows-frame-generation-inputs) describes the Windows API routes and their limits.
 
 ## Two kinds of generators
