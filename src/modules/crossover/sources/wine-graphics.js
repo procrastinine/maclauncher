@@ -58,36 +58,6 @@ function capabilitiesFor(install, support, host = {}) {
     automaticKosmicKrisp: capable("kosmickrisp") && host.physicalAppleGPU === true,
     componentVersions: metadata.componentVersions || {}, minimumMacOS: floors };
 }
-function selectGraphics(settings, capabilities, executableArchitecture) {
-  const backend = settings.graphicsBackend || "auto", requestedVulkan = settings.vulkanBackend || "auto";
-  if (!GRAPHICS_BACKENDS.includes(backend)) fail("Unsupported Direct3D implementation.");
-  if (!VULKAN_BACKENDS.includes(requestedVulkan)) fail("Unsupported Vulkan implementation.");
-  if (backend !== "auto" && !capabilities[backend]) fail(`${backend === "d3dmetal" ? "D3DMetal" : backend.toUpperCase()} is unavailable with this engine and macOS version. Choose Automatic or WineD3D.`);
-  if (backend === "d3dmetal" && executableArchitecture === "x86") fail("D3DMetal supports 64-bit Windows applications. Choose Automatic, DXMT or WineD3D for this game.");
-  if (requestedVulkan !== "auto" && !capabilities[requestedVulkan]) {
-    const required = Requirements.TEMPLATE_RENDERERS.kosmickrisp.minimumMacOS;
-    const measured = capabilities.minimumMacOS?.kosmickrisp;
-    const floor = measured && versionAtLeast(measured, required) ? measured : required;
-    fail(`${requestedVulkan === "kosmickrisp" ? `KosmicKrisp requires Apple Silicon and macOS ${floor.replace(/(?:\.0)+$/, "")} or later` : "MoltenVK is unavailable in this graphics package"}. Choose Automatic or another Vulkan implementation.`);
-  }
-  const vulkan = requestedVulkan === "auto" ? capabilities.automaticKosmicKrisp ? "kosmickrisp" : capabilities.moltenvk ? "moltenvk" : null : requestedVulkan;
-  const components = [];
-  if (backend === "auto") {
-    if (capabilities.dxmt) components.push("dxmt");
-    if (vulkan === "kosmickrisp" && capabilities.d9vk) components.push("d9vk");
-  } else if (backend === "dxvk") {
-    if (!vulkan) fail("DXVK requires an installed Vulkan implementation. Reinstall the graphics package.");
-    components.push(vulkan === "kosmickrisp" && capabilities.dxvk3 ? "dxvk3" : "dxvk");
-  } else if (backend !== "wined3d") components.push(backend);
-  // Software DirectDraw stays on the Wine path unless this optional wrapper
-  // is enabled. It is independent of the selected Direct3D implementation.
-  if (settings.cncDdraw === true) {
-    if (executableArchitecture !== "x86") fail("DirectDraw compatibility supports 32-bit Windows applications. Select a 32-bit executable or disable this option.");
-    if (!capabilities.cncDdraw) fail("DirectDraw compatibility is unavailable in this graphics package. Reinstall the graphics package or disable this option.");
-    components.push("cnc_ddraw");
-  }
-  return { graphicsBackend: backend, vulkanBackend: vulkan || "auto", components };
-}
 function ownDirectory(root) {
   if (!path.isAbsolute(root || "")) fail("A private runtime directory is required.");
   // macOS itself aliases /var and /tmp. The caller owns and validates the game
@@ -371,18 +341,18 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
   }
   if (translatorPlan && !translatorView) translatorView = await require('../../shared/runtime/translator-files').prepareTranslatorFiles(translatorPlan,
     { userDataDir: userDataDir || context?.userDataDir, layout: translatorPlan.layout, signal });
+  if(!translatorPlan)throw new Error('A resolved runtime plan is required before preparing Wine graphics.');
   const native = source.nativeLibraries(install);
-  const support = translatorPlan ? null : supportRoot(install), engine = engineRoot(install), hostInfo = {
+  const support = null, engine = engineRoot(install), hostInfo = {
     hardwareArch: require("../../shared/runtime/host-capabilities").getHostCapabilities().hardwareArch, ...host };
   const layout = translatorPlan?.layout || wineLayout(install);
-  let capabilities = translatorPlan ? { ...install.capabilities, wined3d: true, componentVersions: {} } : capabilitiesFor(install, support, hostInfo);
+  let capabilities = { ...install.capabilities, wined3d: true, componentVersions: {} };
   const hardware = capabilities.kosmickrisp && (!settings.vulkanBackend || settings.vulkanBackend === "auto")
     ? await Hardware.graphicsHardware(hostInfo, { signal }) : { physicalAppleGPU: hostInfo.physicalAppleGPU === true, source: "not-required" };
   hostInfo.physicalAppleGPU = hardware.physicalAppleGPU;
-  if (!translatorPlan) capabilities = capabilitiesFor(install, support, hostInfo);
   if (cameraBridge) capabilities.dxmt = true;
-  const selection = translatorPlan ? { graphicsBackend: translatorPlan.apiMode ? 'wined3d' : translatorPlan.components["d3d-renderer"].used?.engine || "auto",
-    vulkanBackend: translatorPlan.components["vulkan-driver"].used?.engine || "auto", components: [] } : selectGraphics(settings, capabilities, executableArchitecture);
+  const selection = { graphicsBackend: translatorPlan.apiMode ? 'wined3d' : translatorPlan.components["d3d-renderer"].used?.engine || "auto",
+    vulkanBackend: translatorPlan.components["vulkan-driver"].used?.engine || "auto", components: [] };
   const rendererRoot = support && path.join(support, "Frameworks", "renderer");
   let dlss = DLSS.checkSelection(settings, { ...hostInfo, executableArchitecture, translatorPlan, vulkan: vulkanDLSS?.enabled===true,
     backend: selection.components.includes("dxmt") ? "dxmt" : selection.graphicsBackend === "auto" ? "wined3d" : selection.graphicsBackend,
@@ -447,25 +417,6 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     await linkFile(helper.unix, path.join(dllRoot, layout.unixName, helper.name + ".so"), signal);
     dllOverrides.push(helper.name + "=b");
   }
-  for (const name of selection.components) {
-    const root = name === "dxmt" && cameraBridge ? cameraBridge.baseRoot : path.join(renderers, name, "wine"),
-      modules = name === "dxmt" && dlss.dxmt ? [...CORE_DLLS[name], ...DLSS.DLLS] : CORE_DLLS[name];
-    for (const architecture of ["i386-windows", layout.primaryWindows]) {
-      for (const module of modules) {
-        const source = require("../temporal").rendererFile(name === "dxmt" ? cameraBridge : null, architecture, module + ".dll", path.join(root, architecture, module + ".dll"));
-        if (fs.existsSync(source)) await linkFile(source, path.join(dllRoot, architecture, module + ".dll"), signal);
-      }
-    }
-    const unix = path.join(root, layout.unixName);
-    if (fs.existsSync(unix)) {
-      selectedUnix.push(unix);
-      for (const file of await fs.promises.readdir(unix)) if (/\.(?:so|dylib)$/.test(file)) await linkFile(require("../temporal").rendererFile(name === "dxmt" ? cameraBridge : null,
-        layout.unixName, file, path.join(unix, file)), path.join(dllRoot, layout.unixName, file), signal);
-    }
-    dllOverrides.push(modules.join(",") + "=b");
-  }
-  if (cameraBridge && selection.components.includes("dxmt") && dlss.dxmt)
-    await linkFile(cameraBridge.dxmt.native, path.join(dllRoot, "x86_64-unix/maclauncher-dxmt-original.so"), signal);
   const gstreamer = native.gstreamer;
   const external = selection.components.includes("d3dmetal") ? path.join(renderers, "d3dmetal", "external") : null;
   const libraryPaths = [...new Set([path.join(dllRoot, layout.unixName), ...selectedUnix, ...(external ? [external] : []), path.join(engine, "lib", "wine", layout.unixName), ...native.libraries,
@@ -485,26 +436,7 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     env.GST_PLUGIN_PATH_1_0 = "";
     if (gstreamer.scanner && fs.existsSync(gstreamer.scanner)) env.GST_PLUGIN_SCANNER_1_0 = gstreamer.scanner;
   }
-  if (!translatorPlan && selection.vulkanBackend !== "auto") {
-    const icd = path.join(viewRoot, "vulkan-icd.json"), sourceIcd = path.join(support, Closure.RELATIVE_PATHS.vulkan,
-      selection.vulkanBackend === "kosmickrisp" ? "kosmickrisp_mesa_icd.json" : "MoltenVK_icd.json");
-    const descriptor = JSON.parse(Closure.boundedText(sourceIcd));
-    if (!descriptor.ICD || typeof descriptor.ICD.library_path !== "string") fail("The Vulkan driver description is invalid.");
-    const driver = path.resolve(path.dirname(sourceIcd), descriptor.ICD.library_path);
-    if (!Closure.inside(path.join(support, "Frameworks"), fs.realpathSync(driver))) fail("The Vulkan driver escapes its graphics package.");
-    // The private manifest selects exactly one driver, without rewriting the
-    // immutable upstream manifest or depending on a machine-wide Vulkan SDK.
-    descriptor.ICD.library_path = driver;
-    // Windows applications do not opt into macOS portability enumeration.
-    // Wine forwards their instance flags, so allow its selected MoltenVK driver
-    // to be discovered without that opt-in. Driver features stay unchanged.
-    if (selection.vulkanBackend === "moltenvk") descriptor.ICD.is_portability_driver = false;
-    const text = JSON.stringify(descriptor, null, 2) + "\n";
-    if (fs.existsSync(icd) && fs.lstatSync(icd).isSymbolicLink()) fail("The private Vulkan driver description must be a regular file.");
-    if (!fs.existsSync(icd) || fs.readFileSync(icd, "utf8") !== text) await fs.promises.writeFile(icd, text);
-    env.VK_DRIVER_FILES = icd; env.VK_ICD_FILENAMES = icd;
-    env.MVK_CONFIG_LOG_LEVEL = "0";
-  }
+
   if (translatorView) {
     Object.assign(env, translatorView.env);
     env.DYLD_FALLBACK_LIBRARY_PATH = [...translatorView.libraryPaths, env.DYLD_FALLBACK_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
@@ -519,4 +451,4 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
 }
 
 module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, keepBundleLoader, gameBundleInfo, prepareGraphicsView, capabilitiesFor,
-  __test: { capabilitiesFor, selectGraphics, ownDirectory, CORE_DLLS } };
+  __test: { capabilitiesFor, ownDirectory, CORE_DLLS } };

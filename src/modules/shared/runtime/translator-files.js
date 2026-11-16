@@ -69,7 +69,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
   Writable.assertOwnDirectory(userDataDir, store);
   Writable.assertOwnDirectory(store, root);
   let stale;
-  async function link(source, relative) {
+  async function link(source, relative, file = {}) {
     const original = fs.realpathSync(source);
     const target = path.join(root, relative); Writable.assertOwnDirectory(root, path.dirname(target));
     try {
@@ -80,7 +80,10 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
     catch (error) {
       if (error.code !== 'ENOENT') throw error;
       if (fs.lstatSync(target, { throwIfNoEntry: false })) throw stale = new Error('The prepared translator link is incomplete.');
-      try { await fs.promises.symlink(source, target); }
+      try {
+        if(fs.statSync(source).isDirectory())await fs.promises.symlink(source,target);
+        else require('../../../runtime-sources/adapters').applySelectedComponent({kind:'d3d-translator',build:{},parts:{files:[{...file,path:source,relative,logicalName:require('../../../core/logical-libraries').logicalName({...file,path:source})}]},environment:{},parameters:{directory:root}});
+      }
       catch (race) {
         if (race.code !== 'EEXIST') throw race;
         if (!fs.lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink() || !fs.existsSync(target) || fs.realpathSync(target) !== original)
@@ -117,7 +120,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
         [...new Set(item.files.filter(file => file.format === 'macho').map(file => path.relative(item.root, path.dirname(file.path)) || '.'))] };
       const view = await require('./native-library-view').prepareNativeLibraryView(item, { root: path.join(root, 'video'),
         ...preparation, signal, logger });
-      env.GST_PLUGIN_PATH = view.pluginDirectories.join(path.delimiter); env.GST_PLUGIN_PATH_1_0 = env.GST_PLUGIN_PATH;
+      Object.assign(env,require('../../../runtime-sources/adapters').applySelectedComponent({kind:'media',build:item,parts:{plugins:view.pluginDirectories},environment:env,parameters:{directory:root}}).environment);
       continue;
     }
     for (const file of plan.apiMode ? item.files : plan.compatibility?.[item.id]?.files || item.files) {
@@ -127,7 +130,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
         const architecture = cpuFolder(file.machine); if (!architecture) continue;
         const name = path.basename(file.path), module = name.replace(/\.dll$/i, '');
         if (file.form === 'native') { if (!(plan.apiMode ? file.inherited : item.inherited)) native.push({ source: file.path, name, machine: file.machine }); dllOverrides.push(`${module}=n,b`); }
-        else { const relative = `lib/wine/${architecture}/${name}`; links[relative] = await link(file.path, relative); dllOverrides.push(`${module}=b`); }
+        else { const relative = `lib/wine/${architecture}/${name}`; links[relative] = await link(file.path, relative, file); dllOverrides.push(`${module}=b`); }
       } else if (file.format === 'macho' && file.path.endsWith('.so')) {
         if (layout.architecture && !file.cpuSlices.includes(layout.architecture)) continue;
         let source = file.path;
@@ -140,7 +143,7 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
           if (fs.existsSync(framework)) await link(framework, 'external/D3DMetal.framework');
           env.CX_APPLEGPTK_LIBD3DSHARED_PATH = source;
         }
-        const relative = `lib/wine/${layout.unixName}/${path.basename(file.path)}`; links[relative] = await link(source, relative);
+        const relative = `lib/wine/${layout.unixName}/${path.basename(file.path)}`; links[relative] = await link(source, relative, file);
       }
     }
   }
