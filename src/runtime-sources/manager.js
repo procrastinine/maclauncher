@@ -1,5 +1,4 @@
 'use strict';
-const {getKind}=require('../core/component-kinds');
 const {validateSource}=require('./schema');
 
 // A legacy manager id may contain several publisher sections. Its backend owns
@@ -13,7 +12,7 @@ function createSourceBackedManager({id,source,sources=source?[source]:[],adapter
  backend ||= adapter?.createBackend?.({id,sources,source:sources[0],dependencies});
  if(!backend||typeof backend!=='object')throw new TypeError('A source manager backend is required.');
  const manager=Object.create(backend);
- Object.assign(manager,{id,kind,sourceIds:sources.map(item=>item.id),sources,ui:{...backend.ui,groupId:kind,tabLabel:getKind(kind).label}});
+ Object.assign(manager,{id,kind,sourceIds:sources.map(item=>item.id),sources,ui:backend.ui});
  for(const key of Object.keys(backend))if(typeof backend[key]==='function')manager[key]=backend[key].bind(backend);
  manager.listBuilds=context=>adapter?.listBuilds?adapter.listBuilds({manager:backend,sources,context}):[];
  manager.apply=options=>{if(typeof adapter?.apply!=='function')throw new Error(`No ${kind} launch adapter is registered.`);return adapter.apply(options);};
