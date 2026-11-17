@@ -167,7 +167,7 @@ function createManager(engine, { dependencies = {} } = {}) {
     formatVersionLabel: (pin, installed, options) => versionLabel(pin, installed, catalogSources.find(source => source.id === pin?.catalogSourceId)?.componentLabel || definition.label, options?.includedReferences),
     versionContents: (pin, options) => templateName(pin) && !templateComponentLabel(pin, options?.includedReferences)
       ? `The ${catalogSources.find(source => source.id === pin.catalogSourceId)?.componentLabel || definition.label} version in this Template release is known after download.` : null,
-    discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: definition.sourceUrl || downloadSource?.url || catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, supportsDefault: false, customRuntime: !definition.referenceOnly,
+    discoverCatalog: () => [], ...(catalogSources.length ? { catalogSources } : {}), sourceUrl: definition.sourceUrl || downloadSource?.url || catalogSources[0]?.url || "https://gstreamer.freedesktop.org/", sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription, nativeLibrary: true, supportsDefault: !definition.referenceOnly, customRuntime: !definition.referenceOnly,
     resolveExecutable(root, _pin, { installationMetadata } = {}) {
       const stored = installationMetadata?.translator;
       const selected = stored ? path.join(root, installationMetadata.translatorRelative || '') : Component.componentRoot(root, definition);
@@ -202,6 +202,9 @@ function createManager(engine, { dependencies = {} } = {}) {
     }, dependencies: { extractArchive: require("./safe-archive").extractArchive, ...dependencies } });
   manager.translatorEngine = engine;
   manager.ui = { groupId: definition.groupId, sectionLabel: definition.label, memberOrder: definition.memberOrder, management: "managed" };
+  // A copy's installation or removal does not choose a different preference.
+  manager.updateSettingsAfterInstall = () => undefined;
+  manager.updateSettingsAfterUninstall = () => undefined;
   if (definition.localOnly) {
     manager.delivery = { ...manager.delivery, catalog: "none" };
     const getState = manager.getState;
