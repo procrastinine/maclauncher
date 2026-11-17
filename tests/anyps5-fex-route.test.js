@@ -20,7 +20,7 @@ function launchFixture(t, {appleSilicon = true, fexReady = true, rosettaReady = 
   const fexRoot = path.join(f.root, 'fex-runtime'), host = path.join(fexRoot, HOST);
   fs.mkdirSync(path.dirname(host), {recursive: true}); fs.writeFileSync(host, 'fixture host');
   const converted = path.join(f.root, 'converted', 'game');
-  t.mock.method(Prepare, 'prepareGame', async () => { record.prepared++; return {directory: path.dirname(converted), executable: converted}; });
+  t.mock.method(Prepare, 'prepareGame', async () => { record.prepared++; return {directory: path.dirname(converted), executable: converted, identity:Prepare.applicationIdentity(f.entry,f.context)}; });
   t.mock.method(Bundled, 'verifyPayload', () => true);
   t.mock.method(Input, 'prepare', () => ({})); t.mock.method(Input, 'routingEnvironment', () => ({}));
   t.mock.method(Vulkan, 'resolve', (_context, value) => { record.vulkan.push(value.architecture); return {library: '/fixture/libvulkan.1.dylib', backend: 'kosmickrisp'}; });

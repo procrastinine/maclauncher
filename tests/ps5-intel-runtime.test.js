@@ -61,7 +61,7 @@ test('PS5 launch uses shared physical-host translation policy and keeps Intel Vu
   const Input = require('../src/modules/anyps5/input'), Focus = require('../src/modules/shared/runtime/native-focus');
   const Prepare = require('../src/modules/anyps5/prepare'), ProsperPrepare = require('../src/modules/prosper/prepare');
   const options = [], launched = [], selected = {ready: true, version: 'fixture', install: {executablePath: executable, installDir: root, root, declaration: {files: []}}};
-  t.mock.method(Prepare, 'prepareGame', async () => ({directory: root, executable}));
+  t.mock.method(Prepare, 'prepareGame', async () => ({directory: root, executable, identity:{title:'Fixture Game',iconFile:path.join(__dirname,'../src/modules/anyps5/resources/icon.png')}}));
   t.mock.method(ProsperPrepare, 'prepareGame', async () => ({root, dump: root, executable: '/app0/eboot.elf', environment: {}}));
   t.mock.method(Bundled, 'verifyPayload', () => true);
   t.mock.method(Input, 'prepare', () => ({})); t.mock.method(Input, 'routingEnvironment', () => ({}));

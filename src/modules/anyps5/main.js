@@ -3,7 +3,7 @@ const path=require("node:path");
 const manifest=require("./manifest.json");
 const {detectGame}=require("./detect");
 const manager=require("./runtime/manager");
-const {gameDirectory,saveDirectory,resolveSaveLocations,resolveProgram,prepareGame,prepareFexGame,applicationIdentity}=require("./prepare");
+const {gameDirectory,saveDirectory,resolveSaveLocations,prepareGame,prepareFexGame}=require("./prepare");
 const {spawnForegroundNativeGame}=require("../shared/runtime/native-focus");
 const Vulkan=require("../shared/vulkan");
 const Tools=require("./tools");
@@ -69,7 +69,7 @@ module.exports={id:manifest.id,manifest,detectGame,resolveSaveLocations,runtimeM
     const needsRosetta=route==="rosetta";
     if(needsRosetta) await context.ensureRosetta?.();
     const launch=route==="fex"?await prepareFexGame(entry,context,selected.install):await prepareGame(entry,context,selected.install);
-    const identity=launch.identity||applicationIdentity(entry,context);
+    const identity=launch.identity;
     const input=Input.prepare(entry,context,selected.install),vulkan=Vulkan.resolve(context,vulkanOptions(route));
     if(!vulkan) throw new Error("A compatible "+(route==="fex"?"Apple silicon":"Intel")+" Vulkan runtime is required. Install one in Runtimes.");
     const environment={...launchEnvironment(entry,context,vulkan,launch.directory,input),

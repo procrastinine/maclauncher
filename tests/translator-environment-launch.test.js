@@ -40,7 +40,7 @@ test("AnyPS5 and Prosper launch with the merged values of their runtime and Vulk
   const Architecture = require("../src/modules/shared/runtime/architecture");
   const launched = [], selected = { ready: true, version: "fixture", install: { executablePath: executable, installDir: root, root, declaration: { files: [] } } };
   t.mock.method(Architecture, "requiresRosetta", () => false);
-  t.mock.method(Prepare, "prepareGame", async () => ({ directory: root, executable }));
+  t.mock.method(Prepare, "prepareGame", async () => ({ directory: root, executable, identity:{title:'Fixture Game',iconFile:path.join(__dirname,'../src/modules/anyps5/resources/icon.png')} }));
   t.mock.method(ProsperPrepare, "prepareGame", async () => ({ root, dump: root, executable: "/app0/eboot.elf",
     environment: { PROSPER_GUEST_FS: "1", PROSPER_SAVE0: path.join(root, "saves") } }));
   t.mock.method(Bundled, "verifyPayload", () => true);

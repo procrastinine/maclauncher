@@ -219,8 +219,8 @@ async function prepareFexGame(entry,context,install,dependencies={}) {
   return {directory,executable:application.executablePath,app:application.app,identity,
     args:[app0,directory,"0","run",program.programRoot],environment:{ANYPS5_SHADER_CACHE_DIR:path.join(directory,"shader_cache")}};
 }
-async function applicationMetadata(entry,context,layout,dependencies) {
-  const {title,identifier,iconFile}=applicationIdentity(entry,context),root=gameDirectory(entry,context);
+async function applicationMetadata(entry,context,layout,dependencies,identity) {
+  const {title,identifier,iconFile}=identity,root=gameDirectory(entry,context);
   const resources=path.join(layout.contents,"Resources");Writable.assertOwnDirectory(root,resources);
   const source=iconFile;
   const receiptPath=path.join(root,"application.json"), receipt=readRecord(receiptPath);
@@ -237,7 +237,7 @@ async function applicationMetadata(entry,context,layout,dependencies) {
 
 async function prepareGame(entry,context,install,dependencies={}) {
   if(entry.moduleData?.inspectionOnly) throw new Error(entry.moduleData.inspectionReason||"An unpacked PS5 game is required for Play.");
-  const program=resolveProgram(entry), root=gameDirectory(entry,context);
+  const program=resolveProgram(entry), root=gameDirectory(entry,context), gameIdentity=applicationIdentity(entry,context,program);
   assertOutsideSource(program.sourceRoot,root);
   const layout=applicationLayout(entry,context), {directory,executable}=layout;
   Writable.assertOwnDirectory(root,directory);Writable.assertOwnDirectory(root,path.join(directory,"app0"));
@@ -255,7 +255,7 @@ async function prepareGame(entry,context,install,dependencies={}) {
   bindLibraries(directory,runtimePaths(install).libraries);
   if(previous?.schemaVersion===2 && previous.identity===identity && previous.generated?.length && previous.generated.every(file=>{
     try { const output=path.join(directory,file.path==="eboot"?layout.executableName:file.path),stat=fs.lstatSync(output);return stat.isFile()&&!stat.isSymbolicLink()&&Native.hashFile(output)===file.sha256; } catch { return false; }
-  })) { await applicationMetadata(entry,context,layout,dependencies);return {directory,executable,app:layout.app,cached:true}; }
+  })) { await applicationMetadata(entry,context,layout,dependencies,gameIdentity);return {directory,executable,app:layout.app,identity:gameIdentity,cached:true}; }
   const assets=await stageAssets(files,path.join(directory,"app0"),previous?.source===program.sourceRoot?previous.assets:null,context,root);
   const temporary=fs.mkdtempSync(path.join(root,".convert-")), input=path.join(temporary,"input"), output=path.join(temporary,"output");
   Writable.assertOwnDirectory(root,input);Writable.assertOwnDirectory(root,output);
@@ -292,10 +292,10 @@ async function prepareGame(entry,context,install,dependencies={}) {
       }
     }
     await publish(output);fs.chmodSync(executable,0o755);
-    await applicationMetadata(entry,context,layout,dependencies);
+    await applicationMetadata(entry,context,layout,dependencies,gameIdentity);
     Writable.atomicWrite(recordPath,JSON.stringify({schemaVersion:2,source:program.sourceRoot,programRoot:program.programRoot,assetRoot:program.assetRoot,identity,assets,generated})+"\n",{root});
     entry.defaultSaveDir=saveDirectory(entry,context);
-    return {directory,executable,app:layout.app,cached:false};
+    return {directory,executable,app:layout.app,identity:gameIdentity,cached:false};
   } finally { fs.rmSync(temporary,{recursive:true,force:true}); }
 }
 module.exports={gameDirectory,saveDirectory,fexDirectory,resolveSaveLocations,resolveProgram,runtimePaths,prepareGame,prepareFexGame,applicationIdentity,bindSaveData,stageFexApp0,unwrapFile,sourceFiles,isGuestModule};

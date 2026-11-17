@@ -20,6 +20,7 @@ test('both AnyPS5 backends prepare game bundle identity and original artwork wit
    assert.equal(fs.readlinkSync(path.join(path.dirname(prepared.executable),'libSDL2.dylib')),path.join(bin,'libSDL2.dylib'));
    assert.deepEqual(prepared.args,[path.join(prepared.directory,'app0'),prepared.directory,'0','run',fs.realpathSync(f.programs)]);
   }
+  assert.deepEqual(prepared.identity,Prepare.applicationIdentity(f.entry,f.context),'preparation returns the resolved identity for the shared caller');
   const plist=fs.readFileSync(path.join(prepared.app,'Contents/Info.plist'),'utf8');
   assert.match(plist,/<key>CFBundleName<\/key><string>Fixture Game<\/string>/);
   assert.match(plist,/<key>CFBundleDisplayName<\/key><string>Fixture Game<\/string>/);
