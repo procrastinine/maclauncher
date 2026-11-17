@@ -26,7 +26,10 @@ function inspectPackage(root, record, { projectId, manifestRelative, sourceRelat
     if (declared && fs.existsSync(path.join(root,Bundled.relativeFile(declared)))) filesPrefix = '';
     else filesPrefix = declaration?.filesPrefix ?? manifest.filesPrefix ?? filesPrefix;
   }
-  validateManifest?.(manifest, record);
+  // A manifest this launcher's own checks refuse is a property of the package
+  // itself; the manager remembers it for the listed file.
+  try { validateManifest?.(manifest, record); }
+  catch (error) { throw Object.assign(error instanceof Error ? error : new Error(String(error)), { unusablePackage: true }); }
   const { prefix, executable, files, primary } = Contract.manifestPayload(manifest, record, { executableRelative, filesPrefix, dataOnly, resolveDependency, managed });
   validatePayload?.(manifest, record, { primary, files });
   const sourcePath = typeof sourceRelative === "function" ? sourceRelative(manifest, record) : sourceRelative;
@@ -183,7 +186,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     const layer = selectRuntimeVersion({ manual: explicit,
       recommended: explicit ? null : typeof recommendation === "function" ? recommendation() : recommendation,
       defaultVersion: savedDefault,
-      fallback: managerDefaultVersion({ listed: core.core.listDiscoveredCatalog({ userDataDir }).filter(pin => compatible(pin) && !pin.installReason && (!options.compatible || options.compatible(pin))).map(pin => pin.version).sort(compareRuntimeVersions),
+      fallback: managerDefaultVersion({ listed: core.core.listDiscoveredCatalog({ userDataDir }).filter(pin => compatible(pin) && !pin.installReason && !pin.unusablePackage && (!options.compatible || options.compatible(pin))).map(pin => pin.version).sort(compareRuntimeVersions),
         installed: all.filter(item => item.present && item.ready && eligibleInstalled(item)).map(item => item.version).concat(core.getState({userDataDir}).installed.filter(row => row.ready !== false && eligibleInstalled(row)).map(row => row.version)).sort(compareRuntimeVersions) }) });
     const configured = layer.version;
     // Resolving this chosen version exactly is an implementation detail, not
@@ -241,7 +244,15 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     },
     async uninstallRuntime(options = {}) {
       if (includedPackages(options).all.some(item => item.present && item.version === options.version)) throw new Error("The included runtime cannot be removed separately.");
-      return core.uninstallRuntime(options);
+      // Removing a copy of the listed package this launcher cannot use keeps
+      // that package from being offered again.
+      const removed = validateManifest && manager.getState(options).sections[0].installed.find(row => row.version === options.version &&
+        (typeof options.installDir === "string" ? row.installDir === path.resolve(options.installDir) : true));
+      const listed = removed?.status === "unsupported-package" &&
+        core.core.listDiscoveredCatalog({ userDataDir: options.userDataDir }).find(pin => pin.version === removed.version);
+      const result = await core.uninstallRuntime(options);
+      if (listed?.asset?.sha256) rememberUnusable(options, removed.version, listed.asset.sha256, removed.error);
+      return result;
     },
     updateSettingsAfterUninstall(settings, payload) {
       if (!supportsDefault) return undefined;
@@ -288,6 +299,13 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     const { sections, ...view } = state;
     return { ...view, sections: [{ id: "default", label: `${label} versions`, ...view }] };
   }
+  // Every CPU's list holds the same published package.
+  function rememberUnusable({ userDataDir, logger }, version, assetSha256, reason) {
+    for (const architecture of ["arm64", "x64"]) {
+      try { core.core.rememberUnusablePackage({ userDataDir, version, assetSha256, reason, architecture }); }
+      catch (error) { logger?.warn?.(`[runtime:${projectId}] ${version} could not be marked unusable: ${error.message}`); }
+    }
+  }
   async function installForArchitecture(options) {
     const selectionOptions = { ...options, version: options.version };
     const select = () => {
@@ -298,6 +316,9 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     };
     let selected = select();
     if (selected.ready) return selected.install;
+    // A listed version that cannot be installed on this Mac states why,
+    // without a catalog request or a download.
+    if (!selected.version && selected.requiresDownload === false && selected.reason) throw new Error(selected.reason);
     const downloadable = () => core.core.listDiscoveredCatalog({ userDataDir: options.userDataDir })
       .find(pin => pin.version === selected.version && pin.asset && compatible(pin));
     // Installation is an explicit action, including Play's consented
@@ -311,7 +332,12 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     if (!downloadable()) throw new Error(core.core.listDiscoveredCatalog({ userDataDir: options.userDataDir })
       .find(pin => pin.version === selected.version && pin.projectPackage?.unavailable)?.installReason ||
       `${label} ${selected.version} is not available for installation from its runtime catalog.`);
-    return core.installRuntime({ ...options, version: selected.version });
+    const listed = downloadable();
+    try { return await core.installRuntime({ ...options, version: selected.version }); }
+    catch (error) {
+      if (error?.unusablePackage === true && listed.asset?.sha256) rememberUnusable(options, selected.version, listed.asset.sha256, error.message);
+      throw error;
+    }
   }
   Custom.configure(manager, { inspect(runtimePath, { verification } = {}) {
     const roots = [], start = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath);

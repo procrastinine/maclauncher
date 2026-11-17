@@ -12,11 +12,21 @@ export function runtimeInstallVersion(section: Record<string, any> | null | unde
   if (requested && versions.includes(requested)) return requested;
   // A version whose installed copies are all unusable is chosen only on request,
   // so a newer listed version is the offer and a damaged one is never preselected.
+  // A version this Mac cannot install is not the offer either.
   const rows: any[] = Array.isArray(section?.installed) ? section.installed : [];
-  const offered = versions.filter(value => !rows.some(row => row?.version === value) || rows.some(row => row?.version === value && row.ready !== false));
+  const offered = versions.filter(value => rows.some(row => row?.version === value)
+    ? rows.some(row => row?.version === value && row.ready !== false) : !runtimeVersionBlocked(section?.catalog, value));
   const stable = offered.find(value => !isPrereleaseVersion(value, section));
   if (typeof recommended === "string" && offered.includes(recommended) && (!stable || !isPrereleaseVersion(recommended, section))) return recommended;
   return stable || offered[0] || "";
+}
+
+// A listed version whose own requirement keeps it from installing on this Mac,
+// such as a newer macOS or a package this launcher cannot use.
+export function runtimeVersionBlocked(catalog: Record<string, any> | null | undefined, version: string) {
+  const requirement = catalog?.versionRequirements?.[version];
+  return requirement?.installable === false || Boolean(requirement?.installReason) &&
+    Array.isArray(catalog?.installableVersions) && !catalog.installableVersions.includes(version);
 }
 
 export function runtimeMinimumNotice(minimum: unknown) {

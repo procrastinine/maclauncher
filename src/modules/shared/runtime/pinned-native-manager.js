@@ -151,6 +151,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
   const validEntry = entry => Boolean(entry && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(entry.version || "") &&
     typeof entry.upstreamRevision === "string" && entry.upstreamRevision && entry.upstreamRevision.length <= 200 &&
     (entry.minimumMacOS === undefined || typeof entry.minimumMacOS === "string" && /^\d{1,3}\.\d{1,3}(?:\.\d{1,3})?$/.test(entry.minimumMacOS) && Number(entry.minimumMacOS.split(".")[0]) > 0) &&
+    (entry.unusablePackage === undefined || typeof entry.unusablePackage === "string" && entry.unusablePackage.length > 0 && entry.unusablePackage.length <= 1000) &&
     (!entry.asset || (/^https:\/\//.test(entry.asset.url || "") && (/^[a-f0-9]{64}$/.test(entry.asset.sha256 || "") ||
       (entry.asset.integrity === "publisher-md5" && /^[a-f0-9]{32}$/.test(entry.asset.md5 || "") && typeof verifyArtifact === "function") ||
       // Without a publisher digest, the file's hash is recorded at install.
@@ -211,10 +212,11 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     return actual && versionAtLeast(actual, pin.minimumMacOS) ? null : `${label} ${pin.version} requires macOS ${pin.minimumMacOS}.`;
   }
   // Why a listed download cannot be installed on this Mac now: an expired
-  // link, or a reason its source reads live, such as a loader application that
-  // is not installed (`dependencies.listedReason`).
+  // link, a package this launcher found it cannot use, or a reason its source
+  // reads live, such as a loader application that is not installed
+  // (`dependencies.listedReason`).
   const assetReason = pin => pin?.asset?.expiresAt && Date.parse(pin.asset.expiresAt) <= (dependencies.now || Date.now)()
-    ? "This build's download expired. Refresh versions to find a current build." : pin && dependencies.listedReason?.(pin) || null;
+    ? "This build's download expired. Refresh versions to find a current build." : pin?.unusablePackage || pin && dependencies.listedReason?.(pin) || null;
   let discoveryState = { status: "idle", fetchedAt: null, error: null, source: sourceUrl || null, mode: null };
   const sourceStates = Object.fromEntries(sourceIds.map(sourceId => [sourceId, { status: "idle", fetchedAt: null, error: null, mode: null }]));
   const discoveryPromises = new Map();
@@ -264,7 +266,10 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       const measured = known?.minimumMacOS && /^[a-f0-9]{64}$/.test(known.asset?.sha256 || "") &&
         known.asset.sha256 === original.asset?.sha256 &&
         (!original.minimumMacOS || versionAtLeast(known.minimumMacOS, original.minimumMacOS)) ? { minimumMacOS: known.minimumMacOS } : {};
-      const entry = { ...original, version, ...measured,
+      // So does a package this launcher found it cannot use.
+      const unusable = known?.unusablePackage && /^[a-f0-9]{64}$/.test(known.asset?.sha256 || "") && known.asset.sha256 === original.asset?.sha256
+        ? { unusablePackage: known.unusablePackage } : {};
+      const entry = { ...original, version, ...measured, ...unusable,
         ...(original.sourceKind === "commit" ? {} : { upstreamTag: original.upstreamTag || original.version }) };
       deduplicated.set(version, entry);
       entries.set(version, Object.freeze({ ...entry, ...(entry.asset ? { asset: Object.freeze({ ...entry.asset }) } : {}) }));
@@ -361,6 +366,19 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       try { saveCatalog(userDataDir); } catch {}
     }
     return hostReason(installedPin);
+  }
+  // A listed package that fails this launcher's own package checks keeps the
+  // reason with its release, so the same file is not offered or downloaded
+  // again. A different file published for the version is offered as usual.
+  function rememberUnusablePackage({ userDataDir, version, assetSha256, reason } = {}) {
+    loadCatalog(userDataDir);
+    const normalized = canonicalVersion(version), known = entries.get(normalized);
+    if (!known || !/^[a-f0-9]{64}$/.test(assetSha256 || "") || known.asset?.sha256 !== assetSha256 || typeof reason !== "string" || !reason) return false;
+    const unusablePackage = reason.slice(0, 1000);
+    entries.set(normalized, Object.freeze({ ...known, unusablePackage }));
+    remoteEntries = remoteEntries.map(entry => entry.version === normalized ? { ...entry, unusablePackage } : entry);
+    saveCatalog(userDataDir);
+    return true;
   }
   async function refreshCatalog(options = {}) {
     let { sourceId } = options;
@@ -1098,7 +1116,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       return installed.some(item => item.version === cfg.defaultVersion)
         ? settings : { ...settings, defaultVersion: installed[0]?.version || null };
     },
-    core: { normalizeVersion, registerLocal, resolveInstalled, resolveRegistered: resolveRegistration, listInstalled, installVersion, clearDisplayCache, rememberResolvedVersion,
+    core: { normalizeVersion, registerLocal, resolveInstalled, resolveRegistered: resolveRegistration, listInstalled, installVersion, clearDisplayCache, rememberResolvedVersion, rememberUnusablePackage,
       listCatalog: ({ userDataDir } = {}) => { loadCatalog(userDataDir); return versions.map(version => entries.get(version)); },
       listDiscoveredCatalog: ({ userDataDir } = {}) => { loadCatalog(userDataDir); return remoteEntries.slice(); },
       getInstallDir: ({ userDataDir, version }) => { loadCatalog(userDataDir); return installDir(userDataDir, version); },

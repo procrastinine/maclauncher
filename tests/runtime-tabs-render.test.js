@@ -1544,6 +1544,22 @@ test('per-game version menus use only the selected runtime recommendation and pr
   assert.deepEqual(original, before);
 });
 
+test('a listed version that cannot be installed on this Mac reads Unavailable and is never preselected', () => {
+  const reason = 'The Steam bridge package lacks the managed loader paths required by this launcher and needs replacement.';
+  const runtime = manager('bridge-listed', {}, { status: 'success', source: 'https://github.com/example/bridge/releases', versions: ['1.0.4-local', '1.0.0'],
+    installableVersions: [], versionRequirements: { '1.0.4-local': { available: true }, '1.0.0': { available: false, installReason: reason, requiresDownload: true } } },
+  [{ version: '1.0.4-local', ready: true, status: 'ready' }, { version: '1.0.3', ready: true, status: 'ready' }]);
+  const markup = render([{ ...runtime, defaultVersion: '1.0.3' }], runtime.id);
+  assert.match(markup, /<option value="1\.0\.0">v1\.0\.0 · Unavailable<\/option>/, 'the menu names the version unavailable');
+  assert.match(markup, /<option value="1\.0\.4-local" selected="">/, 'an installed version is the choice');
+  assert.equal(runtimeInstallVersion({ catalog: { versions: ['2.0.0', '1.0.0'], installableVersions: ['1.0.0'],
+    versionRequirements: { '2.0.0': { installReason: 'Requires macOS 30.0 or later.' } } } }), '1.0.0', 'a newer version this Mac cannot install is not the offer');
+  assert.equal(runtimeInstallVersion({ catalog: { versions: ['2.0.0'], installableVersions: [],
+    versionRequirements: { '2.0.0': { installable: false, installReason: 'Requires macOS 30.0 or later.' } } } }), '', 'nor is it the only offer');
+  assert.equal(runtimeInstallVersion({ catalog: { versions: ['2.0.0'], installableVersions: [], versionRequirements: { '2.0.0': { installReason: 'x' } } } }, '2.0.0'), '2.0.0',
+    'it stays choosable on request');
+});
+
 test('an installed version this launcher cannot use reads as incompatible and is not preselected or offered for reinstall', () => {
   const reason = 'The Steam bridge package lacks the managed loader paths required by this launcher and needs replacement.';
   const runtime = manager('bridge-fixture', {}, { status: 'success', source: 'https://github.com/example/bridge/releases', versions: ['1.0.0'],

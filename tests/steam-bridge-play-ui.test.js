@@ -290,6 +290,70 @@ test('a listed bridge package identical to an installed copy this launcher canno
   assert.deepEqual(section.catalog.installableVersions, []);
 });
 
+// A copy of an unusable package in the installed layout, as an earlier launcher left it.
+function retainUnusable(userDataDir, older) {
+  const retained = path.join(userDataDir, 'runtimes', id, 'universal', older.record.version);
+  fs.mkdirSync(retained, { recursive: true }); fs.cpSync(older.payload, path.join(retained, 'payload'), { recursive: true });
+  fs.writeFileSync(path.join(retained, 'project-package.json'), JSON.stringify(older.wrapper));
+  fs.writeFileSync(path.join(retained, 'runtime.json'), JSON.stringify({ version: older.record.version, architecture: 'universal',
+    upstreamRevision: older.record.asset.sha256, archiveSha256: older.record.asset.sha256,
+    binarySha256: sha(fs.readFileSync(path.join(older.payload, 'steam.exe'))), executableRelative: 'payload/steam.exe',
+    source: 'download', catalogEntry: { version: older.record.version, upstreamRevision: older.record.asset.sha256,
+      architecture: 'universal', hostArchitectures: ['arm64', 'x64'], localBuild: false, projectPackage: older.record, asset: older.record.asset } }));
+  return retained;
+}
+function unusableBridge(older, requests, extra = {}) {
+  return Bridge.create({ identifyGame: () => ({ appId: '480' }), discoverClient: () => '/client', isRunning: () => false, dependencies: {
+    systemVersionSync: () => '26.0',
+    fetchUrlBuffer: async url => { requests.push(url); return { status: 200, body: Buffer.from(JSON.stringify({ schemaVersion: 2, projectId: id, updatePolicy: 'manual', packages: [older.record] })) }; },
+    downloadToFile: async (url, destination) => { requests.push(url); fs.writeFileSync(destination, older.archive); },
+    extractArchive: async (_archive, destination) => {
+      fs.writeFileSync(path.join(destination, 'runtime-package.json'), JSON.stringify(older.wrapper));
+      fs.cpSync(older.payload, path.join(destination, 'files'), { recursive: true });
+    }, ...extra } });
+}
+const unusableOffer = (bridge, userDataDir) => {
+  const catalog = bridge.getState({ userDataDir }).sections[0].catalog;
+  return { reason: catalog.versionRequirements['1.0.0']?.installReason, installable: catalog.installableVersions };
+};
+
+test('removing an installed copy of a listed package this launcher cannot use keeps that package from being offered again', async t => {
+  const root = scratch(t), userDataDir = path.join(root, 'data'), requests = [];
+  const older = bridgePackage(path.join(root, 'older'), '1.0.0', false), bridge = unusableBridge(older, requests);
+  const retained = retainUnusable(userDataDir, older);
+  await bridge.refreshCatalog({ userDataDir, force: true });
+  // The exact payload Runtimes sends for Remove.
+  await bridge.uninstallRuntime({ userDataDir, sectionId: 'default', version: '1.0.0', architecture: 'arm64', variant: 'architecture:arm64', installDir: retained });
+  assert.equal(fs.existsSync(retained), false);
+  const removed = unusableOffer(bridge, userDataDir);
+  assert.match(removed.reason || '', /managed loader paths/, 'the listed package keeps the reason it cannot be used');
+  assert.deepEqual(removed.installable, [], 'the same package is not offered for installation again');
+  await bridge.refreshCatalog({ userDataDir, force: true });
+  assert.deepEqual(unusableOffer(bridge, userDataDir), removed, 'a refresh listing the same package keeps it unusable');
+  const offline = [], reopened = unusableBridge(older, offline);
+  assert.deepEqual(unusableOffer(reopened, userDataDir), removed, 'the next launch reads it from the saved list');
+  const before = requests.length;
+  await assert.rejects(bridge.installRuntime({ userDataDir, version: '1.0.0' }), /managed loader paths/);
+  assert.equal(requests.length, before, 'nothing is downloaded for a package known to be unusable');
+  const republished = { ...older, record: { ...older.record, asset: { ...older.record.asset, sha256: sha(Buffer.from('republished 1.0.0')) } } };
+  const replaced = unusableBridge(republished, []);
+  await replaced.refreshCatalog({ userDataDir, force: true });
+  assert.deepEqual(unusableOffer(replaced, userDataDir).installable, ['1.0.0'], 'a different package of the version is offered');
+});
+
+test('a listed package found unusable after its download is not downloaded again', async t => {
+  const root = scratch(t), userDataDir = path.join(root, 'data'), requests = [];
+  const older = bridgePackage(path.join(root, 'older'), '1.0.0', false), bridge = unusableBridge(older, requests);
+  await bridge.refreshCatalog({ userDataDir, force: true });
+  assert.deepEqual(unusableOffer(bridge, userDataDir).installable, ['1.0.0']);
+  await assert.rejects(bridge.installRuntime({ userDataDir, version: '1.0.0' }), /managed loader paths/);
+  assert.equal(requests.length, 2, 'one catalog read and one package download');
+  assert.match(unusableOffer(bridge, userDataDir).reason || '', /managed loader paths/);
+  assert.deepEqual(unusableOffer(bridge, userDataDir).installable, []);
+  await assert.rejects(bridge.installRuntime({ userDataDir, version: '1.0.0' }), /managed loader paths/);
+  assert.equal(requests.length, 2, 'the second attempt states the reason without a download');
+});
+
 test('consented bridge failures surface their actual error without launching or saving a refusal', async t => {
   const root = scratch(t), userDataDir = path.join(root, 'data'), { bridge } = offlineBridge(root);
   await bridge.refreshCatalog({ userDataDir, force: true });

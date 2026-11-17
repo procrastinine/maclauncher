@@ -7,7 +7,7 @@ import { ErrorText } from "./ErrorText";
 import { RefreshIcon } from "../icons";
 import { Select } from "./Select";
 import { isRuntimeIncluded, runtimeInstallVersion, runtimeCatalogPresentation, runtimeCatalogSources, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey,
-  translatorVersionBuild } from "./runtime-tabs-model";
+  runtimeVersionBlocked, translatorVersionBuild } from "./runtime-tabs-model";
 
 type Props = {
   managerId: string;
@@ -196,7 +196,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
               {versions.length ? versions.map(value => {
                 const ready = isRuntimeVersionInstalled(readyInstalled, value, selectedVariant, hasVariants);
                 const incomplete=isRuntimeVersionInstalled(incompleteInstalled,value,selectedVariant,hasVariants);
-                const unusable = !ready&&!incomplete ? unusableState(value) : null;
+                const unusable = !ready&&!incomplete ? unusableState(value) || (runtimeVersionBlocked(source, value) ? "unavailable" : null) : null;
                 const includedVersion = ready && installed.some((item: any) => item.version === value && isRuntimeIncluded(item) &&
                   (!hasVariants || item.variant === selectedVariant));
                 const build = cpuBuildLabels ? translatorVersionBuild(value, source, installed) : "";
