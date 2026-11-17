@@ -298,6 +298,21 @@ async function githubTree({ repository: name, revision, signal }) {
   if (response.status !== 200) throw Object.assign(new Error(`The source listing could not be read (${response.status}).`), { status: response.status });
   return JSON.parse(require("./download-utils").decodeResponseBody(response.body, response.headers, { maxBytes: 8 << 20 }).toString("utf8"));
 }
+// One small file GitHub stores as a Git blob, returned only when its bytes
+// match the blob's Git SHA-1.
+async function githubBlob({ repository: name, sha, signal, maxBytes = 8192 }) {
+  const { owner, repo } = repository(name) || {};
+  if (!owner || !/^[a-f0-9]{40}$/.test(sha || "")) throw new Error("Invalid GitHub blob lookup.");
+  const response = await require("./github-transport").request(`https://api.github.com/repos/${owner}/${repo}/git/blobs/${sha}`,
+    { signal, maxBytes, headers: { "User-Agent": "maclauncher", Accept: "application/vnd.github+json" } });
+  if (response.status !== 200) throw Object.assign(new Error(`The source file could not be read (${response.status}).`), { status: response.status });
+  const object = JSON.parse(require("./download-utils").decodeResponseBody(response.body, response.headers, { maxBytes }).toString("utf8"));
+  if (object.encoding !== "base64") throw new Error("The source file has an unknown encoding.");
+  const bytes = Buffer.from(object.content, "base64");
+  if (require("node:crypto").createHash("sha1").update("blob " + bytes.length + "\0").update(bytes).digest("hex") !== sha)
+    throw new Error("The source file differs from its committed Git object.");
+  return bytes;
+}
 // Bytes `start` to `start + length - 1` of a listed file, for a large archive
 // read in parts. Returns the bytes and the file's total size.
 async function range(listed, start, length, { signal } = {}) {
@@ -312,6 +327,6 @@ async function range(listed, start, length, { signal } = {}) {
 
 module.exports = {
   github, githubCommits, githubActions, index, pypi, nuget, vendor, service,
-  download, asset, listedFile, readDigest, githubDigest, githubLicense, githubTree, range,
+  download, asset, listedFile, readDigest, githubDigest, githubLicense, githubTree, githubBlob, range,
   KINDS
 };

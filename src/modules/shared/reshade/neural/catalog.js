@@ -21,14 +21,8 @@ async function checkpointFile(base, revision, tree, repository, dependencies) {
   // Git LFS publishes its SHA-256 and byte length in a small committed pointer.
   // Read only that pointer from the Git object API, never weights during Refresh.
   if (item.size <= 1024 && base.bytes > 1024) {
-    const response = await (dependencies.request || require('../../runtime/github-transport').request)(
-      'https://api.github.com/repos/' + repository + '/git/blobs/' + item.sha, {maxBytes: 8192, signal: dependencies.signal});
-    if (response.status !== 200) throw Error('The checkpoint pointer is unavailable.');
-    const object = JSON.parse(require('../../runtime/download-utils').decodeResponseBody(response.body, response.headers, {maxBytes:8192}).toString('utf8'));
-    if (object.encoding !== 'base64') throw Error('The checkpoint pointer has an unknown encoding.');
-    const pointerBytes = Buffer.from(object.content, 'base64');
-    if (pointerBytes.length !== item.size || require('node:crypto').createHash('sha1').update('blob ' + pointerBytes.length + '\0').update(pointerBytes).digest('hex') !== item.sha)
-      throw Error('The checkpoint pointer differs from its committed Git object.');
+    const pointerBytes = await (dependencies.blob || Upstream.githubBlob)({repository, sha: item.sha, signal: dependencies.signal});
+    if (pointerBytes.length !== item.size) throw Error('The checkpoint pointer differs from its committed Git object.');
     const pointer = pointerBytes.toString('utf8');
     const hash = /^oid sha256:([a-f0-9]{64})$/m.exec(pointer)?.[1], size = Number(/^size (\d+)$/m.exec(pointer)?.[1]);
     if (!pointer.startsWith('version https://git-lfs.github.com/spec/v1\n') || !hash || !Number.isSafeInteger(size) || size < 1 || size > Models.MAX_WEIGHTS) throw Error('The checkpoint pointer is invalid.');

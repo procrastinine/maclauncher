@@ -78,8 +78,8 @@ function createManager(dependencies = {}) {
       const facts = inspectLibrary(file, pin.architecture, dependencies);
       return { minimumMacOS: facts.slices.map(slice => slice.minimumMacOS).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).at(-1) };
     },
-    dependencies: { ...dependencies, extractArchive: dependencies.extractArchive || extractBottle,
-      downloadToFile: dependencies.downloadToFile || (async (url, destination, options) => {
+    // A caller's own downloader replaces this one.
+    dependencies: { downloadToFile: async (url, destination, options) => {
         const pin = manager.core.listCatalog().find(row => row.asset?.url === url);
         if (!pin) throw new Error("Refresh the Vulkan loader versions before installing this version.");
         // Download authorization also permits a fresh anonymous bottle pull
@@ -87,7 +87,7 @@ function createManager(dependencies = {}) {
         const rows = await upstream.discover({ signal: options.signal });
         const fresh = rows.find(row => row.files.some(file => scope(file.url) === scope(url)));
         return Upstream.download(Upstream.listedFile(pin.asset), destination, { ...options, headers: fresh?.details?.headers || pin.headers });
-      }) }
+      }, ...dependencies, extractArchive: dependencies.extractArchive || extractBottle }
   });
   const result = { ...manager, ui: { groupId: "tools", tabLabel: "Tools", sectionLabel: "Vulkan loader", order: 200, memberOrder: 268, management: "managed" } };
   Custom.configure(result, { inspect(input) {

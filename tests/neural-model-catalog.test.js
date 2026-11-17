@@ -59,14 +59,18 @@ test('neural installs verify Git bytes, preserve defaults and reuse installed mo
   let removed;t.mock.method(Manager, 'uninstallRuntime', options => { removed = options.version; });
   await Manager.uninstallRuntime({...f, version: first.version});assert.equal(removed, first.version);
 });
-test('committed LFS pointer metadata supplies actual SHA-256 and size; pointer substitutions are refused', async () => {
+test('committed LFS pointer metadata supplies actual SHA-256 and size; pointer substitutions are refused', async t => {
   const file = {file: 'weights.safetensors', bytes: 4096, url: 'https://raw.githubusercontent.com/example/model/' + 'a'.repeat(40) + '/weights.safetensors'};
   const pointer = Buffer.from('version https://git-lfs.github.com/spec/v1\noid sha256:' + 'e'.repeat(64) + '\nsize 4096\n');
   const item = {path: 'weights.safetensors', type: 'blob', size: pointer.length, sha: blob(pointer)};
-  const request = async () => ({status: 200, body: Buffer.from(JSON.stringify({encoding: 'base64', content: pointer.toString('base64')}))});
-  const row = await Releases.checkpointFile(file, 'b'.repeat(40), [item], 'example/model', {request});
+  // The shared GitHub layer reads the pointer blob; its transport answers from a fixture.
+  t.mock.method(require('../src/modules/shared/runtime/github-transport'), 'request', async url => {
+    assert.match(url, /^https:\/\/api\.github\.com\/repos\/example\/model\/git\/blobs\/[a-f0-9]{40}$/);
+    return {status: 200, body: Buffer.from(JSON.stringify({encoding: 'base64', content: pointer.toString('base64')}))};
+  });
+  const row = await Releases.checkpointFile(file, 'b'.repeat(40), [item], 'example/model', {});
   assert.equal(row.sha256, 'e'.repeat(64));assert.equal(row.bytes, 4096);assert.equal(row.gitBlobSha1, undefined);
-  await assert.rejects(Releases.checkpointFile(file, 'b'.repeat(40), [{...item, sha: 'f'.repeat(40)}], 'example/model', {request}), /committed Git object/);
+  await assert.rejects(Releases.checkpointFile(file, 'b'.repeat(40), [{...item, sha: 'f'.repeat(40)}], 'example/model', {}), /committed Git object/);
 });
 test('neural custom packages keep the actual model manifest and content checks', t => {
   const f = fixture(t), runtimePath = path.join(f.userDataDir, 'custom.dlssmodel');fs.mkdirSync(runtimePath);
