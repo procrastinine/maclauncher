@@ -590,3 +590,14 @@ test("a selected Vulkan driver's library names come before the Wine module's own
   assert.equal(fs.realpathSync(path.join(override, "ntdll.so")), fs.realpathSync(path.join(result.wineRoot, "lib/wine/x86_64-unix/ntdll.so")));
   assert.deepEqual(fs.readdirSync(override).sort(), ["libMoltenVK.dylib", "libvulkan.1.dylib", "ntdll.so"], "no other library enters the override folder");
 });
+
+test("ordinary Sikarugir plans bind only the publisher's requested Vulkan loader name", async t => {
+  const f = fixture(t), install = { templateRoot: f.contents, engineRoot: f.engineRoot, executablePath: path.join(f.engineRoot, "bin", "wine") };
+  const { plan } = await resolvePlan({ install, settings: { graphicsBackend: "wined3d" }, host: { macOSVersion: "26.4" }, executableArchitecture: "x86_64" });
+  assert.deepEqual(plan.vulkanLibraryNames, ["libvulkan.1.dylib"]);
+  const sources = require("../src/modules/crossover/sources"), source = sources.get("sikarugir");
+  const names = source.vulkanLibraryNames(install); names.push("libMoltenVK.dylib");
+  assert.deepEqual(source.vulkanLibraryNames(install), ["libvulkan.1.dylib"], "descriptor facts cannot be changed by a caller");
+  for (const id of ["winecx", "crossover"])
+    assert.equal(typeof sources.get(id).vulkanLibraryNames, "undefined", "unmeasured descriptors retain their existing binding contract");
+});

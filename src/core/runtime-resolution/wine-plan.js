@@ -127,7 +127,8 @@ async function resolve(install, runtime, context, { executableArchitecture, host
     }
   }
   const plan = { ...Plan.resolvePlan({ ...input, compatibility }), layout: input.layout, compatibility, record,
-    vulkanLibrarySelector: Boolean(sourceFor(runtime).vulkanLibrarySelector(install)) };
+    vulkanLibrarySelector: Boolean(sourceFor(runtime).vulkanLibrarySelector(install)),
+    ...(typeof sourceFor(runtime).vulkanLibraryNames === 'function' ? { vulkanLibraryNames: sourceFor(runtime).vulkanLibraryNames(install) } : {}) };
   const vulkan = plan.components['vulkan-driver'];
   const automaticVulkan = !vulkan.inherited && (vulkan.value === Plan.AUTOMATIC || vulkan.fallback && !vulkan.used);
   const videoRow = plan.components.video, selectedVideo = videoRow.selected || videoRow.used;
