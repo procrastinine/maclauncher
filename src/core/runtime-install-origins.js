@@ -9,8 +9,8 @@ const GameData = require("../modules/shared/game-data");
 // compatibility, but do not make an installation user-owned. A game that later uses a recorded version through
 // its own choice or a saved default, and explicit Install, Set default and
 // removal in Runtimes, clear the record. Upkeep removes a recorded version
-// through Runtimes once the current default is a newer verified version of
-// the same runtime and nothing names or resolves to the recorded one.
+// through Runtimes once a later automatic acquisition or a newer verified
+// version supersedes it and nothing names or resolves to the recorded one.
 // Versions without a record stay until they are removed from Runtimes.
 const FILE = ["runtimes", "automatic-installs.json"], LIMIT = 512;
 const text = value => typeof value === "string" && value !== "" ? value : null;
@@ -90,9 +90,18 @@ function sameBuild(a, b) {
   return (a.variant || null) === (b.variant || null) && (!left || !right || left === right);
 }
 
-/** Removes recorded versions that a newer verified version of the same runtime
- * supersedes and that no game record, game choice or saved setting resolves
- * to, through `remove` (Runtimes' own removal). Never throws. */
+function installationForRecord(sections, managerId, record) {
+  const section = sections.find(item => item.section.id === record.sectionId || !item.section.id && record.sectionId === "default");
+  const versions = section?.rows.filter(row => String(row.version) === String(record.version)) || [];
+  // Architecture facades can annotate an installation after its action returns.
+  // Only a unique installed copy can supply an omitted annotation.
+  const exact = versions.find(row => same(identity({ ...row, managerId }), record));
+  return { section, versions, current: exact || (!record.variant && versions.length === 1 ? versions[0] : null) };
+}
+
+/** Removes earlier automatic acquisitions that a later verified copy of the
+ * same runtime supersedes and that no game record, game choice or saved setting
+ * resolves to, through `remove` (Runtimes' own removal). Never throws. */
 async function pruneSuperseded({ userDataDir, managers = [], settings = {}, gameIds = [], isRunning = () => false, remove, logger } = {}) {
   const removed = [];
   let records;
@@ -110,20 +119,18 @@ async function pruneSuperseded({ userDataDir, managers = [], settings = {}, game
     let sections;
     try { sections = installedRows(manager, userDataDir, settings); }
     catch { kept.push(...own); continue; }
+    // Origins are appended when acquisition completes. Their order also covers
+    // content hashes and other version identifiers with no release ordering.
+    const acquired = new Map(own.map((record, index) =>
+      [installationForRecord(sections, manager.id, record).current, index]));
     for (const record of own) {
-      const section = sections.find(item => item.section.id === record.sectionId || !item.section.id && record.sectionId === "default");
-      let current = section?.rows.find(row => same(identity({ ...row, managerId: manager.id }), record));
-      const versions = section?.rows.filter(row => String(row.version) === String(record.version)) || [];
-      // Architecture facades annotate an installation after the install action
-      // returns. A unique annotation identifies the same copy; ambiguity keeps
-      // the origin record rather than forgetting a still-installed version.
-      if (!current && !record.variant && versions.length === 1) current = versions[0];
+      const { section, versions, current } = installationForRecord(sections, manager.id, record);
       if (!current && versions.length) { kept.push(record); continue; }
       // A record whose version is no longer installed has nothing left to describe.
       if (!current) continue;
       try {
         const superseded = section.rows.some(row => row !== current && verified(row) && sameBuild(row, current) &&
-          compareVersions(row.version, record.version) > 0);
+          (acquired.has(row) ? acquired.get(row) > acquired.get(current) : compareVersions(row.version, record.version) > 0));
         const removable = current.readOnly !== true && current.removable !== false && current.included !== true && current.external !== true;
         if (!superseded || !removable || names(settings, record.version) ||
           await referenced(manager, loadGames(), settings, userDataDir, record.version) || await isRunning()) { kept.push(record); continue; }

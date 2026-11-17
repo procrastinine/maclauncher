@@ -25,6 +25,33 @@ function fakeManager(root, id, rows, { resolve = () => null } = {}) {
 const coordinator = { acquireMutation: async () => "token", extendMutation: async () => {}, release: async () => {} };
 const recorded = root => Origins.read(root).map(row => `${row.managerId} ${row.version}`).sort();
 
+test("upkeep replaces earlier automatic acquisitions without ordering their version identifiers", async t => {
+  for (const [label, versions] of [
+    ["content-addressed", ["sha256-" + "f".repeat(64), "sha256-" + "1".repeat(64)]],
+    ["selected older release", ["2.0", "1.0"]]
+  ]) await t.test(label, async t => {
+    const root = profile(t), [earlier, later] = versions;
+    const manager = fakeManager(root, "models", [
+      { version: earlier, variant: "operation:interpolate" },
+      { version: later, variant: "operation:interpolate" },
+      { version: "depth-copy", variant: "operation:depth" },
+      { version: "explicit-copy", variant: "operation:restore" }
+    ]);
+    for (const version of [earlier, later, "depth-copy"]) {
+      assert.equal(Origins.recordPlayInstall({ userDataDir: root, manager,
+        plan: { version, automatic: true }, result: { version } }), true);
+    }
+    const options = { userDataDir: root, managers: [manager],
+      remove: ({ managerId, ...payload }) => runRuntimeManagerAction({ manager, action: "uninstall", payload,
+        userDataDir: root, runtimeCoordinator: coordinator }) };
+    assert.deepEqual((await Origins.pruneSuperseded({ ...options, isRunning: () => true })).removed, []);
+    assert.equal(Origins.read(root).length, 3, "active copies keep their provenance");
+    assert.deepEqual((await Origins.pruneSuperseded(options)).removed.map(row => row.version), [earlier]);
+    assert.deepEqual(manager.getState().installed.map(row => row.version), [later, "depth-copy", "explicit-copy"]);
+    assert.deepEqual(Origins.read(root).map(row => row.version), [later, "depth-copy"]);
+  });
+});
+
 test("Play records only versions it chose on its own and explicit actions clear the record", async t => {
   const root = profile(t), manager = fakeManager(root, "player", [{ version: "7" }]);
   const play = (version, { entry = {}, settings = {}, installedBefore = [], automatic = true } = {}) =>
