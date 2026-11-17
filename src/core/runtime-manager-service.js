@@ -132,7 +132,11 @@ async function runRuntimeManagerActionOnce({ manager, action, payload, userDataD
     if (isAbortError(error)) return false;
     throw error;
   } finally {
-    onStateChange();
+    // The action ends once the state it changed is reported: its result and the
+    // changed rows arrive together, and the backend never closes the action's
+    // idle worker before that state is sent.
+    try { await onStateChange(); }
+    catch (error) { logger?.warn?.(`[runtime:${manager.id}] state after ${action} failed`, error.message); }
   }
 }
 

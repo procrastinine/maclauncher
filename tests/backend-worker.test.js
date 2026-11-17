@@ -491,6 +491,33 @@ test("runtime actions publish actual Included references after host installation
   assert.equal(fs.existsSync(path.join(templateRoot, RELATIVE_PATHS.renderers, "dxvk/version")), true, "Reference refresh never removes source files");
 });
 
+// The service closes idle action lanes beyond its spare count as soon as their
+// requests return, so a state reported after the action returns can be lost.
+test("a runtime action returns after reporting the state it changed, even when that state is prepared asynchronously", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-action-state-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const { restoreRuntimeState } = await import("../src/core/runtime-state-snapshot.mjs");
+  const rows = [], events = [], runtimePath = path.join(root, "Libraries");
+  // Like a Wine whose included translators are described before its state is read.
+  const manager = { id: "fixture-wine", prepareLocalState: () => new Promise(resolve => setTimeout(resolve, 20)),
+    getState: () => ({ installed: [...rows] }),
+    registerCustomRuntime: async options => { const row = { version: options.runtimePath, ready: true, custom: true };rows.push(row);return row; },
+    uninstallRuntime: async options => { rows.splice(rows.findIndex(row => row.version === options.version), 1);return true; } };
+  const manifest = { id: "fixture" }, mod = { manifest, runtimeManagers: [manager] };
+  const registry = { listModuleIds: () => [manifest.id], listModules: () => [manifest], getModule: () => mod,
+    getModuleInfo: () => manifest, getModuleDir: () => root, listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null };
+  const operations = createBackendOperations({ userDataDir: path.join(root, "data"), registry, emit: (event, payload) => events.push({ event, payload }) });
+  t.after(() => operations.beginShutdown());
+  for (const [action, expected] of [["registerCustom", [runtimePath]], ["uninstall", []]]) {
+    events.length = 0;
+    await operations.runtimeAction(manager.id, action, { sectionId: "default", runtimePath, version: runtimePath });
+    const reported = events.filter(row => row.event === "runtimeState" && row.payload.id === manager.id);
+    assert.equal(reported.length, 1, `${action} reported its state before returning`);
+    assert.deepEqual(restoreRuntimeState(reported[0].payload.state).installed.map(row => row.version), expected);
+    assert.ok(events.indexOf(reported[0]) < events.findIndex(row => row.event === "runtimeInventoryChanged"), "other lanes hear of the change after its state");
+  }
+});
+
 test("a failed runtime inventory is isolated and never hides other managers", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-state-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
