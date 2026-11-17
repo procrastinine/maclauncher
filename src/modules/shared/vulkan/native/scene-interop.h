@@ -88,6 +88,16 @@ int rsVulkanPrepareSceneOperation3(VkDevice,const RSVulkanSceneOperationV1*,
 typedef int (*PFN_rsVulkanPrepareSceneOperation3)(VkDevice,const RSVulkanSceneOperationV1*,
     void*,uint32_t,const struct RSGenerationSubmission*,const RSVulkanSceneImageV1*,
     RSPrepareRecordedSceneOperation3,RSRecordedSceneConsumerV3*,RSTemporalResult*);
+// Optional command-aware preparation uses the actual unwrapped recording
+// context. Classic producers require it; device-only preparation is distinct.
+// Success returns an admission, never evaluated output or submission success.
+int rsVulkanPrepareSceneCommands3(VkCommandBuffer,const RSVulkanSceneOperationV1*,
+    void* featureOwner,uint32_t feature,const struct RSGenerationSubmission*,
+    const RSVulkanSceneImageV1* generationOutputs,RSPrepareRecordedSceneOperation3,
+    RSRecordedSceneConsumerV3*,RSTemporalResult*);
+typedef int (*PFN_rsVulkanPrepareSceneCommands3)(VkCommandBuffer,const RSVulkanSceneOperationV1*,
+    void*,uint32_t,const struct RSGenerationSubmission*,const RSVulkanSceneImageV1*,
+    RSPrepareRecordedSceneOperation3,RSRecordedSceneConsumerV3*,RSTemporalResult*);
 typedef uint32_t (*PFN_rsVulkanSceneOperationAPI)(void);
 typedef uint32_t (*PFN_rsVulkanSceneStagingAPI)(void);
 typedef VkResult (*PFN_rsVulkanRecordSceneOperation)(VkCommandBuffer,const RSVulkanSceneOperationV1*);

@@ -43,6 +43,7 @@ struct scene_context {
     struct scene_admission admission;
     RSPrepareRecordedSceneOperation3 prepare;
     PFN_rsVulkanPrepareSceneOperation3 prepareDevice;
+    PFN_rsVulkanPrepareSceneCommands3 prepareCommands;
     RSQueryRecordedSceneFeature3 query;
     PFN_rsVulkanQuerySceneFeature3 queryDevice;
     RSRecordedSceneImageDemand1 demand;
@@ -166,6 +167,7 @@ static VkResult create_context(const RSWineVulkanSceneContextV1 *request,struct 
             value->setDestination=(int(*)(void*,void*))dlsym(value->library,"rsSetRecordedSceneDestination3");
             value->prepare=(RSPrepareRecordedSceneOperation3)dlsym(value->library,"rsPrepareRecordedSceneOperation3");
             value->prepareDevice=(PFN_rsVulkanPrepareSceneOperation3)vk_funcs->p_vkGetDeviceProcAddr(value->device.device,"rsVulkanPrepareSceneOperation3");
+            value->prepareCommands=(PFN_rsVulkanPrepareSceneCommands3)vk_funcs->p_vkGetDeviceProcAddr(value->device.device,"rsVulkanPrepareSceneCommands3");
             value->query=(RSQueryRecordedSceneFeature3)dlsym(value->library,"rsQueryRecordedSceneFeature3");
             value->queryDevice=(PFN_rsVulkanQuerySceneFeature3)vk_funcs->p_vkGetDeviceProcAddr(value->device.device,"rsVulkanQuerySceneFeature3");
             if(value->callbacks.size!=sizeof(value->callbacks3)||value->callbacks.version!=3||
@@ -469,6 +471,7 @@ static VkResult prepare_scene(RSWineVulkanSceneRequestV2 *packet,BOOL wow64,BOOL
 {
     struct scene_context *owner;
     struct vulkan_device *device;
+    struct vulkan_command_buffer *commands=NULL;
     RSWineVulkanSceneRequestV2 request;
     RSRecordedSceneConsumerV3 admitted={0};
     RSVulkanSceneOperationV3 operation;
@@ -476,7 +479,7 @@ static VkResult prepare_scene(RSWineVulkanSceneRequestV2 *packet,BOOL wow64,BOOL
     RSSceneAovs aovs;RSSceneMatrices matrices;
     RSTemporalResult result={.size=sizeof(result),.version=1};
     VkResult status=VK_ERROR_INITIALIZATION_FAILED;
-    uint32_t feature;
+    uint32_t feature,kind;
     uint64_t identity;
     int ready,queried;
     if(!packet)return status;
@@ -501,13 +504,21 @@ static VkResult prepare_scene(RSWineVulkanSceneRequestV2 *packet,BOOL wow64,BOOL
     pthread_mutex_unlock(&provider_mutex);
     if(!owner)return VK_ERROR_FEATURE_NOT_PRESENT;
     if(owner->device.wineDevice!=request.base.device||owner->device.device!=device->host.device)goto done;
-    if(!owner->prepare||!owner->prepareDevice||owner->device.api()!=3){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
+    if(!owner->prepare||owner->device.api()!=3){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
     if(!cancel){status=negotiate_scene_kind(owner,&request.base,feature,&result,&queried);if(status!=VK_SUCCESS)goto done;}
     if(!cancel&&queried>=0&&(!queried||result.status!=RS_TEMPORAL_OK)){
         status=result.status==RS_TEMPORAL_BUSY?VK_NOT_READY:
             result.status==RS_TEMPORAL_UNAVAILABLE?VK_ERROR_FEATURE_NOT_PRESENT:
             result.status==RS_TEMPORAL_INVALID?VK_ERROR_INITIALIZATION_FAILED:VK_ERROR_UNKNOWN;
         goto done;
+    }
+    if(!cancel){
+        kind=atomic_load_explicit(&owner->commandKind,memory_order_acquire);
+        if(kind==0){
+            if(!owner->prepareCommands){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
+            commands=vulkan_command_buffer_from_handle((VkCommandBuffer)(UINT_PTR)request.base.commandBuffer);
+            if(!commands||commands->device!=device||!commands->host.command_buffer){status=VK_ERROR_INITIALIZATION_FAILED;goto done;}
+        }else if(kind!=1||!owner->prepareDevice){status=VK_ERROR_FEATURE_NOT_PRESENT;goto done;}
     }
     if(!cancel){status=prepare_scene_destination(owner,request.metadata.destinationWindow);if(status!=VK_SUCCESS)goto done;}
     if(pthread_mutex_trylock(&owner->admissionMutex)){status=VK_NOT_READY;goto done;}
@@ -521,8 +532,12 @@ static VkResult prepare_scene(RSWineVulkanSceneRequestV2 *packet,BOOL wow64,BOOL
     scene_operation(&request.base,&request.metadata,owner->consumer.owner,
         atomic_load_explicit(&owner->commandKind,memory_order_acquire),&owner->callbacks3,&operation,&color,&aovs,&matrices);
     admitted.size=sizeof(admitted);admitted.version=3;
-    ready=owner->prepareDevice(device->host.device,&operation.base,owner->consumer.owner,feature,
-        NULL,NULL,owner->prepare,&admitted,&result);
+    if(kind==0)
+        ready=owner->prepareCommands(commands->host.command_buffer,&operation.base,owner->consumer.owner,feature,
+            NULL,NULL,owner->prepare,&admitted,&result);
+    else
+        ready=owner->prepareDevice(device->host.device,&operation.base,owner->consumer.owner,feature,
+            NULL,NULL,owner->prepare,&admitted,&result);
     if(!ready||result.status!=RS_TEMPORAL_OK||result.encoded||!scene_admission_valid(&admitted)){
         if(admitted.callbacks.base.release)admitted.callbacks.base.release(admitted.callbacks.base.storage);
         status=result.status==RS_TEMPORAL_BUSY?VK_NOT_READY:
