@@ -132,3 +132,12 @@ test("completed downloads remove pending progress timers", async t => {
   const completed = changes; t.mock.timers.tick(1000);
   assert.equal(changes, completed);
 });
+
+test("a task without the shared Downloads list gets a signal it can pass to child processes", async () => {
+  const { runDownloadTask } = require("../src/modules/shared/runtime/download-manager");
+  const signal = await runDownloadTask(undefined, { label: "Standalone" }, task => task.signal);
+  assert.ok(signal instanceof AbortSignal);assert.equal(signal.aborted, false);
+  // The ANR install combines it with the caller's signal and hands it to execFile.
+  const { promisify } = require("node:util"), execFile = promisify(require("node:child_process").execFile);
+  assert.equal((await execFile("/bin/echo", ["ok"], { signal })).stdout.trim(), "ok");
+});

@@ -203,9 +203,11 @@ function runDownloadTask(downloads, meta, runner, { onProgress } = {}) {
       ...progress, ...(percent === undefined ? {} : { percent }),
       ...(progress?.detail ? { message: progress.detail } : {}) });
   };
+  // Without the shared Downloads list the task still gets a signal, one that
+  // nothing aborts, so a task can pass it on like the list's own.
   if (!downloads || typeof downloads.runTask !== "function") {
     return runner({
-      signal: null,
+      signal: new AbortController().signal,
       onProgress: onProgress ? report : null
     });
   }
