@@ -29,8 +29,8 @@ async function prepare({ payload, context, nativeAbi = NativeAbi.ARM64 }, depend
   if (!managed && profile.schemaVersion !== 1 || profile.nativeAbi !== NativeAbi.ARM64)
     throw new Error("The selected Android native profile is unsupported.");
   const { acquisition: image, content: expected, extractor } = profile.systemImage || {};
-  const prepareImage = dependencies.prepareImage || require("./system-image").prepare;
-  const options = { context, image, expected };
+  const prepareImage = dependencies.prepareImage || require('./system-image-manager').prepare;
+  const options = { context, image, expected, guestArchitecture: 'arm64' };
   // Earlier profiles can keep using an already acquired original. New image
   // acquisition always requires this selected payload's own verified helper.
   const cached = await prepareImage({ ...options, existingOnly: true }, dependencies.imageDependencies);

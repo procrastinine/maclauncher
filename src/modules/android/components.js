@@ -1,34 +1,10 @@
-const fs = require("node:fs"), path = require("node:path");
+const path = require("node:path");
 const Components = require("../shared/runtime/runtime-components");
 
-// Android downloads without a Runtimes row; see core/component-service.js.
-const images = ({ userDataDir }) => path.join(userDataDir, "android", "system-images");
+// Remaining application data stores; original images have a Runtimes manager.
 const google = ({ userDataDir }) => path.join(userDataDir, "android", "google", "packages");
-const readJson = file => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } };
-const attached = directory => { try { return fs.readdirSync(path.join(directory, "mounted")).length > 0; } catch { return false; } };
 
 module.exports = [
-  {
-    // One original image per archive identity, attached read-only while an
-    // AIM game runs. The AIM provider downloads it again, after consent.
-    id: "android-system-images",
-    label: "Android system image",
-    description: "The original Android system image that AIM attaches read-only for Android games. Each game's writable data stays separate.",
-    list(context) {
-      return Components.storeEntries(images(context), { match: /^[a-f0-9]{64}$/ }).flatMap(directory => {
-        const record = readJson(path.join(directory, "image.json"));
-        if (!record || record.archiveSha256 !== path.basename(directory)) return [];
-        const inUse = attached(directory);
-        return [{ id: path.basename(directory), version: `Image ${record.archiveSha256.slice(0, 12)}`, identity: `SHA-256 ${record.archiveSha256}`,
-          path: directory, source: { label: "AIM system image" }, users: ["Android games through AIM"],
-          ...(inUse ? { removable: false, removeReason: "The image is attached for a running Android game. Quit the game to delete it." } : {}) }];
-      });
-    },
-    remove(item, context) {
-      if (attached(item.path)) throw new Error("The image is attached for a running Android game. Quit the game to delete it.");
-      return Components.removeOwned(item.path, images(context));
-    }
-  },
   {
     // microG Services and Companion for the shared Google account service.
     // An installed release stays in use; a deleted one is replaced by the

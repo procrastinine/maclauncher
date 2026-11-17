@@ -48,8 +48,8 @@ async function prepare({ config, dataRoot, userDataDir, jdk, signal }) {
   const bridge = await canonical(path.join(runtime, "native/bionic/jsig-bridge.dylib"), "file");
   const jsig = await canonical(path.join(jdk, "lib/libjsig.dylib"), "file");
   const state = path.join(config.cacheRoot, "bionic");Writable.assertOwnDirectory(dataRoot, state);
-  const image = await require("./system-image").prepare({ context: { userDataDir, signal }, image: profile.systemImage.acquisition,
-    expected: profile.systemImage.content, existingOnly: true });
+  const image = await require("./system-image-manager").prepare({ context: { userDataDir, signal }, image: profile.systemImage.acquisition,
+    expected: profile.systemImage.content, existingOnly: true, guestArchitecture: 'arm64' });
   if (!image) throw new Error("The Android system image is not installed.");
   const systemRoot = await canonical(image.root, "directory");
   Writable.atomicWrite(path.join(state, "bootstrap.json"), JSON.stringify({ schemaVersion: 1, imageSha256: image.archiveSha256, systemRoot }) + "\n", { root: state });

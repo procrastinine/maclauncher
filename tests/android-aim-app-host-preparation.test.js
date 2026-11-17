@@ -73,7 +73,8 @@ process.stdout.write(Object.hasOwn(cfg,'stdout')?cfg.stdout:JSON.stringify(Objec
     originalImage: path.join(directory, "derived/root"), appHostImage: path.join(directory, "app-host", firstGeneration, "root"),
     calls: () => fs.readFileSync(callsFile, "utf8").trim().split("\n").map(JSON.parse),
     // The fixture helper models the mounted volume with an ordinary temp tree.
-    prepare: () => prepareSystem({ context, storage, policy, runtime }, { retireMountTargets() {} }), downloads: () => downloadRequests };
+    prepare: () => prepareSystem({ context, storage, policy, runtime }, { retireMountTargets() {},
+      imageManager: { ensure: async () => ({base,directory,archiveSha256:image.sha256}) } }), downloads: () => downloadRequests };
 }
 
 test("AIM prepares only the original image and keeps shared inputs and private userdata", async t => {

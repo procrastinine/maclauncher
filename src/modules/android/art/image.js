@@ -1,7 +1,7 @@
 const fs = require('node:fs'), path = require('node:path');
 const Bundled = require('../../shared/runtime/bundled-native');
 const Runtime = require('./runtime');
-const {prepare} = require('../system-image');
+const {prepare} = require('../system-image-manager');
 
 /** Owned ART binaries and boot/framework files are installed separately from
  * the original image, which is acquired once under its upstream SDK license. */
@@ -23,7 +23,7 @@ async function prepareSupplier({install,context},dependencies={}) {
     throw Error('The Android ART supplier is incomplete: '+name);
   const extractor = Runtime.member(root,'host/android-image-extract');
   const original = await (dependencies.prepareImage||prepare)({context,image:manifest.imageAcquisition,
-    expected:manifest.platformSupplier?.image,extractor},dependencies.imageDependencies);
+    expected:manifest.platformSupplier?.image,extractor,guestArchitecture:'arm64'},dependencies.imageDependencies);
   components.image = original.root;
   return {root,packageRoot:fs.realpathSync(install.root),manifest,components,bootClasspath:manifest.bootClasspath.slice(),image:original};
 }

@@ -23,7 +23,8 @@ const providerOwners = new Map(["macapk", "aim"].map(runtimeId => [runtimeId, {
 
 module.exports = {
   ...Custom, manifest, normalizeRuntimeId,
-  get runtimeManagers() { return [...Custom.runtimeManagers, ...Providers.runtimeManagers, Jadx, Apktool]; },
+  get runtimeManagers() { return [...Custom.runtimeManagers, ...Providers.runtimeManagers, Jadx, Apktool,
+    require('./system-image-manager'),require('./image-extractor-manager')]; },
   get distributionSupplementals() { return require("../shared/runtime/included-package-metadata").declarations(require("./distribution-included.json")); },
   getRuntimeProvider(runtimeId) { return providerOwners.get(runtimeId) || null; },
   async resolveGameIcon(entry, context) {
@@ -38,6 +39,13 @@ module.exports = {
   },
   onImport(entry, context) { return owner(entry, context).onImport(entry, withRuntime(entry, context)); },
   ensureRuntime(entry, context) { return owner(entry, context).ensureRuntime(entry, withRuntime(entry, context)); },
+  getRuntimeRequirements(entry, context){
+    if(runtimeFor(entry,context)!=='aim')return [];
+    const Aim=require('./providers/aim'),selected=Aim.manager.resolveSelection(entry,context.settings,context.userDataDir,{verification:'status'});
+    const runtime=selected.ready?{...selected.install,root:selected.install.payloadRoot}:null;
+    return require('./system-image-manager').requirements(context,{image:require('./providers/aim/image-source.json'),
+      extractor:runtime?Aim.resolveImageExtractor(runtime):undefined,guestArchitecture:'arm64'});
+  },
   prepareSaveLocation(entry, context) { return owner(entry, context).prepareSaveLocation(entry, withRuntime(entry, context)); },
   resolveSaveLocations(entry, context) { return owner(entry, context).resolveSaveLocations(entry, withRuntime(entry, context)); },
   launchRuntime(runtimeId, entry, context) {

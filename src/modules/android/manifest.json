@@ -653,6 +653,10 @@
       "url": "https://github.com/hahnlee/aim"
     },
     {
+      "label": "Android SDK system images (publisher terms; downloaded separately)",
+      "url": "https://developer.android.com/studio/terms"
+    },
+    {
       "label": "Android Runtime (Apache-2.0)",
       "url": "https://android.googlesource.com/platform/art"
     },

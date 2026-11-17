@@ -218,6 +218,23 @@ package and writable application data are kept apart from the image. JVM
 builds that require an original system image use the same shared cache and
 download the image during Play or account setup.
 
+**Runtimes → Tools → Android system images** lists the images published in the
+Android SDK repositories after Refresh. Each image can be installed or removed,
+and an installed version can be set as the default. A complete extracted image
+root, or its system linker file, can be registered in its original location.
+Required guest ELF files determine the image's CPU. Android absolute symlinks
+are resolved within the guest image. A runtime uses a default or custom image
+only when its complete content matches that runtime's required original image.
+The Android image reader is managed separately in Tools and is acquired with
+the image when the selected runtime does not already provide it.
+
+Play reuses a compatible installed image without Refresh or another download
+dialog. AIM lists the original image and its reader in the runtime download
+consent, including the Android SDK terms.
+Earlier automatic copies retire when unused; explicit installations, defaults,
+custom roots and images in use remain protected. Image storage is shared with
+the existing read-only cache rather than copied into another runtime folder.
+
 Before the application's mounts are attached, the runtime prepares Android's
 original linker configuration. Shared platform files stay read-only, and each
 application's native code is confined to the same private storage as its Java

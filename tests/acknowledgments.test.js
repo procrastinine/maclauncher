@@ -69,6 +69,8 @@ test('every registered runtime manager has a linked upstream project in Credits'
     'android': 'https://github.com/shinyquagsire23/Klepton',
     'macapk': 'https://github.com/kksimp/Mac.apk',
     'android-aim': 'https://github.com/hahnlee/aim',
+    'android-system-image': 'https://developer.android.com/studio/terms',
+    'android-art-image-extractor': 'https://github.com/hahnlee/aim',
     'jadx': 'https://github.com/skylot/jadx',
     'apktool': 'https://github.com/iBotPeaches/Apktool',
     'msg-tool': 'https://github.com/lifegpc/msg-tool',

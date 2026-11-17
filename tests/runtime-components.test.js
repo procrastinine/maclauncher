@@ -280,7 +280,7 @@ test("a component with a catalog offers Refresh, and a Runtimes row measures its
   await assert.rejects(service.sizes({ managerId: "missing" }), /not found/);
 });
 
-test("Android system images, microG packages and store catalogs are listed and removed in their own stores", async t => {
+test("Android system images use Runtimes while application data catalogs retain their own stores", async t => {
   const root = temporary(t), sha = "a".repeat(64);
   const image = path.join(root, "android", "system-images", sha);
   fs.mkdirSync(path.join(image, "mounted"), { recursive: true });
@@ -293,19 +293,14 @@ test("Android system images, microG packages and store catalogs are listed and r
   fs.mkdirSync(path.join(root, "steam", "accounts", "abc", "catalog"), { recursive: true });
   const service = Service.createComponentService({ userDataDir: root, registry, logger: { warn() {} } });
   const listed = Object.fromEntries((await service.list()).components.map(row => [row.id, row]));
-  const [systemImage] = listed["android-system-images"].items;
-  assert.equal(systemImage.identity, `SHA-256 ${sha}`); assert.equal(systemImage.removable, true); assert.ok(systemImage.bytes >= 4096);
+  assert.equal(listed["android-system-images"],undefined,"image removal belongs to the managed Runtimes action and its active-use protection");
+  assert.equal(fs.existsSync(image),true);
   assert.deepEqual(listed["android-google-packages"].items.map(item => [item.version, item.source.url]), [["microG 0.3.9", "https://github.com/microg/GmsCore/releases/tag/v0.3.9"]]);
   assert.equal(listed["android-google-packages"].refreshable, true);
   assert.deepEqual(listed["android-store-catalogs"].items.map(item => item.version), ["F-Droid index"]);
   assert.deepEqual(listed["steam-catalogs"].items.map(item => item.id), [path.join("accounts", "abc", "catalog")]);
   assert.deepEqual(listed["steam-catalogs"].items.map(item => item.version), ["for a signed-in account"]);
-  // An image attached for a running game stays.
-  fs.mkdirSync(path.join(image, "mounted", "system"));
-  const attached = (await service.list()).components.find(row => row.id === "android-system-images").items[0];
-  assert.equal(attached.removable, false); assert.match(attached.removeReason, /running Android game/);
-  fs.rmdirSync(path.join(image, "mounted", "system"));
-  for (const [componentId, itemId, location] of [["android-system-images", sha, image], ["android-google-packages", "0.3.9", release],
+  for (const [componentId, itemId, location] of [["android-google-packages", "0.3.9", release],
     ["android-store-catalogs", "fdroid", path.join(root, "external", "catalogs", "fdroid")]]) {
     assert.equal(await service.remove({ componentId, itemId }), true); assert.equal(fs.existsSync(location), false, componentId);
   }

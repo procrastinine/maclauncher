@@ -3,9 +3,6 @@ const { spawn } = require("node:child_process");
 const { once } = require("node:events");
 const Bundled = require("../../../shared/runtime/bundled-native");
 const manager = require("./manager");
-const { confirmToolInstall } = require("../../../shared/runtime/tool-install");
-const Upstream = require("../../../shared/runtime/upstream");
-const { runDownloadTask } = require("../../../shared/runtime/download-manager");
 const { environment } = require("../../../shared/runtime/macos-sandbox");
 const image = require("./image-source.json");
 const preparations = new Map();
@@ -43,6 +40,15 @@ function resolveController(runtime) {
 
 function resolveLaunchMode() { return "android-services"; }
 
+function resolveImageExtractor(runtime){
+  const files=(runtime.manifest?.files||[]).filter(file=>path.posix.basename(file.path)==='android-image-extract'&&(file.mode&0o111));
+  if(!files.length)return undefined;
+  if(files.length!==1)throw Error('The AIM image reader is ambiguous.');
+  const record=files[0],file=path.join(runtime.root,Bundled.relativeFile(record.path)),actual=Bundled.readRegular(file,Bundled.LIMITS.fileBytes);
+  if(actual.sha256!==record.sha256||actual.size!==record.size)throw Error('The AIM image reader changed.');
+  return file;
+}
+
 async function capture(command, args, { env, cwd, signal, input, timeout = 120000, maximum = 4 * 1024 * 1024 } = {}) {
   signal?.throwIfAborted();
   const child = spawn(command, args, { env: { ...environment(), PATH: systemPath, ...env }, cwd, stdio: ["pipe", "pipe", "pipe"] });
@@ -77,8 +83,12 @@ async function prepareSystem({ context, storage, policy, runtime = resolveRuntim
     const retireMountTargets = dependencies.retireMountTargets || require("./image-storage").retireMountTargets;
     retireMountTargets(directory, context);
     const archive = path.join(directory, "system.zip");
+    // The original is managed independently from AIM's owned derived image.
+    // Its exact archive identity remains the preparation helper's input.
+    await (dependencies.imageManager || require('../../system-image-manager')).ensure(context,{image:imageSource,extractor:resolveImageExtractor(runtime),guestArchitecture:'arm64'});
     if (!fs.existsSync(path.join(directory, "system.dmg"))) await require("../../system-image").adoptBase({
-      context, image: imageSource, destination: path.join(directory, "system.dmg") });
+      context, image: imageSource, destination: path.join(directory, "system.dmg") },dependencies.imageDependencies);
+    if (!fs.existsSync(path.join(directory, "system.dmg"))) throw Error('The managed Android original image is unavailable.');
     const prepare = async signal => {
       retireMountTargets(directory, { ...context, signal });
       await (dependencies.capture || capture)(path.join(runtime.bin, "android-runtime-prepare"), [archive, runtime.root, directory], {
@@ -89,24 +99,6 @@ async function prepareSystem({ context, storage, policy, runtime = resolveRuntim
       fs.mkdirSync(path.join(directory, "userdata"), { recursive: true, mode: 0o700 });
       return { runtime, image, directory, userdata: path.join(directory, "userdata") };
     };
-    if (!fs.existsSync(path.join(directory, "system.dmg"))) {
-      await confirmToolInstall(context, { managerId: "android-aim-image", version: imageSource.version,
-        label: "Android system image", requiresDownload: true, licenseUrl: imageSource.licenseUrl,
-        detail: "Download the Android 16 system image (1.95 GB) under the Android SDK license: " + imageSource.licenseUrl });
-      return runDownloadTask(context.downloads || context.downloadManager, { label: "Android system image", managerId: "android-aim-image", sectionId: "default", version: imageSource.version,
-        kind: "runtime", dedupeKey: "android-aim-image:" + directory }, async ({ signal: taskSignal, onProgress }) => {
-        const signal = context.signal && taskSignal ? AbortSignal.any([context.signal, taskSignal]) : context.signal || taskSignal;
-        try {
-          // The AIM preparation helper accepts exactly this original image, so
-          // the download is checked against its recorded size and SHA-256.
-          await Upstream.download(Upstream.listedFile({ filename: path.basename(new URL(imageSource.url).pathname), url: imageSource.url,
-            bytes: imageSource.size, sha256: imageSource.sha256 }), archive, { signal, onProgress });
-          signal?.throwIfAborted();
-          onProgress?.({ detail: "Preparing…" });
-          return await prepare(signal);
-        } finally { fs.rmSync(archive, { force: true }); }
-      }, { onProgress: context.onProgress });
-    }
     return prepare(context.signal);
   })();
   preparations.set(directory, { identity, operation });
@@ -192,4 +184,4 @@ async function prepareLaunch({ entry, context, storage, packageSet, policy }) {
 }
 
 module.exports = { id: "aim", manager, ensureRuntime, resolveRuntime, resolveController, resolveLaunchMode, prepareSystem, controlDescriptor, stopRuntime, prepareLaunch, capture,
-  resolveIcon: require("./identity").resolveIcon };
+  resolveImageExtractor,resolveIcon: require("./identity").resolveIcon };

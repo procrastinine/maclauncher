@@ -61,9 +61,10 @@ async function contentIdentity(root,signal) {
 }
 const sameContent=(actual,wanted)=>['sha256','records','bytes'].every(key=>actual[key]===wanted[key]);
 const exists=file=>{try{return fs.lstatSync(file);}catch(error){if(error.code==='ENOENT')return null;throw error;}};
-function validate(image,expected){
-  if(!SHA.test(image?.sha256||'')||!/^https:\/\//.test(image.url||'')||!Number.isSafeInteger(image.bytes||image.size)||!(image.bytes||image.size)||
-    !SHA.test(expected?.sha256||'')||!Number.isSafeInteger(expected.records)||expected.records<1||!Number.isSafeInteger(expected.bytes)||expected.bytes<1)
+function validate(image,expected,recordContent=false){
+  const archive=SHA.test(image?.sha256||'')&&/^https:\/\//.test(image.url||'')&&Number.isSafeInteger(image.bytes||image.size)&&(image.bytes||image.size)>0;
+  const content=SHA.test(expected?.sha256||'')&&Number.isSafeInteger(expected?.records)&&expected.records>0&&Number.isSafeInteger(expected?.bytes)&&expected.bytes>0;
+  if(typeof recordContent!=='boolean'||!archive||!content&&!(recordContent&&expected==null))
     throw Error('The Android system image identity is incomplete.');
 }
 
@@ -109,37 +110,45 @@ async function legacyBase({context,image,expected,run,compute,locations}){
     if(fs.readFileSync(id,'utf8').trim()!==image.sha256)continue;
     attached ||= await attachments(run,context);
     if(!attached.some(row=>row['image-path']===source&&row.writeable===false&&!row['shadow-path']&&row['system-entities']?.some(item=>item['mount-point']===path.join(candidate,'system'))))continue;
-    if(!sameContent(await compute(original,context.signal),expected))continue;
+    const content=await compute(original,context.signal);
+    if(expected&&!sameContent(content,expected))continue;
     if(identity(before)!==identity(await regular(source)))throw Error('The original Android image changed during verification.');
-    return {source,identity:identity(before)};
+    return {source,identity:identity(before),content};
   }
   return null;
 }
 
 /** One original immutable image per archive identity. The owned ART/AIM
  * adaptation and writable application data remain separate from this base. */
-async function prepare({context,image,expected,extractor,existingOnly=false},dependencies={}){
-  validate(image,expected);context.signal?.throwIfAborted();
+async function prepare({context,image,expected,extractor,existingOnly=false,recordContent=false,archiveFile,sourceRoot},dependencies={}){
+  validate(image,expected,recordContent);context.signal?.throwIfAborted();
   const userDataDir=path.resolve(context.userDataDir||'');if(!path.isAbsolute(context.userDataDir||''))throw Error('Android data storage is unavailable.');
   const parent=path.join(userDataDir,'android/system-images'),directory=path.join(parent,image.sha256),base=path.join(directory,'system.dmg'),mount=path.join(directory,'mounted');
   Writable.assertOwnDirectory(userDataDir,directory,{create:false});
-  if(existingOnly&&!exists(base))return null;
-  const run=dependencies.command||command,hash=dependencies.hashFile||hashFile,compute=dependencies.contentIdentity||contentIdentity;
+  if(existingOnly&&!exists(base)&&!recordContent)return null;
+  const run=dependencies.command||command,hash=dependencies.hashFile||hashFile,compute=dependencies.contentIdentity||contentIdentity,copy=dependencies.cloneOrCopy||cloneOrCopy;
+  if(recordContent&&!expected&&exists(base)){
+    const file=path.join(directory,'image.json');await regular(file,8192);expected=JSON.parse(fs.readFileSync(file,'utf8')).content;
+    validate(image,expected);
+  }
+  if(sourceRoot&&(!expected||!sameContent(await compute(sourceRoot,context.signal),expected)))throw Error('The custom Android image differs from its selected runtime.');
   // Existing, already acquired originals need verification but no download
   // prompt. A declined new acquisition still creates no cache directories.
-  const candidate=exists(base)?null:await legacyBase({context,image,expected,run,compute,locations:dependencies.legacyLocations||legacyLocations});
-  if(!exists(base)&&!candidate)await (dependencies.confirm||confirmToolInstall)(context,{managerId:'android-system-image',version:image.sha256,label:'Android system image',requiresDownload:true,
+  const candidate=exists(base)||!expected&&!recordContent?null:await legacyBase({context,image,expected,run,compute,locations:dependencies.legacyLocations||legacyLocations});
+  if(existingOnly&&!exists(base)&&!candidate)return null;
+  expected ||= candidate?.content;
+  if(!exists(base)&&!candidate&&!archiveFile&&!sourceRoot)await (dependencies.confirm||confirmToolInstall)(context,{managerId:'android-system-image',version:image.sha256,label:'Android system image',requiresDownload:true,
     licenseUrl:image.licenseUrl||'https://developer.android.com/studio/terms',
     detail:'Download the Android 16 system image under the Android SDK license: '+(image.licenseUrl||'https://developer.android.com/studio/terms')});
   context.signal?.throwIfAborted();Writable.assertOwnDirectory(userDataDir,parent);
   const release=await lock(path.join(parent,'.'+image.sha256+'.lock'),context.signal,dependencies.acquireLock||acquireCatalogLock);
-  let staging,published=false;const stagingMounts=new Set();
-  const acquire=async({signal:taskSignal,onProgress}={})=>{
+  let staging,published=false,guest;const stagingMounts=new Set();
+  const acquire=async({signal:taskSignal,onProgress=context.onProgress}={})=>{
   const signal=context.signal&&taskSignal?AbortSignal.any([context.signal,taskSignal]):context.signal||taskSignal;
   context={...context,signal};
   try{
     Writable.assertOwnDirectory(userDataDir,directory,{create:false});
-    if(existingOnly&&!exists(base))return null;
+    if(existingOnly&&!exists(base)&&!candidate)return null;
     if(!exists(base)){
       staging=await fs.promises.mkdtemp(path.join(parent,'.image-'));
       const reused=Boolean(candidate);
@@ -149,38 +158,48 @@ async function prepare({context,image,expected,extractor,existingOnly=false},dep
         const destination=path.join(staging,'system.dmg');
         // Separate inodes preserve each image owner's attach/detach lifecycle;
         // APFS clones still share the immutable physical extents.
-        await cloneOrCopy(source,destination,{exclusive:true});
+        await copy(source,destination,{exclusive:true});
         if(identity(await regular(source))!==candidate.identity)throw Error('The original Android image changed during preparation.');
       }
       if(!reused){
         const archive=path.join(staging,'system.zip');
         // The runtime payload names this exact original image; the download is
         // checked against its size and SHA-256.
-        await Upstream.download(Upstream.listedFile({filename:path.basename(new URL(image.url).pathname),url:image.url,bytes:image.bytes||image.size,sha256:image.sha256}),archive,{signal,onProgress});
-        await regular(archive);context.signal?.throwIfAborted();
+        if(!sourceRoot){
+          if(archiveFile){await regular(archiveFile);if(await hash(archiveFile,signal)!==image.sha256)throw Error('The Android image archive changed.');await copy(archiveFile,archive,{exclusive:true});}
+          else await Upstream.download(Upstream.listedFile({filename:path.basename(new URL(image.url).pathname),url:image.url,bytes:image.bytes||image.size,sha256:image.sha256}),archive,{signal,onProgress});
+          await regular(archive);context.signal?.throwIfAborted();
+        }
         onProgress?.({detail:'Preparing…'});
         const sparse=path.join(staging,'build.sparseimage'),building=path.join(staging,'build');
         await run('/usr/bin/hdiutil',['create','-size','16g','-type','SPARSE','-fs','Case-sensitive APFS','-volname','Android System','-o',sparse],{context,timeout:120000});
         Writable.assertOwnDirectory(staging,building);
         stagingMounts.add(building);await attach(sparse,building,run,context,true);
-        await run(extractor,[archive,path.join(building,'root')],{context,timeout:20*60*1000});
+        if(sourceRoot){
+          await fs.promises.cp(sourceRoot,path.join(building,'root'),{recursive:true,verbatimSymlinks:true,mode:fs.constants.COPYFILE_FICLONE});
+          Writable.atomicWrite(path.join(building,'root.identity'),image.sha256+'\n',{root:building});
+        }else await run(extractor,[archive,path.join(building,'root')],{context,timeout:20*60*1000});
         if(fs.readFileSync(path.join(building,'root.identity'),'utf8').trim()!==image.sha256)throw Error('The Android system image archive identity differs from its selected supplier.');
         await run('/usr/bin/hdiutil',['detach',building],{context:{...context,signal:undefined}});stagingMounts.delete(building);
         await run('/usr/bin/hdiutil',['convert',sparse,'-format','UDRO','-o',path.join(staging,'system.dmg')],{context,timeout:20*60*1000});
-        await fs.promises.rm(sparse);await fs.promises.rm(archive);
+        await fs.promises.rm(sparse);await fs.promises.rm(archive,{force:true});
         await fs.promises.rm(building,{recursive:true,force:true});
       }
       const stagedBase=path.join(staging,'system.dmg');await fs.promises.chmod(stagedBase,0o400);
       onProgress?.({detail:'Verifying…'});
       if(!reused){const checkMount=path.join(staging,'verify');
         stagingMounts.add(checkMount);await attach(stagedBase,checkMount,run,context);
-        if(fs.readFileSync(path.join(checkMount,'root.identity'),'utf8').trim()!==image.sha256||!sameContent(await compute(path.join(checkMount,'root'),context.signal),expected))
+        const actual=await compute(path.join(checkMount,'root'),context.signal);
+        if(recordContent&&!expected)expected=actual;
+        if(fs.readFileSync(path.join(checkMount,'root.identity'),'utf8').trim()!==image.sha256||!sameContent(actual,expected))
           throw Error('The Android system image content differs from its selected supplier.');
+        if(recordContent)guest=(dependencies.inspectRoot||require('./image-inspection').inspectRoot)(path.join(checkMount,'root'));
         await run('/usr/bin/hdiutil',['detach',checkMount],{context:{...context,signal:undefined}});stagingMounts.delete(checkMount);
         await fs.promises.rm(checkMount,{recursive:true,force:true});
       }
       const stat=await regular(stagedBase),dmgSha256=await hash(stagedBase,context.signal);
-      Writable.atomicWrite(path.join(staging,'image.json'),JSON.stringify({schemaVersion:1,archiveSha256:image.sha256,content:expected,dmgSha256,dmgBytes:Number(stat.size)})+'\n',{root:staging});
+      Writable.atomicWrite(path.join(staging,'image.json'),JSON.stringify({schemaVersion:1,archiveSha256:image.sha256,content:expected,dmgSha256,dmgBytes:Number(stat.size),
+        ...(guest?{guest:{architecture:guest.guestArchitecture,files:guest.files}}:{})})+'\n',{root:staging});
       const stable=identity(await regular(stagedBase));
       await fs.promises.rename(staging,directory);staging=null;
       if(identity(await regular(base))!==stable)throw Error('The Android system image changed during publication.');
@@ -205,7 +224,12 @@ async function prepare({context,image,expected,extractor,existingOnly=false},dep
       if(!persisted)Writable.atomicWrite(verificationFile,JSON.stringify(fingerprint)+'\n',{root:directory});
       verified.set(key,true);if(verified.size>8)verified.delete(verified.keys().next().value);
     }
-    context.signal?.throwIfAborted();return {root,base,directory,archiveSha256:image.sha256,content:expected};
+    if(recordContent){
+      guest=(dependencies.inspectRoot||require('./image-inspection').inspectRoot)(root);
+      const facts={architecture:guest.guestArchitecture,files:guest.files};
+      if(JSON.stringify(receipt.guest)!==JSON.stringify(facts))Writable.atomicWrite(receiptFile,JSON.stringify({...receipt,guest:facts})+'\n',{root:directory});
+    }
+    context.signal?.throwIfAborted();return {root,base,directory,archiveSha256:image.sha256,content:expected,...(guest?{guest}:{})};
   }finally{
     try{if(staging){for(const mount of stagingMounts)try{const cleanupContext={...context,signal:undefined};
       if((await attachments(run,cleanupContext)).some(image=>image['system-entities']?.some(row=>row['mount-point']===mount)))
@@ -216,7 +240,7 @@ async function prepare({context,image,expected,extractor,existingOnly=false},dep
     }}finally{await release();}
   }
   };
-  return !exists(base)&&!candidate?runDownloadTask(context.downloads||context.downloadManager,
+  return !exists(base)&&!candidate&&!archiveFile&&!sourceRoot?runDownloadTask(context.downloads||context.downloadManager,
     {label:'Android system image',managerId:'android-system-image',sectionId:'default',version:image.sha256,kind:'runtime',dedupeKey:'android-system-image:'+directory},
     acquire,{onProgress:context.onProgress}):acquire();
 }
@@ -236,9 +260,27 @@ async function adoptBase({context,image,destination},dependencies={}){
   if(!original)return false;
   Writable.assertOwnDirectory(context.userDataDir,path.dirname(destination));
   const temporary=path.join(path.dirname(destination),'.image-adopt-'+crypto.randomUUID());
-  try{await cloneOrCopy(original.base,temporary,{exclusive:true});await fs.promises.chmod(temporary,0o400);
+  try{await (dependencies.cloneOrCopy||cloneOrCopy)(original.base,temporary,{exclusive:true});await fs.promises.chmod(temporary,0o400);
     try{await fs.promises.link(temporary,destination);}catch(error){if(error.code!=='EEXIST')throw error;await regular(destination);}
   }finally{await fs.promises.rm(temporary,{force:true});}
   return true;
 }
-module.exports={prepare,adoptBase,contentIdentity,hashFile,command};
+async function remove({context,directory},dependencies={}){
+  const parent=path.join(context.userDataDir,'android/system-images');
+  if(path.dirname(directory)!==parent||!SHA.test(path.basename(directory)))throw Error('The Android image location is invalid.');
+  Writable.assertOwnDirectory(parent,directory,{create:false});
+  const run=dependencies.command||command;
+  const images=await attachments(run,context);
+  for(const image of images){
+    if(image['image-path']!==path.join(directory,'system.dmg'))continue;
+    if(image.writeable!==false||image['shadow-path'])throw Error('The Android image has a different access mode.');
+    for(const entity of image['system-entities']||[]){
+      const mount=entity['mount-point'];if(!mount)continue;
+      if(mount!==path.join(directory,'mounted'))throw Error('The Android image is attached outside its managed location.');
+      await run('/usr/bin/hdiutil',['detach',mount],{context});
+    }
+  }
+  if((await attachments(run,context)).some(image=>image['image-path']===path.join(directory,'system.dmg')))throw Error('The Android system image is still attached.');
+  await fs.promises.rm(directory,{recursive:true,force:true});
+}
+module.exports={prepare,adoptBase,contentIdentity,hashFile,command,remove};

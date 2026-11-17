@@ -11,11 +11,13 @@ async function fixture(t){
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const userDataDir=path.join(root,'profile'),volume=path.join(root,'original');fs.mkdirSync(userDataDir);fs.mkdirSync(path.join(volume,'root/system'),{recursive:true,mode:0o755});
   fs.writeFileSync(path.join(volume,'root/system/build.prop'),'ro.build.id=original\n');fs.symlinkSync('/system/build.prop',path.join(volume,'root/original-link'));
+  const elf=Buffer.alloc(64);elf.writeUInt32BE(0x7f454c46);elf[4]=2;elf[5]=1;elf[6]=1;elf.writeUInt16LE(3,16);elf.writeUInt16LE(183,18);elf.writeUInt32LE(1,20);elf.writeUInt16LE(64,52);
+  fs.mkdirSync(path.join(volume,'root/system/bin'));for(const name of ['linker64','app_process64'])fs.writeFileSync(path.join(volume,'root/system/bin',name),elf,{mode:0o755});
   const archive=Buffer.from('original archive'),image={url:'https://example.invalid/android.zip',sha256:sha(archive),bytes:archive.length};
   fs.writeFileSync(path.join(volume,'root.identity'),image.sha256+'\n');
   const expected=await Image.contentIdentity(path.join(volume,'root'));
   const context={userDataDir},events=[],mounts=new Map();let downloads=0,held=false;
-  const deps={legacyLocations:()=>[],acquireLock:async()=>{if(held)return null;held=true;return async()=>{held=false;};},
+  const deps={legacyLocations:()=>[],cloneOrCopy:(source,destination)=>fs.promises.copyFile(source,destination,fs.constants.COPYFILE_EXCL),acquireLock:async()=>{if(held)return null;held=true;return async()=>{held=false;};},
     confirm:async()=>events.push('consent'),
     command:async(file,args,options={})=>{
       const op=path.basename(file);events.push(op+':'+args[0]);

@@ -1620,6 +1620,14 @@ included in distributed runtime packages; selecting AIM requests the image
 download. The versions of a native host and its Android image must be
 compatible.
 
+The original-image manager uses the shared upstream catalog, custom-runtime,
+version-selection, installation-origin and runtime-use contracts. Android SDK
+metadata supplies available image versions and archive checksums. Installation
+measures guest ELF files and records the complete original tree identity;
+runtime preparation still compares its exact required archive and content.
+Immutable originals remain in the shared image cache, while AIM's derived
+overlay and writable application data retain their independent lifetimes.
+
 ### Files and processes
 
 Each provider's data is stored under

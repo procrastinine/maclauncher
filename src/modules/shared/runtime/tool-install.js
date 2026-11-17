@@ -11,7 +11,7 @@ async function downloadApproved(context, plan) {
 const approveDownloads = async () => true;
 
 async function confirmToolInstall(context, { manager, managerId = manager?.id, version,
-  installOptions = {}, label = manager?.label || managerId, requiresDownload, detail, message } = {}) {
+  installOptions = {}, label = manager?.label || managerId, requiresDownload, detail, message, licenseRequired, licenseUrl } = {}) {
   throwIfAborted(context.signal);
   if (requiresDownload === undefined) {
     const state = manager?.getState?.({ userDataDir: context.userDataDir,
@@ -21,6 +21,7 @@ async function confirmToolInstall(context, { manager, managerId = manager?.id, v
   }
   if (requiresDownload && !await downloadApproved(context, { managerId, version, installOptions, label,
     requiresDownload: true, kind: "tool", confirmLabel: "Download and Continue", ...(message ? { message } : {}),
+    ...(licenseRequired === true ? {licenseRequired:true} : {}), ...(typeof licenseUrl === 'string' ? {licenseUrl} : {}),
     detail: detail || "Required for this game action." })) throw createAbortError("Tool installation canceled.");
   throwIfAborted(context.signal);
 }
