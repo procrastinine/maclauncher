@@ -26,7 +26,8 @@ function versionResource({ fileVersion = [1, 5, 7, 23], productVersion = [2, 0, 
   return versionBlock("VS_VERSION_INFO", fixed, [versionBlock("StringFileInfo", Buffer.alloc(0), [versionBlock("040904b0", Buffer.alloc(0), entries)])]);
 }
 
-function peFixture({ is64 = false, version = versionResource(), largeIcon = false } = {}) {
+// `alternate` adds a second, language-neutral version resource after the 1033 one.
+function peFixture({ is64 = false, version = versionResource(), largeIcon = false, alternate = null } = {}) {
   const peOffset = 0x80, optionalLength = is64 ? 240 : 224, raw = 0x400, blob = 0x100, rva = 0x2000;
   const resourceSize = largeIcon ? 0x18000 : 0x1000;
   const bytes = Buffer.alloc(raw + resourceSize);
@@ -43,9 +44,14 @@ function peFixture({ is64 = false, version = versionResource(), largeIcon = fals
   bytes.writeUInt32LE(16, raw + 16); bytes.writeUInt32LE(0x80000030, raw + 20);
   if (largeIcon) { bytes.writeUInt32LE(3, raw + 24); bytes.writeUInt32LE(0x80001000, raw + 28); bytes.fill(0x71, raw + 0x1000); }
   bytes.writeUInt16LE(1, raw + 0x30 + 14); bytes.writeUInt32LE(1, raw + 0x30 + 16); bytes.writeUInt32LE(0x80000050, raw + 0x30 + 20);
-  bytes.writeUInt16LE(1, raw + 0x50 + 14); bytes.writeUInt32LE(1033, raw + 0x50 + 16); bytes.writeUInt32LE(0x80, raw + 0x50 + 20);
+  bytes.writeUInt16LE(alternate ? 2 : 1, raw + 0x50 + 14); bytes.writeUInt32LE(1033, raw + 0x50 + 16); bytes.writeUInt32LE(0x80, raw + 0x50 + 20);
+  if (alternate) { bytes.writeUInt32LE(0, raw + 0x50 + 24); bytes.writeUInt32LE(0x90, raw + 0x50 + 28); }
   bytes.writeUInt32LE(rva + blob, raw + 0x80); bytes.writeUInt32LE(version.length, raw + 0x84);
   version.copy(bytes, raw + blob);
+  if (alternate) {
+    const offset = blob + ((version.length + 15) & ~15);
+    bytes.writeUInt32LE(rva + offset, raw + 0x90); bytes.writeUInt32LE(alternate.length, raw + 0x94); alternate.copy(bytes, raw + offset);
+  }
   return { bytes, raw, peOffset, optional, directories, section, blob: raw + blob };
 }
 

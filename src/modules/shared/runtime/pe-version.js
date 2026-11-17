@@ -52,7 +52,8 @@ function parseVersionResource(bytes) {
 
 // Read only PE headers, the RT_VERSION directory branch and its bounded value.
 // Other resources (including large icons) are not loaded or scanned for markers.
-function readPeVersion(file, { detection } = {}) {
+// With `all`, every parsed version resource is returned, in directory order.
+function readPeVersion(file, { detection, all = false } = {}) {
   let fd, reads = 0, total = 0;
   try {
     const stat = detection?.stat ? detection.stat(file) : fs.statSync(file);
@@ -105,7 +106,7 @@ function readPeVersion(file, { detection } = {}) {
     }
     const version = directory(0).find(item => item.id === 16 && item.directory);
     if (!version) return null;
-    const names = directory(version.offset).filter(item => item.directory).slice(0, 8);
+    const names = directory(version.offset).filter(item => item.directory).slice(0, 8), found = [];
     for (const name of names) {
       const languages = directory(name.offset).filter(item => !item.directory).sort((a, b) => (a.id === 1033 ? -1 : b.id === 1033 ? 1 : a.id - b.id)).slice(0, 8);
       for (const language of languages) {
@@ -113,10 +114,13 @@ function readPeVersion(file, { detection } = {}) {
         const data = read(rootOffset + language.offset, 16), size = data.readUInt32LE(4);
         if (size < 8 || size > LIMITS.versionBytes) continue;
         const value = parseVersionResource(read(offsetFor(data.readUInt32LE(0), size), size));
-        if (value) return { ...value, source: `${path.basename(file)}!RT_VERSION/${name.id ?? "named"}/${language.id ?? "named"}` };
+        if (!value) continue;
+        const result = { ...value, source: `${path.basename(file)}!RT_VERSION/${name.id ?? "named"}/${language.id ?? "named"}` };
+        if (!all) return result;
+        found.push(result);
       }
     }
-    return null;
+    return all ? found : null;
   } catch (error) {
     if (error.code === "DETECTION_LIMIT") throw error;
     return null;

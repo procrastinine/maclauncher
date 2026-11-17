@@ -6,7 +6,7 @@ const Custom = require('../src/modules/shared/runtime/custom-runtime');
 const Components = require('../src/modules/crossover/runtime/steam-client-components');
 const ClientFiles = require('../src/modules/crossover/runtime/steam-client-files');
 const Bridge = require('../src/modules/crossover/runtime/steam-bridge');
-const { peFixture } = require('./helpers/pe-fixture');
+const { peFixture, versionResource } = require('./helpers/pe-fixture');
 const { runRuntimeManagerAction } = require('../src/core/runtime-manager-service');
 
 const sha = (bytes, algorithm = 'sha256') => crypto.createHash(algorithm).update(bytes).digest('hex');
@@ -145,6 +145,33 @@ test('an installed client record must retain both required CPU members', async t
   assert.equal(Components.current(userDataDir, copy.listed.sha1), null);
   assert.equal(Components.status(userDataDir, copy.listed.sha1), null);
   assert.equal(ClientFiles.resolveSelection(null, {}, userDataDir).ready, false);
+});
+
+// Valve's 64-bit client names its build in a language-neutral version resource beside a fixed 3.0.0.1 one.
+function valveClient64() {
+  const fixture = peFixture({ is64: true, version: versionResource({ fileVersion: [3, 0, 0, 1], strings: { ProductName: 'Steam' } }),
+    alternate: versionResource({ fileVersion: [10, 96, 30, 42], strings: { ProductName: 'Steam' } }) });
+  fixture.bytes.writeUInt16LE(0x2102, fixture.peOffset + 22);
+  return fixture.bytes;
+}
+test('client files without a Valve manifest version, from an earlier record or a registered folder, are named by the client build', async t => {
+  const root = scratch(t), userDataDir = path.join(root, 'data'), copy = archive(root, 'bins_misc_ubuntu12', true, 'legacy', valveClient64());
+  cdn(t, [copy]);
+  await Components.discover({ userDataDir, resolved: [copy.listed] });
+  await ClientFiles.installRuntime({ userDataDir, version: copy.listed.sha1 });
+  const label = () => ClientFiles.getState({ userDataDir }).catalog.versionLabels[copy.listed.sha1];
+  assert.equal(label(), 'Steam client 1792618285', 'a record with a manifest version keeps it');
+  // Earlier launchers kept one active.json without the manifest version.
+  const directory = path.join(userDataDir, 'runtimes/steam-client-components'), recordPath = path.join(directory, copy.listed.sha1 + '.json');
+  const { manifestVersion, installedAt, ...legacy } = JSON.parse(fs.readFileSync(recordPath));
+  fs.rmSync(recordPath); fs.writeFileSync(path.join(directory, 'active.json'), JSON.stringify(legacy));
+  fs.writeFileSync(path.join(directory, 'catalog.json'), JSON.stringify({ schemaVersion: 1, rows: [] }));
+  assert.equal(label(), 'Steam client 10.96.30.42');
+  Custom.instrumentManagers([ClientFiles]);
+  const folder = path.join(root, copy.listed.sha1);
+  fs.mkdirSync(folder); fs.writeFileSync(path.join(folder, 'steamclient64.dll'), valveClient64()); fs.writeFileSync(path.join(folder, 'steamclient.dll'), client(false));
+  const registered = await act(ClientFiles, userDataDir, 'registerCustom', { runtimePath: folder });
+  assert.equal(registered.versionLabel, 'Steam client 10.96.30.42', 'a folder named by its content address reads as the client build');
 });
 
 test('a folder with both Windows Steam clients is registered in place; a wrong or missing client is refused', async t => {

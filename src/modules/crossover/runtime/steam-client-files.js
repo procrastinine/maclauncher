@@ -7,20 +7,41 @@ const fs = require('node:fs'), path = require('node:path');
 const Components = require('./steam-client-components');
 const Custom = require('../../shared/runtime/custom-runtime');
 const { readPeExports } = require('../../shared/runtime/pe-exports');
+const { readPeVersion } = require('../../shared/runtime/pe-version');
 const { selectRuntimeVersion, managerDefaultVersion, savedDefaultVersion } = require('../../shared/runtime/version-choices');
 const id = 'steam-client-components', label = 'Windows Steam client files';
 // The client of each Windows CPU the bridge package's clientEnvironment names.
 const CLIENTS = { x86_64: { name: 'steamclient64.dll', machine: 0x8664 }, i386: { name: 'steamclient.dll', machine: 0x14c } };
 const SHA1 = /^[a-f0-9]{40}$/;
-const versionLabel = row => row?.manifestVersion ? `Steam client ${row.manifestVersion}` : `Steam client ${String(row?.archiveSha1 || row?.version || '').slice(0, 12)}`;
+const versionLabel = row => row?.manifestVersion ? `Steam client ${row.manifestVersion}` : row?.build ? `Steam client ${row.build}`
+  : `Steam client ${String(row?.archiveSha1 || row?.version || '').slice(0, 12)}`;
+// Records written by earlier launchers, and folders a user registers, name no
+// Valve manifest version. Valve's client DLL carries its build as the highest
+// file version among its version resources, beside a fixed 3.0.0.1 one. It is
+// read once per file size and modification time.
+const builds = new Map();
+function clientBuild(file) {
+  let stat;
+  try { stat = fs.statSync(file); } catch { return null; }
+  const key = `${file}\0${stat.size}\0${stat.mtimeMs}`;
+  if (!builds.has(key)) {
+    if (builds.size >= 32) builds.clear();
+    const parts = value => value.split('.').map(Number);
+    const newer = (a, b) => { const x = parts(a), y = parts(b); for (let i = 0; i < 4; i++) if (x[i] !== y[i]) return x[i] > y[i] ? a : b; return a; };
+    const versions = (readPeVersion(file, { all: true }) || []).map(row => row.fileVersion).filter(value => /^\d{1,5}(?:\.\d{1,5}){3}$/.test(value || ''));
+    builds.set(key, versions.length ? versions.reduce(newer) : null);
+  }
+  return builds.get(key);
+}
 function normalizeSettings(value) { return { defaultVersion: SHA1.test(value?.defaultVersion || '') || Custom.isPath(value?.defaultVersion) ? value.defaultVersion : null }; }
 const configured = settings => normalizeSettings(settings?.runtimes ? settings.runtimes[id] : settings);
 // Installed versions, newest installation first. Status reads sizes only.
 function installed(userDataDir) {
   if (!userDataDir) return [];
   return Components.records(userDataDir).map(record => {
-    const files = Components.status(userDataDir, record.archiveSha1);
-    return { version: record.archiveSha1, versionLabel: versionLabel(record), installDir: path.join(userDataDir, 'runtimes/steam-client-components', record.archiveSha1),
+    const files = Components.status(userDataDir, record.archiveSha1), installDir = path.join(userDataDir, 'runtimes/steam-client-components', record.archiveSha1);
+    const build = files && !record.manifestVersion ? clientBuild(path.join(installDir, record.clients?.x86_64 || CLIENTS.x86_64.name)) : null;
+    return { version: record.archiveSha1, versionLabel: versionLabel({ ...record, build }), installDir,
       ready: Boolean(files), status: files ? 'ready' : 'damaged', ...(files ? { bytes: files.bytes } : { error: 'The Valve client files changed. Install this version again.' }),
       installedAt: record.installedAt || null, removalLabel: 'Remove' };
   }).sort((a, b) => String(b.installedAt || '').localeCompare(String(a.installedAt || '')));
@@ -121,7 +142,9 @@ function inspectCustom(runtimePath) {
       throw new Error(`${found} is not the ${abi === 'i386' ? '32-bit' : '64-bit'} Windows Steam client.`);
     clients[abi] = found; files.push({ path: found, size: stat.size });
   }
-  return { root, installDir: root, clients, files, executablePath: path.join(root, clients.x86_64), architectures: ['x86_64', 'i386'], ready: true };
+  const build = clientBuild(path.join(root, clients.x86_64));
+  return { root, installDir: root, clients, files, executablePath: path.join(root, clients.x86_64), architectures: ['x86_64', 'i386'], ready: true,
+    ...(build ? { versionLabel: versionLabel({ build }) } : {}) };
 }
 module.exports = { id, label, distributionRequired: false, delivery: { included: 'none', catalog: 'remote', sourceBuild: false },
   ui: { groupId: 'steam-bridge', tabLabel: 'Steam client bridge', sectionLabel: label, management: 'managed', order: 204, memberOrder: 1, category: 'compatibility' },
