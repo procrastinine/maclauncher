@@ -80,3 +80,18 @@ test('FSR4 measures the declared decoder library as a dylib while keeping dxc ex
   write('lib/libdxcompiler.dylib',binary(2));
   assert.equal(Library.read(ctx.userDataDir,'3.2'),null,'a changed declared library checksum remains rejected');
 });
+test('FSR4 discovery preserves digest-less publisher assets and computes an observed local hash', async t => {
+  const ctx = context(t);source(t);const bytes = Buffer.from('archive data at its actual listed URL');
+  t.mock.method(Github,'fetchGithubTags',async()=>[{name:'crossover-v3.4',commit:{sha:'d'.repeat(40)}}]);
+  t.mock.method(Github,'fetchGithubReleases',async()=>[{tag_name:'crossover-v3.4',assets:[{id:17,name:'fsr4-mac-v3.4-crossover.zip',size:bytes.length,browser_download_url:'https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos/releases/download/crossover-v3.4/fsr4-mac-v3.4-crossover.zip'}]}]);
+  await Manager.refreshCatalog(ctx);const selected=Releases.sources(ctx.userDataDir)[0];
+  assert.equal(selected.version,'3.4');assert.equal(selected.assetId,17);assert.equal(selected.archiveSha256,undefined);assert.equal(selected.integrity,'recorded-local');
+  t.mock.method(require('../src/modules/shared/runtime/upstream'),'download',async(_listed,file)=>fs.writeFileSync(file,bytes));
+  const downloaded=await Library.downloadArchive({filename:'release.zip',url:selected.url,bytes:bytes.length},path.join(ctx.userDataDir,'release.zip'));
+  assert.equal(downloaded.sha256,require('node:crypto').createHash('sha256').update(bytes).digest('hex'));
+  await assert.rejects(Library.downloadArchive({filename:'release.zip',url:selected.url,bytes:bytes.length,sha256:'f'.repeat(64)},path.join(ctx.userDataDir,'wrong.zip')),/differs/);
+  const digest={algorithm:'sha512',value:require('node:crypto').createHash('sha512').update(bytes).digest('hex')};
+  assert.equal(Releases.validEntry({...selected,integrity:'publisher-digest',digest}),true);
+  assert.equal((await Library.downloadArchive({filename:'release.zip',url:selected.url,bytes:bytes.length,digest},path.join(ctx.userDataDir,'sha512.zip'))).sha256,downloaded.sha256);
+  await assert.rejects(Library.downloadArchive({filename:'release.zip',url:selected.url,bytes:bytes.length,digest:{algorithm:'sha512',value:'a'.repeat(128)}},path.join(ctx.userDataDir,'bad-sha512.zip')),/differs/);
+});

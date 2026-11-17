@@ -13,8 +13,8 @@ function sourcesFor(method,userDataDir){return require('./catalog').sources(user
 function downloadPlan(source){return {managerId:Models.ID,version:source.version,label:source.files?source.label:'Neural rendering model',kind:'tool',requiresDownload:true,confirmLabel:'Download and Continue',downloadBytes:source.bytes,sourceUrl:source.releaseUrl,detail:source.description+' '+source.weightTerms};}
 function automaticSelection(context,method){const preferences=context.settings?.runtimes?.[Models.ID]||context.settings||{};return !preferences.defaultVersion&&!preferences.defaultVersions?.[method]&&!preferences.customDefaults?.default;}
 function sourceIdentity(source){return crypto.createHash('sha256').update(JSON.stringify(source.files||[])).digest('hex');}
-async function checksum(file, signal) {
-  const hash = crypto.createHash("sha256");
+async function checksum(file, signal, algorithm='sha256') {
+  const hash = crypto.createHash(algorithm);
   for await (const bytes of fs.createReadStream(file, { flags: fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW, signal })) hash.update(bytes);
   return hash.digest("hex");
 }
@@ -47,29 +47,31 @@ async function downloadModel(context={},dependencies={}){
     return (async()=>{
       Downloads.throwIfAborted(signal);const installed=await existingSource(operation,source);if(installed)return installed;
       const root=path.join(context.userDataDir,'runtimes',Models.ID);Writable.assertOwnDirectory(context.userDataDir,root);
-      const temporary=fs.mkdtempSync(path.join(root,'.download-'));let completed=0;
+      const temporary=fs.mkdtempSync(path.join(root,'.download-'));let completed=0;const observedFiles=[];
       try{
         for(const row of source.files){
-          if(typeof row.file!=='string'||path.basename(row.file)!==row.file||!Number.isSafeInteger(row.bytes)||row.bytes<1||!(/^[a-f0-9]{64}$/.test(row.sha256||'')||!row.transport&&/^[a-f0-9]{40}$/.test(row.gitBlobSha1||'')))throw new Error('The model source declaration is invalid.');
+          const expected=Upstream.readDigest(row.digest),observedLocal=row.sha256===undefined&&row.digest===undefined&&['archive-model','prepared-model-archive'].includes(source.kind)&&source.archiveFile===row.file&&row.integrity==='recorded-local';
+          if(typeof row.file!=='string'||path.basename(row.file)!==row.file||!Number.isSafeInteger(row.bytes)||row.bytes<1||!(/^[a-f0-9]{64}$/.test(row.sha256||'')||!row.transport&&(/^[a-f0-9]{40}$/.test(row.gitBlobSha1||'')||expected||observedLocal)))throw new Error('The model source declaration is invalid.');
           const target=path.join(temporary,row.file),limit=new AbortController(),combined=signal?AbortSignal.any([signal,limit.signal]):limit.signal,downloadBytes=row.downloadBytes||row.bytes;let oversized=false;
           // Archive and range transports bound their own transfer. A plain file
           // at an exact revision downloads through the upstream layer. Every
           // file must match its model identity checksum below.
           const bounded=!row.transport;
-          const download=row.transport==='nvidia-vfx-entry'?((_url,target,options)=>require('./nvidia-vfx-source').downloadEntry(row,target,options)):row.transport==='zip-entry'?((_url,target,options)=>{const archiveCacheDirectory=path.join(root,'.source-archives');Writable.assertOwnDirectory(context.userDataDir,archiveCacheDirectory);return require('./checkpoint-source').downloadEntry(row,target,{...options,archiveCacheDirectory,userDataDir:context.userDataDir});}):row.transport==='bounded-ranges'?((_url,target,options)=>require('./checkpoint-source').downloadFile(row,target,options)):((url,target,options)=>Upstream.download(Upstream.listedFile({filename:row.file,url}),target,options));
+          const download=row.transport==='nvidia-vfx-entry'?((_url,target,options)=>require('./nvidia-vfx-source').downloadEntry(row,target,options)):row.transport==='zip-entry'?((_url,target,options)=>{const archiveCacheDirectory=path.join(root,'.source-archives');Writable.assertOwnDirectory(context.userDataDir,archiveCacheDirectory);return require('./checkpoint-source').downloadEntry(row,target,{...options,archiveCacheDirectory,userDataDir:context.userDataDir});}):row.transport==='bounded-ranges'?((_url,target,options)=>require('./checkpoint-source').downloadFile(row,target,options)):((url,target,options)=>Upstream.download(Upstream.listedFile({filename:row.file,url,bytes:row.bytes,sha256:row.sha256,digest:row.digest}),target,options));
           try{await download(row.url,target,{signal:combined,onProgress:progress=>{
             if(bounded&&(progress.downloaded>downloadBytes||progress.total>downloadBytes)){oversized=true;limit.abort();}
             task.onProgress?.({...progress,downloaded:completed+Math.min(progress.downloaded,downloadBytes),total:source.bytes,label:'Downloading model…'});
           }});}catch(error){if(oversized&&!signal?.aborted)throw new Error('The model asset exceeds its declared size.');throw error;}
           Downloads.throwIfAborted(combined);const stat=fs.lstatSync(target);
-          if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==row.bytes||!(row.sha256?await checksum(target,combined)===row.sha256:row.gitBlobSha1&&await gitBlobChecksum(target,combined)===row.gitBlobSha1))throw new Error(`The downloaded ${row.file} is not the selected model file: its size or checksum differs.`);
+          if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==row.bytes||!(row.sha256?await checksum(target,combined)===row.sha256:row.gitBlobSha1?await gitBlobChecksum(target,combined)===row.gitBlobSha1:expected?await checksum(target,combined,expected.algorithm)===expected.value:observedLocal))throw new Error(`The downloaded ${row.file} is not the selected model file: its size or checksum differs.`);
+          if(observedLocal)observedFiles.push({file:row.file,bytes:stat.size,sha256:await checksum(target,combined),integrity:'recorded-local'});
           completed+=downloadBytes;
         }
         const runtimePath=source.kind==='archive-model'?await require('./archive-source').extract(path.join(temporary,source.archiveFile),temporary,source,{signal}):source.kind==='ncnn-rife'?temporary:path.join(temporary,source.entry);
         const imported=await Models.importModel({...operation,runtimePath,modelIdentifier:source.label,onProgress:progress=>task.onProgress?.({...progress,downloaded:completed,total:source.bytes,detail:progress.label})});
         if(imported.operation!==source.method)throw new Error('The downloaded checkpoint does not match the selected model operation.');
         const receipt=path.join(imported.installDir,'download-source.json');
-        if(!fs.existsSync(receipt))fs.writeFileSync(receipt,JSON.stringify({schema:1,version:source.version,inputIdentity:sourceIdentity(source),repository:source.repository,commit:source.revision,sourceLicense:source.sourceLicense,weightTerms:source.weightTerms,files:source.files},null,2)+'\n',{flag:'wx',mode:0o444});
+        if(!fs.existsSync(receipt))fs.writeFileSync(receipt,JSON.stringify({schema:1,version:source.version,inputIdentity:sourceIdentity(source),repository:source.repository,commit:source.revision,sourceLicense:source.sourceLicense,weightTerms:source.weightTerms,files:source.files,...(observedFiles.length?{observedFiles}:{})},null,2)+'\n',{flag:'wx',mode:0o444});
         return imported;
       }finally{fs.rmSync(temporary,{recursive:true,force:true});}
     })();

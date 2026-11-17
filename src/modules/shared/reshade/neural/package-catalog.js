@@ -2,10 +2,12 @@
 const path = require('node:path'), Upstream = require('../../runtime/upstream');
 const sources = require('./model-source.json').sources;
 function profile(base, file, version, sourceUrl, revision) {
-  if (!file || file.digest?.algorithm !== 'sha256' || !Number.isSafeInteger(file.bytes) || file.bytes < 1) return null;
-  return {...base, kind: 'archive-model', version: base.version + '-archive-' + file.digest.value,
+  if (!file || !Number.isSafeInteger(file.bytes) || file.bytes < 1) return null;
+  const identity = file.digest?.algorithm === 'sha256' ? '-archive-' + file.digest.value : '-asset-' + (file.id || encodeURIComponent(version));
+  return {...base, kind: 'archive-model', version: base.version + identity,
     label: base.label + ' · ' + version, releaseUrl: sourceUrl, revision,
-    archiveFile: file.name, files: [{file: file.name, url: file.url, bytes: file.bytes, sha256: file.digest.value},
+    archiveFile: file.name, files: [{file: file.name, url: file.url, bytes: file.bytes,
+      ...(file.digest?.algorithm === 'sha256' ? {sha256:file.digest.value} : file.digest ? {digest:file.digest} : {integrity:'recorded-local'}),...(file.id?{assetId:file.id}:{})},
       ...(base.files || []).filter(row => !row.transport)], bytes: file.bytes + (base.files || []).filter(row => !row.transport).reduce((sum, row) => sum + row.bytes, 0)};
 }
 async function discover(context = {}) {

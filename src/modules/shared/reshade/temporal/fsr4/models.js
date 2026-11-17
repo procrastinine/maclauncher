@@ -91,35 +91,37 @@ async function prepareData(context,input){
  Writable.atomicWrite(path.join(root,'runtime.json'),JSON.stringify({version:source.version,archiveSha256:source.archiveSha256,sourceSpec:source,preparation:1,profiles,files,helpers}),{root:context.userDataDir});return read(context.userDataDir,source.version);
 }
 async function importRuntime(context={}){const source=context.sourceSpec||spec;if(!Releases.validEntry(source))throw Error('Choose an available FSR model source.');const input=fs.realpathSync(context.runtimePath),root=directory(context.userDataDir,source.version);if(input===root||input.startsWith(root+path.sep))throw Error('Choose model data outside its managed storage.');
- return withRuntimeMutation({...descriptor,sourcePath:input},async()=>{
-  if(fs.statSync(input).isDirectory()){const model=await findModel(input);if(model)return prepareData(context,model);throw Error('Choose the upstream model data directory or release zip.');}
-  if(sha(await fs.promises.readFile(input))!==source.archiveSha256)throw Error('The FSR model archive differs from the selected release.');
+ return withRuntimeMutation({...descriptor,version:source.version,sourcePath:input},async()=>{
+  if(fs.statSync(input).isDirectory()){const model=await findModel(input);if(model)return prepareData(source.archiveSha256?context:{...context,sourceSpec:spec},model);throw Error('Choose the upstream model data directory or release zip.');}
+  const archiveBytes=await fs.promises.readFile(input),observed=sha(archiveBytes),expected=Upstream.readDigest(source.digest);if(source.archiveSha256&&observed!==source.archiveSha256||expected&&crypto.createHash(expected.algorithm).update(archiveBytes).digest('hex')!==expected.value)throw Error('The FSR model archive differs from the selected release.');
+  const selectedSource={...source,archiveSha256:observed};
   const scratch=path.join(root,'.import-'+crypto.randomUUID());Writable.assertOwnDirectory(context.userDataDir,scratch);
-  try{await require('../../../runtime/safe-archive').extractArchive(input,scratch,context.signal);const model=await findModel(scratch);if(!model)throw Error('The upstream archive has no usable Lite model data.');return await prepareData({...context,verifiedArchive:true},model);}
+  try{await require('../../../runtime/safe-archive').extractArchive(input,scratch,context.signal);const model=await findModel(scratch);if(!model)throw Error('The upstream archive has no usable Lite model data.');return await prepareData({...context,sourceSpec:selectedSource,verifiedArchive:true},model);}
   finally{await fs.promises.rm(scratch,{recursive:true,force:true});}
  },{userDataDir:context.userDataDir});}
 async function downloadArchive(source,file,signal,onProgress){
  const limit=new AbortController(),bounded=signal?AbortSignal.any([signal,limit.signal]):limit.signal;let oversized=false;
- await Upstream.download(Upstream.listedFile({filename:source.filename,url:source.url}),file,{signal:bounded,onProgress:progress=>{if(progress.downloaded>256*1024*1024||progress.total>256*1024*1024){oversized=true;limit.abort();}onProgress?.(progress);}}).catch(error=>{if(oversized&&!signal?.aborted)throw Error('The FSR model download exceeds its declared size.');throw error;});
- const stat=await fs.promises.stat(file);if(sha(await fs.promises.readFile(file))!==source.sha256)throw Error('The FSR model download differs from its pinned release.');
+ await Upstream.download(Upstream.listedFile({filename:source.filename,url:source.url,bytes:source.bytes,sha256:source.sha256,digest:source.digest}),file,{signal:bounded,onProgress:progress=>{if(progress.downloaded>256*1024*1024||progress.total>256*1024*1024){oversized=true;limit.abort();}onProgress?.(progress);}}).catch(error=>{if(oversized&&!signal?.aborted)throw Error('The FSR model download exceeds its declared size.');throw error;});
+ const stat=await fs.promises.stat(file),data=await fs.promises.readFile(file),observed=sha(data),expected=Upstream.readDigest(source.digest);if(source.bytes&&stat.size!==source.bytes||source.sha256&&observed!==source.sha256||expected&&crypto.createHash(expected.algorithm).update(data).digest('hex')!==expected.value)throw Error('The FSR model download differs from its pinned release.');
+ return {bytes:stat.size,sha256:observed};
 }
 async function install(context={}){
  const source=context.sourceSpec||spec;if(!Releases.validEntry(source))throw Error('Choose an available FSR model source.');
  const current=read(context.userDataDir,source.version),needsLossy=context.fsr4Profile==='int8-lite-lossy';if(current&&(!needsLossy||current.profiles.includes('int8-lite-lossy')))return current;
  if(!await downloadApproved(context,{...descriptor,version:source.version,downloadBytes:source.archiveBytes+(needsLossy?spec.lossy.archiveBytes:0),message:'Download FSR 4.1.2 model data?',detail:'Downloads the selected release and prepares its compatible Lite model data in the launcher profile.',requiresDownload:true,kind:'tool',confirmLabel:'Download and Continue'}))return null;
- return runDownloadTask(context.downloads,{...descriptor,kind:'download',dedupeKey:'fsr4-models:'+context.userDataDir},async task=>{
+ return runDownloadTask(context.downloads,{...descriptor,version:source.version,kind:'download',dedupeKey:'fsr4-models:'+context.userDataDir+':'+source.version},async task=>{
   const root=directory(context.userDataDir,source.version);Writable.assertOwnDirectory(context.userDataDir,root);const file=path.join(root,'.release-'+crypto.randomUUID()+'.zip');
   const signal=context.signal&&task.signal?AbortSignal.any([context.signal,task.signal]):context.signal||task.signal;
   let lossyArchive;
   try{
     if(needsLossy){lossyArchive=path.join(root,'.lite-lossy-'+crypto.randomUUID()+'.7z');await downloadArchive({filename:'fsr4-lite-lossy.7z',url:spec.lossy.url,bytes:spec.lossy.archiveBytes,sha256:spec.lossy.sha256},lossyArchive,signal);}
-    await downloadArchive({filename:path.basename(new URL(source.url).pathname),url:source.url,bytes:source.archiveBytes,sha256:source.archiveSha256},file,signal,task.onProgress);
+    const fetched=await downloadArchive({filename:path.basename(new URL(source.url).pathname),url:source.url,bytes:source.archiveBytes,sha256:source.archiveSha256,digest:source.digest},file,signal,task.onProgress);
     // Import uses the same bounded verification as a local release archive.
     const temporary=path.join(path.dirname(root),'.release-'+crypto.randomUUID()+'.zip');await fs.promises.rename(file,temporary);
-    try{return await importRuntime({...context,sourceSpec:source,signal,lossyArchive,runtimePath:temporary});}finally{await fs.promises.rm(temporary,{force:true});}
+    try{return await importRuntime({...context,sourceSpec:{...source,archiveSha256:fetched.sha256},signal,lossyArchive,runtimePath:temporary});}finally{await fs.promises.rm(temporary,{force:true});}
   }finally{await fs.promises.rm(file,{force:true});if(lossyArchive)await fs.promises.rm(lossyArchive,{force:true});}
  },{onProgress:context.onProgress});
 }
 function environment(userDataDir,profile,version){const current=path.isAbsolute(version||'')?readDirectory(version):read(userDataDir,version);if(!current?.profiles.includes(profile))throw Error('Download or import the selected FSR 4.1.2 model data.');return {FSR4_MODEL_ROOT:current.directory,FSR4_MODEL_BUILD_DIR:current.build};}
 function inspectCustom(runtimePath){const current=readDirectory(runtimePath);if(!current)throw Error('Choose a prepared FSR 4 model directory with compatible initializer arenas.');return current;}
-module.exports={descriptor,directory,read,readDirectory,listInstalled,verify,importRuntime,install,environment,inspectCustom};
+module.exports={descriptor,directory,read,readDirectory,listInstalled,verify,importRuntime,install,environment,inspectCustom,downloadArchive};

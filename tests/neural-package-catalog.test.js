@@ -60,5 +60,17 @@ test('a changed publisher package is refused before any model conversion', async
   Cache.writeRuntimeCatalog({userDataDir: f.userDataDir, managerId: Models.ID, sourceId: 'upstream', source: 'https://github.com/', entries: [source]});
   t.mock.method(Transport, 'downloadToFile', async (_url, destination) => fs.writeFileSync(destination, Buffer.alloc(f.bytes.length, 1)));
   t.mock.method(Models, 'importModel', () => assert.fail('changed publisher archive reached model conversion'));
-  await assert.rejects(Manager.installRuntime({...f, version: source.version, confirmRuntimeInstall: () => true}), /checksum differs/);
+  await assert.rejects(Manager.installRuntime({...f, version: source.version, confirmRuntimeInstall: () => true}), /does not match the checksum its publisher lists|checksum differs/);
+});
+test('a publisher asset without a digest records its actual local archive hash', async t => {
+  const f = fixture(t), base = require('../src/modules/shared/reshade/neural/model-source.json').sources.find(row => row.method === 'mlx-vsr');
+  const source = Packages.profile(base, {id: 123, name: 'listed.whl', url: 'https://pypi.nvidia.com/nvidia-vfx/listed.whl', bytes: f.bytes.length}, 'published-version', 'https://pypi.nvidia.com/nvidia-vfx/');
+  assert.equal(source.files[0].sha256, undefined);assert.equal(source.files[0].integrity, 'recorded-local');assert.equal(source.files[0].assetId, 123);assert.ok(Releases.validEntry(source));
+  Cache.writeRuntimeCatalog({userDataDir: f.userDataDir, managerId: Models.ID, sourceId: 'upstream', source: 'https://github.com/', entries: [source]});
+  t.mock.method(Models, 'listInstalled', () => []);t.mock.method(Models, 'listManaged', () => []);
+  const installDir = path.join(f.userDataDir, 'recorded-model-fixture');fs.mkdirSync(installDir);
+  t.mock.method(Models, 'importModel', async () => ({version: 'sha256-'+'e'.repeat(64), operation: 'mlx-vsr', installDir, ready: true}));
+  await Manager.installRuntime({...f, version: source.version, confirmRuntimeInstall: () => true});
+  const receipt = JSON.parse(fs.readFileSync(path.join(installDir, 'download-source.json'), 'utf8'));
+  assert.equal(receipt.observedFiles[0].sha256, hash(f.bytes));assert.equal(receipt.observedFiles[0].integrity, 'recorded-local');
 });

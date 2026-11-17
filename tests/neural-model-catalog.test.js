@@ -108,3 +108,11 @@ test('Hugging Face model versions use actual ref commits and published LFS ident
   const base = Static.sources.find(row => row.repository.startsWith('https://huggingface.co/'));
   await assert.rejects(require('../src/modules/shared/reshade/neural/hub-source').create(base).discover({}), /differs/);
 });
+test('DLSSMac release assets without publisher digests remain manageable without relaxing raw checkpoint identities', async t => {
+  const f=fixture(t),tag='v0.3.0';
+  t.mock.method(Github,'fetchGithubTags',async()=>[{name:tag,commit:{sha:'e'.repeat(40)}}]);
+  t.mock.method(Github,'fetchGithubReleases',async()=>[{tag_name:tag,assets:[{id:99,name:'DLSSMac-0.3.0-macos.zip',size:100,browser_download_url:'https://github.com/Mappsnet7/DLSSMac/releases/download/v0.3.0/DLSSMac-0.3.0-macos.zip'}]}]);
+  await Manager.refreshCatalog(f);const source=Releases.sources(f.userDataDir).find(row=>row.version==='dlssmac-release-'+tag);
+  assert.equal(source.files[0].assetId,99);assert.equal(source.files[0].sha256,undefined);assert.equal(source.files[0].integrity,'recorded-local');
+  assert.equal(Releases.validEntry({...source,kind:'weights'}),false,'ordinary checkpoints still require their declared content identity');
+});

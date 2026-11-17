@@ -6,7 +6,9 @@ const safe = name => typeof name === 'string' && name.length <= 256 && !/[\0/\\]
 const validEntry = row => safe(row?.version) && row.version.length <= 240 && typeof row.label === 'string' &&
   typeof row.repository === 'string' && /^https:\/\/(?:github\.com|huggingface\.co|pypi\.nvidia\.com)\//.test(row.repository) && row.files?.length > 0 && row.files.length <= 32 &&
   row.files.every(file => safe(file.file) && /^https:\/\//.test(file.url) && Number.isSafeInteger(file.bytes) && file.bytes > 0 && file.bytes <= Models.MAX_WEIGHTS &&
-    (/^[a-f0-9]{64}$/.test(file.sha256 || '') || /^[a-f0-9]{40}$/.test(file.gitBlobSha1 || '')));
+    (/^[a-f0-9]{64}$/.test(file.sha256 || '') || /^[a-f0-9]{40}$/.test(file.gitBlobSha1 || '') ||
+      file.sha256===undefined&&Boolean(Upstream.readDigest(file.digest)) || file.sha256===undefined&&file.digest===undefined&&
+      ['archive-model','prepared-model-archive'].includes(row.kind)&&file.file===row.archiveFile&&file.integrity==='recorded-local'));
 function read(userDataDir) { return Cache.readRuntimeCatalog({userDataDir, managerId: Models.ID, sourceId: 'upstream', validateEntry: validEntry}); }
 function sources(userDataDir) { const rows = read(userDataDir)?.entries || [];return [...rows, ...Static.sources.filter(source => !rows.some(row => row.version === source.version))]; }
 async function checkpointFile(base, revision, tree, repository, dependencies) {
@@ -60,11 +62,11 @@ async function refresh(context = {}, dependencies = {}) {
     const base = Static.sources.find(row => !row.files), source = Upstream.github({repository: 'Mappsnet7/DLSSMac', prerelease: true, allArchitectures: true,
       recognize: release => ({version: release.tag_name, assets: (release.assets || []).filter(asset => /^DLSSMac-.+-macos\.zip$/i.test(asset.name))})});
     for (const release of await (dependencies.discoverReleases || source.discover)({signal})) for (const file of release.files) {
-      if (file.digest?.algorithm !== 'sha256') continue;
       const version = 'dlssmac-release-' + release.version;
       entries.push({...base, version, label: 'DLSSMac ' + release.version, releaseUrl: release.sourceUrl,
-        revision: release.revision, kind: 'weights', entry: file.name, bytes: file.bytes,
-        files: [{file: file.name, url: file.url, bytes: file.bytes, sha256: file.digest.value}]});
+        revision: release.revision, kind: 'prepared-model-archive', archiveFile:file.name, entry: file.name, bytes: file.bytes,
+        files: [{file: file.name, url: file.url, bytes: file.bytes,
+          ...(file.digest?.algorithm==='sha256'?{sha256:file.digest.value}:file.digest?{digest:file.digest}:{integrity:'recorded-local'}),...(file.id?{assetId:file.id}:{})}]});
     }
   } catch (error) { signal?.throwIfAborted();failures.push('DLSSMac: ' + error.message); }
   for (const base of Static.sources.filter(row => require('./hub-source').HUGGING_FACE.test(row.repository))) try {
