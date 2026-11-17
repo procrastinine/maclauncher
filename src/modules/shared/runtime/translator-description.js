@@ -1,6 +1,7 @@
 const fs = require('node:fs'), path = require('node:path');
 const { readMachOLoadCommands } = require('./macho-load-commands');
 const { readPeExports } = require('./pe-exports');
+const BinaryArch = require('../../../core/binary-arch');
 const { readPlistFile } = require('./app-bundle');
 const { fileApis, apisForFiles } = require('./translator-roles');
 const warn = require('../graphics-warning');
@@ -100,6 +101,7 @@ function cachedTranslator(root, options = {}) {
       const file = inspectionFile(key, options.userDataDir);
       const stored = file && require('../../../core/json-files').readJsonObject(file);
       if (stored?.key !== key || !stored.value || !unchangedInspection(stored)) return null;
+      if (stored.value.files?.some(file => file.format === 'pe' && file.rawMachine === undefined)) return null;
       entry = { value: stored.value, observed: stored.observed, live: false, persistedPath: file };
       inspections.set(key, entry);
     }
@@ -320,13 +322,27 @@ function inspectFileFacts(original) {
     if (error.code !== 'MACHO_MALFORMED') result.inspectionWarning = error.message;
   }
   const exports = readPeExports(original, { imports: true }), pe = exports || readPeExports(original, { headersOnly: true, imports: true });
-  if (pe) {
+  let binary;
+  const signature = Buffer.alloc(2), descriptor = fs.openSync(original, 'r');
+  try { fs.readSync(descriptor, signature, 0, 2, 0); } finally { fs.closeSync(descriptor); }
+  if (pe || signature.readUInt16LE(0) === 0x5a4d) {
+    try { binary = BinaryArch.inspectBinary(original); }
+    catch (error) {
+      // Unknown PE machines keep their previous unmeasured admission. A
+      // recognized image with invalid hybrid metadata cannot supply CPU facts.
+      if (pe || !/unsupported PE machine/.test(error.message)) throw error;
+      return { ...result, format: 'unknown', inspectionWarning: error.message, macosFloor: null };
+    }
+  }
+  if (binary?.format === 'pe') {
     if (!exports) result.inspectionWarning = 'PE export inspection is incomplete; basic image facts are available.';
-    if (!pe.importsComplete) result.inspectionWarning = [result.inspectionWarning,
-      `PE import inspection is incomplete: ${pe.importWarning || 'unknown import metadata'}`].filter(Boolean).join(' ');
+    if (!pe?.importsComplete) result.inspectionWarning = [result.inspectionWarning,
+      `PE import inspection is incomplete: ${pe?.importWarning || 'unknown import metadata'}`].filter(Boolean).join(' ');
     // Replacement DLL resources report Windows component versions, not translator releases.
-    return { ...result, realPath: original, format: 'pe', form: pe.form, machine: pe.machine, architecture: pe.architecture, macosFloor: null,
-      peImports: pe.peImports, importsComplete: pe.importsComplete, version: null };
+    return { ...result, realPath: original, format: 'pe', form: pe?.form || 'native', machine: binary.machineCode,
+      rawMachine: binary.machineCode, architecture: binary.machine, hybrid: binary.hybrid,
+      codeArchitectures: binary.hybrid?.codeArchitectures, macosFloor: null,
+      peImports: pe?.peImports || [], importsComplete: pe?.importsComplete === true, version: null };
   }
   return { ...result, format: 'unknown', macosFloor: null };
 }

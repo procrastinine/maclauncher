@@ -9,7 +9,7 @@ function binaryFiles(files, { machine, architecture, requiredPaths = [], integra
   const originals=new Map(), passthrough=[];
   const binaries=files.map(file=>fs.existsSync(file.path)?inspectFile(file):file).filter(file=>{
     if(!['pe','macho'].includes(file.format)){passthrough.push(file);return false;}originals.set(file.path,file);return true;
-  }).map(file=>({...file,...(file.format==='pe'?{machine:peArchitecture(file.machine)}:{architectures:file.cpuSlices})}));
+  }).map(file=>({...file,...(file.format==='pe'?{machine:file.architecture || (typeof file.machine==='number'?peArchitecture(file.machine):file.machine)}:{architectures:file.cpuSlices})}));
   const result=!architecture&&!machine?{binaries:binaries.filter((file,index,list)=>list.findIndex(other=>other.format===file.format&&path.basename(other.path)===path.basename(file.path))===index),excluded:[]}:require('../../../core/logical-libraries').selectLogicalLibraries({build:{binaries},hostArch:architecture,guestArch:peArchitecture(machine),integration});
   const selected=[...result.binaries.map(file=>originals.get(file.path)),...passthrough];
   const missing=result.excluded.map(item=>{const file=[...originals.values()].find(file=>require('../../../core/logical-libraries').logicalName(file)===item.logicalName);return {file,reason:file?(file.format==='pe'?`No PE machine ${peArchitecture(machine)} for `:`No ${architecture} CPU slice for `)+path.basename(file.path):item.reason};});

@@ -140,7 +140,8 @@ function compatibility(description, record, { macOSVersion, executableArchitectu
   for (const file of selected.files) {
     if (!fs.existsSync(file.path)) return incompatible(`Required file is missing: ${file.path}`);
     const actual = file;
-    if (actual.format === 'pe' && machine && !acceptsBinary(expectedUnix, peArchitecture(machine), 'native', { format: 'pe', machine: peArchitecture(actual.machine) }).accepted) return incompatible(`${path.basename(file.path)} has no PE machine for ${executableArchitecture}`);
+    if (actual.format === 'pe' && machine && !acceptsBinary(expectedUnix, peArchitecture(machine), 'native', { ...actual,
+      machine: actual.architecture || (typeof actual.machine === 'number' ? peArchitecture(actual.machine) : actual.machine) }).accepted) return incompatible(`${path.basename(file.path)} has no PE machine for ${executableArchitecture}`);
     if (actual.format !== 'macho') { if (actual.format === 'unknown') warnings.push(`Could not inspect ${file.path}`); continue; }
     if (expectedUnix && !acceptsBinary(expectedUnix, peArchitecture(machine), 'native', { format: 'macho', architectures: actual.cpuSlices }).accepted) return incompatible(`${path.basename(file.path)} has no ${expectedUnix} CPU slice`);
     const image = actual.slices.find(slice => slice.architecture === expectedUnix) || actual.slices[0];
