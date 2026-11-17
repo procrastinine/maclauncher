@@ -71,7 +71,7 @@ function getState({ userDataDir, settings } = {}) {
   const versions = [...new Set([...listed.map(row => row.version), ...rows.map(row => row.version)])];
   const saved = configured(settings).defaultVersion, chosen = choose(null, settings, userDataDir);
   const labels = Object.fromEntries([...listed, ...rows].map(row => [row.version, row.versionLabel || versionLabel(row)]));
-  const catalog = { status: listed.length ? 'success' : 'idle', delivery: 'download', versions, versionLabels: labels,
+  const catalog = { status: listed.length ? 'success' : 'idle', delivery: 'download', label: 'Versions', sourceLabel: 'Valve CDN', description: 'Current Windows Steam client files; installed copies remain available locally.', preferInstalled: true, versions, versionLabels: labels,
     installable: listed.length > 0, installableVersions: listed.map(row => row.version), includedVersions: [], buildableVersions: [],
     versionRequirements: Object.fromEntries(versions.map(version => {
       const row = rows.find(item => item.version === version), offer = listed.find(item => item.version === version);
@@ -147,7 +147,7 @@ function inspectCustom(runtimePath) {
     ...(build ? { versionLabel: versionLabel({ build }) } : {}) };
 }
 module.exports = { id, label, distributionRequired: false, delivery: { included: 'none', catalog: 'remote', sourceBuild: false },
-  ui: { groupId: 'steam-bridge', tabLabel: 'Steam client bridge', sectionLabel: label, management: 'managed', order: 204, memberOrder: 1, category: 'compatibility' },
+  ui: { cpuBuildLabels: false, groupId: 'steam-bridge', tabLabel: 'Steam client bridge', sectionLabel: label, management: 'managed', order: 204, memberOrder: 1, category: 'compatibility' },
   normalizeSettings, getState, resolveSelection, installRuntime, ensure, removeAutomatic,
   uninstallRuntime: ({ userDataDir, version } = {}) => Components.remove(userDataDir, version).then(() => true),
   refreshCatalog: async context => { await Components.discover({ userDataDir: context.userDataDir, signal: context.signal }); return getState(context).catalog; },

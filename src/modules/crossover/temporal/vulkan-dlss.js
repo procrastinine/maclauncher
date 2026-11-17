@@ -60,7 +60,7 @@ function createManagers(dependencies = {}) {
   return [nvapi, ngx].map((manager, index) => {
     const source=[NVAPI_SOURCE,NGX_SOURCE][index];
     return createSourceBackedManager({id:manager.id,source,adapter:require('../../../runtime-adapters/'+source.kind),backend:{...withDescription(manager, info[manager.id]),distributionRequired:false,
-      ui:{groupId:'directx-vulkan',sectionLabel:manager.label,memberOrder:5+index,management:'managed'}}});
+      ui:{cpuBuildLabels:false,groupId:'directx-vulkan',sectionLabel:manager.label,memberOrder:5+index,management:'managed'}}});
   });
 }
 const managers = createManagers();

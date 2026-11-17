@@ -34,7 +34,7 @@ export function SearchableSidebar({ label, searchLabel, items, selectedId, panel
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  useEffect(() => { buttons.current.get(selectedId || "")?.scrollIntoView({ block: "nearest" }); }, [selectedId, query]);
+  useEffect(() => { buttons.current.get(selectedId || "")?.scrollIntoView({ block: "nearest" }); }, [selectedId, query, selectionKey, visible.length]);
   useEffect(() => {
     if (previousSelection.current !== selectionKey && query && !visible.some(item => item.id === selectedId)) setQuery("");
     previousSelection.current = selectionKey;

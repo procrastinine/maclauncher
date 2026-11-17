@@ -57,7 +57,7 @@ function clientRoot(home = os.homedir()) {
 function create({ dependencies = {}, identifyGame = identify, discoverClient = clientRoot, isRunning = ClientStart.clientRunning } = {}) {
   const base = createSourceBackedManager({ id, source, adapter: Adapter, dependencies });
   // One backend retains every installed version and its existing state.
-  const manager = Object.assign(Object.create(base), { ui: { ...base.ui, groupId: source.kind, tabLabel: source.manager.tabLabel,
+  const manager = Object.assign(Object.create(base), { ui: { ...base.ui, cpuBuildLabels: false, groupId: source.kind, tabLabel: source.manager.tabLabel,
     sectionLabel: source.manager.sectionLabel, management: 'managed', order: source.order, category: source.manager.category },
     distributionRequired: false });
   const skippedPath = directory => path.join(directory, 'runtimes/steam-bridge-skipped.json');

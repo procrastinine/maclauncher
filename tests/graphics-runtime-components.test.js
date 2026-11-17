@@ -91,6 +91,14 @@ test("the ANR provider row separates the included runtime, the host floor and mo
   fs.writeFileSync(path.join(directory, "provider.json"), JSON.stringify({ method: "anr", providerABI: 1, complete: true, preparation: 1 }));
   for (const name of ["libmaclauncher-anr-generation.dylib", "helpers.metallib", "anr-convert-dxil", "anr-verify"]) fs.writeFileSync(path.join(directory, name), "provider");
   assert.equal(anr().status, "Models required");assert.equal(anr().available, false);
+  const Manager=require('../src/modules/shared/reshade/runtime/anr-manager');
+  t.mock.method(Manager.core,'listInstalled',()=>[{version:'FG-V.B15',ready:true},{version:'older',ready:true}]);
+  assert.deepEqual(anr().capabilities.map(row=>row.label),['Apex Neural Rendering FG-V.B15','Apex Neural Rendering older']);
   assert.match(anr().requirements, /macOS 26\.0 or later on Apple Silicon/);
   assert.equal(anr({ macOSVersion: "15.5" }).status, "Requires macOS 26.0");
 });
+
+ test('ANR explicitly names an installed package without its generation runtime',t=>{
+ const row=Components.getComponents({root:fixture(t),platform:'darwin',macOSVersion:'26.1',hardwareArch:'arm64'}).find(row=>row.id==='anr');
+ assert.match(row.description,/installed graphics package does not include/i);
+ });

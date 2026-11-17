@@ -207,7 +207,7 @@ function createManagedWindowsTool({ id, label, owner, repo, executableName, asse
     },
     dependencies: { ...dependencies, extractArchive: dependencies.extractArchive || extractArchive } });
   const manager = { ...core,
-    ui: { groupId: "tools", tabLabel: "Tools", sectionLabel: label, order: 200, memberOrder: order, management: "managed" },
+    ui: { cpuBuildLabels: false, groupId: "tools", tabLabel: "Tools", sectionLabel: label, order: 200, memberOrder: order, management: "managed" },
     async ensure(entry, payload, context) {
       const explicit = payload?.toolVersion || entry.runtimeData?.[id]?.version || context.settings?.runtimes?.[id]?.defaultVersion;
       let selected = core.resolveSelection(entry, context.settings, context.userDataDir, { version: payload?.toolVersion });

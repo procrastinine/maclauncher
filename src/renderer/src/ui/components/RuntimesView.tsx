@@ -410,9 +410,9 @@ export function RuntimesView({
                               aria-label={`Manage ${component.label}`} onClick={() => selectSection(choice)}>Manage</button>;
                           })()}
                         </dd>
-                        {Array.isArray(componentChoices.get(component.id)?.section.capabilities) &&
+                        {Array.isArray(component.capabilities || componentChoices.get(component.id)?.section.capabilities) &&
                           <ul className="runtimeComponentCapabilities" aria-label={`${component.label} models`}>
-                            {componentChoices.get(component.id)!.section.capabilities.map((row: Record<string, any>) => <li key={row.id}>
+                            {(component.capabilities || componentChoices.get(component.id)!.section.capabilities).map((row: Record<string, any>) => <li key={row.id}>
                               <span>{row.label}</span>
                               <StatusBadge tone={row.available ? "positive" : "neutral"}>{availabilityLabel(row.available ? "installed" : "notInstalled")}</StatusBadge>
                             </li>)}
@@ -623,7 +623,8 @@ export function RuntimesView({
                         const automaticArchitecture = activeRuntimeSection.automaticArchitecture || activeRuntimeSection.launcherArchitecture;
                         const preferredArchitecture = activeRuntimeSection.defaultArchitecture || automaticArchitecture;
                         const installArchitecture = (row: Record<string, any>) => buildArchitecture(row, activeRuntimeSection, activeRuntimeInstalledSorted);
-                        const installBuild = installArchitecture(inst);
+                        const peOnly = inst.translator?.files?.some((file: any) => file.format === "pe") && !inst.translator.files.some((file: any) => file.format === "macho");
+                        const installBuild = peOnly ? null : installArchitecture(inst);
                         // Translator views name every build, so two builds of one version read as two labeled rows.
                         const translatorBuild = activeRuntimeManager.ui?.cpuBuildLabels === true
                           ? translatorInstallBuild(inst, translatorInstallRequirement(inst, activeRuntimeSection)) : "";
@@ -658,7 +659,7 @@ export function RuntimesView({
                               <div className="saveName">
                                 {activeRuntimeVersionTag(inst.version)}
                                 {translatorBuild ? <span className="badge" data-cpu-build={translatorBuild} title="CPU build">{cpuLabel(translatorBuild)}</span>
-                                  : installBuild && installBuild !== "universal" && automaticArchitecture &&
+                                  : activeRuntimeManager.ui?.cpuBuildLabels !== false && installBuild && installBuild !== "universal" && automaticArchitecture &&
                                   installBuild !== automaticArchitecture && <span className="badge">{architectureLabel(installBuild)}</span>}
                                 {isDefault && (
                                   <span className="badge badgeAccent" title={defaultFor.length ? `Automatic for ${defaultFor.join(", ")}` : undefined}>Default</span>

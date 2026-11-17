@@ -9,6 +9,7 @@ import { cpuId, cpuLabel } from "../../../../core/cpu-labels.mjs";
 export function runtimeInstallVersion(section: Record<string, any> | null | undefined, requested?: string, recommended: unknown = section?.catalog?.recommendedVersion): string {
   const versions: string[] = Array.isArray(section?.catalog?.versions)
     ? section.catalog.versions.filter((value: unknown) => typeof value === "string" && value.trim()) : [];
+  for (const row of section?.installed || []) if (row.version && !versions.includes(row.version)) versions.push(row.version);
   if (requested && versions.includes(requested)) return requested;
   // A version whose installed copies are all unusable is chosen only on request,
   // so a newer listed version is the offer and a damaged one is never preselected.
@@ -16,6 +17,10 @@ export function runtimeInstallVersion(section: Record<string, any> | null | unde
   const rows: any[] = Array.isArray(section?.installed) ? section.installed : [];
   const offered = versions.filter(value => rows.some(row => row?.version === value)
     ? rows.some(row => row?.version === value && row.ready !== false) : !runtimeVersionBlocked(section?.catalog, value));
+  if (section?.catalog?.preferInstalled) {
+    const local = rows.find(row => row.ready !== false && offered.includes(row.version));
+    if (local) return local.version;
+  }
   const stable = offered.find(value => !isPrereleaseVersion(value, section));
   if (typeof recommended === "string" && offered.includes(recommended) && (!stable || !isPrereleaseVersion(recommended, section))) return recommended;
   return stable || offered[0] || "";
@@ -347,6 +352,8 @@ const cpuBuild = (value: unknown) => {
   return name === "x64" || name === "arm64" || name === "universal" ? name : "";
 };
 export function translatorInstallBuild(install: Record<string, any> | null | undefined, requirement?: Record<string, any> | null): string {
+  const files = install?.translator?.files || install?.installationMetadata?.translator?.files;
+  if (Array.isArray(files) && files.some(file => file.format === "pe") && !files.some(file => file.format === "macho")) return "";
   const slices = [...new Set((Array.isArray(install?.architectures) ? install!.architectures : []).map(cpuBuild)
     .filter((cpu: string) => cpu === "x64" || cpu === "arm64"))];
   if (slices.length) return slices.length > 1 ? "universal" : slices[0] as string;

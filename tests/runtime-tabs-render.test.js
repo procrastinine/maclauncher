@@ -6,7 +6,7 @@ const React = require('react');
 const { renderToStaticMarkup, renderToReadableStream } = require('react-dom/server');
 const { build } = require('vite');
 const { react, componentHarness } = require('./helpers/renderer-component');
-let RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow, RuntimeCatalogSources, runtimeInstallVersion;
+let RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow, RuntimeCatalogSources, runtimeInstallVersion, SearchableSidebar;
 test('cached runtime refresh failures show their failure date and redact errors and install tooltips', () => {
   const failedAt = Date.UTC(2026, 9, 24, 12), fetchedAt = Date.UTC(2026, 9, 20, 12);
   const error = 'request to https://fixture-user:fixture-password@github.com/example/runtime failed ECONNREFUSED';
@@ -32,7 +32,7 @@ test.before(async () => {
   compiled.paths = module.paths;
   compiled.require = id => id === 'react' ? react : Module.prototype.require.call(compiled, id);
   compiled._compile(bundle.output.find(chunk => chunk.type === 'chunk').code, compiled.id);
-  ({ RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow, RuntimeCatalogSources, runtimeInstallVersion } = compiled.exports);
+  ({ RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary, RuntimeSettingsWindow, RuntimeCatalogSources, runtimeInstallVersion, SearchableSidebar } = compiled.exports);
 });
 const manager = (id, ui, catalog = {}, installed = []) => ({ id, label: `Backend ${id}`, ui,
   catalog: { status: 'idle', versions: [], ...catalog }, installed });
@@ -645,7 +645,7 @@ test('a refreshed catalog names each listed version in the Version menu beside a
       installArchitecture: { default: build }, installedSort: {}, error: null } } });
     const menu = /<select[^>]*aria-label="MacLauncher Builds version"[^>]*>(.*?)<\/select>/.exec(markup)?.[1] || '';
     const options = [...menu.matchAll(/<option[^>]*value="([^"]+)"[^>]*>([^<]*)<\/option>/g)].map(match => match.slice(1));
-    assert.deepEqual(options.map(([value]) => value), ['MCLv8'], build || 'automatic build');
+    assert.deepEqual(options.map(([value]) => value), ['MCLv8', 'MCLv9'], build || 'automatic build');
     // The visible text names the version itself, not a generic or relative description.
     for (const [value, text] of options) assert.ok(text.includes(value), `${value} reads "${text}"`);
     assert.match(markup, /class="saveName">MCLv9</);
@@ -1444,7 +1444,7 @@ test('fresh runtime UI initialization and source controls use the same stable ch
   assert.equal(runtimeInstallVersion({catalog:{versions:['1.29.2-universal'],versionRequirements:{'1.29.2-universal':{prerelease:true}}}}),'1.29.2-universal','a development-only catalog remains usable');
   assert.equal(runtimeInstallVersion({catalog:{versions:[null,17,'', '1.28.8-universal'],recommendedVersion:{unknown:true}}}),'1.28.8-universal','malformed optional choices cannot suppress usable siblings');
   const unusable={installed:[{version:'1.0.0',ready:false,status:'unsupported-package'},{version:'1.0.3',ready:true}],catalog:{versions:['1.0.0']}};
-  assert.equal(runtimeInstallVersion(unusable),'','an installed copy that cannot be used is never preselected');
+  assert.equal(runtimeInstallVersion(unusable),'1.0.3','the usable installed copy stays in the menu and is selected');
   assert.equal(runtimeInstallVersion(unusable,'1.0.0'),'1.0.0','it stays choosable on request');
   assert.equal(runtimeInstallVersion({...unusable,catalog:{versions:['1.0.0','1.0.4']}}),'1.0.4','a newer listed version is the offer');
   assert.equal(runtimeInstallVersion({...unusable,catalog:{versions:['1.0.0','1.0.4'],recommendedVersion:'1.0.0'}}),'1.0.4','even over a recommendation');
@@ -1580,5 +1580,34 @@ test('an installed version this launcher cannot use reads as incompatible and is
   assert.match(markup, /v1\.0\.0 · Incompatible/, 'the version chooser names the copy incompatible');
   assert.doesNotMatch(markup, /Needs repair|Reinstall/, 'nothing offers to repair the copy by installing it again');
   assert.doesNotMatch(markup, /value="1\.0\.0" selected/, 'the unusable version is not preselected');
-  assert.match(markup, /<option value="" disabled="" selected="">Choose version<\/option>/);
+  assert.match(markup, /<option value="1\.0\.3" selected="">/);
+});
+
+ test('installed versions remain in the catalog menu and local client files are preselected', () => {
+  const runtime = manager('local-client', {}, {label:'Versions', source:'https://cdn.example/client', sourceLabel:'Valve CDN',description:'Current Windows client files.',versions:['new'],preferInstalled:true}, [{version:'old',ready:true}]);
+  const markup=render([runtime]);
+  assert.match(markup, /<option value="old" selected="">/);
+  assert.doesNotMatch(markup, />Install<\/button>/);
+  assert.match(markup, /runtimeSourceName">Versions/);
+  assert.equal(runtimeInstallVersion({...runtime,catalog:{versions:['new']}},'old'),'old');
+ });
+ test('Windows PE translator rows carry no Mac CPU badge',()=>{
+  const runtime=manager('pe-component',{cpuBuildLabels:true},{versions:['1']},[{version:'1',ready:true,architecture:'x86_64',translator:{files:[{format:'pe'}]}}]);
+  runtime.automaticArchitecture='arm64';
+  assert.doesNotMatch(render([runtime]), /data-cpu-build=|badge">Intel|badge">x64/);
+  runtime.ui.cpuBuildLabels=false;delete runtime.installed[0].translator;
+  assert.doesNotMatch(render([runtime]), /data-cpu-build=|badge">Intel|badge">x64/);
+  for(const manager of require('../src/modules/crossover/temporal/vulkan-dlss').createManagers())assert.equal(manager.ui.cpuBuildLabels,false);
+  runtime.ui.cpuBuildLabels=false;delete runtime.installed[0].translator;
+  assert.doesNotMatch(render([runtime]), /data-cpu-build=|badge">Intel|badge">x64/);
+  const managers=require('../src/modules/crossover/temporal/vulkan-dlss').managers;
+  for(const manager of managers)assert.equal(manager.ui.cpuBuildLabels,false);
+ });
+
+test('reopening at the same manager scrolls its sidebar choice into view',t=>{
+ const previous=global.window;global.window={addEventListener(){},removeEventListener(){}};
+ const props={label:'Runtimes',searchLabel:'Search runtimes',items:[{id:'steam',label:'Steam'}],selectedId:'steam',panelId:'panel',selectionKey:'1',onSelect(){}};
+ const h=componentHarness(SearchableSidebar,props);t.after(()=>{h.close();global.window=previous;});let scrolled=0;
+ const visit=node=>{if(!React.isValidElement(node))return;if(node.type==='button'&&node.props.title==='Steam')node.props.ref({scrollIntoView(options){assert.equal(options.block,'nearest');scrolled++;}});React.Children.forEach(node.props.children,visit);};
+ visit(h.render());props.selectionKey='2';h.render();assert.equal(scrolled,1);
 });

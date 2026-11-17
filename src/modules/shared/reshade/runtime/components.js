@@ -82,12 +82,14 @@ function getComponents({ root = require("../index").runtimeRoot(), platform = pr
   // The version Play would use: a saved default, otherwise a ready installed one.
   const anrSelected = anrIncluded && userDataDir ? require("./anr-manager").selection({ userDataDir, settings }).current : null;
   const anrModels = anrSelected?.ready ? anrSelected : null;
+  const anrReleases = anrIncluded && userDataDir ? require("./anr-manager").core.listInstalled(userDataDir) : [];
   const anrStatus = status(anrIncluded, anrFloor, anrHost);
   rows.push({
     id: "anr", label: "Apex Neural Rendering", version: anrModels ? anrModels.version : null,
     status: anrStatus === "Included" ? anrModels ? "Models installed" : "Models required" : anrStatus,
     available: nativeAvailable(anrIncluded) && hostSupports(anrFloor, anrHost) && Boolean(anrModels),
-    description: "Neural scene frame generation from 2× to 5× at 1920×1080, 2560×1440 or 3840×2160 output. The models come from Apex's macOS kit, which is downloaded or imported separately.",
+    capabilities: anrIncluded ? anrReleases.map(row => ({id: row.version, label: `Apex Neural Rendering ${row.version}`, available: row.ready !== false})) : [],
+    description: (anrIncluded ? "" : "The installed graphics package does not include the ANR generation runtime. ") + "Neural scene frame generation from 2× to 5× at 1920×1080, 2560×1440 or 3840×2160 output. The models come from Apex's macOS kit, which is downloaded or imported separately.",
     requirements: `macOS ${anrFloor} or later on Apple Silicon. Requires renderer-provided depth, motion vectors, jitter, the camera near plane and a finite far plane or declared infinite depth.`
   }, {
     id: "lossless", label: "Lossless Scaling", status: installed.length ? `${installed.length} ${installed.length === 1 ? "model file imported" : "model files imported"}` : "Models required",

@@ -98,10 +98,11 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       const source = sourceVariant ? { ...sourceVariant.catalog, id: group.id, label: group.label, description: group.description,
         explicit: group.explicit, secondary: group.secondary, status: group.status, error: group.error, failedAt: group.failedAt, fetchedAt: group.fetchedAt } : group;
       const key = runtimeSourceUiKey(section.id, source.explicit ? source.id : undefined);
-      const versions: string[] = Array.isArray(source.versions) ? source.versions : [];
+      const versions: string[] = [...new Set([...(Array.isArray(source.versions) ? source.versions : []),
+        ...installed.map((item: any) => item.version)])];
       const requested = ui.installVersion[key] || ui.installVersion[section.id];
       const recommendation = source.recommendedVersion || section.catalog?.recommendedVersion;
-      const sourceSection = { ...section, versionLabels: source.versionLabels || section.versionLabels, catalog: source };
+      const sourceSection = { ...section, installed, versionLabels: source.versionLabels || section.versionLabels, catalog: { ...source, versions } };
       const versionTag = runtimeVersionTagger(sourceSection);
       const version = runtimeInstallVersion(sourceSection, requested, recommendation);
       const presentation = runtimeCatalogPresentation(source, version, selectedVariant);
