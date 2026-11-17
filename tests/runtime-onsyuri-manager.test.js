@@ -214,10 +214,13 @@ test("Onsyuri optional task signals reach Mac and Web downloads as valid options
   t.mock.method(Runtime, "installWebVersion", async options => { seen.push(options.signal); return {version:options.version}; });
   await Manager.installRuntime({userDataDir,version:FIXTURE_NATIVE_VERSION,variant:"arm64",sectionId:"mac"});
   await Manager.installRuntime({userDataDir,version:"0.7.6",sectionId:"web"});
-  assert.deepEqual(seen,[undefined,undefined]);
+  // Without the shared Downloads list, each task still passes a signal of its own.
+  assert.ok(seen.every(signal => signal instanceof AbortSignal && !signal.aborted));
   const controller = new AbortController();
   await Manager.installRuntime({userDataDir,version:FIXTURE_NATIVE_VERSION,variant:"arm64",sectionId:"mac",signal:controller.signal});
-  assert.equal(seen[2],controller.signal);
+  assert.equal(seen[2].aborted,false);
+  controller.abort();
+  assert.equal(seen[2].aborted,true,"the caller's signal reaches the download");
 });
 
 test("explicit Onsyuri Refresh retains existing stock Mac download variants alongside Builds profiles", async t => {
