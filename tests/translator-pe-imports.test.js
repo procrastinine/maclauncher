@@ -99,3 +99,32 @@ test('invalid actual PE headers do not become libraries through optional import 
   assert.equal(Description.inspectFile({ path: selected.file }).format, 'unknown');
   assert.throws(() => Component.inspected(selected.root, { engine: 'dxmt' }, { logger: { warn() {} } }), /no loadable library/);
 });
+
+test('incomplete DOS/COFF prefixes stay unknown while recognized malformed hybrid metadata still refuses',t=>{
+  for(const length of [2,63,128,151]) {
+    const f=importing([]),selected=fixture(t,'short-'+length+'.dll',f.bytes.subarray(0,length));
+    const facts=Description.inspectFile({path:selected.file});assert.equal(facts.format,'unknown');assert.match(facts.inspectionWarning,/incomplete/);assert.equal(facts.architecture,undefined);
+  }
+  const f=importing([]),coffOnly=fixture(t,'optional-truncated.dll',f.bytes.subarray(0,f.peOffset+24));
+  assert.throws(()=>Description.inspectFile({path:coffOnly.file}),/outside file bounds/,'a complete recognized COFF header still reaches structural validation');
+  const truncatedSection=fixture(t,'section-truncated.dll',f.bytes.subarray(0,f.raw-1));
+  assert.equal(Description.inspectFile({path:truncatedSection.file}).format,'unknown');
+  for(const machine of [0xaa64,0xa641,0xa64e]) {
+    function hybrid(broken) {
+      const f=importing([]),config=0x200,metadata=0x400,map=0x500,base=0x180000000n;
+      f.bytes.writeUInt16LE(machine,f.peOffset+4);f.bytes.writeBigUInt64LE(base,f.optional+24);f.bytes.writeUInt32LE(0x4000,f.optional+56);
+      f.bytes.writeUInt32LE(0x2000+config,f.directories+10*8);f.bytes.writeUInt32LE(208,f.directories+10*8+4);
+      f.bytes.writeUInt32LE(208,f.raw+config);f.bytes.writeBigUInt64LE(base+BigInt(0x2000+metadata),f.raw+config+200);
+      for(const[offset,value]of [[0,1],[4,0x2000+map],[8,2]])f.bytes.writeUInt32LE(value,f.raw+metadata+offset);
+      for(const[offset,value]of [[0,broken?0x1003:0x1000],[4,16],[8,0x1101],[12,16]])f.bytes.writeUInt32LE(value,f.raw+map+offset);
+      return f.bytes;
+    }
+    const valid=fixture(t,'hybrid-'+machine+'.dll',hybrid(false));
+    assert.equal(PE.readPeExports(valid.file,{headersOnly:true}).machine,machine,'the canonical section validator retains the declared hybrid machine');
+    const facts=Description.inspectFile({path:valid.file});assert.equal(facts.format,'pe');assert.deepEqual(facts.codeArchitectures,['arm64','arm64ec']);assert.equal(facts.architecture,machine===0xa641?'arm64ec':'arm64x');
+    const truncated=fixture(t,'truncated-hybrid-'+machine+'.dll',hybrid(false).subarray(0,f.raw+0x600));
+    assert.equal(Description.inspectFile({path:truncated.file}).format,'unknown','available CHPE facts do not excuse a truncated declared raw section');
+    const invalid=fixture(t,'malformed-'+machine+'.dll',hybrid(true));
+    assert.throws(()=>Description.inspectFile({path:invalid.file}),/unknown CHPE code type/,'recognized malformed hybrid cannot become unknown/usable');
+  }
+});

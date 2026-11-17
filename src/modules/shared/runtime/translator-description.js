@@ -361,9 +361,21 @@ function inspectFileFacts(original) {
     if (error.code !== 'MACHO_MALFORMED') result.inspectionWarning = error.message;
   }
   const exports = readPeExports(original, { imports: true }), pe = exports || readPeExports(original, { headersOnly: true, imports: true });
-  let binary;
+  let binary, incompletePeHeader = false;
   const signature = Buffer.alloc(2), descriptor = fs.openSync(original, 'r');
-  try { fs.readSync(descriptor, signature, 0, 2, 0); } finally { fs.closeSync(descriptor); }
+  try {
+    fs.readSync(descriptor, signature, 0, 2, 0);
+    if (!pe && signature.readUInt16LE(0) === 0x5a4d) {
+      const size = fs.fstatSync(descriptor).size, dos = Buffer.alloc(64);
+      const bytes = fs.readSync(descriptor, dos, 0, Math.min(size, dos.length), 0);
+      incompletePeHeader = bytes < dos.length || (dos.readUInt32LE(60) >= 64 && size - dos.readUInt32LE(60) < 24);
+    }
+  } finally { fs.closeSync(descriptor); }
+  // No complete COFF prefix exists to validate. Complete recognized headers,
+  // including hybrid machines outside the export reader's scope, still reach
+  // the canonical structural/CHPE validator below.
+  if (incompletePeHeader) return { ...result, format: 'unknown',
+    inspectionWarning: 'PE header is incomplete; no image facts are available.', macosFloor: null };
   if (pe || signature.readUInt16LE(0) === 0x5a4d) {
     try { binary = BinaryArch.inspectBinary(original); }
     catch (error) {
@@ -374,6 +386,8 @@ function inspectFileFacts(original) {
     }
   }
   if (binary?.format === 'pe') {
+    if (!pe) return { ...result, format: 'unknown',
+      inspectionWarning: 'PE basic image inspection is incomplete; no validated section facts are available.', macosFloor: null };
     if (!exports) result.inspectionWarning = 'PE export inspection is incomplete; basic image facts are available.';
     if (!pe?.importsComplete) result.inspectionWarning = [result.inspectionWarning,
       `PE import inspection is incomplete: ${pe?.importWarning || 'unknown import metadata'}`].filter(Boolean).join(' ');

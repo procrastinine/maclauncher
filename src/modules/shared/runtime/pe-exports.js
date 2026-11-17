@@ -43,7 +43,9 @@ function readPeExports(file, { detection, headersOnly = false, imports = false, 
     const coff = read(peOffset, 24);
     if (coff.readUInt32LE(0) !== 0x4550) return null;
     const facts = BinaryArch.peHeaderFacts(coff);
-    const architecture = ["i386", "x86_64", "arm64"].includes(facts.declaredArchitecture) ? (facts.declaredArchitecture === "i386" ? "x86" : facts.declaredArchitecture) : null;
+    // This is the declared COFF machine. Hybrid code/CPU acceptance remains
+    // with BinaryArch.inspectBinary and its load-config/CHPE validation.
+    const architecture = ["i386", "x86_64", "arm64", "arm64ec", "arm64x"].includes(facts.declaredArchitecture) ? (facts.declaredArchitecture === "i386" ? "x86" : facts.declaredArchitecture) : null;
     const count = facts.sectionCount, optionalBytes = facts.optionalBytes;
     if (!architecture || !(facts.characteristics & 2) || !count || count > LIMITS.sections || optionalBytes < 104 || optionalBytes > Guards.limit(4096)) return null;
     const optional = read(peOffset + 24, optionalBytes), magic = optional.readUInt16LE(0);
