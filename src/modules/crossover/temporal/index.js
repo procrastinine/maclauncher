@@ -114,6 +114,9 @@ function resolvePlan(entry, context = {}, { install, runtimeId = context.runtime
     });
     const directNgx=settings.dlss===true&&translator?.engine==="dxmt";
     if (!sources.length&&!directNgx) return null;
+    // Automatic NGX forwarding uses the selected complete package's own
+    // libraries. A matching Wine thunk and Unix ABI do not identify its PE build.
+    if (settings.dlssOptional === true && translator?.sourceId === "maclauncher-dxmt" && !sources.length) return null;
     const route = { depth: true, motionVectors: true, jitter: true, exposure: true, cameraProjection: false, methods: ["metalfx"] };
     const inputs = { ...route, source: sources.length ? "xess" : "ngx", routes: sources.map(() => ({ source: "xess", ...route })) };
     let baseRoot, selectedSupport;

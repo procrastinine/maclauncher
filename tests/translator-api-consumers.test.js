@@ -94,6 +94,11 @@ test('per-API camera consumes used D3D11 DXMT and keeps its existing pair requir
   const options = { install: { engineRoot: path.join(root, 'engine'), templateRoot: path.join(root, 'component') }, runtimeId: 'sikarugir',
     root: path.join(root, 'graphics'), translatorPlan, settings: { graphicsBackend: 'wined3d', dlss: true }, host: { platform: 'darwin', hardwareArch: 'arm64', macOSVersion: '26.0' } };
   assert.equal(Temporal.resolvePlan(entry, {}, options).baseRoot, path.join(root, 'component/wine'));
+  const managed = { ...used, sourceId: 'maclauncher-dxmt' };
+  const managedPlan = { ...translatorPlan, components: { ...translatorPlan.components, d3d11: { used: managed } } };
+  assert.equal(Temporal.resolvePlan(entry, {}, { ...options, translatorPlan: managedPlan,
+    settings: { ...options.settings, dlssOptional: true } }), null,
+  'optional forwarding keeps the complete MacLauncher DXMT renderer even when the old bridge matches its thunk and Unix library');
   assert.equal(Temporal.resolvePlan(entry, {}, { ...options, translatorPlan: { ...translatorPlan, components: { ...translatorPlan.components, d3d11: { used: null } } } }), null);
   const context = {}; fs.appendFileSync(binary, 'changed pairing');
   assert.equal(Temporal.resolvePlan(entry, context, options), null); assert.match(context.cameraAdapterNotice, /DXMT temporal libraries do not match/);
