@@ -49,7 +49,7 @@ A Vulkan driver and its loader run inside the program that uses them. For a Wind
 
 | Component | Mac code | On Apple Silicon | Apple Silicon alternative |
 | --- | --- | --- | --- |
-| MacLauncher KosmicKrisp | Separate Apple Silicon and Intel builds | The Apple Silicon build runs natively; the Intel build runs under Rosetta inside Intel Wines, AnyPS5 and Prosper | Apple Silicon build included in the package |
+| MacLauncher KosmicKrisp | Separate Apple Silicon and Intel builds | The Apple Silicon build runs natively; the Intel build runs under Rosetta inside Intel Wines, AnyPS5 converted games and Prosper | Apple Silicon build included in the package |
 | KosmicKrisp from LWJGL | Apple Silicon | Native; never loaded by an Intel process | Not needed |
 | MoltenVK from KhronosGroup releases | Universal | Native, or the Intel slice inside an Intel process | Not needed |
 | MoltenVK scene support, MacLauncher's MoltenVK build | Universal | Native, or the Intel slice inside an Intel process | Not needed |
@@ -78,8 +78,9 @@ Most engines run natively on Apple Silicon. The runtimes in the first table cont
 | Component | Mac code | On Apple Silicon | Apple Silicon alternative |
 | --- | --- | --- | --- |
 | HashLink 1.9 and 1.12 from MacLauncher Builds, and upstream development snapshots | Intel; its JIT compiler emits Intel code | Rosetta | None |
-| AnyPS5 converted games and PS5 system libraries | Intel | Rosetta | None |
+| AnyPS5 converted games and PS5 system libraries | Intel | Rosetta | The AnyPS5 FEX version |
 | AnyPS5 converter | Separate Apple Silicon and Intel builds | Native | Not needed |
+| AnyPS5 FEX version: start host and PS5 system libraries | Apple Silicon; FEXCore translates the game's x86-64 code inside the host | Native | Not needed |
 | Prosper | Intel | Rosetta | None |
 | mac32 | Intel host with 32-bit Intel (i386) libraries | Rosetta | None |
 | RLVM 0.14, for RealLive games | Intel | Rosetta | None |

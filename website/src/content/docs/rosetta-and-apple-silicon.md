@@ -28,7 +28,7 @@ A program needs two things from a computer: a processor that understands its ins
 
 That leads to one simple rule:
 
-- **FEX can stand in for Rosetta** wherever MacLauncher or a WINE supplies the operating system that the x86 code talks to. Windows games in an Apple Silicon WINE are the main case, and PS5 games are a candidate too, since AnyPS5 supplies the PS5's system libraries itself.
+- **FEX can stand in for Rosetta** wherever MacLauncher or a WINE supplies the operating system that the x86 code talks to. Windows games in an Apple Silicon WINE are the main case, and PS5 games are another, since AnyPS5 supplies the PS5's system libraries itself.
 - **Intel Mac programs need Apple Silicon builds.** An Intel build of a Mac engine or library calls the macOS frameworks directly, and FEX has nothing to connect those calls to. The way forward for these is a native build, or a newer upstream version that already has one.
 
 ## Where each part stands
@@ -43,7 +43,7 @@ The table lists every part of MacLauncher with Intel code today, the route to ru
 | MacLauncher's WINE graphics helpers: its DXMT build for DLSS forwarding, Streamline camera forwarding, the XeSS GPU host and the Vulkan scene connection | Apple Silicon builds, loaded by Apple Silicon WINEs | In progress |
 | DXMT from its upstream releases and Sikarugir Templates | **MacLauncher DXMT**, a complete Apple Silicon build of DXMT with ARM64X Windows libraries and a native Mac renderer, which MetalSharp Wine loads in place of its own Direct3D libraries | Available |
 | D3DMetal | None for D3DMetal itself; Apple Silicon WINEs translate Direct3D with DXVK and vkd3d-proton | Not planned (D3DMetal is Apple's closed Intel framework, so only Apple can build it for Apple Silicon) |
-| AnyPS5 and Prosper (PS5 games) | Keep the PS5 game code as x86 and run it under FEX in an Apple Silicon program, with the PS5 system libraries built for Apple Silicon. AnyPS5 comes first, starting with a feasibility check, and Prosper then reuses the same FEX setup | In progress |
+| AnyPS5 and Prosper (PS5 games) | Keep the PS5 game code as x86 and run it under FEX in an Apple Silicon program, with the PS5 system libraries built for Apple Silicon. AnyPS5's FEX version does this, and Prosper then reuses the same FEX setup | In progress |
 | HashLink (Haxe games) | An Apple Silicon JIT compiler in upstream HashLink | Not planned (HashLink's JIT compiler writes Intel code as the game runs, and every HashLink native module calls macOS directly, so FEX doesn't fit) |
 | mac32 (32-bit Mac apps) | None | Not planned (32-bit Mac apps call Cocoa, Carbon and OpenGL directly, which FEX can't provide) |
 | RLVM (RealLive visual novels) | An Apple Silicon build of RLVM | In progress |
