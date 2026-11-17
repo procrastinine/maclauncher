@@ -27,9 +27,10 @@ function hosts(options={}){
 function state(root,options={}){
   const operation=options.operation||"superresolution",provider=resolve(root,options),candidates=provider?hosts(options):[];
   const supported=operation==="superresolution"?provider?.backends||[]:operation==="interpolate"&&provider?.generation?[provider.generation.backend]:[];
-  const readyBackends=supported.filter(key=>candidates.some(row=>row.state.available&&row.state.backends?.includes(key)));
-  const backends=supported.filter(key=>candidates.some(row=>row.state.available&&row.state.backends?.includes(key)||row.state.preparable&&row.state.preparableBackends?.includes(key)));
-  const runtime=options.userDataDir&&Library.listInstalled(options.userDataDir).find(row=>row.capabilities?.includes(operation));
+  const runtime=options.userDataDir&&Library.selectedInstalled(options.userDataDir,options);
+  const usable=supported.filter(key=>!runtime?.backends||operation!=="superresolution"||runtime.backends.includes(key));
+  const readyBackends=usable.filter(key=>candidates.some(row=>row.state.available&&row.state.backends?.includes(key)));
+  const backends=usable.filter(key=>candidates.some(row=>row.state.available&&row.state.backends?.includes(key)||row.state.preparable&&row.state.preparableBackends?.includes(key)));
   const reason=!provider||!supported.length?"The included graphics processor has no XeSS GPU host for this operation.":!backends.length?"A compatible GPU compute host is required.":null;
   const ready=Boolean(runtime&&readyBackends.length),preparationReason=!runtime?"The Intel XeSS runtime will be prepared.":!readyBackends.length?"The GPU compute host will be prepared.":null;
   return {available:!reason,runtimeInstalled:Boolean(runtime),availableWithoutRuntime:Boolean(backends.length),ready,needsPreparation:!ready,operation,backends,readyBackends,

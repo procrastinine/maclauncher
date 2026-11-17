@@ -43,7 +43,7 @@ test("a rolled-back XeSS registration restores the earlier demand and stops the 
 });
 test("XeSS readiness follows operation receipts and the selected payload's actual factory",t=>{
   const f=fixture(t);f.registry={listGraphicsComputeHosts:()=>[{getState:()=>({available:true,backends:["d3d12"]})}]};
-  t.mock.method(Library,"listInstalled",()=>[{version:Source.version,capabilities:["interpolate"]}]);
+  t.mock.method(Library,"selectedInstalled",(_root,options)=>options.operation==="interpolate"?{version:Source.version,capabilities:["interpolate"]}:null);
   assert.equal(Xess.state(f.root,f).ready,false);assert.equal(Xess.state(f.root,{...f,operation:"interpolate"}).available,false);
   addGeneration(f);assert.equal(Xess.state(f.root,{...f,operation:"interpolate"}).ready,true);assert.equal(Xess.state(f.root,f).ready,false);
   f.descriptor.generation.sdk.latency.sha256="0".repeat(64);fs.writeFileSync(path.join(f.payloadDirectory,"provider.json"),JSON.stringify(f.descriptor));

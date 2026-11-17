@@ -1,58 +1,61 @@
-const Library=require("../xess/library"),{downloadApproved,approveDownloads}=require("../../runtime/tool-install");
-const {Source,Components}=Library;
-const versionLabel=()=>{try{return "Intel XeSS SDK · "+Library.release().revision.slice(0,8);}catch{return "Intel XeSS SDK";}};
-function normalizeSettings(value){const version=typeof value?.defaultVersion==="string"?value.defaultVersion.trim():"";return {defaultVersion:version&&version!=="auto"?version:null};}
-function support(context){return require("../xess").state(context.root||require("..").runtimeRoot(context.app),context);}
-function requiredOperations(selected){return ["superresolution",...(selected?.generation?["interpolate"]:[])];}
-function missingBytes(installed,selected){const capabilities=installed?.capabilities||[];return (capabilities.includes("superresolution")?0:Source.bytes)+(selected?.generation&&!capabilities.includes("interpolate")?Components.files.reduce((sum,row)=>sum+row.bytes,0):0);}
-function getState(context={}){
-  const {userDataDir,settings}=context,state=support(context),selected=state.available?state.provider:null,required=requiredOperations(selected);
-  const copies=Library.listInstalled(userDataDir),installed=copies.map(row=>({...row,versionLabel:versionLabel(),
-    description:row.capabilities.map(value=>value==="interpolate"?"Frame generation and XeLL":"Super resolution").join(" · "),
-    missingComponents:required.filter(value=>!row.capabilities.includes(value)),removalLabel:"Remove",
-    removalConfirm:row.external?"Remove the XeSS runtime registration? Original DLLs remain unchanged.":"Remove the managed XeSS runtime files?"}));
-  const current=installed.find(row=>row.version===Source.version),complete=Boolean(current&&!current.missingComponents.length),bytes=missingBytes(current,selected);
-  const catalog={status:"success",delivery:"download",versions:[Source.version],versionLabels:{[Source.version]:versionLabel()},
-    installable:Boolean(selected),installableVersions:selected?[Source.version]:[],includedVersions:[],buildableVersions:[],
-    versionRequirements:{[Source.version]:{requiresDownload:!complete,requiresBuild:false,available:complete,included:false,
-      downloadBytes:bytes,installLabel:current?"Complete install":"Install",...(!selected?{reason:state.reason||"A compatible GPU compute host is required."}:{})}},
-    importable:true,importInputKinds:["file","directory"],importExtensions:["dll"],importLabel:"Import XeSS files…",
-    importDescription:"Registers compatible original Intel DLLs in place. Selecting libxess_fg.dll or its folder also registers the required XeLL companion.",
-    sourceUrl:Library.sourceUrl(),source:Library.sourceUrl(),refreshLabel:"Reload available runtime",supportsLatestOnly:false,fetchedAt:null,error:null,
-    latestInstalledVersion:current?.version||null,latestAvailableVersion:Source.version,updateAvailable:Boolean(current&&!complete)};
-  const section={id:"default",label:"XeSS",managementTitle:"Intel XeSS runtime",supportsDefault:true,installed,variants:[],installing:null,catalog,
-    defaultVersion:normalizeSettings(settings).defaultVersion,
-    sourceLinks:[{label:"Official downloads",url:"https://github.com/intel/xess/releases"},{label:"Source",url:Library.sourceUrl()}],
-    description:"Original Intel runtime files matching the included macOS adapter. The available SDK version follows its compiled dependency declaration."};
-  return {...section,id:Source.managerId,sections:[section]};
+const Library = require("../xess/library"), Versions = require("../xess/versions");
+const { confirmToolInstall } = require("../../runtime/tool-install");
+const { selectRuntimeVersion } = require("../../runtime/version-choices");
+function requested(context = {}) {
+  return selectRuntimeVersion({ manual: context.version,
+    defaultVersion: context.settings?.runtimes?.[Library.Source.managerId]?.defaultVersion }).version;
 }
-async function installRuntime(context={}){
-  const requested=context.version&&context.version!=="auto"?context.version:normalizeSettings(context.settings?.runtimes?.[Source.managerId]).defaultVersion;
-  if(requested&&requested!==Source.version)throw Error("The selected Intel SDK version does not match the included XeSS adapter.");
-  const state=support(context),selected=state.available?state.provider:null;if(!selected)throw Error(state.reason||"A compatible GPU compute host is required.");
-  const installed=Library.listInstalled(context.userDataDir)[0],bytes=missingBytes(installed,selected);
-  if(bytes&&!await downloadApproved(context,{managerId:Source.managerId,version:Source.version,label:versionLabel(),
-    message:"Install Intel XeSS runtime files?",detail:selected.generation?"Includes super resolution, frame generation and the required XeLL companion.":"Includes the original super-resolution runtime.",
-    downloadBytes:bytes,requiresDownload:true,kind:"tool",sourceUrl:Library.sourceUrl(),confirmLabel:"Install"}))return null;
-  // The confirmation above authorizes the component downloads.
-  const options={...context,confirmRuntimeInstall:approveDownloads};
-  const sr=await Library.install({...options,operation:"superresolution"});if(!sr)return null;
-  if(selected.generation){const fg=await Library.install({...options,operation:"interpolate"});if(!fg)return null;}
-  return Library.listInstalled(context.userDataDir)[0];
+function missing(message = "Install or import a compatible Intel XeSS SDK.") {
+  return Object.assign(Error(message), { code: "GRAPHICS_XESS_RUNTIME_MISSING", managerId: Library.Source.managerId });
 }
-// The download a Play's XeSS row needs when the runtime is missing or lacks a
-// component this Mac's XeSS host uses. Reading it is offline.
-function launchPlan(context={}){
-  const state=support(context),selected=state.available?state.provider:null;if(!selected)return null;
-  const bytes=missingBytes(Library.listInstalled(context.userDataDir)[0],selected);
-  return bytes?{managerId:Source.managerId,version:Source.version,label:versionLabel(),bytes,installOptions:{sectionId:"default"}}:null;
+function createManager(dependencies = {}) {
+  const manager = Versions.createManager(dependencies), state = manager.getState, remove = manager.uninstallRuntime, install = manager.installRuntime;
+  manager.ui = { groupId: "graphics", tabLabel: "Graphics", sectionLabel: "XeSS", order: 0, memberOrder: 6, management: "managed" };
+  manager.updateSettingsAfterInstall = settings => manager.normalizeSettings(settings);
+  manager.getState = context => {
+    const value = state(context), legacy = Library.legacyListInstalled(context?.userDataDir);
+    if (!legacy.length) return value;
+    const installed = [...value.installed, ...legacy];
+    return { ...value, installed, sections: value.sections.map(section => section.id === 'default' ? { ...section, installed } : section) };
+  };
+  manager.uninstallRuntime = context => context.version === Library.Source.version
+    ? Library.remove(context) : remove(context);
+  manager.installRuntime = context => context.version === Library.Source.version
+    ? Library.installLegacy({ ...context, confirmRuntimeInstall: require("../../runtime/tool-install").approveDownloads }) : install(context);
+  manager.resolveRuntime = (context = {}) => {
+    const selection = manager.resolveSelection(context.entry || {}, context.settings, context.userDataDir, { version: context.version });
+    if (!selection.ready) {
+      if (requested(context) && requested(context) !== Library.Source.version) throw missing(selection.reason);
+      return null;
+    }
+    const install = selection.install, operation = context.operation || "superresolution";
+    if (!install.capabilities?.includes(operation)) throw missing("The selected XeSS SDK does not contain the required runtime components.");
+    if (operation === 'superresolution' && context.backend && context.backend !== 'auto' && !install.backends?.includes(context.backend))
+      throw missing("The selected XeSS SDK does not expose the selected GPU backend.");
+    return { ...install, library: operation === 'interpolate' ? install.libraries.frameGeneration : install.library,
+      sourcePath: operation === 'interpolate' ? install.libraries.frameGeneration : install.library };
+  };
+  manager.ensure = async (context = {}) => {
+    let selected = manager.resolveSelection(context.entry || {}, context.settings, context.userDataDir, { version: context.version });
+    if (selected.ready) return manager.resolveRuntime(context);
+    await confirmToolInstall(context, { manager, version: selected.version, requiresDownload: true, detail: "Required for the selected XeSS effect." });
+    if (!selected.version || selected.discoveryRequired) {
+      await manager.refreshCatalog({ ...context, force: false }); context.onRuntimeStateChange?.(); context.signal?.throwIfAborted();
+      selected = manager.resolveSelection(context.entry || {}, context.settings, context.userDataDir, { version: context.version });
+    }
+    if (!selected.version) throw missing("No Intel XeSS SDK releases are available.");
+    await manager.installRuntime({ ...context, version: selected.version, automatic: selected.automatic === true });
+    context.onRuntimeStateChange?.();
+    return manager.resolveRuntime(context);
+  };
+  manager.launchPlan = (context = {}) => {
+    try { if (manager.resolveRuntime(context)) return null; } catch (error) { if (error.code !== 'GRAPHICS_XESS_RUNTIME_MISSING') throw error; }
+    const legacy = Library.legacyListInstalled(context.userDataDir).find(row => row.capabilities?.includes(context.operation || 'superresolution'));
+    if (legacy && (!requested(context) || requested(context) === Library.Source.version)) return null;
+    const selected = manager.resolveSelection(context.entry || {}, context.settings, context.userDataDir, { version: context.version });
+    return { managerId: manager.id, version: selected.version, automatic: selected.automatic === true,
+      label: 'Intel XeSS SDK', requiresDownload: true, installOptions: { sectionId: 'default' } };
+  };
+  return manager;
 }
-module.exports={id:Source.managerId,label:"XeSS",distributionRequired:false,
-  delivery:{included:"none",catalog:"declared",sourceBuild:false},
-  ui:{groupId:"graphics",tabLabel:"Graphics",sectionLabel:"XeSS",order:0,memberOrder:6,management:"managed"},
-  normalizeSettings,getState,installRuntime,launchPlan,coordinateImportRuntime:Library.importRuntime,importRuntime:Library.importRuntime,uninstallRuntime:Library.remove,
-  performSetupAction:context=>{if(context.setupActionId==="download")return installRuntime(context);if(context.setupActionId==="downloadFrameGeneration"){const state=support({...context,operation:"interpolate"});if(!state.available)throw Error(state.reason);return Library.install({...context,operation:"interpolate"});}throw Error("Choose an available XeSS runtime action.");},
-  refreshCatalog:async context=>getState(context).catalog,
-  applySettingsUpdate:(action,payload,settings)=>action==="setDefault"?normalizeSettings({defaultVersion:payload?.version}):normalizeSettings(settings),
-  updateSettingsAfterInstall:settings=>normalizeSettings(settings),
-  updateSettingsAfterUninstall:(settings,payload)=>normalizeSettings(settings).defaultVersion===payload?.version?normalizeSettings():normalizeSettings(settings),core:Library};
+module.exports = Object.assign(createManager(), { createManager });

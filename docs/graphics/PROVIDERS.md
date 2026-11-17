@@ -99,7 +99,9 @@ Frames reach the host through GPU copies between shared Metal-backed storage and
 
 Games that call the XeSS API themselves are handled by a separate integration, which replaces the game's XeSS API under D3D11 and DXMT. It forwards the game's XeSS API resources and frame metadata to a configured shared temporal provider. Because of this mapping, a game's XeSS call does not mean that Intel's neural runtime ran, and the integration does not intercept every D3D12 or Vulkan game API entry point. Flags or graphics profiles that it does not support receive the corresponding API error.
 
-The original XeSS components are imported from local files, and MacLauncher keeps an exact record of each one together with its license terms. The super-resolution, frame-generation and latency components have separate requirements, so installing the provider code does not by itself install or enable every component.
+The Graphics tab in Runtimes lists installed XeSS SDKs. Refresh reads Intel's upstream releases; each listed SDK can be installed, removed or selected as the default. Local SDK folders and DLLs can also be registered. Downloads and local selections use the same checks for Windows CPU headers and the entry points required by the GPU hosts. Play uses an installed compatible selection offline and requests download consent when one is missing. Existing SDK registrations remain available.
+
+The super-resolution, frame-generation and latency components have separate requirements, so installing the provider code does not by itself install or enable every component. Frame generation requires both its own DLL and the XeLL companion from the selected SDK.
 
 XeSS frame generation also needs view and projection matrices. MacLauncher's XeSS integration gives the original SDK unjittered row-major matrices: it removes declared projection jitter and converts explicit clip-range and Y-orientation representations for its texture rows. Authored view, off-center projection and reverse-depth geometry are preserved, and missing renderer matrices are never inferred from camera parameters.
 

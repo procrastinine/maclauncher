@@ -15,7 +15,7 @@ test("XeSS downloads read the installed graphics package's SDK revision and keep
   const requests = [], url = file => `https://raw.githubusercontent.com/intel/xess/${revision}/bin/${file}`;
   Harness.network.routes = Object.fromEntries([Library.Source.file, ...Library.Components.files.map(spec => spec.file)].map(file =>
     [url(file), () => { requests.push(url(file)); return Buffer.from("not the declared library"); }]));
-  const approved = { userDataDir, root, confirmRuntimeInstall: async () => true };
+  const approved = { userDataDir, root, version: Library.Source.version, confirmRuntimeInstall: async () => true };
   await assert.rejects(Library.install(approved), /is not the declared Intel XeSS file: its size or checksum differs/);
   await assert.rejects(Library.install({ ...approved, operation: "interpolate" }), /is not the declared Intel XeSS file: its size or checksum differs/);
   assert.equal(requests[0], url(Library.Source.file));

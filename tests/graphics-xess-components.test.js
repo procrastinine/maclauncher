@@ -40,7 +40,7 @@ test('an incompatible companion publishes no FG receipt and preserves an existin
  fs.writeFileSync(f.ll,Buffer.alloc(fs.statSync(f.ll).size,2));await assert.rejects(Library.importRuntime({...f,runtimePath:f.sdk,operation:'interpolate'}),/does not match/);
  assert.deepEqual(fs.readFileSync(file),before);assert.equal(fs.existsSync(path.join(Library.directory(f.userDataDir),'interpolation.json')),false);assert.deepEqual(Library.listInstalled(f.userDataDir)[0].capabilities,['superresolution']);
 });
-test('XeSS installation preserves Auto and exact user choices while enforcing the adapter SDK contract',async t=>{
+test('XeSS installation preserves Auto and exact user choices with offline missing-version resolution',async t=>{
  const f=fixture(t),Manager=require('../src/modules/shared/reshade/runtime/xess-manager');
  await Library.importRuntime({...f,runtimePath:f.sr});
  const installed=Library.listInstalled(f.userDataDir)[0];
@@ -49,7 +49,7 @@ test('XeSS installation preserves Auto and exact user choices while enforcing th
  assert.deepEqual(Manager.updateSettingsAfterInstall({defaultVersion:'another-sdk'},installed),{defaultVersion:'another-sdk'});
  assert.equal(Manager.getState({...f,root:path.join(f.userDataDir,'no-graphics'),settings:{}}).defaultVersion,null);
  const settings={runtimes:{[Library.Source.managerId]:{defaultVersion:'another-sdk'}}};
- await assert.rejects(Library.resolve(f.userDataDir,{settings}),/selected Intel SDK version/);
- await assert.rejects(Manager.installRuntime({...f,settings,confirmRuntimeInstall:()=>assert.fail('An incompatible choice cannot download')}),/selected Intel SDK version/);
+ await assert.rejects(Library.resolve(f.userDataDir,{settings}),{code:'GRAPHICS_XESS_RUNTIME_MISSING'});
+ const Github=require('../src/modules/shared/runtime/github-releases');t.mock.method(Github,'fetchGithubReleases',async()=>[]);t.mock.method(Github,'fetchGithubTags',async()=>[]);await assert.rejects(Manager.installRuntime({...f,settings}),/XeSS another-sdk is not available/);
  assert.equal((await Library.resolve(f.userDataDir)).version,Library.Source.version);
 });
