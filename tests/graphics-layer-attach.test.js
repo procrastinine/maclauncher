@@ -227,3 +227,57 @@ int main(int argc, char **argv) {
   const result = JSON.parse(execFileSync(path.join(root, "harness"), [root], { encoding: "utf8", timeout: 30000 }));
   assert.deepEqual(result, { tables: 1, before: 1, after: 1, layerKeepsOriginal: 1 });
 });
+
+// On a Vulkan route of a loader that ignores DYLD variables, the selected Direct3D libraries (DXVK, vkd3d-proton)
+// never load the Metal shim, so the scene client's Unix side applies the same graphics libraries. It shares the
+// shim's code; whichever loads first applies them and the other leaves them as they are.
+test("the WineVulkan client's Unix side applies the graphics libraries itself, alone or beside the Metal shim", { skip: process.platform !== "darwin" }, t => {
+  const { execFileSync } = require("node:child_process");
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "winevulkan-rebind-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const native = path.resolve(__dirname, "../src/modules/shared/reshade/native");
+  const scene = fs.readFileSync(path.join(__dirname, "../src/modules/crossover/temporal/vulkan/scene-unix.c"), "utf8");
+  assert.match(scene, /#include "macfx-shared\/reshade\/native\/graphics-library-attach\.h"/);
+  assert.match(scene, /__attribute__\(\(constructor\)\) static void [a-z_]+\(void\)\s*\{\s*maclauncher_attach_graphics_libraries\(\);\s*\}/);
+  const source = (name, text) => { const file = path.join(root, name); fs.writeFileSync(file, text); return file; };
+  const clang = (...args) => execFileSync("/usr/bin/clang", ["-arch", "arm64", "-mmacosx-version-min=13.0", ...args], { stdio: "pipe", timeout: 60000 });
+  const library = (output, input, ...args) => clang("-dynamiclib", "-install_name", "@rpath/" + output, input, "-o", path.join(root, output), ...args);
+  library("winemetal-runtime.so", source("runtime.c", "const void *__wine_unix_call_funcs[1], *__wine_unix_call_wow64_funcs[1];\n"),
+    "-install_name", "@loader_path/winemetal-runtime.so");
+  library("winemetal.so", path.join(native, "winemetal-layer.c"), "-Wl,-reexport_library," + path.join(native, "winemetal-runtime.tbd"));
+  library("winevulkan.so", source("winevulkan.c", `#include "graphics-library-attach.h"
+__attribute__((constructor)) static void attach_graphics_libraries(void) { maclauncher_attach_graphics_libraries(); }
+`), "-I", native);
+  library("graphics.dylib", source("graphics.c", `#include <CoreGraphics/CoreGraphics.h>
+int fixture_loads;
+__attribute__((constructor)) static void loaded(void) { fixture_loads++; }
+CGError fixture_warp(CGPoint point) { (void)point; return kCGErrorSuccess; }
+__attribute__((used)) static const struct { const void *replacement, *original; } pairs[] __attribute__((section("__DATA,__interpose"))) =
+  {{(const void *)fixture_warp, (const void *)CGWarpMouseCursorPosition}};
+`), "-framework", "CoreGraphics");
+  const importer = source("importer.c", "#include <CoreGraphics/CoreGraphics.h>\nvoid *fixture_imported_warp(void) { return (void *)&CGWarpMouseCursorPosition; }\n");
+  for (const name of ["before.dylib", "between.dylib", "after.dylib"]) library(name, importer, "-framework", "CoreGraphics");
+  clang(source("harness.c", `#include <dlfcn.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+typedef void *(*address)(void);
+static void *open(const char *dir, const char *name) { char file[4096]; snprintf(file, sizeof file, "%s/%s", dir, name); return dlopen(file, RTLD_NOW); }
+static int rebound(void *image, void *replacement) { return image && ((address)dlsym(image, "fixture_imported_warp"))() == replacement; }
+int main(int argc, char **argv) {
+  char graphics[4096]; snprintf(graphics, sizeof graphics, "%s/graphics.dylib", argv[1]); setenv("MACLAUNCHER_GRAPHICS_LIBRARIES", graphics, 1);
+  int shim = !strcmp(argv[2], "with-shim");
+  void *before = open(argv[1], "before.dylib"), *vulkan = open(argv[1], "winevulkan.so"), *between = open(argv[1], "between.dylib");
+  void *metal = shim ? open(argv[1], "winemetal.so") : (void *)1, *after = open(argv[1], "after.dylib");
+  void *layer = dlopen(graphics, RTLD_NOLOAD | RTLD_NOW);
+  if (!before || !vulkan || !between || !metal || !after || !layer) { fprintf(stderr, "%s\\n", dlerror()); return 2; }
+  void *replacement = dlsym(layer, "fixture_warp");
+  printf("{\\"loads\\":%d,\\"before\\":%d,\\"between\\":%d,\\"after\\":%d}\\n", *(int *)dlsym(layer, "fixture_loads"),
+    rebound(before, replacement), rebound(between, replacement), rebound(after, replacement));
+  return 0;
+}
+`), "-o", path.join(root, "harness"));
+  for (const mode of ["alone", "with-shim"])
+    assert.deepEqual(JSON.parse(execFileSync(path.join(root, "harness"), [root, mode], { encoding: "utf8", timeout: 30000 })),
+      { loads: 1, before: 1, between: 1, after: 1 }, mode);
+});

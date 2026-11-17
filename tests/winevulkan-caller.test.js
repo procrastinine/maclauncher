@@ -242,3 +242,60 @@ test('legacy builtin export names preserve the publisher route without acquiring
   const context={settings:{},userDataDir:path.join(f.root,'profile'),useRuntime:()=>assert.fail('unsupported helper is not leased'),translatorPlan:{layout:require('../src/modules/shared/runtime/wine-layout').wineLayout(f.install),components:{'vulkan-driver':{used:{engine:'moltenvk'}}}}};
   assert.equal(await Graphics.prepareWineVulkan({},context,f.install,{manager,root:path.join(f.root,'absent-component')}),null);
 });
+
+// MetalSharp Wine's loader ignores DYLD variables but loads unsigned libraries. On its Vulkan values (DXVK,
+// vkd3d-proton) no Metal shim loads, so the WineVulkan client is what applies the graphics libraries.
+const metalsharpSignature = `CodeDirectory v=20500 size=447 flags=0x10000(runtime) hashes=3+7 location=embedded\n[Dict]\n` +
+  ['com.apple.security.cs.allow-jit','com.apple.security.cs.disable-library-validation'].map(key=>`\t[Key] ${key}\n\t[Value]\n\t\t[Bool] true\n`).join('');
+function hardenedLoader(f,signature=metalsharpSignature){
+  const unix=path.join(f.engine,'lib/wine/aarch64-unix'),bundle=path.join(unix,'wine.app/Contents');
+  fs.rmSync(path.join(unix,'wine'));put(path.join(bundle,'MacOS/wine'),image({cpu:ARM64,fileType:2}));put(path.join(bundle,'embedded.provisionprofile'),'fixture');
+  fs.symlinkSync('wine.app/Contents/MacOS/wine',path.join(unix,'wine'));
+  Graphics.graphicsLayerRoute(f.install,{readSignature:()=>signature});
+}
+test('a hardened Wine loader on a Vulkan graphics value asks for a WineVulkan client that applies the graphics libraries',async t=>{
+  const Policy=require('../src/core/runtime-resolution/graphics-policy');
+  assert.equal(Policy.graphicsModule({runtime:'metalsharp-wine'}),'winemetal','unset, Mullion renders through winemetal');
+  for(const value of ['dxvk','vkd3d'])assert.equal(Policy.graphicsModule({runtime:'metalsharp-wine',graphicsPolicy:{value}}),'winevulkan',value);
+  assert.equal(Policy.graphicsModule({runtime:'metalsharp-wine',graphicsPolicy:{value:'wine'}}),null,'Wine\'s own libraries name no module');
+  assert.equal(Policy.graphicsModule({runtime:'sikarugir'}),null);
+  const f=moduleFixture(t);hardenedLoader(f);
+  const pin={version:'2.0.0',capabilities:{runtimeProfile:f.profile,graphicsLibraryAPI:1},asset:{bytes:42}};
+  const manager={id:'winevulkan-scene',label:'WineVulkan helper',core:{catalog:[pin]},resolveSelection:()=>({ready:false,version:pin.version}),getState:()=>({installed:[]})};
+  const plan=value=>({runtime:'metalsharp-wine',layout:require('../src/modules/shared/runtime/wine-layout').wineLayout(f.install),
+    components:{'vulkan-driver':{used:{engine:'kosmickrisp'}}},...(value?{graphicsPolicy:{variable:'GRAPHICS_BACKEND',value,lanes:[]}}:{})});
+  const ask=(effects,value,options={})=>Graphics.wineVulkanRequirements({name:'Fixture',effects},{runtimeId:'metalsharp-wine',runtimeSettings:{},settings:{runtimes:{}},userDataDir:path.join(f.root,'profile'),
+    translatorPlan:plan(value)},{install:f.install,manager,root:path.join(f.root,'absent-component'),...options});
+  const spatial={schema:2,mode:'advanced',enabled:true,video:[{id:'cas',kind:'spatial',enabled:true,method:'cas',settings:{}}]};
+  assert.equal((await ask(spatial,'dxvk')).length,1,'a spatial filter on DXVK needs the client to attach');
+  assert.equal((await ask(spatial,'vkd3d')).length,1);
+  assert.deepEqual(await ask(spatial,null),[],'Mullion\'s winemetal applies them on the unset value');
+  assert.deepEqual(await ask({schema:2,mode:'advanced',enabled:false,video:[]},'dxvk'),[],'no processing, no client');
+  delete pin.capabilities.graphicsLibraryAPI;
+  assert.deepEqual(await ask(spatial,'dxvk'),[],'a client without the graphics library constructor is not downloaded for it');
+  const scene={schema:2,mode:'advanced',enabled:true,video:[{id:'t',kind:'temporal',enabled:true,method:'metalfx',settings:{}}]};
+  assert.deepEqual(await ask(scene,'dxvk'),[],'scene inputs on a hardened loader need a client that also attaches the processor');
+  pin.capabilities.graphicsLibraryAPI=1;
+  assert.equal((await ask(scene,'dxvk')).length,1);
+  // An installed client without the constructor leaves the attachment to a listed one that has it.
+  const Tool=require('../src/modules/crossover/temporal/vulkan/manager');
+  const local={...manager,inspectPayload:Tool.inspectPayload,
+    resolveSelection:(_entry,_settings,_root,options)=>options?.compatible?{ready:false,version:pin.version}:{ready:true,version:'1.0.0',install:{modulePayloadRoot:f.moduleRoot}}};
+  assert.equal((await ask(spatial,'dxvk',{manager:local})).length,1);
+  f.manifest.provider.graphicsLibraryAPI=1;put(path.join(f.moduleRoot,'manifest.json'),JSON.stringify(f.manifest));
+  assert.deepEqual(await ask(spatial,'dxvk',{manager:local}),[],'the installed client carries them');
+});
+
+test('the game process loads the graphics libraries through the WineVulkan client only when it carries them on a loader that loads unsigned libraries',t=>{
+  const f=moduleFixture(t),carrying={graphicsLibraries:true};
+  assert.equal(Graphics.inProcessGraphics(f.install,{vulkanSelection:carrying}),false,'a loader that honours DYLD variables takes the DYLD route');
+  hardenedLoader(f);
+  assert.equal(Graphics.inProcessGraphics(f.install,{vulkanSelection:carrying}),true);
+  assert.equal(Graphics.inProcessGraphics(f.install,{vulkanSelection:{graphicsLibraries:false}}),false);
+  assert.equal(Graphics.inProcessGraphics(f.install,{vulkanSelection:carrying,environment:{running:true}}),false,'a running Wine session keeps its own processes');
+  assert.equal(Graphics.inProcessGraphics(f.install,{runtimeLibraryRoot:'/view/graphics-runtime'}),true);
+  const strict=moduleFixture(t);hardenedLoader(strict,metalsharpSignature.replace('disable-library-validation','allow-unsigned-executable-memory'));
+  assert.equal(Graphics.inProcessGraphics(strict.install,{vulkanSelection:carrying}),false,'library validation refuses an unsigned client');
+  assert.match(fs.readFileSync(path.join(__dirname,'../src/modules/crossover/sources/wine-graphics.js'),'utf8'),
+    /inProcessGraphics\(install, \{ runtimeLibraryRoot, vulkanSelection, environment \}\) \? \{ inProcessGraphics: true \} : \{\}/);
+});

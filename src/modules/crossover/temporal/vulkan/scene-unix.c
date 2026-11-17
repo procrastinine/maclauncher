@@ -9,6 +9,7 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+#include "macfx-shared/reshade/native/graphics-library-attach.h"
 #include "vulkan_private.h"
 #include "scene-request.h"
 #include "scene-metadata.h"
@@ -25,6 +26,10 @@ struct scene_provider {
     atomic_uint references;
     RSWineVulkanSceneProviderV1 value;
 };
+// A Vulkan route of a loader that ignores DYLD variables loads no Metal shim, so
+// this module applies the graphics libraries (graphics-library-attach.h).
+__attribute__((constructor)) static void attach_graphics_libraries(void) { maclauncher_attach_graphics_libraries(); }
+
 static pthread_mutex_t provider_mutex = PTHREAD_MUTEX_INITIALIZER;
 static struct scene_provider *current_provider;
 struct scene_context {

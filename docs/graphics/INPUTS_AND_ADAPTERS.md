@@ -105,6 +105,8 @@ Reconstruction work can also be prepared ahead of time. The optional preparation
 
 On the native side, the driver still encodes the work through `RSVulkanSceneEncodingV2`, with its actual queue and the retain and release callbacks for each frame in flight. The shared graph chooses and prepares the provider, and the scene connection itself selects no algorithm and creates no command queue or presentation scheduler.
 
+The module's Unix side also loads the graphics layer in a game process whose Wine loader ignores DYLD variables but loads unsigned libraries, such as MetalSharp Wine's under its DXVK and vkd3d-proton values, where no Metal library of the Wine loads. [Wine runtimes](../runtimes/WINE.md) describes when Play selects a module version for that.
+
 ### XeSS compute hosts
 
 Which scene producer supplies a frame and which algorithm processes it are separate choices. Intel XeSS, for example, is one of the temporal upscaling implementations in the shared graph, and neither the game's CPU architecture nor its original upscaling API decides whether it can run. [XeSS](PROVIDERS.md#xess) lists its inputs and the hosts it can run in.

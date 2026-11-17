@@ -307,6 +307,19 @@ function graphicsLayerRoute(install, { readSignature = codesignOutput } = {}) {
 function graphicsLayerAttachable(install, options = {}) {
   return graphicsLayerRoute(install, options) !== null;
 }
+// Whether the loader the game runs from ignores DYLD variables but loads
+// unsigned libraries, so a Unix module of the game's process applies the
+// graphics libraries itself (graphics-library-attach.h).
+function loadsUnsignedLibraries(install, { readSignature = codesignOutput } = {}) {
+  const facts = loaderFacts(install, readSignature);
+  return Boolean(facts && !facts.dyld && facts.libraries);
+}
+// Whether such a module is prepared: the view's Metal shim (runtimeLibraryRoot),
+// or a selected WineVulkan client that carries the graphics libraries' loader.
+// A running Wine session keeps the processes it has.
+function inProcessGraphics(install, { runtimeLibraryRoot, vulkanSelection, environment } = {}) {
+  return Boolean(runtimeLibraryRoot || !environment && vulkanSelection?.graphicsLibraries === true && loadsUnsignedLibraries(install));
+}
 // A Wine whose ntdll reads DXMT_RUNTIME_DIR loads <dir>/aarch64-unix/winemetal.so
 // as the Unix side of its Metal library, and its Windows libraries from the
 // folders beside it. The runtime's own folder is lib/mullion; a separately
@@ -517,7 +530,7 @@ function wineVulkanSelection(root, install, { layout = wineLayout(install), sign
     try { require("../temporal/vulkan/selection").inspectClientName({file:client.file,sha256:client.sha256}); }
     catch(error){if(error.message==="WineVulkan client needs a distinct builtin export name.")continue;throw error;}
     matches.push({ client: { file: client.file, sha256: client.sha256, original: { file: original, sha256: Identity.fileDigest(original).sha256 } },
-      native: { file: native.file, sha256: native.sha256, dependencies },
+      native: { file: native.file, sha256: native.sha256, dependencies }, graphicsLibraries: (supplied?.provider || pair).graphicsLibraryAPI === 1,
       inputs: [declaration, client, native].map(({ file, sha256 }) => ({ path: file, sha256 })) });
   }
   if (matches.length > 1) fail("The WineVulkan graphics package has more than one matching pair.");
@@ -563,18 +576,25 @@ async function wineVulkanRequirements(entry,context,{install,translatorPlan=cont
     install=context.wineEnvironment?.install||source.manager().resolveSelection(entry,context.settings,context.userDataDir,context.runtimeSettings).install;
   }
   if(!install)return [];
+  // On a loader that ignores DYLD variables, a graphics value that renders
+  // through winevulkan loads no Metal shim, so processing needs a client that
+  // applies the graphics libraries.
+  const attaches=require("../../shared/effects/execution-requirements").analyze(entry).needed.processor&&
+    require("../../../core/runtime-resolution/graphics-policy").graphicsModule(translatorPlan)==="winevulkan"&&loadsUnsignedLibraries(install);
   const resolved=wineVulkanRuntimeSelection(entry,context,install,{translatorPlan,root,manager});
-  if(resolved.selection){
+  if(resolved.selection&&(!attaches||resolved.selection.graphicsLibraries)){
     if(resolved.managed)context.recordRuntimeUse?.({managerId:manager.id,version:resolved.selected.version,sourcePath:resolved.selected.install.installDir||resolved.selected.install.modulePayloadRoot||resolved.selected.install.executablePath});
     return [];
   }
-  // Only an explicitly requested scene feature asks for an absent module.
-  // Unprofiled or incompatible Wine versions keep their publisher renderer.
-  if(context.runtimeSettings?.dlss!==true&&!DLSS.needsSceneInputs(entry.effects))return [];
+  // Only an explicitly requested scene feature or that attachment asks for an
+  // absent module. Unprofiled or incompatible Wine versions keep their
+  // publisher renderer.
+  if(!attaches&&context.runtimeSettings?.dlss!==true&&!DLSS.needsSceneInputs(entry.effects))return [];
   const layout=translatorPlan.layout||wineLayout(install),Architecture=require("../../shared/runtime/architecture");
   if(!Architecture.targetArchitecture(layout.architecture)||!layout.primaryWindowsRoot||!layout.unixRoot)return [];
   const compatible=pin=>{
     const binding=pin.runtimeProfile||pin.capabilities?.runtimeProfile||pin.projectPackage?.capabilities?.runtimeProfile;
+    if(attaches&&(pin.graphicsLibraryAPI??pin.capabilities?.graphicsLibraryAPI??pin.projectPackage?.capabilities?.graphicsLibraryAPI)!==1)return false;
     const files=wineVulkanProfile(binding,layout),original=path.join(layout.primaryWindowsRoot,"winevulkan.dll"),native=path.join(layout.unixRoot,"winevulkan.so");
     if(!files||!fs.existsSync(original)||!fs.existsSync(native)||!files.has(fs.realpathSync(original))||!files.has(fs.realpathSync(native)))return false;
     const image=require("../../shared/runtime/macho-load-commands").readMachOLoadCommands(native,{signal:context.signal}).slices.find(row=>row.architecture===layout.architecture);
@@ -742,10 +762,11 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
     },
   } : path.isAbsolute(prefixPath || "") && writesBuiltinPrefix ? { applyPrefix: () => registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, layout) } : {};
   const result = { ...selection, ...loader, env, dllOverrides, translatorPlan, ...lifecycle,
-    capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath, ...(runtimeLibraryRoot ? { inProcessGraphics: true } : {}) };
+    capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath,
+    ...(inProcessGraphics(install, { runtimeLibraryRoot, vulkanSelection, environment }) ? { inProcessGraphics: true } : {}) };
   if (vulkanSelection) Object.defineProperty(result, "vulkanNative", { enumerable: true, get: () => prepared?.native });
   return result;
 }
 
-module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, publisherSigned, graphicsLayerAttachable, graphicsLayerRoute, runtimeLibraryRoute, prepareRuntimeLibraryView, gameLoader, keepBundleLoader, gameBundleInfo, prepareGraphicsView, wineVulkanSelection, wineVulkanRuntimeSelection, prepareWineVulkan, prepareWineVulkanView, wineVulkanRequirements, capabilitiesFor,
+module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, publisherSigned, graphicsLayerAttachable, graphicsLayerRoute, loadsUnsignedLibraries, inProcessGraphics, runtimeLibraryRoute, prepareRuntimeLibraryView, gameLoader, keepBundleLoader, gameBundleInfo, prepareGraphicsView, wineVulkanSelection, wineVulkanRuntimeSelection, prepareWineVulkan, prepareWineVulkanView, wineVulkanRequirements, capabilitiesFor,
   __test: { capabilitiesFor, ownDirectory, prepareLoaderView, CORE_DLLS } };
