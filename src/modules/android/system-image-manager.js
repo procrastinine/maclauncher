@@ -43,7 +43,9 @@ function createManager(dependencies = {}) {
     });
   }
   function selection(entry,settings,userDataDir,options={}) {
-    const installed=listInstalled(userDataDir),rows=sources(userDataDir),saved=Custom.defaultVersion(settings,ID);
+    const installed=listInstalled(userDataDir),rows=sources(userDataDir),choice=Custom.defaultVersion(settings,ID);
+    // A saved default that is neither installed nor listed any more gives way to the ordinary choice.
+    const saved=!rows.length&&!installed.length||installed.some(row=>row.version===choice)||rows.some(row=>row.version===choice)?choice:null;
     const chosen=selectRuntimeVersion({manual:options.version,defaultVersion:saved,
       fallback:managerDefaultVersion({installed:installed.filter(row=>row.ready).map(row=>row.version),listed:rows.map(row=>row.version)})});
     const install=installed.find(row=>row.version===chosen.version&&row.ready)||null;
@@ -144,6 +146,8 @@ function createManager(dependencies = {}) {
       ...(context.version?{version:context.version}:{}),...(context.requiredImage?.sha256?{sourcePath:path.join(parent(context.userDataDir),context.requiredImage.sha256)}:{})},
       ()=>installRuntime(context),{userDataDir:context.userDataDir}),uninstallRuntime:remove,
     async refreshCatalog(context={}) {const entries=await source.discover({...context,latestOnly:false});
+      // An answer that lists no image is not a release list; the earlier list stays.
+      if(!entries.length)throw Error('Google\'s Android image catalog listed no system images. Refresh again later.');
       Catalog.writeRuntimeCatalog({userDataDir:context.userDataDir,managerId:ID,source:source.locations?.[0],entries,maxEntries:2000});return getState(context).catalog;},
     applySettingsUpdate:(action,payload,settings)=>action==='setDefault'?normalizeSettings({...settings,defaultVersion:payload.version}):normalizeSettings(settings),
     updateSettingsAfterInstall:(settings,installed)=>normalizeSettings(settings).defaultVersion?settings:{...settings,defaultVersion:installed.version},
