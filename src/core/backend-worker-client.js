@@ -246,8 +246,11 @@ const PERSISTENT = new Set(["state", "inspector"]);
 const RETAINED_READS = new Set(["inspector"]);
 // A game's or an import's first request otherwise waits for a new worker to
 // load every module. One spare worker loads them in advance and becomes the
-// next such lane; another starts shortly after.
+// next such lane; another starts shortly after. When the user starts choosing
+// games to add, further spares start so that each of the import queue's lanes
+// has a worker; spares nobody takes close after the idle period.
 const SPARE = "spare", SPARE_DELAY_MS = 250;
+const isSpare = lane => lane === SPARE || lane.startsWith(SPARE + ":");
 const adoptsSpare = lane => lane.startsWith("game:") || lane.startsWith("library-import:");
 function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
   idleMs = 120000, maxIdleWorkers = 2, workerPath, runtimeCoordinator } = {}) {
@@ -262,8 +265,8 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
   function idle(lane, client) {
     if (clients.get(lane) !== client) return;
     cancelIdle(lane);
-    if (client.pending.size || client.retainedProcesses || PERSISTENT.has(lane) || lane === SPARE) return;
-    const idleClients = [...clients].filter(([key, value]) => !PERSISTENT.has(key) && key !== SPARE && !value.pending.size && !value.retainedProcesses);
+    if (client.pending.size || client.retainedProcesses || PERSISTENT.has(lane) || isSpare(lane)) return;
+    const idleClients = [...clients].filter(([key, value]) => !PERSISTENT.has(key) && !isSpare(key) && !value.pending.size && !value.retainedProcesses);
     for (const [key, value] of idleClients.slice(0, Math.max(0, idleClients.length - maxIdleWorkers))) {
       cancelIdle(key); clients.delete(key); downloads.delete(key); void value.close();
     }
@@ -287,7 +290,7 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
     client.on("shutdown", () => coordination.close());
     client.on("event", (event, payload) => {
       const lane = client.lane;
-      if (clients.get(lane) !== client || lane === SPARE) return;
+      if (clients.get(lane) !== client || isSpare(lane)) return;
       if (event === "downloads") downloads.set(lane, payload);
       if ((event === "toolLaunch" || event === "gameProcess") && payload.process) payload = { ...payload, child: client.process(payload.process) };
       // Other lanes stop reusing display inventories after a runtime change.
@@ -312,20 +315,40 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
     cancelIdle(lane);
     let client = clients.get(lane);
     if (!client || client.closed) {
-      const spare = adoptsSpare(lane) && clients.get(SPARE);
-      if (spare && !spare.closed) {
-        clients.delete(SPARE); spare.lane = lane; clients.set(lane, spare); client = spare;
+      const spareLane = adoptsSpare(lane) && [...clients.keys()].find(key => isSpare(key) && !clients.get(key).closed);
+      if (spareLane) {
+        const spare = clients.get(spareLane);
+        cancelIdle(spareLane); clients.delete(spareLane); spare.lane = lane; clients.set(lane, spare); client = spare;
         if (sparePrepared) setTimeout(prepareSpare, SPARE_DELAY_MS).unref();
       } else client = create(lane);
     }
     return client;
   }
   let sparePrepared = false;
+  const spares = () => [...clients].filter(([key, client]) => isSpare(key) && !client.closed).length;
   function prepareSpare() {
     sparePrepared = true;
-    if (disposed || shuttingDown || clients.get(SPARE) && !clients.get(SPARE).closed) return false;
+    if (disposed || shuttingDown || spares()) return false;
     create(SPARE);
     return true;
+  }
+  // Workers for `count` concurrent imports: idle import lanes and spares count.
+  function prepareImportLanes(count) {
+    if (disposed || shuttingDown) return 0;
+    const ready = [...clients].filter(([key, client]) => !client.closed && (isSpare(key) ||
+      key.startsWith("library-import:") && !client.pending.size)).length;
+    let started = 0;
+    for (let index = 1; ready + started < count; index++) {
+      const lane = `${SPARE}:${index}`;
+      if (clients.has(lane) && !clients.get(lane).closed) continue;
+      const client = create(lane); started++;
+      const timer = setTimeout(() => {
+        if (clients.get(lane) !== client) return;
+        clients.delete(lane); timers.delete(lane); void client.close();
+      }, idleMs);
+      timer.unref(); timers.set(lane, timer);
+    }
+    return started;
   }
   // The first selected game's inspector requests otherwise wait for a worker
   // to load its modules and read installed runtimes. The inspector worker
@@ -366,6 +389,7 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
     async close() { disposed = true; for (const lane of timers.keys()) cancelIdle(lane); await Promise.all([...clients.values()].map(client => client.close())); clients.clear(); },
     prepareInspectorLane: (settings, order) => prepareInspector(settings, order),
     prepareSpareLane: () => prepareSpare(),
+    prepareImportLanes: count => prepareImportLanes(count),
     // State propagation is a cheap message; workers never query Electron synchronously.
     updateRunning: running => { currentRunning = running; for (const client of clients.values()) if (!client.closed) client.worker.postMessage({ type: "running", running }); }
   };

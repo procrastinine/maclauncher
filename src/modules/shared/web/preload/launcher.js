@@ -153,6 +153,7 @@ contextBridge.exposeInMainWorld("MacLauncher", {
       return () => ipcRenderer.removeListener("launcher:steamState", handler);
     },
     openGameDialog: () => ipcRenderer.invoke("launcher:openGameDialog"),
+    prepareImport: () => ipcRenderer.send("launcher:prepareImport"),
     getPathForFile: file => {
       try {
         if (file && typeof file.path === "string" && file.path) return file.path;

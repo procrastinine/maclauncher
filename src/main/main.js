@@ -3618,7 +3618,14 @@ ipcMain.handle("launcher:openUtilityWindow", async (_event, request) => {
   return true;
 });
 
+// Choosing games to add starts a worker for each import lane while the user
+// picks, so the imports that follow do not wait for workers to load modules.
+function prepareImportLanes() {
+  try { backendService.prepareImportLanes(gameImports.concurrency); } catch {}
+}
+
 async function showGameOpenDialog() {
+  prepareImportLanes();
   const result = await dialog.showOpenDialog({
     title: "Open game",
     properties: ["openFile", "openDirectory", "multiSelections"],
@@ -3741,6 +3748,7 @@ async function openGamesFromMenu() {
 }
 
 ipcMain.handle("launcher:openGameDialog", showGameOpenDialog);
+ipcMain.on("launcher:prepareImport", prepareImportLanes);
 // The result is a record: Electron keeps only the message of a thrown error, and
 // the code decides which recovery actions an import failure offers.
 ipcMain.handle("launcher:addRecent", async (_event, inputPath) => {

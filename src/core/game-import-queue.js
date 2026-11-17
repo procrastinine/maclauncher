@@ -55,6 +55,7 @@ function createGameImportQueue({ onChange, cancelImporter, concurrency = 3 } = {
       return operation;
     },
     list,
+    concurrency: limit,
     async cancel(input) {
       if (typeof input !== "string" || !input || input.includes("\0")) return false;
       const resolved = path.resolve(input), job = jobs.get(resolved);

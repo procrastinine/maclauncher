@@ -771,6 +771,7 @@ declare global {
         steamChooseDirectory: import("./components/SteamView").SteamApi["steamChooseDirectory"];
         onSteamState: import("./components/SteamView").SteamApi["onSteamState"];
         openGameDialog(): Promise<string[]>;
+        prepareImport?(): void;
         getPathForFile(file: File): string | null;
         addRecent(inputPath: string): Promise<unknown>;
         cancelImport(inputPath: string): Promise<boolean>;

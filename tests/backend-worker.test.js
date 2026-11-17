@@ -246,6 +246,23 @@ test("an import lane adopts the prepared spare worker", { timeout: 10000 }, asyn
   assert.equal((await service.request("library", "moduleAction", {}, "status", {})).lane, "library", "the library lane keeps its own worker");
 });
 
+test("choosing games to add prepares a worker for each import lane, and spares nobody takes close", { timeout: 10000 }, async t => {
+  const service = createBackendService({ workerPath, idleMs: 300 });
+  t.after(() => service.close());
+  assert.equal(service.prepareSpareLane(), true);
+  assert.equal(service.prepareImportLanes(3), 2, "two spares join the prepared one");
+  assert.equal(service.prepareImportLanes(3), 0, "prepared lanes are not started again");
+  const lanes = await Promise.all([0, 1, 2].map(index => service.request(`library-import:${index}`, "moduleAction", {}, "status", {})));
+  assert.deepEqual(lanes.map(reply => reply.lane).sort(), ["spare", "spare:1", "spare:2"], "every concurrent import starts on a prepared worker");
+  assert.equal(service.prepareImportLanes(2), 0, "the idle import lanes that stay open count as prepared");
+
+  const unused = createBackendService({ workerPath, idleMs: 200 });
+  t.after(() => unused.close());
+  assert.equal(unused.prepareImportLanes(2), 2);
+  await new Promise(resolve => setTimeout(resolve, 500));
+  assert.equal((await unused.request("library-import:0", "moduleAction", {}, "status", {})).lane, "library-import:0", "unused spares closed");
+});
+
 test("native host callbacks roundtrip asynchronously and preserve structured errors", async t => {
   const client = new BackendWorkerClient({ workerPath, callbacks: { choose: async descriptor => ({ path: descriptor.path }) } });
   t.after(() => client.close());

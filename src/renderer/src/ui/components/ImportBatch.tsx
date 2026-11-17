@@ -203,6 +203,7 @@ export function useLauncherDrop(api: NonNullable<Window["MacLauncher"]>["launche
 
   function onAppDragEnter(ev: React.DragEvent) {
     if (!isExternalFileDrag(ev)) return;
+    if (!addDropDepth.current) api?.prepareImport?.();
     closePopoversForDrop();
     addDropDepth.current += 1;
     setAddDropActive(true);
