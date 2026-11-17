@@ -39,7 +39,7 @@ export function LibraryToolbar({ sort, onSortChange, scope, onScopeChange, count
         </select>
         <PopoverButton label={<>Game types{typesFiltered ? " •" : ""}</>} ariaLabel="Game types"
           title={typesFiltered ? "Some game types are hidden" : undefined} disabled={!hasTypes}
-          buttonClassName={["btn", "small", typesFiltered ? "primary" : ""].filter(Boolean).join(" ")}
+          buttonClassName={["btn", typesFiltered ? "primary" : ""].filter(Boolean).join(" ")}
           popoverClassName="menuPopover gameSearchDropdown">{types}</PopoverButton>
         <span className="libraryCount">{count}</span>
         <label className="librarySort">

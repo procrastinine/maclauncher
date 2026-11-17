@@ -227,8 +227,9 @@ export function SettingsView({
                 || runtimeTabs[0];
               return (
                 <div className="settingsSection" key={mod.id}>
+                  {/* The heading repeats the sidebar entry that opened it. */}
                   <div className="settingsTitle">
-                    {formatModuleLabel(mod.label, mod.shortLabel, mod.id)}
+                    {mod.shortLabel || formatModuleLabel(mod.label, mod.shortLabel, mod.id)}
                   </div>
                   {(runtimeChoices.length > 1 || (defaultRuntime && !runtimeChoices.includes(defaultRuntime))) && (
                     <div className="settingsRow">

@@ -41,7 +41,7 @@ function propsFor(runtime, runtimeData = {}) {
 }
 function renderRows(t, props) {
   const harness = componentHarness(GameDetails, props); t.after(() => harness.close());
-  const rows = elements(harness.render()).filter(node => node.props.className === 'detailRow');
+  const rows = elements(harness.render()).filter(node => /^detailRow(?: textRow)?$/.test(node.props.className || ''));
   const markup = renderToStaticMarkup(React.createElement(React.Fragment, null, ...rows));
   return { rows, markup };
 }
@@ -85,8 +85,11 @@ test('actual provider status rows render selected to used for every API, Vulkan 
       assert.equal(React.Children.toArray(value.props.children).filter(child => typeof child === 'string').join(''), text);
       assert.equal(renderToStaticMarkup(labelRows[0]).includes(' → '), row.selected !== row.used);
     }
-    assert.ok(rendered.markup.includes('Required fixture symbol is absent.'));
+    // The arrow says a choice falls back; translator rows carry no reason lines (GUI 0877 L2).
+    assert.equal(rendered.markup.includes('Required fixture symbol is absent.'), false);
     assert.equal(rendered.markup.includes('Identical choices need no reason.'), false);
+    assert.ok(rendered.rows.every(node => node.props.className !== 'detailRow' || !elements(node).some(child => child.props.className === 'detailLabel'
+      && rows.some(row => row.label === child.props.children))), 'translator rows align labels with the first value line');
     assert.ok(rendered.markup.includes('Camera fixture notice.'));
     assert.deepEqual(rows.map(row => row.component), ['d3d8', 'd3d9', 'd3d10', 'd3d11', 'd3d12', 'vulkan-driver', 'video']);
   }
@@ -105,7 +108,7 @@ test('before status arrives a recorded game shows a pending line, never recorded
     assert.equal(renderRows(t, propsFor(runtime)).markup.includes('Checking…'), false, 'a game without a recorded Play shows no pending line');
     props.runtimeStatusEntry = { runtimeId: runtime, status: { translatorRows: [{ id: 'fresh', label: 'Fresh status', selected: 'New selection', used: 'New used', reason: 'Actual new reason.' }] } };
     const current = renderRows(t, props).markup;
-    assert.ok(current.includes('New selection → New used')); assert.ok(current.includes('Actual new reason.'));
+    assert.ok(current.includes('New selection → New used')); assert.equal(current.includes('Actual new reason.'), false);
     assert.equal(current.includes('Required fixture symbol is absent.'), false);
     assert.equal(current.includes('Checking…'), false);
     assert.equal(current.includes('Unavailable'), false);
@@ -146,4 +149,23 @@ test('an automatic selection reads Automatic before what it uses, and the runtim
   assert.deepEqual(rows['Direct3D 11'], ['DXMT 0.80 · WineCX', 'DXMT 0.80 · WineCX']);
   // DXMT has no Direct3D 9 library, so that API is left to WineCX.
   assert.deepEqual(rows['Direct3D 9'], ["WineCX's automatic choice", "WineCX's automatic choice"]);
+});
+
+test('only the DLSS forwarding line stays under a translator row, and repeated source ids leave the shown labels', t => {
+  const runtime = manifest.runtime.supported[0], props = propsFor(runtime);
+  props.runtimeStatusEntry = { runtimeId: runtime, status: { translatorRows: [
+    { id: 'vk', label: 'Vulkan', selected: 'Stock MoltenVK', used: 'Stock MoltenVK', reasonCode: 'dlss-forwarding', reason: 'This Vulkan driver does not forward DLSS frames.' },
+    { id: 'd3d12', label: 'Direct3D 12', selected: 'Saved selection (unavailable)', used: 'WineD3D · CrossOver 26.3', fallback: true, reasonCode: 'matching-implementation',
+      reason: 'Direct3D 12 and DXGI must use matching translator implementations.' }] } };
+  const markup = renderRows(t, props).markup;
+  assert.ok(markup.includes('This Vulkan driver does not forward DLSS frames.'));
+  assert.equal(markup.includes('matching translator implementations'), false);
+  assert.ok(markup.includes('Saved selection (unavailable) → WineD3D · CrossOver 26.3'));
+  assert.match(markup, /<div class="detailRow textRow"><div class="detailLabel">Direct3D 12<\/div>/);
+  const label = require('../src/modules/shared/runtime/translator-label.js');
+  assert.equal(label.presentLabel('DXVK 3.1.1 · dxvk'), 'DXVK 3.1.1');
+  assert.equal(label.presentLabel('KosmicKrisp 27.0.0-devel · maclauncher-kosmickrisp'), 'KosmicKrisp 27.0.0-devel');
+  assert.equal(label.presentLabel('DXVK 3.1.1 · dxvk-gplasync'), 'DXVK 3.1.1 · dxvk-gplasync', 'a folder that tells registrations apart stays');
+  const css = require('node:fs').readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.detailRow\.textRow \{ align-items: baseline; \}/);
 });

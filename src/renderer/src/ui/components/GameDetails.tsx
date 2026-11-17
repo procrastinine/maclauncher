@@ -26,7 +26,7 @@ import { moduleToolGroups, presentModuleFields } from "./module-tools-model";
 import { isRuntimeManageable } from "./runtime-tabs-model";
 import { RuntimeDescription } from "./RuntimeDescription";
 import { resolveInspectorRuntimeSection, runtimeInspectorInstall, runtimeInspectorRepair, runtimeInspectorSelectedVersion,
-  runtimeInspectorVersions, runtimeInspectorVersionOptions, runtimeInspectorVersionPatch } from "./runtime-inspector-model";
+  runtimeInspectorVersions, runtimeInspectorVersionOptions, runtimeInspectorVersionPatch, runtimeVersionTagWithout } from "./runtime-inspector-model";
 import { EffectsControls } from "./EffectsControls";
 import { ErrorText } from "./ErrorText";
 import { StatusBadge } from "./StatusBadge";
@@ -385,8 +385,9 @@ export const GameDetails = memo(function GameDetails({
   const runtimeRecommendationInstalled = Boolean(runtimeRecommendation && (runtimeSection?.installed || [])
     .some((item: any) => item?.version === runtimeRecommendation.version && item.ready !== false &&
       (!runtimeRecommendedVariant || item.variant === runtimeRecommendedVariant)));
-  const runtimeVersionTag = runtimeVersionTagger(runtimeSection,
-    [...runtimeVersionChoices, runtimeRecommendation?.version, runtimePlayVersion, runtimeStatusDefaultVersion]);
+  // The Runtime row above names the runtime, so its versions read without it.
+  const runtimeVersionTag = runtimeVersionTagWithout(runtimeVersionTagger(runtimeSection,
+    [...runtimeVersionChoices, runtimeRecommendation?.version, runtimePlayVersion, runtimeStatusDefaultVersion]), runtimeLabel);
   const runtimeVersionOptions = runtimeInspectorVersionOptions(runtimeSection, runtimeVersionSelected, runtimeVersionTag,
     Boolean(runtimeVersionOverride) && !runtimeChoiceAnswer);
   const runtimePreferredArchitecture = runtimeArchitectureOverride || runtimeSection?.defaultArchitecture ||
@@ -507,15 +508,7 @@ export const GameDetails = memo(function GameDetails({
                 <PathDisplay path={saveDir} managed={g.managedSaveDir} />
               </div>
               <div className="detailActions">
-                <button
-                  className="btn small iconOnly"
-                  onClick={() => onReveal(saveDir)}
-                  disabled={!hasSaveDir}
-                  title="Reveal in Finder"
-                  aria-label="Reveal in Finder"
-                >
-                  <FolderIcon />
-                </button>
+                {/* The folder button ends the row, under the Game row's. */}
                 {canChangeSaveLocation && <button
                   className="btn small"
                   onClick={() => onPickSaveDir(g.gamePath)}
@@ -532,6 +525,15 @@ export const GameDetails = memo(function GameDetails({
                     Reset
                   </button>
                 )}
+                <button
+                  className="btn small iconOnly"
+                  onClick={() => onReveal(saveDir)}
+                  disabled={!hasSaveDir}
+                  title="Reveal in Finder"
+                  aria-label="Reveal in Finder"
+                >
+                  <FolderIcon />
+                </button>
               </div>
             </div>
           )}
@@ -770,16 +772,17 @@ export const GameDetails = memo(function GameDetails({
             <div className="detailValue dim">Unavailable</div>
           </div>}
           {translatorRows.map((row, index) => (
-            <div className="detailRow" key={`translator:${row.id || index}`}>
+            <div className="detailRow textRow" key={`translator:${row.id || index}`}>
               <div className="detailLabel">{row.label}</div>
-              {/* A choice that is also what runs reads once. */}
+              {/* A choice that is also what runs reads once. The arrow says a
+                  choice falls back; only DLSS forwarding has a line of its own. */}
               <div className="detailValue">{row.selected === row.used ? row.used : `${row.selected} → ${row.used}`}
-                {(row.selected !== row.used || row.reasonCode === 'dlss-forwarding') && row.reason && (!row.fallback || row.reasonCode) && <div className="detailMeta">{row.reason}</div>}
+                {row.reasonCode === 'dlss-forwarding' && row.reason && <div className="detailMeta">{row.reason}</div>}
               </div>
             </div>
           ))}
           {Array.isArray(runtimeStatus?.details) && runtimeStatus.details.filter((row: {label: string}) => !translatorLabels.has(row.label)).map((row: {label: string; value: string; detail?: string}, index: number) => (
-            <div className="detailRow" key={index}>
+            <div className="detailRow textRow" key={index}>
               <div className="detailLabel">{row.label}</div>
               <div className="detailValue">{row.value}{row.detail && <div className="detailMeta">{row.detail}</div>}</div>
             </div>

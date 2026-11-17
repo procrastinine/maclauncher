@@ -209,7 +209,8 @@ test('Credits opens projects and game port resources through their own links, wi
   unavailable.props.onClick({ preventDefault() {} });
   assert.equal(opened.length, 2);
   const markup = renderToStaticMarkup(React.createElement(components.CreditsView, { acknowledgments: [{ label: 'Runtime', url: 'https://example.com/runtime' }], canOpenExternal: true, onOpenLink() {} }));
-  assert.match(markup, /<a class="ackLink" href="https:\/\/example\.com\/runtime"[^>]*>https:\/\/example\.com\/runtime<\/a>/);
+  // The link reads without its scheme; its title keeps the full URL (GUI 0877 C1).
+  assert.match(markup, /<a class="ackLink" href="https:\/\/example\.com\/runtime" title="https:\/\/example\.com\/runtime"[^>]*>example\.com\/runtime<\/a>/);
   assert.match(markup, />Awesome Decomp Games<\/a>/);
   assert.doesNotMatch(markup, /<button/);
   assert.doesNotMatch(markup, />Credits<\/h1>.*launcherViewHeader|class="launcherViewHeader"/);

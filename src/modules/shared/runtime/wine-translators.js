@@ -431,10 +431,13 @@ function planInputs(settings = {}, install) {
     settings: Object.fromEntries([SETTINGS['d3d-renderer'], ...Roles.ROLES.map(role => role.settingsKey)].map(key => [key, settings[key] ?? ''])) };
 }
 const samePlanInputs = (recorded, settings, install) => Boolean(recorded) && JSON.stringify(recorded) === JSON.stringify(planInputs(settings, install));
+// Rows recorded at an earlier Play are worded as current rows are.
 function presentInspectorRows(rows) {
+  const { presentLabel } = require('./translator-label');
   return rows.map(row => {
     const reasonCode = row.reasonCode || (row.fallback ? 'recorded-fallback' : null);
-    return { ...row, reasonCode, selected: reasonCode === 'missing-choice' ? Plan.UNAVAILABLE_CHOICE_LABEL : row.selected,
+    return { ...row, reasonCode, used: typeof row.used === 'string' ? presentLabel(row.used) : row.used,
+      selected: reasonCode === 'missing-choice' ? Plan.UNAVAILABLE_CHOICE_LABEL : typeof row.selected === 'string' ? presentLabel(row.selected) : row.selected,
       reason: row.fallback && reasonCode !== 'load-impossible' ? Plan.fallbackNotice(reasonCode, { roles: row.conflictRoles }) : row.reason };
   });
 }

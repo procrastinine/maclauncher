@@ -48,7 +48,8 @@ test('a copy downloaded from a Template release is labelled managed, and the cop
     'DXMT 0.80-244-g7c8dee1 · Sikarugir Template 1.0.24');
   assert.equal(Labels.label({ ...component, source: { kind: 'sikarugir', runtime: 'sikarugir', label: 'Sikarugir Template' } }, { templateRoot: '/fixture', catalogEntry: { template: { version: '1.0.24' } } }),
     'DXMT 0.80-244-g7c8dee1 · Sikarugir Template 1.0.24', 'a reference to an installed Template names its host');
-  assert.equal(Labels.label({ ...component, source: { kind: 'upstream', label: 'dxmt' } }), 'DXMT 0.80-244-g7c8dee1 · dxmt');
+  // A source that only repeats the component is left out (GUI 0877 L1).
+  assert.equal(Labels.label({ ...component, source: { kind: 'upstream', label: 'dxmt' } }), 'DXMT 0.80-244-g7c8dee1');
 });
 
 test('an installed Wine runtime summarizes its translator versions after local preparation, naming Template folders that differ', async t => {

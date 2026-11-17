@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { XIcon } from "../icons";
-import { filterSidebarItems, sidebarMovement, sidebarSearchShortcut, sidebarSections } from "./sidebar-navigation-model";
+import { filterSidebarItems, sidebarMovement, sidebarRevealBlock, sidebarSearchShortcut, sidebarSections } from "./sidebar-navigation-model";
 import type { SidebarItem } from "./sidebar-navigation-model";
 
 type SearchableSidebarProps = {
@@ -36,9 +36,14 @@ export function SearchableSidebar({ label, searchLabel, items, selectedId, panel
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
   // The selected entry is revealed when it changes, again once the panel beside
-  // it has laid out, and when a prepared window is shown.
+  // it has laid out, and when a prepared window is shown; one brought in from
+  // outside the list is centred.
   useEffect(() => {
-    const reveal = () => buttons.current.get(selectedId || "")?.scrollIntoView({ block: "nearest" });
+    const reveal = () => {
+      const button = buttons.current.get(selectedId || ""), list = button?.closest("nav");
+      const block = button && list ? sidebarRevealBlock(button.getBoundingClientRect(), list.getBoundingClientRect()) : null;
+      if (block) button!.scrollIntoView({ block });
+    };
     reveal();
     const frame = typeof requestAnimationFrame === "function" ? requestAnimationFrame(reveal) : null;
     const shown = () => { if (document.visibilityState === "visible") reveal(); };

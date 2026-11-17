@@ -141,7 +141,13 @@ test('popover buttons use native light dismiss and describe their expanded state
     count: '2 games', sort: { mode: 'custom', direction: 'asc' }, onSortChange() {}, scope: 'all', onScopeChange() {},
     types: React.createElement('label', null, 'Fixture'), typesFiltered: true, hasTypes: true,
     inspectorOpen: false, hasSelection: false, onToggleInspector() {} }));
-  assert.match(toolbar, /<button type="button" class="btn small primary" popoverTarget="([^"]+)"[^>]*aria-label="Game types" title="Some game types are hidden" aria-expanded="false">Game types •<\/button><div id="\1" popover="auto" class="menuPopover gameSearchDropdown"><label>Fixture<\/label><\/div>/);
+  // Game types is as tall as the All games menu beside it (GUI 0877 L9).
+  assert.match(toolbar, /<button type="button" class="btn primary" popoverTarget="([^"]+)"[^>]*aria-label="Game types" title="Some game types are hidden" aria-expanded="false">Game types •<\/button><div id="\1" popover="auto" class="menuPopover gameSearchDropdown"><label>Fixture<\/label><\/div>/);
+  const unfiltered = renderToStaticMarkup(React.createElement(ui.LibraryToolbar, {
+    count: '2 games', sort: { mode: 'custom', direction: 'asc' }, onSortChange() {}, scope: 'all', onScopeChange() {},
+    types: React.createElement('label', null, 'Fixture'), typesFiltered: false, hasTypes: true,
+    inspectorOpen: false, hasSelection: false, onToggleInspector() {} }));
+  assert.match(unfiltered, /<button type="button" class="btn" popoverTarget="[^"]+"[^>]*aria-label="Game types"/);
 });
 
 test('availability uses one vocabulary for options, rows and badges', () => {

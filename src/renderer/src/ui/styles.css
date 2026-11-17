@@ -778,6 +778,10 @@ progress:indeterminate::-webkit-progress-value { width: 32% !important; animatio
   box-shadow: inset 0 -1px var(--border);
 }
 .scrollableTabStrip .scrollableTabStripViewport { flex: 1 1 0; min-width: 0; overflow-x: auto; overflow-y: hidden; }
+.scrollableTabStrip.moreRight .scrollableTabStripViewport { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+.scrollableTabStrip.moreLeft .scrollableTabStripViewport { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); }
+.scrollableTabStrip.moreLeft.moreRight .scrollableTabStripViewport {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
 .tabStripArrow {
   flex: 0 0 24px;
   width: 24px;
@@ -1260,6 +1264,9 @@ button:focus-visible,
   color: var(--muted);
 }
 
+/* A label beside a value of several lines reads with its first line. */
+.detailRow.textRow { align-items: baseline; }
+
 .detailValue {
   font-size: var(--font-sm);
   color: var(--text);
@@ -1593,7 +1600,7 @@ input[type="checkbox"], input[type="radio"] {
 .runtimePanel .runtimeImport { padding: 0; }
 .runtimePanel .runtimeSection > .empty { padding: 10px 12px; }
 .runtimeDefaultControl { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-weight: 400; font-size: var(--font-sm); color: var(--muted); }
-.runtimeDefaultSelect { width: auto; max-width: min(22rem, 48vw); color: var(--text); }
+.runtimeDefaultSelect { width: auto; max-width: min(36rem, 55vw); color: var(--text); }
 
 .runtimePanelHeader {
   display: flex;
@@ -1889,7 +1896,9 @@ input[type="checkbox"], input[type="radio"] {
 .runtimeSource { display: flex; flex-direction: column; gap: 4px; }
 .runtimeSourceRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 28px; }
 .runtimeSourceRow > .runtimeSourceName { min-width: 4.5rem; font-size: var(--font-sm); font-weight: 400; color: var(--muted); }
-.runtimeVersionSelect { width: auto; min-width: 10rem; max-width: min(26rem, 100%); }
+/* Several named sources line their controls up in one column. */
+.runtimeSourceRow.named > .runtimeSourceName { min-width: 9rem; }
+.runtimeVersionSelect { width: auto; min-width: 10rem; max-width: min(36rem, 100%); }
 .runtimeSourceTrail { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: var(--font-xs); }
 .runtimeSourceLinks { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--font-xs); }
 .runtimeAvailability { font-size: var(--font-xs); }
@@ -2083,7 +2092,7 @@ select.input:not([multiple]) {
   grid-template-columns: minmax(180px, 3fr) minmax(0, 2fr);
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 5px 12px;
   border-top: 1px solid var(--border);
   font-size: var(--font-md);
 }
@@ -2104,7 +2113,6 @@ select.input:not([multiple]) {
 }
 
 .ackTitle {
-  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
@@ -2308,7 +2316,15 @@ select.input:not([multiple]) {
   max-width: 100%;
 }
 
-/* The update button keeps its size; the result beside it wraps under it when narrow. */
+/* A menu is as wide as its choices, as a native pop-up button is; text fields fill the column. */
+.settingsControl > select.input:not([multiple]) { flex: 0 1 auto; width: auto; min-width: 8rem; }
+
+/* Buttons after a field share one width, so the fields before them end together. */
+.settingsControl > .input + .btn:not(.iconOnly) { min-width: 6.5rem; }
+
+/* The update button keeps its size; the result beside it stays on one line while the window allows. */
+.settingsRow:has(> .settingsUpdateControl) { grid-template-columns: minmax(var(--field-label), 15rem) minmax(0, 1fr); }
+.settingsUpdateControl { flex-wrap: nowrap; }
 .settingsUpdateControl > .btn { flex-shrink: 0; }
 .settingsStatus {
   flex: 1 1 12rem;

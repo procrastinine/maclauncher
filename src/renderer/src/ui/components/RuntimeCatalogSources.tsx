@@ -175,12 +175,12 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       const contents = pendingInstall && typeof source.versionRequirements?.[version]?.contents === "string" ? source.versionRequirements[version].contents : "";
       const variantChoices = (sourceVariants.length ? availableVariants : variants);
       return <div className="runtimeSource" data-runtime-source={source.id} key={source.id}>
-        <div className="runtimeSourceRow">
+        <div className={`runtimeSourceRow${named ? " named" : ""}`}>
           {/* Several sources are each named; one source's menu is simply Version. */}
           {versions.length > 0 ? <label className="runtimeSourceName" htmlFor={fieldId}>{named ? label : "Version"}</label>
             : named && <span className="runtimeSourceName">{label}</span>}
           {versions.length === 0 ? loaded ? <span className="dim runtimeAvailability">No downloadable versions found at this source.</span>
-            : <button type="button" className="btn small primary" disabled={sourceBusy} aria-busy={refreshing}
+            : <button type="button" className="btn small" disabled={sourceBusy} aria-busy={refreshing}
               aria-label={source.explicit ? `Load ${label} versions` : "Load versions"}
               onClick={() => reload(source.supportsLatestOnly ? true : undefined)}>
               {refreshing ? "Loading versions…" : "Load versions"}

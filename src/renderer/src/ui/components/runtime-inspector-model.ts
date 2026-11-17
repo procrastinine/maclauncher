@@ -132,3 +132,13 @@ export function runtimeInspectorVersionPatch(moduleInfo: ModuleManifest | null, 
   else if (section) patch[key] = null;
   return patch;
 }
+
+/** Version wording under a row that already names the runtime: "Sikarugir
+ * 1.0.24 · Wine 11.0 rev 1" reads "1.0.24 · Wine 11.0 rev 1" beside Sikarugir. */
+export function runtimeVersionTagWithout(tag: (version: string) => string, runtimeName: unknown) {
+  const name = typeof runtimeName === "string" ? runtimeName.trim() : "";
+  return (version: string) => {
+    const text = tag(version);
+    return name && text.startsWith(`${name} `) && text.length > name.length + 1 ? text.slice(name.length + 1) : text;
+  };
+}

@@ -341,3 +341,15 @@ for (const [id, scenarios] of Object.entries(engineTools)) {
     }
   });
 }
+
+test('the Saves folder button ends its row after Change… and Reset, under the Game row folder button (GUI 0877 L5)', () => {
+  const state = createLibraryFixture(), game = state.recents[0];
+  game.defaultSaveDir = '/owned/private-saves'; game.saveDirOverride = '/custom/saves';
+  game.moduleSupports = { ...game.moduleSupports, saveLocation: true, saveLocationOverride: true };
+  const markup = renderDetails(state);
+  const saves = markup.slice(markup.indexOf('>Saves<'));
+  const actions = /<div class="detailActions">([\s\S]*?)<\/div>/.exec(saves)[1];
+  const order = [...actions.matchAll(/<button[^>]*?(?:aria-label="([^"]+)"[^>]*)?>([^<]*)/g)].map(match => match[1] || match[2]);
+  assert.deepEqual(order.slice(-1), ['Reveal in Finder']);
+  assert.ok(order.indexOf('Change…') < order.indexOf('Reveal in Finder'));
+});

@@ -22,7 +22,9 @@ export function ScrollableTabStrip({ label, selectedTabId, className, tabsClassN
   }, []);
   useLayoutEffect(() => { controller.current?.update(selectedTabId); }, [selectedTabId, children]);
 
-  return <div ref={container} className={["scrollableTabStrip", className].filter(Boolean).join(" ")}>
+  // Tabs that continue past an edge fade out before its arrow instead of being cut against it.
+  return <div ref={container} className={["scrollableTabStrip", scroll.canScrollLeft ? "moreLeft" : "", scroll.canScrollRight ? "moreRight" : "", className]
+    .filter(Boolean).join(" ")}>
     <button type="button" className="tabStripArrow" aria-label={`Scroll ${label} left`} title={`Scroll ${label} left`}
       hidden={!scroll.overflow} disabled={!scroll.canScrollLeft} onClick={() => controller.current?.scroll(-1)}>
       <ChevronIcon direction="left" />

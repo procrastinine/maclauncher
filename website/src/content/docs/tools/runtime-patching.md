@@ -94,7 +94,7 @@ Every translator also reads environment variables, named values set when a progr
 
 ### 5. Play and check the inspector
 
-Press **Play**. Anything still missing downloads after you agree, and then the game starts with your choices. Afterwards, the inspector lists each translator as *selected → used*: the DXVK version you picked on the Direct3D row, for example, and the driver on the Vulkan row, which also names the processor build that ran, such as **Intel (Rosetta)** for an Intel WINE on Apple Silicon. When the two sides differ, a line underneath explains why MacLauncher fell back.
+Press **Play**. Anything still missing downloads after you agree, and then the game starts with your choices. Afterwards, the inspector lists each translator as *selected → used*: the DXVK version you picked on the Direct3D row, for example, and the driver on the Vulkan row, which also names the processor build that ran, such as **Intel (Rosetta)** for an Intel WINE on Apple Silicon. When the two sides differ, MacLauncher fell back, and the game's runtime settings (the gear beside **Runtime**) explain why under that translator's menu.
 
 ## Going back
 

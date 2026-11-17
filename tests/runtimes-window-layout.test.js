@@ -160,7 +160,7 @@ test('one help button per panel; row details and the Register custom explanation
     { defaultVersion: '1.0', customRuntime: true, description: 'About the runtime.' })], 'fixture', { onRuntimeRegister() {} });
   assert.equal((markup.match(/class="helpTipButton"/g) || []).length, 1);
   assert.match(markup, /<span title="mac-arm64\n\/Runtimes\/1\.0">v1\.0<\/span>/);
-  assert.match(markup, /<div class="dim">Requires macOS 14\.0 or later\.<\/div>/, 'a platform requirement stays visible');
+  assert.match(markup, /<div class="dim">Requires macOS 14\.0 or later<\/div>/, 'a platform requirement stays visible, as a detail without a period');
   assert.match(markup, /<div class="runtimeInstalledFooter"><button class="btn small" title="Register a compatible executable[^"]*">Register custom…<\/button><\/div>/);
 });
 
@@ -177,4 +177,87 @@ test('Steamworks4j joins Compatibility, sidebar rows are compact and an empty mo
 test('the Windows Steam client files section is titled like every other version list', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/modules/crossover/runtime/steam-client-files.js'), 'utf8');
   assert.doesNotMatch(source, /managementTitle/);
+});
+
+// GUI 0877 review (11-17): entry-keeping tabs, group members' CPUs, the reveal,
+// the empty list, row detail punctuation, tab strip edges and source rows.
+const { componentHarness } = require('./helpers/renderer-component');
+const treeElements = node => react.isValidElement(node) ? [node, ...react.Children.toArray(node.props.children).flatMap(treeElements)] : [];
+
+test('a tab chosen inside Wine · Intel keeps Wine · Intel, even for a source whose automatic CPU is Apple Silicon', () => {
+  const props = { runtimeManagers: wines(), runtimeUi: {}, runtimeManagerId: 'winecx', runtimeSectionId: 'default', downloadTasks: [],
+    updateRuntimeUiSection() {}, onRuntimeRefresh() {}, onRuntimeInstall() {}, onRuntimeSetDefault() {}, onRuntimeUninstall() {}, onCancelDownload() {} };
+  props.setRuntimeManagerId = id => { props.runtimeManagerId = id; };
+  props.setRuntimeSectionId = id => { props.runtimeSectionId = id; };
+  const harness = componentHarness(ui.RuntimesView, props);
+  try {
+    const entry = tree => treeElements(tree).find(node => node.props?.items && 'selectedId' in node.props).props;
+    let tree = harness.render();
+    const intel = entry(tree).items.find(item => item.label === 'Wine · Intel').id;
+    assert.equal(entry(tree).selectedId, intel, 'the WineCX deep link opens Wine · Intel');
+    const tab = treeElements(tree).find(node => node.props?.role === 'tab' && treeElements(node).some(child => child.props?.children === 'Highball Wine')
+      || node.props?.role === 'tab' && node.props.children === 'Highball Wine');
+    tab.props.onClick();
+    tree = harness.render(); tree = harness.render();
+    assert.equal(props.runtimeManagerId, 'highball-wine');
+    assert.equal(entry(tree).selectedId, intel, 'the entry stays Wine · Intel');
+    const selectedTabs = treeElements(tree).filter(node => node.props?.role === 'tab' && node.props['aria-selected']);
+    assert.equal(selectedTabs.length, 1);
+    assert.match(renderToStaticMarkup(selectedTabs[0]), />Highball Wine</);
+  } finally { harness.close(); }
+  assert.deepEqual(ui.runtimeTabChoice({ id: 'host:wine:x64' }, { managerId: 'highball-wine', sectionId: 'default' }),
+    { groupId: 'host:wine:x64', managerId: 'highball-wine', sectionId: 'default' });
+});
+
+test('a member of a source group without CPU facts follows its source, so CrossOver graphics integration is only in Wine · Intel', () => {
+  const { groupRuntimeManagers, splitRuntimeGroupsByHost, runtimeGroupSections, runtimeSectionTabs } = ui;
+  const integration = { id: 'crossover-winemac', label: 'CrossOver graphics integration',
+    ui: { groupId: 'crossover', sectionLabel: 'CrossOver graphics integration', memberOrder: 1, management: 'managed' },
+    sections: [{ id: 'default', label: 'Versions', installed: [], catalog: { status: 'idle', versions: [] } }] };
+  const groups = splitRuntimeGroupsByHost(groupRuntimeManagers([...wines(), integration], categories), sections);
+  const tabs = group => runtimeSectionTabs(runtimeGroupSections(group, sections)).map(tab => tab.label);
+  assert.deepEqual(groups.map(group => group.label), ['Wine · Apple Silicon', 'Wine · Intel']);
+  assert.deepEqual(tabs(groups[0]), ['Sikarugir', 'Highball Wine', 'MetalSharp Wine']);
+  assert.deepEqual(tabs(groups[1]), ['CrossOver', 'CrossOver graphics integration', 'Sikarugir', 'WineCX', 'Highball Wine']);
+});
+
+test('an entry revealed from outside the sidebar list is centred; one already in view stays put', async () => {
+  const { pathToFileURL } = require('node:url');
+  const model = await import(pathToFileURL(path.join(__dirname, '../src/renderer/src/ui/components/sidebar-navigation-model.ts')).href).catch(() => null);
+  const source = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/components/sidebar-navigation-model.ts'), 'utf8');
+  assert.match(source, /export function sidebarRevealBlock/);
+  const reveal = model?.sidebarRevealBlock || ui.sidebarRevealBlock;
+  assert.equal(reveal({ top: 100, bottom: 126 }, { top: 60, bottom: 700 }), null);
+  assert.equal(reveal({ top: 690, bottom: 716 }, { top: 60, bottom: 700 }), 'center', 'flush against the bottom edge is not left there');
+  assert.equal(reveal({ top: 20, bottom: 46 }, { top: 60, bottom: 700 }), 'center');
+  const sidebar = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/components/SearchableSidebar.tsx'), 'utf8');
+  assert.doesNotMatch(sidebar, /block: "nearest"/);
+});
+
+test('an empty list whose default is not installed says so once, and row details carry no sentence period', () => {
+  const empty = render([runtime([], { defaultVersion: '3.0', defaultSource: 'manager' })], 'fixture');
+  assert.equal((empty.match(/data-runtime-default-missing="true"/g) || []).length, 1);
+  assert.match(empty, /<div class="empty runtimeDefaultMissing" data-runtime-default-missing="true">The default version, v3\.0, is not installed\./);
+  assert.doesNotMatch(empty, /No runtime versions installed yet/);
+  const row = render([runtime([{ version: '1.0', ready: true, minimumMacOS: '30.0' }], { defaultVersion: '1.0' })], 'fixture');
+  assert.match(row, /<div class="dim">Requires macOS 30\.0 or later<\/div>/);
+});
+
+test('overflowing tab strips fade before their arrows, and named sources line up with plain Load versions buttons', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.scrollableTabStrip\.moreRight \.scrollableTabStripViewport \{ -webkit-mask-image:/);
+  assert.match(css, /\.scrollableTabStrip\.moreLeft \.scrollableTabStripViewport \{ -webkit-mask-image:/);
+  const strip = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/components/ScrollableTabStrip.tsx'), 'utf8');
+  assert.match(strip, /scroll\.canScrollRight \? "moreRight"/);
+  assert.match(css, /\.runtimeSourceRow\.named > \.runtimeSourceName \{ min-width: 9rem; \}/);
+  assert.match(css, /\.runtimeDefaultSelect \{ width: auto; max-width: min\(36rem, 55vw\);/, 'the Default menu fits "Automatic (Apex Neural Rendering FG-V.B15)"');
+  const section = { id: 'default', label: 'Versions', installed: [], catalog: { status: 'idle', versions: [] },
+    catalogs: [{ id: 'builds', label: 'MacLauncher Builds', explicit: true, status: 'idle', versions: [] },
+      { id: 'upstream', label: 'Upstream', explicit: true, status: 'idle', versions: [] }] };
+  const markup = renderToStaticMarkup(react.createElement(ui.RuntimeCatalogSources, { managerId: 'fixture', section, identity: 'Fixture',
+    links: [], ui: { installVersion: {}, installVariant: {}, pendingActions: {} }, busy: false, variant: '', downloads: [],
+    onSelect() {}, onInstall() {}, onRefresh() {} }));
+  const loads = [...markup.matchAll(/<button type="button" class="([^"]+)"[^>]*>Load versions<\/button>/g)].map(match => match[1]);
+  assert.ok(loads.length >= 1, markup);
+  assert.ok(loads.every(cls => cls === 'btn small'), 'Load versions is an ordinary button');
 });

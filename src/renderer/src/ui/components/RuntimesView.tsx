@@ -12,9 +12,9 @@ import {
   sortInstalled
 } from "../ui-helpers";
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
-import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs, runtimeChoiceForQuery, runtimeDefaultMenu, runtimeDistinctLinks,
+import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs, runtimeChoiceForQuery, runtimeTabChoice, runtimeDefaultMenu, runtimeDistinctLinks,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
-  runtimeRemovalPresentation, runtimeMinimumNotice, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
+  runtimeRemovalPresentation, runtimeMinimumDetail, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
   managedRuntimeSections, runtimePendingAction, runtimeRefreshPayload, runtimeSourceUiKey,
   translatorInstallBuild, translatorInstallRequirement } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
@@ -189,9 +189,13 @@ export function RuntimesView({
       { managerId: activeRuntimeManager.id, sectionId: activeRuntimeSectionId });
     rememberedSections.current.set(activeRuntimeManager.id, activeRuntimeSectionId);
   }, [activeRuntimeManager, activeRuntimeGroup, activeRuntimeSectionId, runtimeManagerId, runtimeSectionId, setRuntimeManagerId, setRuntimeSectionId]);
-  function selectSection(choice: RuntimeTabSection) {
-    setRuntimeManagerId(choice.managerId);
-    setRuntimeSectionId(choice.sectionId);
+  // A choice made inside the shown entry keeps that entry; choosing an entry in
+  // the sidebar names its own.
+  function selectSection(choice: RuntimeTabSection, group: RuntimeTabGroup | null = activeRuntimeGroup) {
+    const next = runtimeTabChoice(group, choice);
+    setRuntimeGroupId(next.groupId);
+    setRuntimeManagerId(next.managerId);
+    setRuntimeSectionId(next.sectionId);
   }
   function selectSectionTab(tab: RuntimeSectionTab) {
     const next = tab.choices.find(choice => choice.sectionId === rememberedSections.current.get(choice.managerId)) || tab.choices[0];
@@ -205,7 +209,7 @@ export function RuntimesView({
     const prior = remembered.current.get(group.id);
     const next = runtimeChoiceForQuery(choices, query, group.label) ||
       choices.find(choice => choice.managerId === prior?.managerId && choice.sectionId === prior?.sectionId) || choices[0];
-    if (next) selectSection(next);
+    if (next) selectSection(next, group);
   }
   // Opening Runtimes at a runtime chooses its entry anew: the automatic CPU's
   // entry when the runtime has one for each CPU.
@@ -346,7 +350,10 @@ export function RuntimesView({
     return { install: inst, isDefault, defaultFor, translatorBuild, otherBuild, variantLabel, label };
   }) : [];
   // A default shared by several sections can be installed in another one.
+  // Only a downloaded runtime's default can be fetched later; a registered
+  // application's list says only that none is registered.
   const defaultMissing = Boolean(activeRuntimeSection && activeRuntimeSupportsDefault && !defaultSelections && activeRuntimeSection.defaultVersion &&
+    !managementPresentation.local &&
     ![activeRuntimeSection, ...(Array.isArray(activeRuntimeManager?.sections) ? activeRuntimeManager!.sections : [])]
       .some((section: any) => (Array.isArray(section?.installed) ? section.installed : []).some((inst: any) => inst.version === activeRuntimeSection.defaultVersion)));
   // Per-operation defaults keep their table's own choices.
@@ -656,11 +663,14 @@ export function RuntimesView({
                       </select>}
                     </span>}
                   </div>
-                  {defaultMissing && <div className="dim runtimeAvailability runtimeDefaultMissing" data-runtime-default-missing="true">
+                  {/* An empty list says only that its default is not installed yet, in the empty line's place. */}
+                  {defaultMissing && installedRows.length > 0 && <div className="dim runtimeAvailability runtimeDefaultMissing" data-runtime-default-missing="true">
                     The default version, {activeRuntimeVersionTag(activeRuntimeSection.defaultVersion)}, is not installed. MacLauncher asks before downloading it when a game needs it.
                   </div>}
                   {installedRows.length === 0 ? (
-                    <div className="empty">{managementPresentation.emptyLabel}</div>
+                    defaultMissing ? <div className="empty runtimeDefaultMissing" data-runtime-default-missing="true">
+                      The default version, {activeRuntimeVersionTag(activeRuntimeSection.defaultVersion)}, is not installed. MacLauncher asks before downloading it when a game needs it.
+                    </div> : <div className="empty">{managementPresentation.emptyLabel}</div>
                   ) : (
                     <div className="saveList">
                       {installedRows.map(({ install: inst, isDefault, defaultFor, translatorBuild, otherBuild, variantLabel }) => {
@@ -694,7 +704,7 @@ export function RuntimesView({
                               {inst.custom && (inst.installDir || inst.version) && <div className="dim mono runtimeRegisteredPath"><PathDisplay path={inst.installDir || inst.version} /></div>}
                               {inst.installDir && installSizes[inst.installDir] && <div className="dim" data-runtime-size="true">
                                 {componentSizeText({ path: inst.installDir, bytes: installSizes[inst.installDir].bytes, sizeComplete: installSizes[inst.installDir].complete })}</div>}
-                              {runtimeMinimumNotice(inst.minimumMacOS) && <div className="dim">{runtimeMinimumNotice(inst.minimumMacOS)}</div>}
+                              {runtimeMinimumDetail(inst.minimumMacOS) && <div className="dim">{runtimeMinimumDetail(inst.minimumMacOS)}</div>}
                               {apis.length > 0 && <div className="dim">{apis.join(", ")}</div>}
                               {typeof inst.componentSummary === "string" && inst.componentSummary &&
                                 <div className="dim" data-runtime-components="true">Includes {inst.componentSummary}</div>}

@@ -39,3 +39,10 @@ export function sidebarMovement(key: string, index: number, count: number): numb
 export function sidebarSearchShortcut(event: { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }): boolean {
   return event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "f";
 }
+
+// How the selected entry is brought into view: an entry already wholly in the
+// list stays put, and one outside it (a deep link, a search, a prepared window)
+// is centred rather than left against the list's edge.
+export function sidebarRevealBlock(item: { top: number; bottom: number }, list: { top: number; bottom: number }): "center" | null {
+  return item.top >= list.top - 1 && item.bottom <= list.bottom + 1 ? null : "center";
+}

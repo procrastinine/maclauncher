@@ -16,6 +16,11 @@ function CreditLink({ url, label, canOpen, onOpen, className }: { url: string; l
     onClick={event => { event.preventDefault(); if (canOpen) onOpen(url); }}>{label}</a>;
 }
 
+// A link reads as its address without the scheme or a closing slash; its title keeps the full URL.
+export function creditLinkText(url: string) {
+  return url.replace(/^https?:\/\/(?:www\.)?/i, "").replace(/\/$/, "");
+}
+
 export function CreditsView({ acknowledgments, canOpenExternal, onOpenLink }: CreditsViewProps) {
   return <main className="launcherView creditsView" aria-labelledby="credits-title">
     <LauncherViewHeader title="Credits" titleId="credits-title" />
@@ -24,11 +29,11 @@ export function CreditsView({ acknowledgments, canOpenExternal, onOpenLink }: Cr
         <div className="ackTable">
           <div className="ackRow ackHeaderRow">
             <div className="ackCell">Project</div>
-            <div className="ackCell ackUrl mono">URL</div>
+            <div className="ackCell ackUrl">Link</div>
           </div>
           {acknowledgments.map(item => <div className="ackRow" key={`${item.label}-${item.url}`}>
             <div className="ackCell ackTitle">{item.label}</div>
-            <div className="ackCell ackUrl mono ellipsis"><CreditLink url={item.url} label={item.url} canOpen={canOpenExternal} onOpen={onOpenLink} /></div>
+            <div className="ackCell ackUrl ellipsis"><CreditLink url={item.url} label={creditLinkText(item.url)} canOpen={canOpenExternal} onOpen={onOpenLink} /></div>
           </div>)}
         </div>}
       {/* Related links follow the credited projects. */}

@@ -32,13 +32,30 @@ function sourceText(value, host) {
   if (source === "custom") return "Registered";
   return source && !host && !value.included && value.source?.kind === "template" ? `Managed copy from ${source}` : source;
 }
+// A qualifier repeats the label when the label already states every word of
+// it. A bare package id may carry MacLauncher's own namespace
+// ("maclauncher-kosmickrisp" beside "KosmicKrisp 27.0.0"), which tells nothing
+// apart; "dxvk-gplasync" beside "DXVK 3.1.1" still adds "gplasync".
+const words = value => displayText(value).toLowerCase().split(/[^a-z0-9.]+/).filter(Boolean);
+function repeats(part, stated) {
+  const text = displayText(part), known = new Set(words(stated));
+  const own = words(/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(text) ? text.replace(/^maclauncher[-_]/, "") : text);
+  return own.every(word => known.has(word));
+}
+// A label already written (a row recorded at an earlier Play) without such repeats.
+function presentLabel(text) {
+  const [first, ...rest] = displayText(text).split(/\s*·\s*/);
+  return rest.reduce((parts, part) => repeats(part, parts.join(" ")) ? parts : [...parts, part], [first]).filter(Boolean).join(" · ");
+}
 function label(value, host, { folder = value?.labelFolder, hostVersionLabel, hostName } = {}) {
   if (!value) return "";
-  const parts = [componentLabel(value), sourceText(value, host)].filter(Boolean);
+  const component = componentLabel(value), source = sourceText(value, host);
+  const parts = [component, source && !repeats(source, component) ? source : ""].filter(Boolean);
   // A qualifier adds only the words the label does not already state, so
   // "CrossOver Preview 26.3" beside "CrossOver 26.3" adds "Preview".
   for (const part of [folder, ...displayText(hostVersionLabel).split(/\s*·\s*/), hostName].map(displayText)) {
-    if (!part || parts.some(existing => existing.includes(part))) continue;
+    // A folder that tells registrations apart is kept unless the label states all of it.
+    if (!part || parts.some(existing => existing.includes(part)) || repeats(part, parts.join(" "))) continue;
     const stated = new Set(parts.join(" ").split(/\s+/)), rest = part.split(/\s+/).filter(word => !stated.has(word)).join(" ");
     if (rest) parts.push(rest);
   }
@@ -57,4 +74,4 @@ function registeredLabels(rows) {
     return result;
   });
 }
-module.exports = { componentVersion, componentLabel, hostLabel, label, registeredLabels };
+module.exports = { componentVersion, componentLabel, hostLabel, label, presentLabel, registeredLabels };

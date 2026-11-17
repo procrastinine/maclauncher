@@ -293,7 +293,13 @@ test('Settings and Credits use plain native-window content without HTML close or
   assert.match(settings, /<nav class="launcherSidebarChoices" aria-label="Settings sections">/);
   assert.doesNotMatch(settings, /Scroll Settings sections/);
   assert.match(credits, /<main class="launcherView creditsView"/);
-  assert.match(credits, /https:\/\/example\.com\/project/);
+  // A link reads as its address without the scheme, in the body font, with the full URL as its title (GUI 0877 C1).
+  assert.match(credits, /<div class="ackCell ackUrl ellipsis"><a [^>]*title="https:\/\/example\.com\/project"[^>]*>example\.com\/project<\/a><\/div>/);
+  assert.doesNotMatch(credits, /ackUrl mono|>https:\/\/example/);
+  assert.match(credits, /<div class="ackCell ackUrl">Link<\/div>/);
+  const ackCss = require('node:fs').readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(ackCss, /\.ackRow \{[^}]*padding: 5px 12px;/);
+  assert.doesNotMatch(/\.ackTitle \{[^}]*\}/.exec(ackCss)[0], /font-weight/);
   for (const markup of [settings, credits]) assert.doesNotMatch(markup, /modalBackdrop|aria-modal|role="dialog"|aria-label="Close"|Back to Library/);
 });
 // Rows show name, format, input → output and origin; each file's full path and
@@ -353,7 +359,7 @@ test('runtime groups use a searchable sidebar while runtime sub-tabs retain edge
 test('empty catalogs expose a labeled Load versions action without a render-time request', () => {
   const runtime = { ...manager('common', { tabLabel: 'Common runtime' }), customRuntime: true };
   const markup = render([runtime], runtime.id, { onRuntimeRegister() {} });
-  assert.match(markup, /<button[^>]*class="btn small primary"[^>]*aria-label="Load versions"[^>]*>Load versions<\/button>/);
+  assert.match(markup, /<button[^>]*class="btn small"[^>]*aria-label="Load versions"[^>]*>Load versions<\/button>/);
   assert.doesNotMatch(markup, /No versions loaded|iconOnly runtimeRefresh|<select[^>]*aria-label="Version"/);
   assert.ok(markup.indexOf('>Load versions</button>') < markup.indexOf('>Installed</span>'));
   assert.ok(markup.indexOf('>Installed</span>') < markup.indexOf('>Register custom…</button>'));
@@ -366,7 +372,7 @@ test('each source row ends with its own refresh control and no remote refresh is
   const markup = render([runtime]);
   const sharedHeader = markup.split('class="saveSectionTitle runtimeInstalledHeader"')[1].split('class="runtimeSectionBody"')[0];
   assert.doesNotMatch(sharedHeader, /runtimeRefresh|All versions/);
-  assert.equal((markup.match(/class="runtimeSourceRow"/g) || []).length, 2);
+  assert.equal((markup.match(/class="runtimeSourceRow named"/g) || []).length, 2);
   assert.equal((markup.match(/class="btn small iconOnly runtimeRefresh"/g) || []).length, 2);
   assert.equal((markup.match(/>All versions<\/button>/g) || []).length, 1);
   for (const id of ['builds', 'upstream']) {
@@ -481,6 +487,7 @@ test('local application versions show paths and independent defaults without dow
   assert.doesNotMatch(markup, /Uninstall|class="btn small primary"|Latest available|Latest installed|runtimeRemote/);
   const empty = render([{ ...runtime, installed: [], catalog: { ...runtime.catalog, versions: [] } }], runtime.id, { onRuntimeImport() {} });
   assert.match(empty, /No applications registered\./);
+  assert.doesNotMatch(empty, /asks before downloading/, 'a registered application is never downloaded');
   assert.match(empty, />Add application…<\/button>/);
   assert.doesNotMatch(empty, /No versions loaded|No runtime versions installed/);
   const busy = render([runtime], runtime.id, { onRuntimeImport() {}, runtimeUi: { 'local-apps': {
@@ -1497,7 +1504,7 @@ test('per-game version menus use only the selected runtime recommendation and pr
     assert.doesNotMatch(versionMenu(renderGame(engine, true, pending)), /Automatic \(/);
   }
   assert.match(versionMenu(renderGame(portable, true, wineVersion)),
-    /<option value="" title="10\.0_8-template-1\.0\.24" selected="">Automatic \(Sikarugir 1\.0\.24 · Wine 10\.0 rev 8\)<\/option>/);
+    /<option value="" title="10\.0_8-template-1\.0\.24" selected="">Automatic \(1\.0\.24 · Wine 10\.0 rev 8\)<\/option>/);
   // Automatic names the version Play uses, such as a compatible installed
   // version, rather than the recommended one.
   assert.match(versionMenu(renderGame(engine, true, '4.6.1-stable')), /<option value="" title="4\.6\.1-stable" selected="">Automatic \(v?4\.6\.1-stable\)<\/option>/);
@@ -1508,7 +1515,8 @@ test('per-game version menus use only the selected runtime recommendation and pr
     assert.match(attributes, new RegExp('value="' + engineVersion + '"'));
     assert.match(label, /^v?4\.6\.3-stable$/);
   }
-  assert.match(selected(renderGame(portable, false, wineVersion))[1], /^Sikarugir 1\.0\.24 · Wine 10\.0 rev 8$/);
+  // The Runtime row above names Sikarugir, so its versions read without it (GUI 0877 L3).
+  assert.match(selected(renderGame(portable, false, wineVersion))[1], /^1\.0\.24 · Wine 10\.0 rev 8$/);
   // (b) A chosen version that is neither installed nor listed stays selected
   // and never falls back to Automatic. Until Play's answer for that choice
   // arrives it reads as itself without a marker; a pending lookup, a failed one
@@ -1620,6 +1628,6 @@ test('reopening at the same manager scrolls its sidebar choice into view',t=>{
  const previous=global.window;global.window={addEventListener(){},removeEventListener(){}};
  const props={label:'Runtimes',searchLabel:'Search runtimes',items:[{id:'steam',label:'Steam'}],selectedId:'steam',panelId:'panel',selectionKey:'1',onSelect(){}};
  const h=componentHarness(SearchableSidebar,props);t.after(()=>{h.close();global.window=previous;});let scrolled=0;
- const visit=node=>{if(!React.isValidElement(node))return;if(node.type==='button'&&node.props.title==='Steam')node.props.ref({scrollIntoView(options){assert.equal(options.block,'nearest');scrolled++;}});React.Children.forEach(node.props.children,visit);};
+ const visit=node=>{if(!React.isValidElement(node))return;if(node.type==='button'&&node.props.title==='Steam')node.props.ref({scrollIntoView(options){assert.equal(options.block,'center');scrolled++;},getBoundingClientRect:()=>({top:700,bottom:726}),closest:()=>({getBoundingClientRect:()=>({top:60,bottom:700})})});React.Children.forEach(node.props.children,visit);};
  visit(h.render());props.selectionKey='2';h.render();assert.equal(scrolled,1);
 });

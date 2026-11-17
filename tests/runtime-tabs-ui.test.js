@@ -49,7 +49,7 @@ test('shared settings and runtimes keep static detail in help while preserving c
   assert.match(runtimes, /class="runtimeCatalogDetails"><p>Catalog explanation\.<\/p>/);
   // A row's static detail is its name's tooltip; its macOS requirement stays visible.
   assert.match(runtimes, /<span title="mac-arm64\nInstallation detail\.\nGraphics library 1\.0\n\/Runtimes\/2\.0">v2\.0<\/span>/);
-  assert.match(runtimes, /<div class="dim">Requires macOS 14\.0 or later\.<\/div>/);
+  assert.match(runtimes, /<div class="dim">Requires macOS 14\.0 or later<\/div>/);
   assert.doesNotMatch(runtimes, /class="runtimePanelSubtitle"|class="dim mono ellipsis runtimePath"|<div class="dim">Installation detail\./);
   assert.doesNotMatch(runtimes, /class="runtimeSectionHint"/);
   // The install reason is shown once, beside the install control.

@@ -39,6 +39,10 @@ export function runtimeMinimumNotice(minimum: unknown) {
   return value && value.localeCompare(packageInfo.build.mac.minimumSystemVersion, undefined, { numeric: true }) > 0
     ? `Requires macOS ${value} or later.` : "";
 }
+// The same requirement as one of an installed row's detail lines, which carry no sentence period.
+export function runtimeMinimumDetail(minimum: unknown) {
+  return runtimeMinimumNotice(minimum).replace(/\.$/, "");
+}
 
 export function runtimeRefreshFailure(catalog: Record<string, any> | null | undefined) {
   const failedAt = catalog?.failedAt;
@@ -183,8 +187,9 @@ export function groupRuntimeManagers(managers: RuntimeManagerState[], categories
 // slices, then its stated architecture; a listed version's CPU is the one its
 // list states, then that of its installed row. A tab keeps the rows of its CPU
 // and every row whose CPU is unknown, and a source with no CPU facts is a tab of
-// every entry. With no CPU facts at all, the sources share one entry named after
-// the host group.
+// every entry, unless it is a member of a source's group (CrossOver's graphics
+// integration), which follows that source's CPUs. With no CPU facts at all, the
+// sources share one entry named after the host group.
 const HOST_CPUS = ["arm64", "x64"] as const;
 type HostCpu = typeof HOST_CPUS[number];
 function hostCpu(value: unknown): HostCpu | "" {
@@ -231,7 +236,12 @@ export function splitRuntimeGroupsByHost(groups: RuntimeTabGroup[],
     const { name, first, members } = hosts.get(slot)!;
     const managers = members.flatMap(group => group.managers);
     const sections = new Map(managers.map(manager => [manager, resolveSections(manager)]));
-    const cpusOf = (manager: RuntimeManagerState) => new Set(sections.get(manager)!.flatMap(section => [...sectionCpus(section)]));
+    const ownCpus = (manager: RuntimeManagerState) => new Set(sections.get(manager)!.flatMap(section => [...sectionCpus(section)]));
+    const groupOf = new Map(members.flatMap(group => group.managers.map(manager => [manager, group] as const)));
+    const cpusOf = (manager: RuntimeManagerState) => {
+      const own = ownCpus(manager);
+      return own.size ? own : new Set(groupOf.get(manager)!.managers.flatMap(member => [...ownCpus(member)]));
+    };
     const cpus = HOST_CPUS.filter(cpu => managers.some(manager => cpusOf(manager).has(cpu)));
     const id = `host:${name.toLowerCase()}`;
     const entry = (cpu: HostCpu | null): RuntimeTabGroup => ({ ...first, id: cpu ? `${id}:${cpu}` : id,
@@ -286,6 +296,12 @@ export function runtimeSectionTabs(sections: RuntimeTabSection[]): RuntimeSectio
       choices: [section] });
   }
   return tabs;
+}
+
+// A tab chosen inside an entry keeps that entry: the source of a tab in Wine ·
+// Intel stays in Wine · Intel even when its automatic CPU is Apple Silicon.
+export function runtimeTabChoice(group: RuntimeTabGroup | null, choice: RuntimeTabSection) {
+  return { groupId: group?.id ?? null, managerId: choice.managerId, sectionId: choice.sectionId };
 }
 
 // A source listed under two headings is selected by the entry chosen in the sidebar.

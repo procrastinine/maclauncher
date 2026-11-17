@@ -29,7 +29,7 @@ function markup(t, entry, manifest, status) {
   const harness = componentHarness(GameDetails, { g, state, moduleInfo: manifest, actions: new Proxy({}, { get: () => async () => {} }),
     runtimeStatusEntry: status ? { runtimeId: entry.runtimeId, status } : null, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null });
   t.after(() => harness.close());
-  return renderToStaticMarkup(React.createElement(React.Fragment, null, ...elements(harness.render()).filter(node => node.props.className === 'detailRow')));
+  return renderToStaticMarkup(React.createElement(React.Fragment, null, ...elements(harness.render()).filter(node => /^detailRow(?: textRow)?$/.test(node.props.className || ''))));
 }
 
 test('actual plan settings and inspector accept standalone choices and share missing-choice messages without mutating saved intent', t => {
@@ -74,6 +74,7 @@ test('actual provider status presents legacy recorded fallbacks without parsing 
   assert.equal(row.reason, Plan.fallbackNotice('recorded-fallback')); assert.deepEqual(row.future, legacy[0].future);
   assert.notEqual(row, legacy[0]); assert.deepEqual(legacy, before);
   const rendered = markup(t, entry, Main.manifest, status);
-  assert.ok(rendered.includes('Recorded selected renderer → Recorded actual renderer')); assert.ok(rendered.includes(row.reason));
+  // The arrow shows the fallback; the row carries no reason line (GUI 0877 L2).
+  assert.ok(rendered.includes('Recorded selected renderer → Recorded actual renderer')); assert.equal(rendered.includes(row.reason), false);
   assert.equal(rendered.includes(legacy[0].reason), false); assert.equal(status.details[0].value, legacy[0].used);
 });

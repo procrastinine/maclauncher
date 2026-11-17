@@ -56,3 +56,14 @@ test('a module with one runtime names it in a heading without a one-choice menu 
   assert.match(saved, /aria-label="Default runtime"/);
   assert.match(saved, /\(saved; choose a compatible runtime\)/);
 });
+
+test('a module section is headed by its sidebar entry, and Settings menus, status and actions keep one compact column (GUI 0877 S1, S4, S6, S9)', () => {
+  const markup = renderModule('crossover');
+  assert.match(markup, /<div class="settingsTitle">Windows<\/div>/);
+  assert.doesNotMatch(markup, /<div class="settingsTitle">Windows Game<\/div>/);
+  const css = require('node:fs').readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.settingsControl > select\.input:not\(\[multiple\]\) \{ flex: 0 1 auto; width: auto; min-width: 8rem; \}/, 'a menu sizes to its choices');
+  assert.match(css, /\.settingsControl > \.input \+ \.btn:not\(\.iconOnly\) \{ min-width: 6\.5rem; \}/, 'Browse… and Add… share one width');
+  assert.match(css, /\.settingsUpdateControl \{ flex-wrap: nowrap; \}/);
+  assert.match(css, /\.settingsRow:has\(> \.settingsUpdateControl\) \{ grid-template-columns: minmax\(var\(--field-label\), 15rem\) minmax\(0, 1fr\); \}/);
+});
