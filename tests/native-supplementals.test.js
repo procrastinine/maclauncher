@@ -90,6 +90,17 @@ test('declared custom helpers are included while managed helpers and other versi
   assert.equal(selected('7zip/7zz'), true);
 });
 
+test('distribution planning keeps profile-scoped remote catalogs offline and separate from static pins', () => {
+  const remote = { id: 'client-files', distributionRequired: false, delivery: { catalog: 'remote' },
+    core: { catalog: () => assert.fail('Application packaging must not query a profile catalog') } };
+  const pinned = { id: 'pinned-files', distributionRequired: false, core: { catalog: [{ version: '1', asset: {} }] } };
+  const plan = require('../scripts/distribution-model.cjs').createPlan({ arch: 'arm64', maximumMacOS: '13.0',
+    dependencies: { managers: () => new Map([remote, pinned].map(manager => [manager.id, manager])), supplementals: () => [], modules: () => [] } });
+  assert.deepEqual(plan.packages, []);
+  assert.deepEqual(plan.runtimes.map(row => [row.managerId, row.download.pinnedVersions, row.download.catalogQuery]),
+    [['client-files', [], true], ['pinned-files', ['1'], false]]);
+});
+
 test('native host dependencies preserve declared loader identities', () => {
   const row = { id: 'fixture-bridge', version: '1.0', file: 'bridge.dylib',
     dependency: '@loader_path/libsteam_api.dylib', provider: { id: 'steam-api-helper', version: '0.5.0', file: 'libsteam_api.dylib' },

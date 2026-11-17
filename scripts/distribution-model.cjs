@@ -57,7 +57,7 @@ function createPlan({ arch, maximumMacOS, packageConfig = require('../package.js
   const supplementals = require('./native-supplementals.cjs').requirements(config, dependencies);
   const sourceArtifacts = require('./native-source-artifacts.cjs').requirements(packages, catalog, supplementals);
   const runtimes = [...catalog.values()].map(manager => {
-    const pins = manager.core?.catalog || [], included = packages.filter(item => item.managerId === manager.id);
+    const pins = Array.isArray(manager.core?.catalog) ? manager.core.catalog : [], included = packages.filter(item => item.managerId === manager.id);
     return { managerId: manager.id, includedVersions: [...new Set(included.map(item => item.version))].sort(),
       includedExecution: included.length ? manager.delivery?.included || manager.bundledExecution || 'managed' : 'none',
       download: { pinnedVersions: pins.filter(pin => pin.asset || pin.publishedBinary || pin.packages).map(pin => pin.version).sort(),

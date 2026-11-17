@@ -14,6 +14,19 @@ function installFixture(manager, userDataDir) {
   const core=manager.core, architecture=process.arch;
   let version='1.0.0', directory, sectionId='default', variant;
   if(manager.id === 'crossover') return []; // Reference-only application, never a downloaded runtime.
+  if(manager.id === 'steam-client-components') {
+    version='a'.repeat(40);directory=path.join(userDataDir,'runtimes',manager.id,version);
+    const payload=stage(directory,{version,sectionId});
+    const record={archiveSha1:version,clients:{x86_64:'steamclient64.dll',i386:'steamclient.dll'},files:[]};
+    for(const name of ['active.json',version+'.json'])write(path.join(path.dirname(directory),name),JSON.stringify(record));
+    return [payload];
+  }
+  if(manager.id === 'android-system-image') {
+    directory=path.join(userDataDir,'android/system-images','a'.repeat(64));
+    const payload=stage(directory,{version,sectionId});
+    write(path.join(directory,'managed-image.json'),JSON.stringify({version,versions:[version]}));
+    return [payload];
+  }
   if(core?.Catalog?.packs) return core.Catalog.packs.map(pack => stage(core.installRoot(userDataDir,pack.id,version),{version,sectionId:pack.id,architecture}));
   if(core?.java) return [core.java,core.vineflower].map((provider,index)=>{
     const line=provider.LTS_LINES?.[0] || 21, v=index?'1.0.0':line+'.0.0';
