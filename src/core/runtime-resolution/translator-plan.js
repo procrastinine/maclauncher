@@ -3,6 +3,7 @@ const AUTOMATIC = 'automatic', INHERIT = 'inherit';
 const UNAVAILABLE_CHOICE_LABEL = 'Saved selection (unavailable)';
 const Roles = require('../../modules/shared/runtime/translator-roles');
 const Pairing = require('./translator-pairing');
+const Policy = require('./graphics-policy');
 const { compareRuntimeVersions } = require('../../modules/shared/runtime/pinned-native-manager');
 const fs = require('node:fs'), path = require('node:path');
 const { fileDigest } = require('../../modules/shared/runtime/verified-identity');
@@ -24,6 +25,7 @@ function fallbackNotice(reasonCode, { roles = [] } = {}) {
     ? `This choice needs its own copy of a library that the ${roles.join(' and ')} choice provides, and a game can load only one copy.`
     : 'This choice needs a library that another Direct3D choice already provides, and a game can load only one copy.';
   if (reasonCode === 'recorded-fallback') return 'The recorded runtime used a different choice.';
+  if (reasonCode === 'graphics-policy') return 'This Wine loads one Direct3D route per game, and another Direct3D choice sets it.';
   return 'This choice cannot load with the selected runtime. Its included copy or automatic choice will be used.';
 }
 
@@ -158,7 +160,7 @@ function physicalPlacements(plan) {
   };
   for (const role of Roles.DIRECT3D_ROLES) {
     const description = plan.components[role.id]?.used;
-    if (!description) continue;
+    if (!description || Policy.loadedByWine(plan, description)) continue;
     for (const file of filesForRole(description, role)) {
       if (plan.dxgiBinding && Pairing.isDxgi(file)) continue;
       place(file, description, [role.id]);
@@ -224,6 +226,9 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
     const row = plan.components[role.id], files = row.used && apiCompatibility[role.id]?.[row.used.id]?.files;
     if (files) row.used = { ...row.used, files };
   }
+  // A Wine that loads its own Direct3D components by one environment value
+  // places none of their files and has no DXGI pairing of ours to make.
+  const policy = Policy.applyPolicy(plan, { selections, included, filesForRole });
   const backend = selectorBackend(plan, selections, included);
   if (backend) {
     // The runtime's selector runs its own renderer for every Direct3D API, so
@@ -237,7 +242,7 @@ function resolveApiRoles(plan, { selections = {}, choices = [], included = [], c
     plan.apiMode = false; plan.placements = []; plan.groups = apiGroups(plan);
     return plan;
   }
-  const pair = () => Pairing.resolvePairing(plan, { choices, included, compatibility, apiCompatibility, filesForRole });
+  const pair = () => !policy && Pairing.resolvePairing(plan, { choices, included, compatibility, apiCompatibility, filesForRole });
   let paired = pair();
   plan.apiMode = true;
   let physical = physicalPlacements(plan);

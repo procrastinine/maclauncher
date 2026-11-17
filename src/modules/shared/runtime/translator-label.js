@@ -1,7 +1,7 @@
 // One presentation path for Included rows and per-game translator choices.
 // The original version text and binary facts stay on the description.
 const names = { d3dmetal: "D3DMetal", dxmt: "DXMT", dxvk: "DXVK", wined3d: "WineD3D",
-  moltenvk: "MoltenVK", kosmickrisp: "KosmicKrisp", "vkd3d-proton": "vkd3d-proton", gstreamer: "GStreamer" };
+  moltenvk: "MoltenVK", kosmickrisp: "KosmicKrisp", "vkd3d-proton": "vkd3d-proton", gstreamer: "GStreamer", mullion: "Mullion" };
 const displayText = value => String(value ?? "").replace(/[\s\x00-\x1f\x7f]+/g, " ").trim();
 function componentRelease(value) {
   const text = displayText(String(value?.version || "").split(/[\r\n]/)[0]).split(/\s*·\s*/)[0];

@@ -106,6 +106,15 @@ async function resolve(install, runtime, context, { executableArchitecture, host
       return [item.id, Binary.compatibility({ ...item, files, requiredPaths }, record,
         { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() })];
     }))])) : {};
+  // A Direct3D component that the Wine loads itself serves the programs its
+  // value applies to, whatever machine its own files name.
+  for (const item of input.included) {
+    const lane = require('./graphics-policy').laneCompatibility(runtime, item, executableArchitecture);
+    if (!lane) continue;
+    const decided = previous => lane.compatible ? { ...lane, files: previous?.files || item.files } : lane;
+    compatibility[item.id] = decided(compatibility[item.id]);
+    for (const role of Object.values(apiCompatibility)) if (role[item.id]) role[item.id] = decided(role[item.id]);
+  }
   // MacLauncher's DXVK 2.x/3.x and vkd3d-proton cannot run on MoltenVK. With the
   // Vulkan driver on its automatic choice and no MacLauncher KosmicKrisp (a Mac
   // that cannot run it, or a download declined in this Play), each keeps the
@@ -227,7 +236,7 @@ async function resolve(install, runtime, context, { executableArchitecture, host
   plan.warnings.push(...(plan.components.video.used?.videoPreparation?.warnings || []));
   if (plan.components.d3d12.used?.engine === 'vkd3d-proton' && plan.components['vulkan-driver'].used?.engine !== 'kosmickrisp')
     plan.warnings.push('KosmicKrisp is recommended for vkd3d-proton. The saved selection is being used with the selected Vulkan driver.');
-  const used = value => JSON.stringify([value.apiMode, Object.values(value.components).map(row => [row.used?.id, row.used?.engine, row.used?.form, row.used?.root, row.used?.files?.map(file => [file.path, file.machine])]),
+  const used = value => JSON.stringify([value.apiMode, value.graphicsPolicy?.value, Object.values(value.components).map(row => [row.used?.id, row.used?.engine, row.used?.form, row.used?.root, row.used?.files?.map(file => [file.path, file.machine])]),
     value.placements?.map(item => [item.file.path, item.file.machine, item.roles])]);
   const previous = context.translatorPlan;
   context.runtimePlan={satisfied:true,provisional:false,selection:plan};

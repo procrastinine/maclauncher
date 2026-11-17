@@ -57,6 +57,7 @@ function descriptor(id, transport) {
   const data = definition(id), wine = data.wine || {};
   return Object.freeze({...wine, id: data.id, label: data.label, runtimeLabel: data.label, managerId: data.manager?.id || data.id,
     order: data.order, labels: Object.freeze({...data.labels}), source: data,
+    graphicsPolicy: data.graphicsPolicy || null,
     vulkanLibrarySelector: typeof wine.vulkanLibrarySelector === 'boolean' ? () => wine.vulkanLibrarySelector : install => install?.capabilities?.vulkanLibrarySelector === true,
     ...transport,
     vulkanLibraryNames: Array.isArray(wine.vulkanLibraryNames) ? () => [...wine.vulkanLibraryNames] : undefined,

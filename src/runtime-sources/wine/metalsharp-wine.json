@@ -21,6 +21,56 @@
         { "path": "lib/wine/aarch64-windows/libwow64fex.dll", "name": "wow64-client" },
         { "path": "lib/wine/aarch64-unix/libwow64fex.so", "name": "wow64-helper" }
       ]
+    },
+    {
+      "id": "metalsharp-wine-mullion",
+      "kind": "d3d-translator",
+      "label": "MetalSharp Mullion",
+      "engine": "mullion",
+      "parts": [
+        { "path": "lib/mullion", "name": "mullion" }
+      ]
+    },
+    {
+      "id": "metalsharp-wine-dxvk",
+      "kind": "d3d-translator",
+      "label": "MetalSharp DXVK",
+      "engine": "dxvk",
+      "vulkan": true,
+      "parts": [
+        { "path": "lib/dxvk", "name": "dxvk" }
+      ]
+    },
+    {
+      "id": "metalsharp-wine-vkd3d-proton",
+      "kind": "d3d-translator",
+      "label": "MetalSharp vkd3d-proton",
+      "engine": "vkd3d-proton",
+      "vulkan": true,
+      "parts": [
+        { "path": "lib/vkd3d-proton", "name": "vkd3d-proton" }
+      ]
     }
-  ]
+  ],
+  "graphicsPolicy": {
+    "variable": "GRAPHICS_BACKEND",
+    "default": "dxmt",
+    "builtins": "wine",
+    "values": [
+      {
+        "value": "dxmt",
+        "lanes": ["metalsharp-wine-mullion"]
+      },
+      {
+        "value": "dxvk",
+        "lanes": ["metalsharp-wine-dxvk", "metalsharp-wine-mullion"],
+        "architectures": ["x64"]
+      },
+      {
+        "value": "vkd3d",
+        "lanes": ["metalsharp-wine-vkd3d-proton", "metalsharp-wine-dxvk", "metalsharp-wine-mullion"],
+        "architectures": ["x64"]
+      }
+    ]
+  }
 }

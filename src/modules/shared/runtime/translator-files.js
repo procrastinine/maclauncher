@@ -104,11 +104,14 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
   try {
   const placed = placesDirect3D(plan, selected);
   if (placed) env.CX_GRAPHICS_BACKEND = placedGraphicsBackend(plan, selected);
+  // A Wine that loads its own Direct3D components reads the plan's value.
+  if (plan.graphicsPolicy) env[plan.graphicsPolicy.variable] = plan.graphicsPolicy.value;
   // A separately selected Direct3D 12 library replaces the renderer's own.
   const separateD3D12 = !plan.apiMode && plan.components?.d3d12?.used;
   for (const item of selected) {
     signal?.throwIfAborted();
     if (!placed && usesSelector(plan) && item.included && item.component === 'd3d-renderer') { env.CX_GRAPHICS_BACKEND = item.backend || item.engine; continue; }
+    if (require('../../../core/runtime-resolution/graphics-policy').loadedByWine(plan, item)) continue;
     if (item.engine === 'vkd3d' && !plan.apiMode) continue; // Legacy Wine d3d12 stays in its normal builtin tree.
     if (item.component === 'vulkan-driver') {
       const json = item.icd ? { path: item.icd } : item.files.find(file => file.format === 'json' && (() => { try { return Boolean(JSON.parse(fs.readFileSync(file.path)).ICD); } catch { return false; } })());
