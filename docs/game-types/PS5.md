@@ -1,6 +1,6 @@
 # PlayStation 5
 
-This game type covers unpacked, decrypted PS5 games, plus PS5 PKG archives for inspection. Two runtimes can play an unpacked game: the default, [AnyPS5](#anyps5), converts the game's programs into macOS executables, and the optional [Prosper](#prosper) runs the original programs directly. Detection and the inspector tools belong to the game type, so they stay available with either runtime.
+This game type covers unpacked, decrypted PS5 games, plus PS5 PKG archives for inspection. Two runtimes can play an unpacked game: the default, [AnyPS5](#anyps5), runs the game's programs with its own PS5 system libraries, and the optional [Prosper](#prosper) runs the original programs directly. Detection and the inspector tools belong to the game type, so they stay available with either runtime.
 
 ## Accepted inputs
 
@@ -24,12 +24,26 @@ Once an AnyPS5 conversion exists, **Inspect program** exports the program metada
 
 | Runtime | Delivery | Requirements |
 | --- | --- | --- |
-| **PS5 (AnyPS5)**, default | Packages from MacLauncher Builds | macOS 26 or later on Intel or Apple Silicon; Vulkan with Intel support |
+| **PS5 (AnyPS5)**, default | Managed versions from MacLauncher Builds, including Apple Silicon FEX and Intel converted-game packages | macOS 26 or later. Apple Silicon: an Apple Silicon Vulkan build with FEX, or Vulkan with Intel support with Rosetta. Intel: Vulkan with Intel support |
 | **Prosper** | Packages from MacLauncher Builds or a local build registered in Runtimes | macOS 26 or later on Intel or Apple Silicon; Vulkan 1.4 with Intel support |
 
 ### AnyPS5
 
-[AnyPS5](https://github.com/boykopovar/AnyPS5), which appears in MacLauncher as **PS5 (AnyPS5)**, converts the x86-64 PS5 executable and its bundled modules into Mach-O files. The converter itself follows the selected package's CPU, but converted games and PS5 system libraries use x86-64. Both the Intel converter and the game therefore run natively on Intel Macs, without Rosetta, while Apple Silicon runs converted games under [Rosetta](../runtimes/ROSETTA.md), which the system consent flow installs if it is missing. On both Mac architectures, AnyPS5 requires macOS 26 or later and a Vulkan build with Intel support.
+[AnyPS5](https://github.com/boykopovar/AnyPS5) appears in Runtimes as **PS5 (AnyPS5)**. Its versions include an Apple Silicon host using [FEX](https://github.com/FEX-Emu/FEX) and packages for converted Intel games. The game's runtime-version choice selects the execution route; there is no separate CPU setting.
+
+Automatic prefers a ready FEX version on Apple Silicon. If only a usable converted-game version is installed, Play uses it without a download. A saved default or an explicit game version remains selected. Both routes use the same save folder.
+
+#### FEX
+
+The Apple Silicon FEX package contains AnyPS5's PS5 system libraries built for Apple Silicon and its start host, which runs the game's x86-64 code with FEXCore and calls those libraries directly. The host loads the executable and modules from the imported game folder without converting them, including prepared inputs with `source/` and `app0/` folders. No Rosetta is involved. The game's `/app0` is a copy of the imported assets in `fex/app0/`, cloned where the volume supports it so it takes no extra space, which keeps any writes a game makes to `/app0` out of the imported folder. Play copies files that are new or changed in the imported folder, except a file the game has changed in its copy.
+
+Each game has one working folder, `fex/` inside its private data. It holds the staged `app0/`, the `data` and `_sd` links to the game's saves and the files AnyPS5 creates as the game runs: save-data memory in `_sd_mem/`, the `devlog/`, `temp0/` and `download0/` folders, and the shader cache in `shader_cache/`. The host runs from an `AnyPS5.app` bundle inside the installed package, one per installed version, without copying a runtime or a root filesystem into each game folder.
+
+The package is a managed version in the **PS5 (AnyPS5)** section of Runtimes: versions come from the MacLauncher Builds catalog through **Refresh**, and each version can be installed, removed or made the default, or replaced by a local build at a custom path. When the FEX route needs a package or an Apple Silicon Vulkan build that is missing, Play asks once for both, installs them and continues.
+
+#### Converted route
+
+With a converted-game runtime version, AnyPS5 converts the x86-64 PS5 executable and its bundled modules into Mach-O files. The converter itself follows the selected package's CPU, but converted games and PS5 system libraries use x86-64. Both the Intel converter and the game therefore run natively on Intel Macs, without Rosetta, while Apple Silicon runs converted games under [Rosetta](../runtimes/ROSETTA.md), which the system consent flow installs if it is missing. On both Mac architectures, AnyPS5 requires macOS 26 or later and a Vulkan build with Intel support.
 
 The converted program runs from its prepared macOS application bundle, with the library title as its application and executable name and the library artwork as its Dock icon. The executable and converted modules share the same directory, which preserves their relative library paths. Games prepared in an older layout move into this one on their next preparation without being converted again. Renaming a library entry updates the prepared executable name without keeping the old name, and removing the game's prepared data removes the bundle.
 
@@ -41,7 +55,7 @@ AnyPS5 versions are supplied by MacLauncher Builds and need no Python installati
 
 AnyPS5 is a PS5 runtime rather than a native macOS game engine, so each game needs a runtime container of its own, which preparation builds. Game resources are copied into the container's `app0/` folder, and the PS5 executables and nested modules are converted into Mach-O files, while the original programs stay unchanged. During preparation, Play first shows how many resources have been copied out of the total file count and then how many modules have been converted out of the total, counting the main program as the first module, as the relinker reports them. The hover text names the relinker's current stage and module.
 
-The conversion is cached, keyed by the game input and by the contents of AnyPS5's relinker and SELF extraction helper, so runtime versions with identical converter inputs reuse the same conversion. Changes to the copied resources are preserved when the conversion is updated. The container reaches the shared runtime libraries through a directory link, which makes them follow the selected install.
+The conversion is cached, keyed by the game input and by the contents of AnyPS5's relinker and SELF extraction helper, so runtime versions with identical converter inputs reuse the same conversion. Both execution routes use the same asset-staging policy. Changes made by the game remain preserved when the imported assets or conversion are updated. The container reaches the shared runtime libraries through a directory link, which makes them follow the selected install.
 
 AnyPS5 runs with the container as its working directory. The runtime's `/data` path uses the game's private save directory and `_sd` uses a subfolder of it, unless an explicit save-location setting redirects both paths into the chosen save folder. Save-data memory stays in the container's `launch/_sd_mem/` in either case, keyed by user and slot and kept separate from the original game files.
 
@@ -49,7 +63,7 @@ A game can also carry PlayGo metadata, which describes which game chunks are ins
 
 #### Vulkan
 
-ARM-only Vulkan libraries cannot load into AnyPS5's x86-64 game process, so its **Vulkan** setting selects an installed Vulkan implementation with Intel support. The list shows the installed implementations. Automatic prefers MacLauncher KosmicKrisp, then LWJGL's KosmicKrisp, then MoltenVK, and offers MacLauncher KosmicKrisp's download when none of them is installed. **Settings → PlayStation 5 → PS5 (AnyPS5)** sets the default for all games, and each game's runtime settings can override it.
+The **Vulkan** setting follows the selected AnyPS5 version. With the Apple Silicon version (FEX), the game process is an Apple Silicon program and the setting selects an installed Apple Silicon Vulkan implementation. ARM-only Vulkan libraries cannot load into a converted game's x86-64 process, so with an Intel version the setting selects an installed Vulkan implementation with Intel support. The list shows the installed implementations. Automatic prefers MacLauncher KosmicKrisp, then LWJGL's KosmicKrisp, then MoltenVK, and offers MacLauncher KosmicKrisp's download for the game process's CPU when none of them is installed. **Settings → PlayStation 5 → PS5 (AnyPS5)** sets the default for all games, and each game's runtime settings can override it.
 
 With KosmicKrisp, AnyPS5 uses `KK_EMULATION=performance,-denorm_preserve,-denorm_flush` to turn off the software denormal controls, which the emulator requests when they are offered. A game-set environment value overrides this default.
 

@@ -16,10 +16,13 @@ function gameDirectory(entry, context) {
   return GameData.resolveGameModuleDir(context.userDataDir,entry.gameId,"anyps5");
 }
 const saveDirectory = (entry,context) => entry.saveDirOverride || path.join(gameDirectory(entry,context),"saves");
+// The FEX start host's working folder: save aliases and AnyPS5's own files, one per game.
+const fexDirectory = (entry,context) => path.join(gameDirectory(entry,context),"fex");
 function resolveSaveLocations(entry,context) {
   const primary=saveDirectory(entry,context),root=gameDirectory(entry,context);
   return {primaryDirectory:primary,directories:[{directory:primary,role:"primary",source:"AnyPS5 data",confidence:"declared"},
     {directory:path.join(primary,"_sd"),role:"alternate",source:"AnyPS5 save data",confidence:"declared"},
+    {directory:path.join(root,"fex","_sd_mem"),role:"alternate",source:"AnyPS5 save-data memory",confidence:"declared"},
     {directory:path.join(root,"launch.app","Contents","MacOS","_sd_mem"),role:"alternate",source:"AnyPS5 save-data memory",confidence:"declared"},
     {directory:path.join(root,"launch","_sd_mem"),role:"alternate",source:"AnyPS5 legacy save-data memory",confidence:"declared"}]};
 }
@@ -74,6 +77,27 @@ function assertOutsideSource(source,output) {
   let parent=output;
   while(!fs.existsSync(parent)) parent=path.dirname(parent);
   if(inside(source,path.join(fs.realpathSync(parent),path.relative(parent,output)))) throw new Error("Prepared PS5 files must be stored outside the original game folder.");
+}
+// Both execution routes stage /app0 through the same copy policy. A game-modified
+// file retains its original source hash, so a later source update cannot replace it.
+async function stageFexApp0(program,directory,context) {
+  const app0=path.join(directory,"app0"), recordPath=path.join(directory,"app0.json"), previous=readRecord(recordPath);
+  Writable.assertOwnDirectory(directory,app0);
+  const files=await sourceFiles(program.assetRoot,context);
+  let staged=previous?.source===program.assetRoot&&previous.files&&typeof previous.files==="object"?previous.files:null;
+  if(staged&&previous.schemaVersion!==2) {
+    // Earlier receipts stored a mutable target identity. Only bytes that still
+    // match the source can establish source ownership during migration.
+    staged=Object.fromEntries(files.filter(file=>staged[file.name]).map(file=>{
+      const old=staged[file.name],output=path.join(app0,file.name);let stat;
+      try {stat=fs.lstatSync(output);} catch(error) {if(error.code!=="ENOENT")throw error;}
+      const hash=stat?.isFile()&&!stat.isSymbolicLink()?Native.hashFile(output):null;
+      return [file.name,{stamp:old.stamp,sha256:hash&&hash===Native.hashFile(file.full)?hash:null}];
+    }));
+  }
+  const assets=await stageAssets(files,app0,staged,context,directory);
+  Writable.atomicWrite(recordPath,JSON.stringify({schemaVersion:2,source:program.assetRoot,files:assets})+"\n",{root:directory});
+  return {app0};
 }
 async function stageAssets(files,app0,previous,context,root) {
   const assets={};let completed=0;
@@ -234,4 +258,4 @@ async function prepareGame(entry,context,install,dependencies={}) {
     return {directory,executable,app:layout.app,cached:false};
   } finally { fs.rmSync(temporary,{recursive:true,force:true}); }
 }
-module.exports={gameDirectory,saveDirectory,resolveSaveLocations,resolveProgram,runtimePaths,prepareGame,unwrapFile,sourceFiles,isGuestModule};
+module.exports={gameDirectory,saveDirectory,fexDirectory,resolveSaveLocations,resolveProgram,runtimePaths,prepareGame,bindSaveData,stageFexApp0,unwrapFile,sourceFiles,isGuestModule};

@@ -58,7 +58,7 @@ Compatibility layers are much lighter than VMs and much faster than emulators, w
 
 The same idea works for other platforms, and several of MacLauncher's runtimes for consoles and phones are compatibility layers in exactly this sense.
 
-PlayStation 5 games are x86-64 programs, like PC games. [AnyPS5](https://github.com/boykopovar/AnyPS5) converts the game's executable and modules into macOS programs and supplies its own versions of the PS5's system libraries, much as WINE supplies Windows DLLs. An Intel Mac runs the x86-64 code directly and Apple Silicon runs it through Rosetta, while graphics go through Vulkan running on Metal. No part of this imitates PlayStation hardware.
+PlayStation 5 games are x86-64 programs, like PC games. [AnyPS5](https://github.com/boykopovar/AnyPS5) supplies its own versions of the PS5's system libraries, much as WINE supplies Windows DLLs. On Apple Silicon, [FEX](https://github.com/FEX-Emu/FEX) translates the game's x86-64 code inside an Apple Silicon AnyPS5 host whose system libraries are Apple Silicon code, so nothing runs under Rosetta. The other route converts the game's executable and modules into macOS programs, which an Intel Mac runs directly and Apple Silicon runs through Rosetta. Graphics go through Vulkan running on Metal. No part of this imitates PlayStation hardware.
 
 The Nintendo Switch has an ARM64 CPU, the same instruction family as Apple Silicon, so once a Switch game has been prepared, its code runs directly on your Mac's processor. [nxnative](https://github.com/seedds/nxnative) provides the system services the game expects and turns its graphics into Metal, compiling the shaders ahead of time. That compilation is the preparation step you see the first time you launch a Switch game.
 

@@ -11,10 +11,18 @@
       "file"
     ],
     "extensions": [
-      { "extension": ".elf" },
-      { "extension": ".bin" },
-      { "extension": ".self" },
-      { "extension": ".pkg" }
+      {
+        "extension": ".elf"
+      },
+      {
+        "extension": ".bin"
+      },
+      {
+        "extension": ".self"
+      },
+      {
+        "extension": ".pkg"
+      }
     ],
     "fileSignatures": [
       {
@@ -58,7 +66,8 @@
     },
     "managerUi": {
       "anyps5": {
-        "tabLabel": "PS5 (AnyPS5)", "sectionLabel": "PS5 (AnyPS5)",
+        "tabLabel": "PS5 (AnyPS5)",
+        "sectionLabel": "PS5 (AnyPS5)",
         "management": "managed",
         "order": 47,
         "category": "platforms"
@@ -69,7 +78,7 @@
         "label": "PS5 (AnyPS5)",
         "graphicsHost": "window",
         "graphicsArchitecture": "x86_64",
-        "requirements": "macOS 26 · Rosetta on Apple Silicon · Vulkan with Intel support",
+        "requirements": "macOS 26 · Vulkan · Apple silicon: FEX, or Rosetta with Intel Vulkan",
         "settings": {
           "environmentAction": "listTranslatorEnvironments",
           "defaults": {
@@ -96,9 +105,18 @@
               "label": "Mouse input",
               "default": "auto",
               "options": [
-                { "value": "auto", "label": "Automatic" },
-                { "value": "controller", "label": "Controller bindings" },
-                { "value": "native", "label": "Native mouse" }
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "controller",
+                  "label": "Controller bindings"
+                },
+                {
+                  "value": "native",
+                  "label": "Native mouse"
+                }
               ],
               "description": "Controller bindings use the mouse buttons and wheel as mapped below. Native mouse sends them directly to the game. F7 toggles capture. Applies on the next launch."
             },
@@ -480,6 +498,10 @@
     {
       "label": "AnyPS5 (GPL-2.0-only)",
       "url": "https://github.com/boykopovar/AnyPS5"
+    },
+    {
+      "label": "FEX (MIT)",
+      "url": "https://github.com/FEX-Emu/FEX"
     }
   ],
   "icon": {

@@ -73,17 +73,25 @@ function vulkanFixture(t, host = apple, backend = "kosmickrisp") {
     return [{ id: `${backend}-fixture:27`, backend, projectId: "maclauncher-kosmickrisp", version: "27", label: backend === "kosmickrisp" ? "MacLauncher KosmicKrisp 27" : "MoltenVK 27",
       library: library[cpu], driver: library[cpu], readable: [library[cpu]] }];
   } };
-  const original = Vulkan.choices;
+  const original = Vulkan.choices, translates = Architecture.requiresRosetta;
   t.mock.method(Vulkan, "choices", (context, options) => original(context, { ...options, managers: [], adapted, hostCapabilities: host }));
+  t.mock.method(Architecture, "requiresRosetta", architecture => translates(architecture, host));
   return { context: { userDataDir: root, settings: {}, runtimeSettings: {} }, requested };
 }
+// The selected runtime version supplies AnyPS5's measured execution route.
+const anyps5Vulkan = route => (context,t) => {
+  const manager=require("../src/modules/anyps5/runtime/manager");
+  t.mock.method(manager,"resolveSelection",()=>({ready:true,route}));
+  return require("../src/modules/anyps5/main").settingsActions.listVulkanRuntimes({},context);
+};
 for (const [consumer, list, cpu] of [
-  ["AnyPS5", context => require("../src/modules/anyps5/main").settingsActions.listVulkanRuntimes({}, context), "x64"],
+  ["AnyPS5 (Automatic)", anyps5Vulkan("fex"), "arm64"],
+  ["AnyPS5 (Rosetta)", anyps5Vulkan("rosetta"), "x64"],
   ["Prosper", context => require("../src/modules/prosper/provider").createProvider({ vulkan: Vulkan }).settingsActions.listVulkanRuntimes({}, context), "x64"],
   ["Android", context => require("../src/modules/android/custom-main").settingsActions.listVulkanRuntimes({}, context), "arm64"]]) {
   test(`${consumer}: Vulkan choices list the build its host process loads without repeating its CPU`, t => {
     const { context, requested } = vulkanFixture(t);
-    const rows = list(context).vulkanRuntimes;
+    const rows = list(context,t).vulkanRuntimes;
     assert.deepEqual(rows[0], { value: "auto", label: "Automatic" });
     assert.deepEqual(rows.slice(1).map(row => row.label), ["MacLauncher KosmicKrisp 27"]);
     assert.deepEqual([...new Set(requested)], [cpu]);

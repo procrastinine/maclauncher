@@ -730,7 +730,7 @@ Module `anyps5`.
 
 | Backend | Description and requirements |
 | --- | --- |
-| PS5 (AnyPS5) (default) | macOS 26 · Rosetta on Apple Silicon · Vulkan with Intel support |
+| PS5 (AnyPS5) (default) | macOS 26 · Vulkan matching the selected runtime version · Apple Silicon FEX or converted Intel games |
 | Inspect only |  |
 | Prosper *(provider)* |  |
 

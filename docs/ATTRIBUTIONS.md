@@ -101,7 +101,8 @@ The other Android runtimes are [Mac.apk](https://github.com/kksimp/Mac.apk) publ
 | [PlayCover](https://github.com/PlayCover/PlayCover), [PlayTools](https://github.com/PlayCover/PlayTools) | iOS application preparation and runtime hooks (GPL-3.0). Upstream notices accompany downloaded packages. |
 | [LLVM libunwind and libc++abi](https://llvm.org) | Runtime support libraries distributed with downloaded packages (Apache-2.0 with LLVM exception). |
 | [nxnative](https://github.com/seedds/nxnative) | Nintendo Switch application support (MIT). |
-| [AnyPS5](https://github.com/boykopovar/AnyPS5) | PS5 application conversion (GPL-2.0-only). |
+| [AnyPS5](https://github.com/boykopovar/AnyPS5) | PS5 application conversion and system libraries (GPL-2.0-only). |
+| [FEX](https://github.com/FEX-Emu/FEX) | x86-64 code translation in the AnyPS5 on FEX start host (MIT). Its package retains the FEX and dependency notices. |
 | [Prosper](https://github.com/mattias800/prosper) | Optional locally registered PS5 runtime. Its source and runtime retain their own terms. |
 | [mpv](https://mpv.io/), [uosc](https://github.com/tomasklaen/uosc), [thumbfast](https://github.com/po5/thumbfast) | Video playback, its on-screen controller and thumbnail script. Upstream licenses accompany the downloaded player. |
 | [Intel XeSS](https://github.com/intel/xess) | Optional temporal upscaler downloaded from the publisher's repository under the Intel Simplified Software License. The license accompanies the installed library. |
