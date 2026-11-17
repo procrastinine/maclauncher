@@ -330,8 +330,8 @@ test('registry metadata exposes manageable production groups while exposing mana
       ['Ikemen GO', ['sff-tools']], ['Flash', ['ffdec']], ['Unity', ['cpp2il', 'assetripper']], ['GameMaker', ['gm8-decompiler', 'undertale-mod-cli']],
       ['ScummVM', ['scummvm-tools']]]) for (const id of ids) assert.equal(section(id).label, engine, id);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'tools'), sections).map(choice => [choice.label, choice.managerId]),
-      [['Installer reader', 'innoextract'], ['FreeArc decoders', 'freearc'], ['SREP', 'srep'], ['WineVulkan helper', 'winevulkan-scene'], ['ILSpy', 'ilspy'], ['RPGMakerDecrypter', 'rpgmaker-decrypter'], ['JADX', 'jadx'], ['Apktool', 'apktool'],
-        ['msg-tool', 'msg-tool'], ['Rizin / Ghidra', 'native-inspector']]);
+      [['Installer reader', 'innoextract'], ['FreeArc decoders', 'freearc'], ['SREP', 'srep'], ['WineVulkan helper', 'winevulkan-scene'], ['ILSpy', 'ilspy'], ['SteamCMD', 'steamcmd'], ['RPGMakerDecrypter', 'rpgmaker-decrypter'], ['JADX', 'jadx'], ['Apktool', 'apktool'],
+        ['msg-tool', 'msg-tool'], ['Vulkan loader', 'vulkan-loader'], ['Rizin / Ghidra', 'native-inspector']]);
     assert.equal(groups.at(-1).id, 'tools');
     assert.equal(groups.filter(group => group.label === 'GameMaker').length, 1);
     assert.equal(groups.some(group => group.label === 'Butterscotch'), false);
