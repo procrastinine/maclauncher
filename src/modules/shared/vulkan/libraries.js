@@ -164,7 +164,7 @@ function createManager(backend, dependencies = {}) {
       let minimumMacOS = "1.0";
       for (const file of files) {
         fs.chmodSync(path.join(unpacked, file), 0o755);
-        const native = inspect(path.join(unpacked, file), { signal, ...(backend === "moltenvk" ? { architecture: null } : {}),
+        const native = inspect(path.join(unpacked, file), { signal, ...(backend === "moltenvk" ? { architecture: require("../runtime/architecture").selectedArchitecture() } : {}),
           macOSVersion: (dependencies.systemVersionSync || systemVersionSync)() });
         for (const slice of native.slices) if (versionAtLeast(slice.minimumMacOS, minimumMacOS)) minimumMacOS = slice.minimumMacOS;
       }
