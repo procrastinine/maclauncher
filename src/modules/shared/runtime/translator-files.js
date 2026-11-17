@@ -14,6 +14,13 @@ const usesVulkanSelector = plan => plan?.vulkanLibrarySelector ?? Boolean(source
 // The names under which Wine's Unix side opens its Vulkan library: libMoltenVK
 // for CrossOver and WineCX, the Vulkan loader for Sikarugir.
 const VULKAN_LIBRARY_NAMES = Object.freeze(['libMoltenVK.dylib', 'libvulkan.1.dylib']);
+function requestedVulkanLibraryNames(plan) {
+  const names = plan?.vulkanLibraryNames;
+  if (names === undefined) return null;
+  if (!Array.isArray(names) || !names.length || names.some(name => !VULKAN_LIBRARY_NAMES.includes(name)))
+    throw new Error('The Wine Vulkan library names are invalid.');
+  return VULKAN_LIBRARY_NAMES.filter(name => names.includes(name));
+}
 const cpuFolder = machine => ({ 332: 'i386-windows', 34404: 'x86_64-windows', 43620: 'aarch64-windows' })[machine];
 function selectedDescriptions(plan) {
   if (plan?.apiMode) {
@@ -63,8 +70,10 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
   if (plan.pairingError) throw new Error(plan.pairingError);
   const selected = selectedDescriptions(plan), links = {}, native = [], dllOverrides = [], env = {};
   const inputs = filesIdentity(selected);
+  const vulkanLibraryNames = selected.some(item => item.component === 'vulkan-driver') ? requestedVulkanLibraryNames(plan) : null;
   // Advance a stale generation deterministically; active paths are never moved or replaced.
-  const identity = crypto.createHash('sha256').update(JSON.stringify(previousIdentity ? [layout.architecture, inputs, previousIdentity] : [layout.architecture, inputs])).digest('hex');
+  const identity = crypto.createHash('sha256').update(JSON.stringify([layout.architecture, inputs,
+    ...(vulkanLibraryNames ? [vulkanLibraryNames] : []), ...(previousIdentity ? [previousIdentity] : [])])).digest('hex');
   const store = path.join(userDataDir, 'graphics/wine-translators'), root = path.join(store, identity);
   Writable.assertOwnDirectory(userDataDir, store);
   Writable.assertOwnDirectory(store, root);
@@ -109,9 +118,11 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
       if (!driver) throw new Error('The selected Vulkan driver file is missing.');
       Object.assign(env, require('../vulkan').driverEnvironment({ driver, icd: json?.path, backend: item.engine }, root));
       const library = loader || driver;
-      links[`lib/wine/${layout.unixName}/${VULKAN_LIBRARY_NAMES[0]}`] = library;
+      // Only the consumer's requested names override lookup. An unrelated name
+      // can belong to a publisher dependency with a different native ABI.
+      const names = vulkanLibraryNames || [VULKAN_LIBRARY_NAMES[0], ...(!usesSelector(plan) && loader ? [VULKAN_LIBRARY_NAMES[1]] : [])];
+      for (const name of names) links[`lib/wine/${layout.unixName}/${name}`] = library;
       if (usesVulkanSelector(plan)) env.CX_LIBVULKAN = library;
-      if (!usesSelector(plan) && loader) links[`lib/wine/${layout.unixName}/${VULKAN_LIBRARY_NAMES[1]}`] = loader;
       continue;
     }
     if (item.component === 'video') {
