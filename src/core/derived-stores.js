@@ -28,4 +28,12 @@ module.exports = [
     directories: ({ userDataDir }) => [path.join(userDataDir, "runtimes")],
     match: require("./storage-maintenance").TRASH
   },
+  {
+    // Earlier Legendary and GOGdl downloads stay in this folder as registered
+    // versions until they are deleted in Runtimes. A removal that stopped while
+    // this folder was its own store is finished here. Nothing else matches.
+    id: "earlier-store-helper-removals",
+    directories: ({ userDataDir }) => [path.join(userDataDir, "external", "tools")],
+    match: require("./storage-maintenance").TRASH
+  },
 ];
