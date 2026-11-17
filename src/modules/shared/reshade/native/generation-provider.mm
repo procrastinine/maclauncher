@@ -353,7 +353,12 @@ public:
 #endif
    for(auto output:outputs){interpolator.outputTexture=output;InternalTemporalScope scope;[interpolator encodeToCommandBuffer:commands];}
    receipt->armed.store(true);
-   result.completion=[receipt]()->ShaderResult{const auto status=receipt->status.load();if(status==1)return {true,{}};if(status==2)return {false,"MetalFX interpolation commands failed or were abandoned"};return {false,"MetalFX interpolation is still in flight",true};};
+   // The receipt settles in the completed handler added above. A reader that runs before it on the same command
+   // buffer, such as a completed handler added earlier, takes the buffer's own completion instead.
+   __weak id<MTLCommandBuffer>finished=commands;
+   result.completion=[receipt,finished]()->ShaderResult{auto status=receipt->status.load();
+    if(!status&&receipt->armed.load()){id<MTLCommandBuffer>buffer=finished;if(buffer.status==MTLCommandBufferStatusCompleted)status=1;else if(buffer.status==MTLCommandBufferStatusError)status=2;}
+    if(status==1)return {true,{}};if(status==2)return {false,"MetalFX interpolation commands failed or were abandoned"};return {false,"MetalFX interpolation is still in flight",true};};
    sceneCommands=nil;sceneDepth=nil;sceneMotion=nil;sceneAovs.reset();sceneMatrices.reset();sceneResources.reset();result.encoded=true;result.ready=!reset;result.generated=result.ready?outputs.size():0;result.historyFrames=reset?1:2;if(reset)result.reason="MetalFX interpolation history is warming";return result;
   }
   return reject("MetalFX interpolation requires macOS 26 or later");
