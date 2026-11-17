@@ -312,6 +312,12 @@ export function RuntimesView({
   const componentChoices = new Map((sectionGroup ? activeSectionTab?.choices || [] : [])
     .filter(choice => typeof choice.manager.ui?.componentId === "string").map(choice => [choice.manager.ui!.componentId as string, choice]));
   const showInstalledSort = activeRuntimeInstalled.length >= 4;
+  // Only a saved default can be cleared. The action sits on the default's own row, or beside the
+  // note naming a default that is not installed, never in a row of its own.
+  const clearSavedDefault = activeRuntimeManager && activeRuntimeSection && activeRuntimeSupportsDefault &&
+    activeRuntimeSection.defaultSource === "saved" ? <button className="btn small" disabled={runtimeBusy}
+      title={activeRuntimeSection.defaultVersion ? `${activeRuntimeVersionTag(activeRuntimeSection.defaultVersion)} is the chosen default. MacLauncher chooses one automatically again.` : undefined}
+      onClick={() => onRuntimeSetDefault(activeRuntimeManager.id, activeRuntimeSection.id, null)}>Use automatic default</button> : null;
 
   return (
     <main className="launcherView runtimesView" aria-labelledby="runtimes-title">
@@ -373,14 +379,11 @@ export function RuntimesView({
               id={`runtime-panel-${activeRuntimeManager.id}-${activeRuntimeSection.id}`}
             >
               <div className="runtimePanel">
-                {(showRuntimeIdentity || activeRuntimeDownloadSummary || activeRuntimeSection.defaultSource === "saved") && <div className="runtimePanelHeader">
+                {(showRuntimeIdentity || activeRuntimeDownloadSummary) && <div className="runtimePanelHeader">
                   <div>
                     {showRuntimeIdentity && <div className="runtimePanelTitle">{activeRuntimeIdentity}</div>}
                   </div>
                   <div className="runtimePanelHeaderActions">
-                    {activeRuntimeSupportsDefault && activeRuntimeSection.defaultSource === "saved" && <button className="btn small" disabled={runtimeBusy}
-                      title={activeRuntimeSection.defaultVersion ? `${activeRuntimeVersionTag(activeRuntimeSection.defaultVersion)} is the chosen default. MacLauncher chooses one automatically again.` : undefined}
-                      onClick={() => onRuntimeSetDefault(activeRuntimeManager.id, activeRuntimeSection.id, null)}>Use automatic default</button>}
                     {activeRuntimeDownloadSummary && (
                       <div className="chip">{activeRuntimeDownloadSummary}</div>
                     )}
@@ -614,6 +617,7 @@ export function RuntimesView({
                       .some((section: any) => (Array.isArray(section?.installed) ? section.installed : []).some((inst: any) => inst.version === activeRuntimeSection.defaultVersion)) &&
                     <div className="dim runtimeAvailability runtimeDefaultMissing" data-runtime-default-missing="true">
                       The default version, {activeRuntimeVersionTag(activeRuntimeSection.defaultVersion)}, is not installed. MacLauncher asks before downloading it when a game needs it.
+                      {clearSavedDefault}
                     </div>}
                   {activeRuntimeInstalledSorted.length === 0 ? (
                     <div className="empty">{managementPresentation.emptyLabel}</div>
@@ -695,6 +699,8 @@ export function RuntimesView({
                                   onClick={() => onRuntimeInstalledAction(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, action.id, inst.architecture)}>
                                   {action.label}
                                 </button>)}
+                              {/* A saved default is cleared on its own row, so the action adds no row above Versions. */}
+                              {isDefault && !defaultSelections && clearSavedDefault}
                               {(!isDefault || incompleteDefault) && inst.ready !== false && activeRuntimeSupportsDefault && inst.supportsDefault !== false && (
                                 <>
                                   <button

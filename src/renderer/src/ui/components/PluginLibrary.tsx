@@ -125,6 +125,11 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
     const versionRows = plugin.custom ? [] : (section.installed || []).filter((item: Record<string, any>) => !item.suppliedBy);
     const versionTag = runtimeVersionTagger(section);
     const supportsDefault = section.supportsDefault !== false && Boolean(onSetDefault);
+    // A saved default is cleared on its own version row, never in a row of its own under Versions.
+    const clearDefault = supportsDefault && section.defaultSource === "saved" ? <button type="button" className="btn small" disabled={busy}
+      aria-label={`Use the automatic ${name} version`}
+      title={section.defaultVersion ? `${versionTag(section.defaultVersion)} is the chosen default. MacLauncher chooses one automatically again.` : undefined}
+      onClick={() => onSetDefault!(manager.id, choice.sectionId, null)}>Use automatic default</button> : null;
     return <article className="pluginCard" key={choice.id} aria-label={name}>
       <div className="pluginCardTitle">{name}</div>
       {plugin.description && <p className="pluginCardDescription">{plugin.description}</p>}
@@ -165,6 +170,7 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
                 {row.ready === false && <StatusBadge tone="warning">{availabilityLabel("needsRepair")}</StatusBadge>}
               </div></div>
               <div className="saveRowActions">
+                {isDefault && clearDefault}
                 {!isDefault && row.ready !== false && supportsDefault && <button type="button" className="btn small" disabled={busy}
                   aria-label={`Set ${name} ${tag} as default`} onClick={() => onSetDefault!(manager.id, choice.sectionId, row.version)}>Set default</button>}
                 {row.removable !== false && <button type="button" className="btn iconOnly danger" disabled={busy}
@@ -173,11 +179,8 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
             </div>;
           })}
         </div>}
-        {supportsDefault && section.defaultSource === "saved" && <div className="pluginCardActions pluginVersionDefault">
-          <button type="button" className="btn small" disabled={busy} aria-label={`Use the automatic ${name} version`}
-            title={section.defaultVersion ? `${versionTag(section.defaultVersion)} is the chosen default. MacLauncher chooses one automatically again.` : undefined}
-            onClick={() => onSetDefault!(manager.id, choice.sectionId, null)}>Use automatic default</button>
-        </div>}
+        {clearDefault && !versionRows.some((row: Record<string, any>) => row.version === section.defaultVersion) &&
+          <div className="pluginCardActions pluginVersionDefault">{clearDefault}</div>}
       </details>}
     </article>;
   };

@@ -485,6 +485,11 @@ test('effective manager defaults remain visible when installed and only saved de
       assert.match(markup,/badge badgeAccent[^>]*>Default<\/span>/,'the installed default keeps its marker');
       const clear=elements(tree).find(node=>node.type==='button'&&node.props.children==='Use automatic default');
       assert.equal(Boolean(clear),defaultSource==='saved');
+      // Owner, 11-17: the action must not add a row above Versions; it sits on the default's own row.
+      if(clear){
+        assert(!elements(tree).some(node=>node.props?.className==='runtimePanelHeader'&&elements(node).some(n=>n.props===clear.props)),'not in a header row above Versions');
+        assert(elements(tree).some(node=>node.props?.className==='saveRow'&&elements(node).some(n=>n.props===clear.props)),'on the default version row');
+      }
       if(clear){clear.props.onClick();assert.deepEqual(calls,[['fixture','default',null]]);}
       else assert.deepEqual(calls,[]);
     } finally {h.close();}

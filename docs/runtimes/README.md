@@ -246,7 +246,7 @@ Installing from **Runtimes** leaves a saved default unchanged, with these except
 - Most native package managers, CrossOver and the Python tools save the first installed version as the default when no default is saved.
 - Tool sections, such as Vineflower and GDRE Tools, make a newer installed version their default.
 
-Managers that declare `supportsDefault: false`, such as Unity Mono and the mpv plugins, offer no **Set default**. **Use automatic default** removes a saved default.
+Managers that declare `supportsDefault: false`, such as Unity Mono and the mpv plugins, offer no **Set default**. **Use automatic default**, on the row of a saved default (or beside the note naming a saved default that is not installed), removes that saved default.
 
 An installed build is marked with a processor when its package is built for a processor other than the automatic one, for example **Intel** for an Intel build installed with the **Build** menu in the Apple Silicon app. Builds for the automatic processor and Universal builds carry no mark. Because the mark follows the Macs that the package declares it runs on rather than the processor of the files inside it, a package for Apple Silicon that contains Intel Wine libraries is not marked **Intel**, and such a build can be the default. When one version is installed with both **Build** choices, only the installation made with the non-automatic choice is marked. The graphics translator entries name every build instead, as described under [Processor builds](#processor-builds). When the default version is not installed, the **Installed** list says so, and MacLauncher asks before downloading it when a game needs it.
 

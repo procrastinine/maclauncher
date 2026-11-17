@@ -126,6 +126,9 @@ test('Runtimes plugin cards list upstream versions and manage each installed ver
   // Default and removal of each installed version.
   assert.match(markup, /aria-label="Set uosc v5\.12\.0 as default"/);
   assert.doesNotMatch(markup, /aria-label="Set uosc v5\.13\.0 as default"/, 'the default version is marked, not offered');
+  // Owner, 11-17: clearing a saved default adds no row under Versions; it sits on the default's own row.
+  assert.doesNotMatch(markup, /pluginVersionDefault/, 'no row of its own under Versions');
+  assert.match(markup, /v5\.13\.0(?:(?!saveRow")[\s\S])*aria-label="Use the automatic uosc version"/, 'on the v5.13.0 row');
   inCard('uosc', 'Set uosc v5.12.0 as default').props.onClick();
   await inCard('uosc', 'Remove uosc v5.12.0').props.onClick();
   inCard('uosc', 'Use the automatic uosc version').props.onClick();
