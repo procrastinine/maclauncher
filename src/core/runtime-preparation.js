@@ -65,10 +65,19 @@ async function managerPlan(entry, info, context, managers, { managerId, runtimeI
     const selectionEntry = runtimeId === context.runtimeId ? entry : { ...entry, runtimeId };
     const selection = await manager.resolveSelection(selectionEntry, context.settings, context.userDataDir);
     if (selection) {
-      if (selection.ready === true || (selection.install && selection.ready !== false)) return null;
+      if (selection.ready === true || (selection.install && selection.ready !== false)) {
+        if (selection.automatic === false) require("./runtime-install-origins").clearRecord(context.userDataDir, { managerId, version: selection.install?.version || selection.version });
+        const install = selection.install;
+        context.recordRuntimeUse?.({ managerId, version: install?.version || selection.version,
+          sectionId: selection.installOptions?.sectionId || sectionId || "default",
+          ...(install?.variant ? { variant: install.variant } : {}),
+          ...(install?.installDir || install?.appPath || install?.executablePath ? { sourcePath: install.installDir || install.appPath || install.executablePath } : {}) });
+        return null;
+      }
       if (!selection.version && !selection.discoveryRequired) throw new Error(selection.reason || "A compatible runtime version could not be selected.");
       return { managerId, version: selection.version || null, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}),
-        installOptions: selection.installOptions || {} };
+        ...(selection.automatic === true ? { automatic: true } : {}),
+        installOptions: { ...selection.installOptions, ...(selection.architecture ? { architecture: selection.architecture } : {}) } };
     }
   }
   const selected = managerSelection(entry, info, context, manager, { runtimeId, sectionId });
@@ -341,7 +350,7 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
       report({ phase: "install", label: progressLabel, managerId: manager.id, version: plan.version });
       const target = typeof manager.installRuntime === "function" ? manager
         : Object.assign(Object.create(manager), { installRuntime: options => manager.performSetupAction(options) });
-      const result = await install(target, { ...plan.installOptions, version: plan.version }, { label, progressLabel });
+      const result = await install(target, { ...plan.installOptions, version: plan.version, ...(plan.automatic === true ? { automatic: true } : {}) }, { label, progressLabel });
       // A version Play chose on its own may later be superseded and removed.
       if (plan.automatic === true) require("./runtime-install-origins").recordPlayInstall({ userDataDir: context.userDataDir, manager, plan, result,
         entry, settings: context.settings, installedBefore, logger: context.logger });

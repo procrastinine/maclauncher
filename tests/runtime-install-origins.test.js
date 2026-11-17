@@ -30,8 +30,7 @@ test("Play records only versions it chose on its own and explicit actions clear 
   const play = (version, { entry = {}, settings = {}, installedBefore = [], automatic = true } = {}) =>
     Origins.recordPlayInstall({ userDataDir: root, manager, plan: { version, automatic, installOptions: { sectionId: "default" } }, result: { version }, entry, settings, installedBefore });
   assert.equal(play("6"), true);
-  // A module planner, such as Ren'Py recommending 7.4.11 from a game's 7.4.11.2266, marks nothing automatic.
-  assert.equal(play("7.4.11", { automatic: false, entry: { moduleData: { version: "7.4.11.2266" } } }), false, "a module planner's choice is never recorded");
+  assert.equal(play("7.4.11", { automatic: false }), false, "a non-automatic installation is not recorded");
   assert.equal(play("5", { entry: { runtimeData: { player: { version: "5" } } } }), false, "a game's choice is not automatic");
   assert.equal(play("4", { settings: { runtimes: { player: { defaultVersion: "4" } } } }), false, "a saved default is not automatic");
   assert.equal(play("7", { installedBefore: ["7"] }), false, "an existing installation keeps its origin");

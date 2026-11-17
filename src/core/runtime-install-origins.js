@@ -1,14 +1,12 @@
 const path = require("node:path");
 const { readJsonObject, writeJsonAtomic } = require("./json-files");
 const { compareVersions } = require("../modules/shared/runtime/version-order.mjs");
-const { usableDefaultVersion } = require("../modules/shared/runtime/version-choices");
 const Architecture = require("../modules/shared/runtime/architecture");
 const GameData = require("../modules/shared/game-data");
 
-// Runtime versions that Play installed on its own: the manager's own default,
-// chosen by the shared planner because no game choice, game recommendation or
-// saved default named a version. Module planners never record a version, so
-// what they choose stays. A game that later uses a recorded version through
+// Runtime versions that Play installed without an explicit game choice or
+// saved default. Detected game formats and module recommendations constrain
+// compatibility, but do not make an installation user-owned. A game that later uses a recorded version through
 // its own choice or a saved default, and explicit Install, Set default and
 // removal in Runtimes, clear the record. Upkeep removes a recorded version
 // through Runtimes once the current default is a newer verified version of
@@ -35,14 +33,25 @@ function identity({ managerId, version, sectionId, variant }) {
 
 /** Records a version that the shared planner chose as the manager's default
  * (`plan.automatic`) and Play installed, unless it was installed before or a
- * game record or saved setting names it. Never throws. */
+ * explicit game choice or saved setting names it. Never throws. */
 function recordPlayInstall({ userDataDir, manager, plan = {}, result, entry, settings, installedBefore = [], logger } = {}) {
   try {
     const version = text(String(result?.version ?? plan.version ?? ""));
     if (!userDataDir || !manager?.id || plan.automatic !== true || !version || installedBefore.includes(version)) return false;
-    if (names(entry?.runtimeData, version) || names(entry?.moduleData, version) || names(settings, version)) return false;
+    if (names(entry?.runtimeData, version) || names(settings, version)) return false;
+    const sectionId = result?.sectionId || plan.installOptions?.sectionId || "default";
+    let variant = result?.variant || plan.installOptions?.variant;
+    if (!variant && typeof manager.getState === "function") {
+      const architecture = Architecture.requestedArchitecture(plan.installOptions) || Architecture.targetArchitecture(result?.architecture);
+      const candidates = installedRows(manager, userDataDir, settings).filter(item => item.section.id === sectionId).flatMap(item => item.rows)
+        .filter(row => String(row.version) === version && (!architecture ||
+          (Architecture.requestedArchitecture(row) ? Architecture.requestedArchitecture(row) === architecture : Architecture.matchesArchitecture(row, architecture))));
+      const variants = [...new Set(candidates.map(row => row.variant || null))];
+      if (variants.length > 1) return false;
+      variant = variants[0];
+    }
     const row = identity({ managerId: manager.id, version, sectionId: result?.sectionId || plan.installOptions?.sectionId,
-      variant: result?.variant || plan.installOptions?.variant });
+      variant });
     const installs = read(userDataDir).filter(item => !same(item, row));
     write(userDataDir, [...installs, { ...row, ...(text(entry?.gameId) ? { gameId: entry.gameId } : {}), installedAt: new Date().toISOString() }]);
     return true;
@@ -98,14 +107,18 @@ async function pruneSuperseded({ userDataDir, managers = [], settings = {}, game
     catch { kept.push(...own); continue; }
     for (const record of own) {
       const section = sections.find(item => item.section.id === record.sectionId || !item.section.id && record.sectionId === "default");
-      const current = section?.rows.find(row => same(identity({ ...row, managerId: manager.id }), record));
+      let current = section?.rows.find(row => same(identity({ ...row, managerId: manager.id }), record));
+      const versions = section?.rows.filter(row => String(row.version) === String(record.version)) || [];
+      // Architecture facades annotate an installation after the install action
+      // returns. A unique annotation identifies the same copy; ambiguity keeps
+      // the origin record rather than forgetting a still-installed version.
+      if (!current && !record.variant && versions.length === 1) current = versions[0];
+      if (!current && versions.length) { kept.push(record); continue; }
       // A record whose version is no longer installed has nothing left to describe.
       if (!current) continue;
       try {
-        // Superseded: the section's current default is a newer verified installation of the same build.
-        const latest = usableDefaultVersion(section.section);
-        const superseded = latest != null && String(latest) !== String(record.version) && compareVersions(latest, record.version) > 0 &&
-          section.rows.some(row => row !== current && String(row.version) === String(latest) && verified(row) && sameBuild(row, current));
+        const superseded = section.rows.some(row => row !== current && verified(row) && sameBuild(row, current) &&
+          compareVersions(row.version, record.version) > 0);
         const removable = current.readOnly !== true && current.removable !== false && current.included !== true && current.external !== true;
         if (!superseded || !removable || names(settings, record.version) ||
           await referenced(manager, loadGames(), settings, userDataDir, record.version) || await isRunning()) { kept.push(record); continue; }
@@ -129,11 +142,11 @@ async function pruneSuperseded({ userDataDir, managers = [], settings = {}, game
     removed.map(row => `${row.managerId} ${row.version}`).join(", "));
   return { removed };
 }
-// Whether any game record names the version or resolves to it through the
+// Whether any explicit game choice names the version or resolves to it through the
 // manager's own selection.
 async function referenced(manager, games, settings, userDataDir, version) {
   for (const game of games) {
-    if (names(game, version)) return true;
+    if (names(game.runtimeData, version)) return true;
     if (typeof manager.resolveSelection !== "function") continue;
     try {
       const selection = await manager.resolveSelection(game, settings, userDataDir, { verification: "status" });

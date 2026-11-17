@@ -725,10 +725,11 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       if (local.install) { preferredVersion = chosen.version; chosen = local; }
     }
     const { layer, version, pin, install } = chosen;
-    if (!version) return { version: null, install: null, ready: false, requiresDownload: true,
+    const automatic = !manual && (!saved || layer.source === "recommended" || preferredVersion != null);
+    if (!version) return { version: null, install: null, ready: false, requiresDownload: true, automatic,
       discoveryRequired: remote.size === 0,
       reason: preferredArchitectures(remoteEntries).map(hostReason).find(Boolean) || `No ${label} versions are available to download.` };
-    return { version, install, ready: Boolean(install), requiresDownload: !install, selectionSource: layer.source || "default", ...(preferredVersion ? { preferredVersion } : {}),
+    return { version, install, ready: Boolean(install), requiresDownload: !install, automatic, selectionSource: layer.source || "default", ...(preferredVersion ? { preferredVersion } : {}),
       discoveryRequired: !pin || !remote.has(version), reason: install ? null : !entries.has(version)
       ? `${label} ${version} is not available. Available versions: ${versions.join(", ")}.`
       : hostReason(entries.get(version)) || (compatible && !compatible(entries.get(version)) ? `${label} ${version} has an incompatible runtime profile.` : null) || includedFailures.get(version)?.error ||
