@@ -2,15 +2,10 @@ const fs = require("node:fs"), path = require("node:path");
 const { promisify } = require("node:util"), { execFile } = require("node:child_process");
 const { setTimeout: delay } = require("node:timers/promises");
 const Writable = require("../writable-input");
-const Upstream = require("../runtime/upstream");
 const { runDownloadTask } = require("../runtime/download-manager");
 const Models = require("./models");
-const Native = require("../runtime/local-native");
 const run = promisify(execFile);
-// Valve replaces this bootstrap in place, and SteamCMD updates itself after
-// launch. The downloaded executable must carry Valve's Developer ID signature;
-// Steam verifies its own updates and the authenticated application download.
-const BOOTSTRAP = Upstream.vendor({ location: "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_osx.tar.gz", teamIdentifier: "MXGJJ98X76" });
+const SteamCMD = require('./runtime/steamcmd-manager'), SteamCMDSource = require('./steamcmd-source');
 const quote = text => "'" + text.replace(/'/g, "'\\''") + "'";
 function terminalScript(session) {
   if (!path.isAbsolute(session) || /[\x00-\x1f]/.test(session)) throw new Error("Invalid Steam download directory.");
@@ -51,19 +46,15 @@ IFS= read -r steam_account || exit 1
 case "$steam_account" in ''|*[!a-zA-Z0-9_]*|anonymous) printf '%s\\n' 'A Steam account name is required.'; exit 1;; esac
 [ -f active ] && [ ! -f cancel ] || exit 1
 # Start the signed executable with the environment of Valve's steamcmd.sh.
-# Status 42 asks for a restart after SteamCMD updates itself.
+# The selected managed package already contains Valve's verified client parts.
+# Keep that version; an updater restart is a failure, never a hidden download loop.
 run_steamcmd() {
   ulimit -n 2048
-  while :; do
     steamcmd="$PWD/tools/steamcmd"
-    [ -x "$steamcmd" ] || steamcmd="$PWD/tools/Steam.AppBundle/Steam/Contents/MacOS/steamcmd"
     /usr/bin/env -i HOME="$PWD/home" TMPDIR="$PWD/tmp/" PATH=/usr/bin:/bin:/usr/sbin:/sbin \\
       DYLD_LIBRARY_PATH="$PWD/tools" DYLD_FRAMEWORK_PATH="$PWD/tools" \\
-      "$steamcmd" +@sSteamCmdForcePlatformType windows +@ShutdownOnFailedCommand 1 \\
+      "$steamcmd" -skipinitialbootstrap -nobootstrapperupdate +@sSteamCmdForcePlatformType windows +@ShutdownOnFailedCommand 1 \\
       +force_install_dir "$PWD/content" +login "$steam_account" +app_update 993090 validate +quit
-    status=$?
-    [ "$status" -eq 42 ] || return "$status"
-  done
 }
 run_steamcmd &
 steam_pid=$!
@@ -103,53 +94,30 @@ async function terminalDownload(session, { signal, execute = run, timeout = 30 *
     if (!finished) await delay(3500);
   }
 }
-// Valve's archive holds steamcmd at its top level. A package that moves it
-// deeper is used from that folder; the self-updated app bundle stays intact.
-function steamcmdExecutable(tools) {
-  const executable = root => ["steamcmd", "Steam.AppBundle/Steam/Contents/MacOS/steamcmd"].map(name => path.join(root, name))
-    .find(file => { try { return fs.lstatSync(file).isFile(); } catch { return false; } });
-  if (executable(tools)) return executable(tools);
-  let found = null;
-  (function visit(directory, depth) {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      if (found || !entry.isDirectory() || entry.name === "__MACOSX" || /\.(?:app|AppBundle)$/.test(entry.name)) continue;
-      const child = path.join(directory, entry.name);
-      if (executable(child)) found = child; else if (depth < 3) visit(child, depth + 1);
-    }
-  })(tools, 0);
-  if (!found) return null;
-  const unpacked = tools + "-package";
-  fs.renameSync(tools, unpacked); fs.renameSync(path.join(unpacked, path.relative(tools, found)), tools);
-  return executable(tools);
-}
 async function acquire(context = {}, dependencies = {}) {
   const { userDataDir, signal, onProgress } = context;
-  const { execute = run, authenticate = terminalDownload, importModel = Models.importModel } = dependencies;
+  const { authenticate = terminalDownload, importModel = Models.importModel, manager = SteamCMD } = dependencies;
   const root = path.join(userDataDir, "runtimes/lossless-steam");
   Writable.assertOwnDirectory(userDataDir, root);
   const session = fs.mkdtempSync(path.join(root, ".download-"));
   try {
     for (const name of ["tools", "home", "tmp", "content"]) fs.mkdirSync(path.join(session, name), { mode: 0o700 });
-    onProgress?.({ detail: "Downloading SteamCMD", downloaded: 0, total: null });
-    const [listed] = (await BOOTSTRAP.discover({ signal }))[0]?.files || [];
-    const archive = path.join(session, "steamcmd.tar.gz");
-    try { await BOOTSTRAP.download(listed, archive, { signal }); }
-    catch (error) {
-      signal?.throwIfAborted();
-      throw new Error(`SteamCMD could not be downloaded${error.statusCode ? ` (${error.statusCode})` : ""}. Import an installed Lossless Scaling DLL instead.`, { cause: error });
+    const selected = manager.resolveSelection({}, context.settings, userDataDir);
+    let tool = selected.ready ? selected.install : null;
+    if (!tool) {
+      await require('../runtime/tool-install').confirmToolInstall(context, {manager, version: selected.version,
+        detail: 'Installs the selected Valve SteamCMD package in Tools for this Steam download.'});
+      tool = await manager.installRuntime({...context, version: selected.version});
     }
-    await execute("/usr/bin/tar", ["-xf", archive, "-C", path.join(session, "tools")], { signal, timeout: 30000 });
-    try {
-      const executable = steamcmdExecutable(path.join(session, "tools"));
-      if (!executable) throw new Error("SteamCMD is not a regular file.");
-      Native.readMachOArchitectures(executable);
-      await BOOTSTRAP.verifySigner(executable, { execute, signal });
-      fs.chmodSync(executable, 0o755);
-    } catch (error) {
-      signal?.throwIfAborted();
-      throw new Error("The SteamCMD download is not Valve's signed macOS SteamCMD. Import an installed Lossless Scaling DLL instead.", { cause: error });
-    }
-    await context.ensureRosetta?.({ signal });
+    if (!tool?.executablePath) throw Error('Choose an installed SteamCMD version in Runtimes.');
+    return await require('../../../core/coordinated-runtime-managers').withRuntimeUse({managerId: manager.id, sectionId: 'default', version: tool.version, sourcePath: tool.installDir}, async () => {
+    await context.useRuntime?.({managerId: manager.id, sectionId: 'default', version: tool.version, sourcePath: tool.installDir});
+    // A session has its own account and writable files; the managed package and
+    // custom originals remain unchanged and are reused by subsequent actions.
+    await fs.promises.cp(tool.installDir || path.dirname(tool.executablePath), path.join(session, 'tools'), {recursive: true});
+    if (path.basename(tool.executablePath) !== 'steamcmd') await fs.promises.copyFile(tool.executablePath, path.join(session, 'tools/steamcmd'));
+    SteamCMDSource.bootstrapArguments(path.join(session, 'tools/steamcmd'));
+    if (tool.needsRosetta || tool.requiresRosetta) await context.ensureRosetta?.({signal});
     onProgress?.({ detail: "Complete Steam sign-in in Terminal", downloaded: 0, total: null });
     await authenticate(session, { signal });
     signal?.throwIfAborted();
@@ -157,6 +125,7 @@ async function acquire(context = {}, dependencies = {}) {
     if (!fs.existsSync(runtimePath)) throw new Error("Steam did not download Lossless.dll. Confirm that the Steam account owns Lossless Scaling, or import an installed DLL.");
     onProgress?.({ detail: "Importing Lossless Scaling models", downloaded: 0, total: null });
     return { ...await importModel({ userDataDir, runtimePath, signal }), message: "Lossless Scaling models downloaded and imported." };
+    }, {userDataDir});
   } finally { await fs.promises.rm(session, { recursive: true, force: true }); }
 }
 function downloadFromSteam(context = {}) {
@@ -164,4 +133,4 @@ function downloadFromSteam(context = {}) {
   return runDownloadTask(context.downloads, { dedupeKey: "lossless-steam", managerId: "graphics-models", sectionId: "default", label: "Lossless Scaling", detail: "Downloading from Steam" },
     task => acquire({ ...context, ...task }));
 }
-module.exports = { BOOTSTRAP, terminalScript, terminalDownload, acquire, downloadFromSteam };
+module.exports = { terminalScript, terminalDownload, acquire, downloadFromSteam };
