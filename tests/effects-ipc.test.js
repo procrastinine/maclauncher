@@ -379,9 +379,18 @@ test("getGameEffects graphicsInputs ingress waits for Forget and cancels quietly
 });
 
 test("getGameEffects and templates quietly ignore stale requests after Forget removed the library entry", async t => {
- const f=fixture(t);f.context.loadGamesHydrated=()=>[];
+ const f=fixture(t),coordinator=require('../src/core/runtime-coordinator').createRuntimeCoordinator();
+ f.context.coordinatorFor=()=>coordinator;
+ // Model an inspector request issued while its entry exists, but delivered
+ // only after the shared coordinator completes removal and main drops it.
+ let deliver;const issued=new Promise(resolve=>{deliver=resolve;}).then(()=>f.invoke('getGameEffects',f.entry.gamePath));
+ const remover=coordinator.client();const token=await remover.acquireGameRemoval({gameId:f.entry.gameId,gamePath:f.entry.gamePath});
+ await remover.completeGameRemoval(token);f.context.loadGamesHydrated=()=>[];
  f.context.backendService.request=()=>assert.fail('a removed entry must not enter backend discovery');
- assert.equal(await f.invoke('getGameEffects',f.entry.gamePath),null);
+ deliver();assert.equal(await issued,null);
  assert.equal(JSON.stringify(await f.invoke('getGameEffectTemplates',f.entry.gamePath)),'[]');
+ for(const method of ['getGameEffects','getGameEffectTemplates']){
+  await assert.rejects(f.invoke(method,'/Games/Unrelated-invalid'),/Game not found in library/,'unrelated missing paths retain their meaningful error');
+ }
  await assert.rejects(Promise.resolve().then(()=>f.invoke('setGameEffects',f.entry.gamePath,shaderPlan())),/Game not found in library/,'mutating actions retain their missing-game refusal');
 });

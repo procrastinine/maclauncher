@@ -4459,7 +4459,10 @@ const EFFECTS_INFO_OPTIONS = ["settings", "root", "graphicsHost", "graphicsArchi
 const cancelledRead = (read, value) => read.catch(error => { if (isAbortError(error)) return value; throw error; });
 ipcMain.handle("launcher:getGameEffects", async (_event, gamePath) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
-  if (!entry) return null;
+  if (!entry) {
+    if (coordinatorFor(userDataDir).wasGameRemoved(gamePath)) return null;
+    throw new Error("Game not found in library.");
+  }
   const options = await cancelledRead(gameEffectsOptions(entry, undefined, { readOnly: true }), null);
   if (!options) return null;
   const info = options.running ? EffectsRuntime.info(entry, options) : await cancelledRead(backendService.request("inspector", "gameEffectsInfo", entry,
@@ -4473,7 +4476,10 @@ ipcMain.handle("launcher:getGameEffects", async (_event, gamePath) => {
 ipcMain.handle("launcher:graphicsCatalog", (event, request) => graphicsCatalog.request(event.sender, request));
 ipcMain.handle("launcher:getGameEffectTemplates", async (_event, gamePath) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
-  if (!entry) return [];
+  if (!entry) {
+    if (coordinatorFor(userDataDir).wasGameRemoved(gamePath)) return [];
+    throw new Error("Game not found in library.");
+  }
   const options = await cancelledRead(gameEffectsOptions(entry, undefined, { readOnly: true }), null);
   if (!options) return [];
   // As with discovery, a game that is not running reads them in the inspector's worker.

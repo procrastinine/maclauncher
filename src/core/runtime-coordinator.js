@@ -56,7 +56,7 @@ async function isRuntimeProcessAlive(pid) {
 /** Pure Node host. Only bookkeeping and short JSON commits run here; jobs stay in workers. */
 function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProcessAlive, orphanPollMs = 1000 } = {}) {
   const active = new Map(), pending = [], closedOwners = new WeakSet();
-  const gameActivity = new Map(), removedGames = new Set(), pendingRemovals = [], waitingUses = [];
+  const gameActivity = new Map(), removedGames = new Map(), pendingRemovals = [], waitingUses = [];
   let orphanTimer;
   const overlap = (a, b) => a.identities.some(left => b.identities.some(right => conflicts(left, right)));
   const ownPreparationUse = (request, lease) => lease.kind === "use" && lease.owner === request.owner &&
@@ -220,7 +220,7 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
       completeGameRemoval: token => {
         const lease = owned(owner, token);
         if (gameActivity.get(token) !== lease || lease.kind !== "remove") throw coordinationError("RUNTIME_LEASE_INVALID", "Game removal is not owned by this operation.");
-        removedGames.add(lease.gameId);
+        removedGames.set(lease.gameId, lease.gamePath);
         release(owner, token);
         return true;
       },
@@ -249,7 +249,8 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
       close: () => closeOwner(owner)
     };
   }
-  return { client, snapshot: () => ({ active: [...active.values()].map(lease => ({ kind: lease.kind,
+  return { client, wasGameRemoved: gamePath => typeof gamePath === "string" && path.isAbsolute(gamePath) &&
+    [...removedGames.values()].includes(path.resolve(gamePath)), snapshot: () => ({ active: [...active.values()].map(lease => ({ kind: lease.kind,
     identities: lease.identities, pids: [...lease.pids], orphan: Boolean(lease.orphan) })), pending: pending.length,
     games: [...gameActivity.values()].map(lease => ({ kind: lease.kind, gameId: lease.gameId,
       pids: [...lease.pids], orphan: Boolean(lease.orphan) })) }) };
