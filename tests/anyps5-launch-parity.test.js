@@ -12,8 +12,13 @@ test('both AnyPS5 backends prepare game bundle identity and original artwork wit
   else {
    assert.equal(typeof Prepare.prepareFexGame,'function','FEX must consume the shared game identity in a game-owned native bundle');
    const bin=path.join(f.runtime,'AnyPS5.app/Contents/MacOS');fs.mkdirSync(bin,{recursive:true});fs.writeFileSync(path.join(bin,'anyps5-fex-start'),'unchanged signed host');fs.writeFileSync(path.join(bin,'libSDL2.dylib'),'unchanged native closure');
+   // A run report an earlier direct launch wrote beside the host is not part of the package and is never linked: the
+   // host replaces no symlink, so a linked report would send its next report to the user's Application Support.
+   fs.writeFileSync(path.join(bin,'anyps5-report.json'),'{}');
+   const manifest={files:[{path:'AnyPS5.app/Contents/MacOS/anyps5-fex-start'},{path:'AnyPS5.app/Contents/MacOS/libSDL2.dylib'},{path:'licenses/FEX.txt'}]};
    const before=fs.readFileSync(path.join(bin,'anyps5-fex-start'));
-   prepared=await Prepare.prepareFexGame(f.entry,f.context,{...f.install,executablePath:path.join(bin,'anyps5-fex-start')},{runApplicationCommand:async()=>({stdout:''})});
+   prepared=await Prepare.prepareFexGame(f.entry,f.context,{...f.install,manifest,executablePath:path.join(bin,'anyps5-fex-start')},{runApplicationCommand:async()=>({stdout:''})});
+   assert.deepEqual(fs.readdirSync(path.dirname(prepared.executable)).sort(),[path.basename(prepared.executable),'libSDL2.dylib'].sort(),'only the declared native closure is linked beside the game-owned host');
    assert.notEqual(prepared.executable,path.join(bin,'anyps5-fex-start'));
    assert.deepEqual(fs.readFileSync(prepared.executable),before);
    assert.deepEqual(fs.readFileSync(path.join(bin,'anyps5-fex-start')),before,'sealed supplier bytes unchanged');

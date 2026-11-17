@@ -200,6 +200,15 @@ function prepareData(entry,context,directory,program) {
   bindSaveData(entry,context,directory,program.sourceRoot,{name:"_sd",suffix:"_sd"});
   entry.defaultSaveDir=saveDirectory(entry,context);
 }
+// The host's native closure is what its package declares beside it. Files the host writes there at run time (its run
+// report) are not package content and are never linked into a game's bundle.
+function declaredHostSiblings(install) {
+  const root=install.payloadRoot||install.root,files=install.manifest?.files;
+  if(!root||!Array.isArray(files)) throw new Error("The AnyPS5 runtime has no inspected package layout.");
+  const directory=path.relative(root,path.dirname(install.executablePath)),executable=path.basename(install.executablePath);
+  return Object.fromEntries(files.map(file=>file.path).filter(file=>path.posix.dirname(file)===directory.split(path.sep).join("/")&&path.posix.basename(file)!==executable)
+    .map(file=>[path.posix.basename(file),path.join(root,file)]));
+}
 // The FEX backend uses the same game application identity as a converted game. Only the owned host entry is cloned;
 // its native sibling closure stays with the verified immutable runtime, and guest programs stay at their original paths.
 async function prepareFexGame(entry,context,install,dependencies={}) {
@@ -209,9 +218,7 @@ async function prepareFexGame(entry,context,install,dependencies={}) {
   Writable.assertOwnDirectory(context.userDataDir,root);Writable.assertOwnDirectory(root,directory);
   prepareData(entry,context,directory,program);
   const {app0}=await stageFexApp0(program,directory,context);
-  const identity=applicationIdentity(entry,context,program),hostDirectory=path.dirname(install.executablePath);
-  const nativeLinks=Object.fromEntries(fs.readdirSync(hostDirectory).filter(name=>name!==path.basename(install.executablePath))
-    .map(name=>[name,path.join(hostDirectory,name)]));
+  const identity=applicationIdentity(entry,context,program),nativeLinks=declaredHostSiblings(install);
   const application=await Application.prepare({executablePath:install.executablePath,executableName:identity.executableName,
     directory:path.join(directory,"application"),title:identity.title,identifier:identity.identifier,iconFile:identity.iconFile,
     nativeLinks,showInDock:true,signal:context.signal,applicationLabel:"Game",nameFallback:"Game",

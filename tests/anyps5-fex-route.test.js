@@ -38,7 +38,7 @@ function launchFixture(t, {appleSilicon = true, fexReady = true, rosettaReady = 
   const anyps5 = require(modulePath); t.after(() => delete require.cache[modulePath]);
   const [manager] = anyps5.runtimeManagers;
   const selection = (ready, executablePath, root, route) => ready
-    ? {ready: true, version: route, route, install: {executablePath, installDir: root, root, declaration: {files: []}}}
+    ? {ready: true, version: route, route, install: {executablePath, installDir: root, root, payloadRoot: root, declaration: {files: []}, manifest: {files: [{path: path.relative(root, executablePath)}]}}}
     : {ready: false, version: 'fixture', reason: 'Not installed.'};
   t.mock.method(manager, 'resolveSelection', entry => {
     const route = !appleSilicon ? 'native' : entry?.runtimeData?.anyps5?.version === 'rosetta' || !fexReady && rosettaReady ? 'rosetta' : 'fex';
