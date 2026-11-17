@@ -9,6 +9,10 @@ function validateSource(source){
  for(const key of Object.keys(source))if(!['id','kind','label','order','upstream','vulkan','vulkanFeatures','dxgi','included','graphicsPolicy'].includes(key))console.warn('Unknown runtime source key: '+key);
  if(source.upstream){object(source.upstream,'upstream');const upstream=source.upstream;if(upstream.github){if(!/^[\w.-]+\/[\w.-]+$/.test(upstream.github))throw new TypeError('Invalid upstream repository.');object(upstream.assets,'upstream assets');for(const pattern of Object.values(upstream.assets))new RegExp(pattern);}else if(!Object.hasOwn(upstream,'builds')&&!Object.hasOwn(upstream,'app'))throw new TypeError('Unknown upstream.');}
  if(source.included&&!Array.isArray(source.included))throw new TypeError('Included components must be an array.');
+ // Environment values a game gets while it uses an included component, such as a setting its Vulkan driver reads.
+ for(const embed of source.included||[])if(embed?.environment!==undefined&&(!embed.environment||typeof embed.environment!=='object'||Array.isArray(embed.environment)||
+   !Object.entries(embed.environment).every(([key,value])=>/^[A-Z_][A-Z0-9_]*$/.test(key)&&typeof value==='string'&&!/[\0\r\n]/.test(value))))
+  throw new TypeError('An included component environment maps variable names to text values.');
  // The DXGI provider a Direct3D 12 translator presents through: an engine, from a first version on.
  if(source.dxgi!==undefined&&(!source.dxgi||typeof source.dxgi.engine!=='string'||!source.dxgi.engine||source.dxgi.from!==undefined&&typeof source.dxgi.from!=='string'))throw new TypeError('A DXGI need names an engine and an optional first version.');
  // Vulkan device features that a translator's versions from `from` on require of the driver.

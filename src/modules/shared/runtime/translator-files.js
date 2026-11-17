@@ -122,6 +122,8 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
       const loader = item.files.find(file => /libvulkan(?:\.\d+)*\.dylib$/.test(file.path))?.path;
       if (!driver) throw new Error('The selected Vulkan driver file is missing.');
       Object.assign(env, require('../vulkan').driverEnvironment({ driver, icd: json?.path, backend: item.engine }, root));
+      // A Wine's own driver brings the settings its source declares for it.
+      if (item.included) Object.assign(env, require('../../crossover/sources').get(plan.runtime)?.source?.included?.find(embed => embed.id === item.embedId)?.environment);
       const library = loader || driver;
       // Only the consumer's requested names override lookup. An unrelated name
       // can belong to a publisher dependency with a different native ABI.

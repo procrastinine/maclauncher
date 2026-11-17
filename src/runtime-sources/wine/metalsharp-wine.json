@@ -30,7 +30,8 @@
       "parts": [
         { "path": "lib/libMoltenVK.dylib", "name": "library" },
         { "path": "share/vulkan/icd.d/MoltenVK_icd.json", "name": "icd" }
-      ]
+      ],
+      "environment": { "MVK_CONFIG_EMULATE_SAMPLER_LOD_BIAS": "0" }
     },
     {
       "id": "metalsharp-wine-mullion",

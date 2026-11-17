@@ -77,6 +77,45 @@ test('an explicit MetalSharp DXVK choice sets GRAPHICS_BACKEND=dxvk and places n
   assert.equal(view.dllOverrides.some(line => /^(?:d3d9|d3d10core|d3d11|dxgi|d3d12)=/.test(line)), false, view.dllOverrides.join(' '));
 });
 
+// A MoltenVK folder laid out as MetalSharp Wine's: the library and its ICD manifest.
+function moltenVk(root, name, extra) {
+  const { image, ARM64 } = require('./fixtures/macho-image');
+  const lib = path.join(root, name, 'lib', 'libMoltenVK.dylib'), icd = path.join(root, name, 'share', 'vulkan', 'icd.d', 'MoltenVK_icd.json');
+  fs.mkdirSync(path.dirname(lib), { recursive: true }); fs.mkdirSync(path.dirname(icd), { recursive: true });
+  fs.writeFileSync(lib, image({ cpu: ARM64 }));
+  fs.writeFileSync(icd, JSON.stringify({ file_format_version: '1.0.0', ICD: { library_path: '../../../lib/libMoltenVK.dylib', api_version: '1.4.0', is_portability_driver: true } }));
+  return { ...Description.describeTranslator(path.join(root, name), { engine: 'moltenvk', component: 'vulkan-driver', source: 'custom' }),
+    component: 'vulkan-driver', engine: 'moltenvk', ...extra };
+}
+
+test('MetalSharp\'s own MoltenVK runs with its sampler LOD bias emulation off, and no other MoltenVK gets the value', async t => {
+  // MetalSharp's MoltenVK adds sampler LOD bias in every shader on Apple GPUs below Apple10 and leaves the bias
+  // word undeclared in helper functions, so DXVK's presenter (cursor and gamma helpers) never compiles (P5 0806).
+  const source = require('../src/runtime-adapters/wine').definition('metalsharp-wine');
+  const embed = source.included.find(item => item.kind === 'vulkan-driver');
+  assert.equal(embed.id, 'metalsharp-wine-moltenvk');
+  assert.deepEqual(embed.environment, { MVK_CONFIG_EMULATE_SAMPLER_LOD_BIAS: '0' });
+  const root = fixture(t), ms = metalSharp(root);
+  const own = moltenVk(root, 'metalsharp-moltenvk', { id: 'included:vulkan-driver:moltenvk', included: true, sourceId: embed.id, embedId: embed.id });
+  const managed = moltenVk(root, 'moltenvk-1.4.1', { id: 'moltenvk-1.4.1' });
+  for (const [driver, expected] of [[own, '0'], [managed, undefined]]) {
+    const plan = ms.plan({ d3d11: ms.dxvk.id });
+    plan.components['vulkan-driver'] = { used: driver, inherited: false, fallback: false };
+    const view = await prepare(root, plan);
+    assert.equal(view.env.GRAPHICS_BACKEND, 'dxvk');
+    assert.ok(view.env.VK_ICD_FILENAMES, driver.id);
+    assert.equal(view.env.MVK_CONFIG_EMULATE_SAMPLER_LOD_BIAS, expected, driver.id);
+    // Argument buffers stay at MoltenVK's default: DXVK's 2048-sampler heap needs them (P5 0842).
+    assert.equal(Object.hasOwn(view.env, 'MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS'), false, driver.id);
+  }
+  const Schema = require('../src/runtime-sources/schema');
+  const copy = JSON.parse(JSON.stringify(source));
+  for (const environment of [[], { lower: '0' }, { MVK_X: 0 }, { MVK_X: 'a\nb' }]) {
+    copy.included.find(item => item.id === embed.id).environment = environment;
+    assert.throws(() => Schema.validateSource(copy), /environment maps variable names/, JSON.stringify(environment));
+  }
+});
+
 test('automatic MetalSharp choices leave GRAPHICS_BACKEND unset, so its own default stays', async t => {
   const root = fixture(t), ms = metalSharp(root);
   for (const selections of [{}, { d3d9: 'automatic', d3d11: 'automatic', d3d12: 'automatic' }]) {

@@ -241,6 +241,7 @@ Games whose Vulkan driver is MoltenVK receive these variables. Their global valu
 | `MVK_CONFIG_LOG_LEVEL` | Log detail: 0 none, 1 errors, 2 warnings, 3 information, 4 debug. |  |
 | `MVK_CONFIG_FAST_MATH_ENABLED` | Metal fast math: 0 never, 1 always, 2 when a shader requests it. | Set by MoltenVK fast math in the Runtime Settings of Wine games. |
 | `MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS` | 1 places descriptors in Metal argument buffers. | Set by MoltenVK argument buffers in the Runtime Settings of Wine games. |
+| `MVK_CONFIG_EMULATE_SAMPLER_LOD_BIAS` | MetalSharp Wine's MoltenVK: 1 adds each sampler's LOD bias in every shader on Apple GPUs whose samplers have none, 0 leaves the bias out. | Set to 0 for MetalSharp Wine's own MoltenVK. |
 | `MVK_CONFIG_UE4_HACK_ENABLED` | 1 turns on MoltenVK's workarounds for Unreal Engine 4 games. | Set by MoltenVK UE4 compatibility in the Runtime Settings of Wine games. |
 | `MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS` | 1 processes queue submissions on the calling thread. |  |
 | `MVK_CONFIG_PREFILL_METAL_COMMAND_BUFFERS` | Metal command buffer filling: 0 at submission, 1 deferred, 2 immediate, 3 immediate without autorelease pools. |  |
