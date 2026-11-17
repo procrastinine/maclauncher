@@ -109,3 +109,25 @@ test("a failed folder import carries the nested games through the backend and th
   assert.deepEqual(message.nestedGames, failure.nestedGames);
   assert.match(userImportError({ code: "DETECTION_CONFLICT", nestedGames: [failure.nestedGames[0]] }, root).message, /more than one possible game\. MacLauncher found one game in it\./);
 });
+
+test("nested detections overlap, while their offers, order and limits stay those of a one-at-a-time search", async t => {
+  const { root, write } = tree(t);
+  const names = ["A", "B", "C", "D", "E", "F"];
+  for (const name of names) write(name + "/game.marker");
+  write("readme.txt");
+  let failure; try { D.resultOrThrow(await detect(root)); } catch (value) { failure = value; }
+  let active = 0, most = 0; const calls = [];
+  const slow = async (input, options) => {
+    calls.push(path.basename(input)); active++; most = Math.max(most, active);
+    // Later folders finish first.
+    await new Promise(resolve => setTimeout(resolve, 5 * (names.length - names.indexOf(path.basename(input)))));
+    try { return await detect(input, options); } finally { active--; }
+  };
+  assert.deepEqual((await findNestedGames(root, failure, { detect: slow })).map(game => game.relativePath), names);
+  assert.equal(most, 3, "three detections run at a time");
+  calls.length = 0;
+  const limited = await findNestedGames(root, failure, { detect: slow, limits: { depth: 3, folders: 4, choices: 8, games: 16 } });
+  assert.deepEqual(limited.map(game => game.relativePath), names.slice(0, 4));
+  assert.deepEqual(calls.sort(), names.slice(0, 4), "no detection beyond the limit starts");
+  assert.equal(active, 0, "no detection is left running");
+});

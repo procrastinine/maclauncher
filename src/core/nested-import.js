@@ -11,6 +11,9 @@ const { throwIfAborted } = require("../modules/shared/runtime/download-utils");
 // gamePath, so only offers with distinct game paths are separate games. The
 // search only reads.
 const LIMITS = Object.freeze({ depth: 3, folders: 32, choices: 8, games: 16 });
+// Detections run a few at a time. Results are taken in search order, so the
+// offers, their order and the limits are those of a one-at-a-time search.
+const CONCURRENCY = 3;
 const SEARCHED = new Set(["DETECTION_UNSUPPORTED", "DETECTION_CONFLICT"]);
 
 function inside(root, candidate) {
@@ -60,37 +63,61 @@ async function findNestedGames(inputPath, error, { detect, signal, limits = LIMI
     seen.add(key);
     games.push(offer(inputPath, candidate, report, choice));
   };
+  const started = new Map();
+  const start = candidate => {
+    if (!started.has(candidate)) started.set(candidate, detect(candidate, { workerMode: "inline" }).catch(() => null));
+    return started.get(candidate);
+  };
   async function explain(candidate) {
     throwIfAborted(signal);
     detections++;
-    try { return await detect(candidate, { workerMode: "inline" }); } catch { return null; }
+    try { return await start(candidate); } finally { started.delete(candidate); }
   }
   async function offerChoices(choices) {
-    for (const choice of rankChoices(inputPath, choices.filter(file => typeof file === "string" && inside(root, safeRealpath(file)))).slice(0, limits.choices)) {
+    const ranked = rankChoices(inputPath, choices.filter(file => typeof file === "string" && inside(root, safeRealpath(file)))).slice(0, limits.choices);
+    throwIfAborted(signal);
+    for (const choice of ranked.slice(0, CONCURRENCY)) start(choice);
+    for (const [index, choice] of ranked.entries()) {
+      if (ranked[index + CONCURRENCY]) { throwIfAborted(signal); start(ranked[index + CONCURRENCY]); }
       const report = await explain(choice);
       if (report?.detected) add(choice, report, true);
     }
   }
-  // The selected folder's own conflict already names its choices.
-  if (error.code === "DETECTION_CONFLICT") {
-    await offerChoices(error.choices || error.detection?.error?.choices || []);
+  // The next folders the search would detect start ahead of their turn,
+  // within the detections it has left.
+  const ahead = (pending, count) => {
+    throwIfAborted(signal);
+    for (const folder of pending) {
+      if (count <= 0) break;
+      if (inside(root, safeRealpath(folder))) { start(folder); count--; }
+    }
+  };
+  try {
+    // The selected folder's own conflict already names its choices.
+    if (error.code === "DETECTION_CONFLICT") {
+      await offerChoices(error.choices || error.detection?.error?.choices || []);
+      return games;
+    }
+    const pending = subfolders(inputPath);
+    while (pending.length && detections < limits.folders && games.length < limits.games) {
+      const folder = pending.shift();
+      if (!inside(root, safeRealpath(folder))) continue;
+      ahead(pending, Math.min(CONCURRENCY - 1, limits.folders - detections - 1));
+      const report = await explain(folder);
+      if (!report) continue;
+      if (report.detected) { add(folder, report); continue; }
+      if (report.error?.code === "DETECTION_CONFLICT") { await offerChoices(report.error.choices || []); continue; }
+      if (report.error?.code !== "DETECTION_UNSUPPORTED") continue;
+      // Detection already entered folders that hold a single item.
+      const searched = report.input?.resolvedPath || folder;
+      const level = path.relative(inputPath, searched).split(path.sep).length;
+      if (level < limits.depth) pending.push(...subfolders(searched));
+    }
     return games;
+  } finally {
+    // Work started ahead of a search that ended finishes before the result.
+    await Promise.all(started.values());
   }
-  const pending = subfolders(inputPath);
-  while (pending.length && detections < limits.folders && games.length < limits.games) {
-    const folder = pending.shift();
-    if (!inside(root, safeRealpath(folder))) continue;
-    const report = await explain(folder);
-    if (!report) continue;
-    if (report.detected) { add(folder, report); continue; }
-    if (report.error?.code === "DETECTION_CONFLICT") { await offerChoices(report.error.choices || []); continue; }
-    if (report.error?.code !== "DETECTION_UNSUPPORTED") continue;
-    // Detection already entered folders that hold a single item.
-    const searched = report.input?.resolvedPath || folder;
-    const level = path.relative(inputPath, searched).split(path.sep).length;
-    if (level < limits.depth) pending.push(...subfolders(searched));
-  }
-  return games;
 }
 
 function safeRealpath(file) {
