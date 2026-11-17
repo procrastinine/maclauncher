@@ -66,7 +66,7 @@ test('JVM and ART consent to the same Android package once', async t => {
   const {prepareForLaunch} = require('../src/core/runtime-preparation');
   t.mock.method(Common, 'resolveSelection', () => ({ready:false, version:'unified', install:null}));
   const registry = {listModuleIds:() => ['android'], getModule:() => Module};
-  assert.deepEqual(Module.runtimeManagers.filter(item => item.id.startsWith('android')).map(item => item.id), ['android', 'android-aim']);
+  assert.deepEqual(Module.runtimeManagers.filter(item => item.id.startsWith('android')).map(item => item.id), ['android', 'android-aim', 'android-system-image', 'android-art-image-extractor']);
   assert.equal(manifest.runtime.managerUi['android-art'], undefined);
   for (const execution of ['jvm', 'art']) {
     const context = launcher.getLaunchContext(entry, {}), events = [];

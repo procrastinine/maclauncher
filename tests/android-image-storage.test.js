@@ -13,7 +13,7 @@ function fixture(t) {
   const overlay = "schema = 1\n";fs.mkdirSync(path.join(runtime.root, "image"), { recursive: true });
   fs.writeFileSync(path.join(runtime.root, "image/overlay.toml"), overlay);
   runtime.manifest.files.push({ path: "image/overlay.toml", sha256: crypto.createHash("sha256").update(overlay).digest("hex") });
-  const image = { sha256: "d".repeat(64) }, directory = directoryForImage(profile, runtime, image);
+  const image = { sha256: "d".repeat(64), url: "https://example.invalid/system.zip", bytes: 1 }, directory = directoryForImage(profile, runtime, image);
   fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(path.join(directory, "system.dmg"), "original base");fs.writeFileSync(path.join(directory, "derived.shadow"), "original shadow");
   fs.mkdirSync(path.join(directory, "userdata"));fs.writeFileSync(path.join(directory, "userdata/save"), "private data");

@@ -9,7 +9,7 @@ const Module = require("../src/modules/android/main");
 test("Android runtime choices expose managed packages and preserve the default execution", () => {
   assert.equal(Module.manifest.runtime.default, "klepton");
   assert.deepEqual(Module.manifest.runtime.manager, { klepton: "android", macapk: "macapk", aim: "android-aim" });
-  assert.deepEqual(Module.runtimeManagers.map(manager => manager.id), ["android", "macapk", "android-aim", "jadx", "apktool"]);
+  assert.deepEqual(Module.runtimeManagers.map(manager => manager.id), ["android", "macapk", "android-aim", "jadx", "apktool", "android-system-image", "android-art-image-extractor"]);
   for (const manager of Module.runtimeManagers.filter(manager => ["android", "android-aim"].includes(manager.id))) {
     assert.equal(manager.delivery.included, "none");
     assert.equal(manager.delivery.sourceBuild, false);

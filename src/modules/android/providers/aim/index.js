@@ -85,7 +85,10 @@ async function prepareSystem({ context, storage, policy, runtime = resolveRuntim
     const archive = path.join(directory, "system.zip");
     // The original is managed independently from AIM's owned derived image.
     // Its exact archive identity remains the preparation helper's input.
-    await (dependencies.imageManager || require('../../system-image-manager')).ensure(context,{image:imageSource,extractor:resolveImageExtractor(runtime),guestArchitecture:'arm64'});
+    // A base AIM already prepared is used as it is: the managed original is
+    // recorded when present and never downloaded again for it.
+    const retained = fs.existsSync(path.join(directory, "system.dmg"));
+    await (dependencies.imageManager || require('../../system-image-manager')).ensure(context,{image:imageSource,extractor:resolveImageExtractor(runtime),guestArchitecture:'arm64',existingOnly:retained});
     if (!fs.existsSync(path.join(directory, "system.dmg"))) await require("../../system-image").adoptBase({
       context, image: imageSource, destination: path.join(directory, "system.dmg") },dependencies.imageDependencies);
     if (!fs.existsSync(path.join(directory, "system.dmg"))) throw Error('The managed Android original image is unavailable.');
