@@ -226,7 +226,7 @@ function inspectManifest(runtimePath, { managerId, allowLibrary = false, verific
   const Bundled = require("./bundled-native");
   let directory = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath);
   for (let depth = 0; depth < 7; depth += 1) {
-    for (const relative of ["manifest.json", "bundle-manifest.json", "project-payload/manifest.json"]) {
+    for (const relative of ["manifest.json", "runtime.json", "bundle-manifest.json", "project-payload/manifest.json"]) {
       const manifestPath = path.join(directory, relative);
       if (!fs.existsSync(manifestPath)) continue;
       let stored, manifest;
