@@ -34,15 +34,13 @@ function resolvePairing(plan, { choices = [], included = [], compatibility = {},
   const currentDxgi = ownerRole ? rows[ownerRole].used :
     [rows.d3d11?.used, rows.d3d10?.used, rows['d3d-renderer'].used].find(item => item?.files?.some(isDxgi));
   // Wine's automatic D3D12 cannot share DXVK DXGI with upstream vkd3d.
+  // Leave that API unplaced instead of silently selecting a managed translator.
+  // An explicit Direct3D 12 choice still resolves its matching DXGI below.
   if (!explicit(rows.d3d12) && rows.d3d12.used?.engine !== 'vkd3d-proton' && currentDxgi?.engine === 'dxvk' &&
       currentDxgi.files?.some(isDxgi) && included.some(item => item.engine === 'vkd3d')) {
-    const proton = candidates.find(item => item.engine === 'vkd3d-proton' && usable(item, 'd3d12'));
-    if (!proton) return missing('vkd3d-proton', 'DXVK DXGI requires vkd3d-proton for Direct3D 12. Play installs the matching translator after confirmation.', 'd3d12');
-    if (rows.d3d12.inherited) {
-      rows.d3d12.fallback = true; rows.d3d12.reasonCode = 'dxgi-pairing'; rows.d3d12.reason = 'DXVK DXGI requires vkd3d-proton for Direct3D 12.';
-    }
-    rows.d3d12.used = described(proton, 'd3d12');
-    ownerRole ||= 'd3d12';
+    Object.assign(rows.d3d12, { used: null, fallback: true, reasonCode: 'dxgi-pairing',
+      reason: "Wine's automatic Direct3D 12 cannot use the selected DXVK DXGI. Choose a compatible Direct3D 12 translator to use that API." });
+    if (ownerRole === 'd3d12') ownerRole = null;
   }
   if (!ownerRole) return false;
   const owner = rows[ownerRole].used;

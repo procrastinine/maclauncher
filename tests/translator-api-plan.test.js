@@ -267,9 +267,11 @@ test('Direct3D 12 and DXGI stay ABI paired on both Wine routes, including incomp
     assert.equal(reverse.dxgiBinding.description.id, wine.id);
     assert.match(reverse.components.d3d11.reason, /requires Wine's DXGI/);
     const automatic12 = resolve({ d3d11: dxvk.id }, dxvk);
-    assert.equal(automatic12.components.d3d12.used.id, proton.id);
+    assert.equal(automatic12.components.d3d12.used, null);
+    assert.match(automatic12.components.d3d12.reason, /Choose.*Direct3D 12/);
     const missingProton = resolve({ d3d11: dxvk.id }, dxvk, [dxvk]);
-    assert.deepEqual(missingProton.requiredTranslators, ['vkd3d-proton']);
+    assert.equal(missingProton.requiredTranslators, undefined);
+    assert.equal(missingProton.components.d3d12.used, null);
     const missingDxvk = resolve({ d3d12: proton.id }, null, [proton]);
     assert.deepEqual(missingDxvk.requiredTranslators, ['dxvk']);
     await assert.rejects(Files.prepareTranslatorFiles(missingDxvk, { userDataDir: path.join(f.root, 'blocked'), layout }), /requires DXVK DXGI/);
@@ -406,4 +408,24 @@ test('a missing DXGI pair uses ordinary consented runtime installation and resum
   assert.ok(events.indexOf('consent') < events.indexOf('catalog'));
   assert.ok(events.indexOf('catalog') < events.indexOf('install'));
   assert.ok(events.indexOf('install') < events.indexOf('ready'));
+});
+
+test('a selected driver and DXVK never promote automatic Direct3D 12 to a managed translator', t => {
+  const f = fixture(t);
+  const wine = { ...component(f, 'own-wine', 'wined3d', { d3d11: ['dxgi.dll'], dxgi: [] }), included: true };
+  const own12 = { ...component(f, 'own12', 'vkd3d', { d3d12: ['dxgi.dll'] }, [], { component: 'd3d12' }), included: true };
+  const dxvk = component(f, 'picked-dxvk', 'dxvk', { d3d10core: ['dxgi.dll'], d3d11: ['dxgi.dll'], dxgi: [] });
+  const proton = component(f, 'managed12', 'vkd3d-proton', { d3d12: ['dxgi.dll'] }, [], { component: 'd3d12' });
+  const driver = { id: 'picked-driver', component: 'vulkan-driver', engine: 'moltenvk', files: [] };
+  const input = { runtime: 'winecx', included: [wine, own12], choices: [dxvk, proton, driver], compatibility: compatibility([wine, own12, dxvk, proton]) };
+  for (const selectedDriver of ['automatic', driver.id]) {
+    const selections = { 'd3d-renderer': dxvk.id, 'vulkan-driver': selectedDriver };
+    const plan = Plan.resolveApiRoles(Plan.resolvePlan({ ...input, selections }), { ...input, selections });
+    assert.notEqual(plan.components.d3d12.used?.id, proton.id, 'automatic never downloads or selects managed vkd3d-proton');
+    assert.equal(plan.requiredTranslators, undefined);
+    assert.equal(plan.pairingError, undefined, 'Direct3D 11 remains usable');
+    assert.equal(plan.components.d3d11.used.id, dxvk.id);
+    assert.equal(plan.components.d3d12.used, null, 'incompatible Wine Direct3D 12 is left unplaced');
+    assert.match(plan.components.d3d12.reason, /Choose.*Direct3D 12/);
+  }
 });

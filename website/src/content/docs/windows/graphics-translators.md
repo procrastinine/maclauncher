@@ -12,6 +12,8 @@ Windows games draw their graphics through Microsoft's [Direct3D](https://en.wiki
 
 Several translators exist, and they differ in the Direct3D versions they handle, the Macs they run on and the way they get to Metal. Each of the three WINE distributions that MacLauncher uses ([CrossOver, Sikarugir and WineCX](/maclauncher/windows/crossover-and-sikarugir/)) comes with some of them, and MacLauncher can install others. This page goes through the translators one at a time and then explains how MacLauncher chooses among them and how you can choose yourself. Where each version comes from, and how every game can use its own, is covered in [Translator versions](/maclauncher/windows/translator-versions/).
 
+The automatic translator choice uses the Wine runtime’s own component. Selecting a Vulkan driver leaves that choice unchanged. If a selected DXVK supplies DXGI that is incompatible with Wine’s automatic Direct3D 12, that API stays unplaced until a compatible Direct3D 12 translator is chosen explicitly. [Translator versions](/maclauncher/windows/translator-versions/) describes shared-library choices.
+
 ## How the layers stack
 
 A translator reaches Metal in one of two ways. Some go straight from Direct3D to Metal. The others translate Direct3D into Vulkan, the cross-platform graphics API maintained by the Khronos Group, and leave the last step to a *Vulkan driver*, a library that implements Vulkan on top of Metal. Games that use Vulkan themselves need only that last step, which WINE's own Vulkan layer hands to the same driver. The Mac has two Vulkan drivers, MoltenVK and KosmicKrisp, which [The Vulkan drivers](#the-vulkan-drivers) describes further down.
