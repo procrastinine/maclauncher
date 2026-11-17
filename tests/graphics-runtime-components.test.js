@@ -84,7 +84,7 @@ test("the ANR provider row separates the included runtime, the host floor and mo
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   const options = { root, platform: "darwin", macOSVersion: "26.1", hardwareArch: "arm64", userDataDir };
   const anr = (overrides = {}) => Components.getComponents({ ...options, ...overrides }).find(row => row.id === "anr");
-  assert.equal(anr().status, "Not included");assert.equal(anr().available, false);
+  assert.equal(anr().status, "Not included in installed graphics package");assert.equal(anr().available, false);
   const record = path.join(root, "runtime.json"), current = JSON.parse(fs.readFileSync(record, "utf8"));
   fs.writeFileSync(record, JSON.stringify({ ...current, features: { graphics: { ...current.features.graphics, anrGenerationAPI: 1 } } }));
   const directory = path.join(root, "generation/anr");fs.mkdirSync(directory, { recursive: true });

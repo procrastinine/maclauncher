@@ -86,7 +86,7 @@ function getComponents({ root = require("../index").runtimeRoot(), platform = pr
   const anrStatus = status(anrIncluded, anrFloor, anrHost);
   rows.push({
     id: "anr", label: "Apex Neural Rendering", version: anrModels ? anrModels.version : null,
-    status: anrStatus === "Included" ? anrModels ? "Models installed" : "Models required" : anrStatus,
+    status: !anrIncluded ? "Not included in installed graphics package" : anrStatus === "Included" ? anrModels ? "Models installed" : "Models required" : anrStatus,
     available: nativeAvailable(anrIncluded) && hostSupports(anrFloor, anrHost) && Boolean(anrModels),
     capabilities: anrIncluded ? anrReleases.map(row => ({id: row.version, label: `Apex Neural Rendering ${row.version}`, available: row.ready !== false})) : [],
     description: (anrIncluded ? "" : "The installed graphics package does not include the ANR generation runtime. ") + "Neural scene frame generation from 2× to 5× at 1920×1080, 2560×1440 or 3840×2160 output. The models come from Apex's macOS kit, which is downloaded or imported separately.",
