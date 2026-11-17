@@ -300,6 +300,13 @@ export function runtimeSectionTabs(sections: RuntimeTabSection[]): RuntimeSectio
 
 // A tab chosen inside an entry keeps that entry: the source of a tab in Wine ·
 // Intel stays in Wine · Intel even when its automatic CPU is Apple Silicon.
+/** A requested runtime of the shown entry whose sections have not resolved yet
+ * stays requested: the entry's first choice shows meanwhile, and the request
+ * is not replaced by it. */
+export function runtimeRequestPending(group: RuntimeTabGroup | null, choices: RuntimeTabSection[], managerId: string | null) {
+  return Boolean(managerId && group?.managers.some(manager => manager.id === managerId) && !choices.some(choice => choice.managerId === managerId));
+}
+
 export function runtimeTabChoice(group: RuntimeTabGroup | null, choice: RuntimeTabSection) {
   return { groupId: group?.id ?? null, managerId: choice.managerId, sectionId: choice.sectionId };
 }
@@ -349,6 +356,18 @@ export function runtimeDefaultMenu(section: Record<string, any> | null | undefin
       label: current ? `${current.label} (unavailable)` : `${versionTag(defaultVersion)} (not installed)` });
   }
   return { choices, selected };
+}
+
+/** A row's Make default choice: every usable installed row that is not the
+ * current default, with the variant and CPU the Default menu passes. None where
+ * the runtime has no default, keeps a default per operation, or for a reference
+ * or a row that is not ready. */
+export function runtimeMakeDefaultChoice(row: RuntimeDefaultRow, { supportsDefault = true, perOperation = false }: { supportsDefault?: boolean; perOperation?: boolean } = {}): RuntimeDefaultChoice | null {
+  const { install } = row;
+  if (!supportsDefault || perOperation || row.isDefault || install.ready === false || install.reference || install.supportsDefault === false || !text(install.version)) return null;
+  return { value: JSON.stringify([install.version, text(install.variant), text(install.architecture)]), version: install.version, label: row.label,
+    ...(text(install.variant) ? { variant: text(install.variant) } : {}),
+    ...(text(install.architecture) ? { architecture: text(install.architecture) } : {}) };
 }
 
 export function runtimeTabMovement(key: string, index: number, count: number): number | null {

@@ -104,7 +104,7 @@ Native package files declare their CPU architectures and an optional `format`: `
 
 A manager that has to query the device offline before it can report its state can provide an asynchronous `prepareLocalState(context)`, which runs before its synchronous `getState(context)`. Other managers report their state independently while that query runs. Acquiring a runtime is always a separate, explicit action.
 
-A choice in the Runtimes **Default** menu (the `setDefault` action) calls the manager's `applySettingsUpdate(action, payload, settings, { userDataDir })`. Before the settings are committed, an optional `updateSettingsAfterDefault(nextSettings, payload, { userDataDir, previousSettings })` can record related preferences, and custom path defaults use the same hook after selection.
+A choice in the Runtimes **Default** menu or a row's **Make default** button (the `setDefault` action) calls the manager's `applySettingsUpdate(action, payload, settings, { userDataDir })`. Before the settings are committed, an optional `updateSettingsAfterDefault(nextSettings, payload, { userDataDir, previousSettings })` can record related preferences, and custom path defaults use the same hook after selection.
 
 ### Processor architectures and macOS versions
 

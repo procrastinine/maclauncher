@@ -130,9 +130,13 @@ test('Runtimes plugin cards list upstream versions and manage each installed ver
   assert.deepEqual(menu.props.menu.choices.map(choice => choice.label), ['Automatic', 'v5.13.0', 'v5.12.0']);
   assert.equal(menu.props.menu.selected, JSON.stringify(['5.13.0', '', '']), 'the saved default is selected');
   assert.match(markup, /v5\.13\.0<span class="badge badgeAccent">Default<\/span>/, 'the default version keeps its badge');
+  // Owner, 11-17: each usable installed version that is not the default has its own Make default button.
+  const makeDefault = nodes(card('uosc').props.children).filter(node => node.type === 'button' && node.props.children === 'Make default');
+  assert.deepEqual(makeDefault.map(node => node.props.title), ['Make uosc v5.12.0 the default']);
   menu.props.onChoose(menu.props.menu.choices[2]);
   await inCard('uosc', 'Remove uosc v5.12.0').props.onClick();
   menu.props.onChoose(menu.props.menu.choices[0]);
+  makeDefault[0].props.onClick();
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(calls.map(call => call.slice(0, 4)), [
     ['refresh', 'mpv-plugins', 'uosc', {}],
@@ -141,6 +145,7 @@ test('Runtimes plugin cards list upstream versions and manage each installed ver
     ['refresh', 'mpv-plugins', 'thumbfast', {}],
     ['default', 'mpv-plugins', 'uosc', '5.12.0'],
     ['uninstall', 'mpv-plugins', 'uosc', uosc.installed[1]],
-    ['default', 'mpv-plugins', 'uosc', null]]);
+    ['default', 'mpv-plugins', 'uosc', null],
+    ['default', 'mpv-plugins', 'uosc', '5.12.0']]);
   assert.equal(settings.length, 0, 'managing versions of an installed plugin keeps its setting');
 });

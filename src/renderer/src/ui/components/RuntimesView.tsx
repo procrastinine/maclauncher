@@ -12,7 +12,7 @@ import {
   sortInstalled
 } from "../ui-helpers";
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
-import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs, runtimeChoiceForQuery, runtimeTabChoice, runtimeDefaultMenu, runtimeDistinctLinks,
+import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs, runtimeChoiceForQuery, runtimeTabChoice, runtimeRequestPending, runtimeDefaultMenu, runtimeMakeDefaultChoice, runtimeDistinctLinks,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
   runtimeRemovalPresentation, runtimeMinimumDetail, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
   managedRuntimeSections, runtimePendingAction, runtimeRefreshPayload, runtimeSourceUiKey,
@@ -183,12 +183,13 @@ export function RuntimesView({
   useEffect(() => {
     if (!activeRuntimeManager) return;
     if (!activeRuntimeSectionId) return;
+    if (runtimeRequestPending(activeRuntimeGroup, activeRuntimeChoices, runtimeManagerId)) return;
     if (runtimeManagerId !== activeRuntimeManager.id) setRuntimeManagerId(activeRuntimeManager.id);
     if (runtimeSectionId !== activeRuntimeSectionId) setRuntimeSectionId(activeRuntimeSectionId);
     if (activeRuntimeGroup) remembered.current.set(activeRuntimeGroup.id,
       { managerId: activeRuntimeManager.id, sectionId: activeRuntimeSectionId });
     rememberedSections.current.set(activeRuntimeManager.id, activeRuntimeSectionId);
-  }, [activeRuntimeManager, activeRuntimeGroup, activeRuntimeSectionId, runtimeManagerId, runtimeSectionId, setRuntimeManagerId, setRuntimeSectionId]);
+  }, [activeRuntimeManager, activeRuntimeGroup, activeRuntimeChoices, activeRuntimeSectionId, runtimeManagerId, runtimeSectionId, setRuntimeManagerId, setRuntimeSectionId]);
   // A choice made inside the shown entry keeps that entry; choosing an entry in
   // the sidebar names its own.
   function selectSection(choice: RuntimeTabSection, group: RuntimeTabGroup | null = activeRuntimeGroup) {
@@ -673,7 +674,10 @@ export function RuntimesView({
                     </div> : <div className="empty">{managementPresentation.emptyLabel}</div>
                   ) : (
                     <div className="saveList">
-                      {installedRows.map(({ install: inst, isDefault, defaultFor, translatorBuild, otherBuild, variantLabel }) => {
+                      {installedRows.map(({ install: inst, isDefault, defaultFor, translatorBuild, otherBuild, variantLabel, label }) => {
+                        // Make default beside each usable row keeps the Default menu's choice one click away.
+                        const makeDefault = runtimeMakeDefaultChoice({ install: inst, isDefault, label },
+                          { supportsDefault: activeRuntimeSupportsDefault, perOperation: Boolean(defaultSelections) });
                         const installDetail = typeof inst.detail === "string" && inst.detail.trim() ? inst.detail.trim() : "";
                         const apis = (Array.isArray(inst.apis) ? inst.apis : Array.isArray(inst.translator?.apis) ? inst.translator.apis : [])
                           .filter((api: unknown): api is string => typeof api === "string").sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
@@ -711,6 +715,9 @@ export function RuntimesView({
                               {inst.error && <div className="dim">{formatUserError(inst.error)}</div>}
                             </div>
                             {!inst.reference && <div className="saveRowActions">
+                              {makeDefault && <button type="button" className="btn small" disabled={runtimeBusy} title={`Make ${makeDefault.label} the default`}
+                                onClick={() => onRuntimeSetDefault(activeRuntimeManager.id, activeRuntimeSection.id, makeDefault.version,
+                                  makeDefault.variant, undefined, makeDefault.architecture)}>Make default</button>}
                               {onRuntimeInstalledAction && (inst.actions || []).filter((action: any) => action.available !== false).map((action: any) =>
                                 <button className="btn small" key={action.id} disabled={runtimeBusy}
                                   onClick={() => onRuntimeInstalledAction(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, action.id, inst.architecture)}>

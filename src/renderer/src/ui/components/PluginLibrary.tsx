@@ -4,7 +4,7 @@ import { availabilityLabel, buildRuntimeSettingsDefaults, formatDownloadPercent,
   resolveRuntimeSections, resolveRuntimeSettingsSchema, runtimeSettingsEqual, runtimeVersionTagger } from "../ui-helpers";
 import type { RuntimeSettingsApi } from "./RuntimeSettingsWindow";
 import type { RuntimeTabSection } from "./runtime-tabs-model";
-import { runtimeDefaultMenu, runtimeSourceUrl } from "./runtime-tabs-model";
+import { runtimeDefaultMenu, runtimeMakeDefaultChoice, runtimeSourceUrl } from "./runtime-tabs-model";
 import { RuntimeDefaultMenu } from "./RuntimeDefaultMenu";
 import { ErrorText } from "./ErrorText";
 import { Toggle } from "./FieldRow";
@@ -172,12 +172,15 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
         {versionRows.length > 0 && <div className="saveList" aria-label={`Installed ${name} versions`}>
           {versionRows.map((row: Record<string, any>) => {
             const tag = versionTag(row.version), isDefault = supportsDefault && row.version === section.defaultVersion;
+            const makeDefault = runtimeMakeDefaultChoice({ install: row, label: tag, isDefault }, { supportsDefault });
             return <div className="saveRow" key={row.version}>
               <div className="saveRowMain"><div className="saveName">{tag}
                 {isDefault && <span className="badge badgeAccent">Default</span>}
                 {row.ready === false && <StatusBadge tone="warning">{availabilityLabel("needsRepair")}</StatusBadge>}
               </div></div>
               <div className="saveRowActions">
+                {makeDefault && <button type="button" className="btn small" disabled={busy} title={`Make ${name} ${tag} the default`}
+                  onClick={() => onSetDefault!(manager.id, choice.sectionId, makeDefault.version)}>Make default</button>}
                 {row.removable !== false && <button type="button" className="btn small iconOnly danger" disabled={busy}
                   title={`Remove ${name} ${tag}`} aria-label={`Remove ${name} ${tag}`} onClick={() => removeVersion(row)}><TrashIcon /></button>}
               </div>

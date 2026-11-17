@@ -123,6 +123,28 @@ test('one Default menu in the Installed header replaces Set default and Use auto
   assert.doesNotMatch(render([runtime(rows.slice(0, 2), { supportsDefault: false })], 'fixture'), /runtimeDefaultSelect/);
 });
 
+test('every usable installed row that is not the default has a Make default button passing its version, variant and CPU', () => {
+  // Owner, 11-17 5:05 PM: "We should have make default buttons". The Default menu stays in the header.
+  const rows = [{ version: '2.0', ready: true }, { version: '1.0', variant: 'mono', architecture: 'x64', ready: true },
+    { version: '0.9', ready: false }, { version: '0.8', ready: true, supportsDefault: false }, { version: '0.7', ready: true, reference: true }];
+  const calls = [], overrides = { onRuntimeSetDefault: (...args) => calls.push(args) };
+  const harness = componentHarness(ui.RuntimesView, props([runtime(rows, { defaultVersion: '2.0', defaultSource: 'saved' })], 'fixture', overrides));
+  try {
+    const tree = harness.render(), markup = renderToStaticMarkup(tree);
+    const buttons = treeElements(tree).filter(node => node.type === 'button' && node.props.children === 'Make default');
+    assert.equal(buttons.length, 1, 'only v1.0: v2.0 is the default, v0.9 is not ready, v0.8 has no default and v0.7 is a reference');
+    assert.match(markup, /<button type="button" class="btn small" title="Make v1\.0[^"]* the default">Make default<\/button>/);
+    assert.match(markup, /runtimeDefaultSelect/, 'the Default menu stays in the Installed header');
+    buttons[0].props.onClick();
+    assert.deepEqual(calls, [['fixture', 'default', '1.0', 'mono', undefined, 'x64']]);
+  } finally { harness.close(); }
+  assert.doesNotMatch(render([runtime(rows.slice(0, 2), { supportsDefault: false })], 'fixture'), />Make default</);
+  assert.doesNotMatch(render([runtime(rows.slice(0, 2), { defaultVersion: '2.0', defaultSelections: [{ id: 'op', label: 'Operation', version: '2.0' }] })], 'fixture'), />Make default</);
+  assert.equal(ui.runtimeMakeDefaultChoice({ install: { version: '1.0', ready: true }, label: 'v1.0', isDefault: true }), null);
+  assert.deepEqual(ui.runtimeMakeDefaultChoice({ install: { version: '1.0', variant: 'mono', architecture: 'arm64' }, label: 'v1.0', isDefault: false }),
+    { value: JSON.stringify(['1.0', 'mono', 'arm64']), version: '1.0', label: 'v1.0', variant: 'mono', architecture: 'arm64' });
+});
+
 test('choosing in the Default menu passes the version, variant and CPU; Automatic clears the saved default', () => {
   const rows = [{ install: { version: '1.0', variant: 'mono', architecture: 'x64', ready: true }, label: 'v1.0 · Intel · Mono', isDefault: true },
     { install: { version: '1.0', variant: 'mono', architecture: 'arm64', ready: true }, label: 'v1.0 · Mono', isDefault: false },
@@ -260,4 +282,31 @@ test('overflowing tab strips fade before their arrows, and named sources line up
   const loads = [...markup.matchAll(/<button type="button" class="([^"]+)"[^>]*>Load versions<\/button>/g)].map(match => match[1]);
   assert.ok(loads.length >= 1, markup);
   assert.ok(loads.every(cls => cls === 'btn small'), 'Load versions is an ordinary button');
+});
+
+test('a deep link to a runtime whose sections arrive late keeps that runtime instead of the entry\'s first tab (GUI 0904)', () => {
+  const sec = () => [{ id: 'default', label: 'Versions', installed: [], catalog: { versions: [] } }];
+  const tool = (id, label, memberOrder) => ({ id, label, ui: { groupId: 'tools', tabLabel: 'Tools', sectionLabel: label, order: 200, memberOrder, management: 'managed' }, sections: sec() });
+  const managers = [tool('innoextract', 'Installer reader', 100), tool('ilspy', 'ILSpy', 200),
+    { id: 'java-steamworks', label: 'Steamworks4j', ui: { category: 'compatibility', tabLabel: 'Steamworks4j', order: 204, management: 'managed' }, sections: sec() }];
+  const ilspy = managers[1], loaded = ilspy.sections; ilspy.sections = [];
+  const props = { runtimeManagers: managers, runtimeUi: {}, runtimeManagerId: 'java-steamworks', runtimeSectionId: null, downloadTasks: [], navigationKey: 1,
+    updateRuntimeUiSection() {}, onRuntimeRefresh() {}, onRuntimeInstall() {}, onRuntimeSetDefault() {}, onRuntimeUninstall() {}, onCancelDownload() {} };
+  props.setRuntimeManagerId = id => { props.runtimeManagerId = id; };
+  props.setRuntimeSectionId = id => { props.runtimeSectionId = id; };
+  const harness = componentHarness(ui.RuntimesView, props);
+  try {
+    harness.render(); harness.render();
+    props.runtimeManagerId = 'ilspy'; props.runtimeSectionId = null; props.navigationKey = 2;
+    harness.render(); harness.render();
+    assert.equal(props.runtimeManagerId, 'ilspy', 'the request stays while its sections load');
+    ilspy.sections = loaded; props.runtimeManagers = [...managers];
+    harness.render(); const tree = harness.render();
+    const selected = treeElements(tree).filter(node => node.props?.role === 'tab' && node.props['aria-selected']);
+    assert.equal(selected.length, 1);
+    assert.match(renderToStaticMarkup(selected[0]), />ILSpy</);
+  } finally { harness.close(); }
+  assert.equal(ui.runtimeRequestPending({ managers: [{ id: 'ilspy' }] }, [], 'ilspy'), true);
+  assert.equal(ui.runtimeRequestPending({ managers: [{ id: 'ilspy' }] }, [{ managerId: 'ilspy' }], 'ilspy'), false);
+  assert.equal(ui.runtimeRequestPending({ managers: [{ id: 'other' }] }, [], 'ilspy'), false);
 });
