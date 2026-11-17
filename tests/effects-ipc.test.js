@@ -377,3 +377,11 @@ test("getGameEffects graphicsInputs ingress waits for Forget and cancels quietly
  assert.equal(await f.invoke('getGameEffects',f.entry.gamePath),null,'a read starting after removal completion also cancels quietly');
  assert.equal(JSON.stringify(await f.invoke('getGameEffectTemplates',f.entry.gamePath)),'[]','template inputs use the same quiet read boundary');
 });
+
+test("getGameEffects and templates quietly ignore stale requests after Forget removed the library entry", async t => {
+ const f=fixture(t);f.context.loadGamesHydrated=()=>[];
+ f.context.backendService.request=()=>assert.fail('a removed entry must not enter backend discovery');
+ assert.equal(await f.invoke('getGameEffects',f.entry.gamePath),null);
+ assert.equal(JSON.stringify(await f.invoke('getGameEffectTemplates',f.entry.gamePath)),'[]');
+ await assert.rejects(Promise.resolve().then(()=>f.invoke('setGameEffects',f.entry.gamePath,shaderPlan())),/Game not found in library/,'mutating actions retain their missing-game refusal');
+});
