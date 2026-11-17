@@ -33,7 +33,7 @@ An Apple Silicon build runs only on an Apple Silicon Mac, while Intel builds als
 
 ### Your own copies
 
-Some runtimes can use a copy you already have. **Register custom…** adds your own executable, app or runtime folder to a runtime's choices, and [CrossOver](https://www.codeweavers.com/crossover/), CodeWeavers' paid app for running Windows software, has **Add CrossOver…** and **Find installed applications**. [WineCX](https://github.com/dappermint/winecx-gptk), a free WINE distribution, has no **Register custom…**, because it runs only versions that MacLauncher installed itself. MacLauncher only points to the copies you register, so they stay where they are, and removing one only forgets it.
+Some runtimes can use a copy you already have. **Register custom…** adds your own executable, app or runtime folder to a runtime's choices, and [CrossOver](https://www.codeweavers.com/crossover/), CodeWeavers' paid app for running Windows software, has **Add CrossOver…** and **Find installed applications**. WINE runtimes such as [WineCX](https://github.com/dappermint/winecx-gptk), and the small packages that sit beside them, such as DXVK-NVAPI, the Steam client bridge and Valve's Windows Steam client files, have **Register custom…** too, and each checks your copy for the files it needs before adding it. MacLauncher only points to the copies you register, so they stay where they are, and removing one only forgets it.
 
 ### Downloads
 

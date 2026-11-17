@@ -290,5 +290,49 @@ function currentInspection(installDir, evidence, wineRoot) {
 // The one wording for a floor the running macOS does not meet, the same as
 // the stable platform requirements use.
 const requiresMacOS = version => `Requires macOS ${String(version).replace(/(?:\.0)+$/, "")} or later.`;
+
+// A Wine the user selects is read where it is. Nothing is written into its
+// folder, so a publisher's signed application keeps its seal, and the same
+// closure check as a download measures its CPU and macOS floor. A full check
+// lists the tree and reads its native images again only when the listing
+// changed; a status check reuses the last result while the files named in
+// `quick` are unchanged.
+const customResults = new Map(), customStatus = new Map();
+function inspectCustomTree(root, { label = "Wine", wineRoot, quick = [], required = [], external = [], skip, executableRoot,
+  verification = "full", systemVersionSync = Host.systemVersionSync } = {}) {
+  const marks = JSON.stringify(quick.map(relative => { try { return stamp(fs.statSync(path.join(root, relative))); } catch { return null; } }));
+  const known = customStatus.get(root);
+  let result = verification === "status" && known?.marks === marks ? known.result : null;
+  if (!result) {
+    const records = walk(root, undefined, label, external);
+    const key = crypto.createHash("sha256").update(JSON.stringify([root, records.map(row => [row.relative, row.kind, row.stamp || "", row.target || ""])])).digest("hex");
+    result = customResults.get(key);
+    if (!result) {
+      const native = inspectClosure(root, records, undefined, { label, required, skip, executableRoot });
+      result = { minimumMacOS: native.minimumMacOS, architectures: native.architectures, nativeComponents: native.nativeComponents,
+        capabilities: wineCapabilities(wineRoot), wineVersion: wineVersion(wineRoot) };
+      if (customResults.size >= 64) customResults.delete(customResults.keys().next().value);
+      customResults.set(key, result);
+    }
+    if (customStatus.size >= 64) customStatus.delete(customStatus.keys().next().value);
+    customStatus.set(root, { marks, result });
+  }
+  if (!Host.versionAtLeast(systemVersionSync(), result.minimumMacOS)) throw new Error(requiresMacOS(result.minimumMacOS));
+  return result;
+}
+// The CPU an inspected Wine runs as, in the form installed records use.
+function customArchitecture(architectures = []) {
+  const { normalizeArchitecture } = require("../../shared/runtime/architecture");
+  const values = [...new Set(architectures.map(normalizeArchitecture).filter(Boolean))];
+  return values.length > 1 ? "universal" : values[0] || null;
+}
+// Registers a Wine source's custom inspector with the shared custom runtime
+// list. Its installed and registered versions share one selection.
+function configureCustom(manager, inspect) {
+  require("../../shared/runtime/custom-runtime").configure(manager, { defaultsPath: () => ["defaultVersion"], providers: [{ core: manager.core,
+    lists: { listInstalled: "default" }, resolves: { resolveInstalled: "default", resolveRegistered: "default" },
+    versions: ["normalizeVersion"], directories: ["getInstallDir"] }], inspect });
+}
 module.exports = { INVENTORY, MAXIMUM_FILES, MAXIMUM_INVENTORY_BYTES, safeRelative, regularFile, walk, nativeInfo, inspectClosure,
-  hashAsync, writeInventory, mentions, wineCapabilities, wineVersion, createInventoryCheck, prepareInstalled, requiresMacOS, currentInspection, INSPECTION_VERSION, later, inside, stamp };
+  hashAsync, writeInventory, mentions, wineCapabilities, wineVersion, createInventoryCheck, prepareInstalled, requiresMacOS, currentInspection, INSPECTION_VERSION, later, inside, stamp,
+  inspectCustomTree, customArchitecture, configureCustom };

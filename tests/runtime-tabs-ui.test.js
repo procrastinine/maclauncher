@@ -321,9 +321,9 @@ test('registry metadata exposes manageable production groups while exposing mana
     // One family group holds the nxnative runtime and its native tools for Switch and Switch 2 games.
     assert.deepEqual(['nxnative', 'nxnative-tools'].map(id => section(id).label), ['Switch / Switch 2 (nxnative)', 'Switch / Switch 2 (nxnative)']);
     assert.deepEqual(groups.filter(group => group.category === 'compatibility').map(group => group.label), ['CrossOver', 'Sikarugir', 'WineCX', 'Highball Wine', 'MetalSharp Wine', 'Steam client bridge', 'DOSBox', '32-bit Mac']);
-    // The Wine runtimes share the Steam client bridge as one managed row.
+    // The Wine runtimes share the Steam client bridge, with Valve's Windows Steam client files as its second managed row.
     assert.deepEqual(runtimeGroupSections(section('maclauncher-steam-bridge'), sections).map(choice => [choice.label, choice.managerId]),
-      [['Steam client bridge', 'maclauncher-steam-bridge']]);
+      [['Steam client bridge', 'maclauncher-steam-bridge'], ['Windows Steam client files', 'steam-client-components']]);
     // Engine-specific tools sit with their engine; Tools keeps cross-engine tools only.
     for (const [engine, ids] of [['AliceSoft', ['alice-tools']], ['MAGES.', ['sc3tools']], ['Siglus', ['siglus-ssu']], ['RealLive (RLVM)', ['rldev']],
       ['LÖVE', ['ljd', 'unluac']], ['WOLF RPG', ['wolftl', 'uberwolf']], ['HashLink', ['hlbc']], ['GemRB', ['near-infinity']],

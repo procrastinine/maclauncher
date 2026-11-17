@@ -73,7 +73,9 @@ test('managed preparation retains the selected bottle on both launches and write
     entries: paths.map(name => ({ path: name, mode: 0o644, bytes: name.endsWith('.so') ? image({ cpu: name.startsWith('aarch64') ? 0x0100000c : 0x01000007 })
       : peFixture({ is64: !name.startsWith('i386') }).bytes })) });
   t.mock.method(Components, 'install', async options => { assert.deepEqual(Object.keys(options).sort(), ['onProgress', 'signal', 'userDataDir']); });
-  t.mock.method(Components, 'current', () => ({ root: path.join(root, 'components'), clients: { i386: 'steamclient.dll', x86_64: 'steamclient64.dll' } }));
+  // The client files manager supplies the Valve files the bridge passes.
+  t.mock.method(require('../src/modules/crossover/runtime/steam-client-files'), 'resolveSelection', () => ({ ready: true,
+    install: { root: path.join(root, 'components'), clients: { i386: 'steamclient.dll', x86_64: 'steamclient64.dll' } } }));
   const bridge = Bridge.create({ identifyGame: () => ({ appId: '123' }), discoverClient: () => '/native-client', isRunning: () => true,
     dependencies: { systemVersionSync: () => '27.0',
       fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from(JSON.stringify(fixture.catalog)) }),

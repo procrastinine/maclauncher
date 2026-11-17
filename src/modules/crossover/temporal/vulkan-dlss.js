@@ -34,12 +34,16 @@ function createManagers(dependencies = {}) {
     recognize: release => (release.assets || []).filter(asset => archiveFormat(asset.name)).map(asset => ({
       version: release.tag_name.replace(/^v/, ''), architecture: 'universal', assets: [asset]
     })) });
-  const nvapi = createPinnedNativeManager({ id: 'dxvk-nvapi', label: 'DXVK-NVAPI', nativeLibrary: true, customRuntime: false,
+  // A downloaded release and a library or folder the user selects pass the
+  // same check: one x64 nvapi64.dll whose NVAPI entry point is code.
+  const nvapi = createPinnedNativeManager({ id: 'dxvk-nvapi', label: 'DXVK-NVAPI', nativeLibrary: true,
     sourceUrl: 'https://github.com/jp7677/dxvk-nvapi/releases', upstreamUrl: 'https://github.com/jp7677/dxvk-nvapi',
     discoverCatalog: async options => upstreamPins(await source.discover(options)),
     resolveExecutable(root) { const file = findLibrary(root, 'nvapi64.dll'); if (!file) throw Error('The DXVK-NVAPI package has no unique x64 library.'); return file; },
     inspectRuntime({ runtimePath, runtimeVersion, upstreamRevision }) {
-      if (readPeExports(runtimePath)?.machine !== 0x8664) throw Error('DXVK-NVAPI requires its x64 Windows library.');
+      const pe = readPeExports(runtimePath);
+      if (pe?.machine !== 0x8664) throw Error('DXVK-NVAPI requires its x64 Windows library.');
+      if (!pe.exports?.get('nvapi_QueryInterface')?.executable) throw Error('The selected DXVK-NVAPI library has no NVAPI entry point.');
       return { executablePath: runtimePath, architectures: ['x86_64'], runtimeVersion, upstreamRevision, needsRosetta: false };
     }, dependencies });
   const ngx = createProjectBuildManager({ projectId: 'vkd3d-proton', label: 'Vulkan DLSS forwarding', nativeLibrary: true,

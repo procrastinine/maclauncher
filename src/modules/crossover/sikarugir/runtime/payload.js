@@ -116,9 +116,7 @@ module.exports = { WINE_ROOT, SUPPORT_ROOT, INVENTORY, walk, inspectClosure, fin
 
 function configureCustom(manager, inspectPayload) {
  const Custom = require("../../../shared/runtime/custom-runtime"), Payload=module.exports;
-  Custom.configure(manager, { defaultsPath: () => ["defaultVersion"], providers: [{ core: manager.core,
-    lists: { listInstalled: "default" }, resolves: { resolveInstalled: "default", resolveRegistered: "default" },
-    versions: ["normalizeVersion"], directories: ["getInstallDir"] }], inspect(runtimePath, { verification } = {}) {
+  Shared.configureCustom(manager, function inspect(runtimePath, { verification } = {}) {
     let root = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath);
     for (let depth = 0; depth < 7 && !fs.existsSync(path.join(root, Payload.INVENTORY)); depth += 1) root = path.dirname(root);
     if (!fs.existsSync(path.join(root, Payload.INVENTORY))) throw new Error("Select the complete Sikarugir runtime directory, including its Wine engine and support libraries.");
@@ -129,7 +127,7 @@ function configureCustom(manager, inspectPayload) {
     const selected = inspectPayload({ ...record, ...native, installDir: root }, { verification: verification === "status" ? "status" : "full" });
     if (!selected.install) throw new Error(selected.reason);
     return { ...selected.install, runtimeVersion: record.version };
-  } });
+  });
 }
 module.exports.configureCustom=configureCustom;
 

@@ -156,15 +156,17 @@ test('with another Play download, the bridge is one line of that dialog', async 
   assert.deepEqual([declined.result, declined.launches], [false, []], 'declining the required download cancels Play');
 });
 
-test('Runtimes lists the bridge as one managed row with its Valve files, and removing its last version removes them', async t => {
+test('Runtimes lists the bridge beside its Valve client files, and removing its last version removes the files it brought in', async t => {
   const root = scratch(t), userDataDir = path.join(root, 'data'), { bridge, install, received, item, valve } = offlineBridge(root);
+  const ClientFiles = require('../src/modules/crossover/runtime/steam-client-files');
   assert.deepEqual({ ...bridge.ui }, { groupId: 'steam-bridge', tabLabel: 'Steam client bridge', sectionLabel: 'Steam client bridge',
     management: 'managed', order: 204, category: 'compatibility' });
+  assert.deepEqual([ClientFiles.ui.groupId, ClientFiles.ui.tabLabel, ClientFiles.ui.sectionLabel], ['steam-bridge', 'Steam client bridge', 'Windows Steam client files']);
   const empty = bridge.getState({ userDataDir }).sections[0];
-  assert.equal(empty.supportsDefault, false);
-  assert.match(empty.description, /^Connects Windows Steam games in CrossOver, Sikarugir and WineCX to the Steam client for Mac\./);
-  assert.deepEqual(empty.components.map(row => [row.id, row.label, row.status, row.available, row.version]),
-    [['steam-client-components', 'Windows Steam client files', 'Not installed', false, undefined]]);
+  assert.equal(empty.supportsDefault, true);
+  assert.match(empty.description, /^Connects Windows Steam games in CrossOver, Sikarugir and WineCX to the Steam client for Mac/);
+  assert.equal(empty.components, undefined, 'the Valve files are their own managed row');
+  assert.deepEqual(ClientFiles.getState({ userDataDir }).installed, []);
   await bridge.refreshCatalog({ userDataDir, force: true });
   bridge.skipOptional({ appId: '480' }, { userDataDir });
   // A Components import passes the bridge package's own archive; the Valve install never receives it.
@@ -174,16 +176,19 @@ test('Runtimes lists the bridge as one managed row with its Valve files, and rem
   assert.deepEqual(Object.keys(received.at(-1)).sort(), ['onProgress', 'signal', 'userDataDir']);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(userDataDir, 'runtimes/steam-bridge-skipped.json'))).apps, [],
     'an installation makes a declined game eligible again');
-  const ready = bridge.getState({ userDataDir }).sections[0], active = Components.status(userDataDir);
-  assert.deepEqual(ready.installed.map(row => row.version), ['1.0.0']);
-  assert.deepEqual(ready.components.map(row => [row.status, row.available, row.version]), [['Installed', true, active.archiveSha1.slice(0, 12)]]);
+  assert.deepEqual(bridge.getState({ userDataDir }).sections[0].installed.map(row => row.version), ['1.0.0']);
+  const files = ClientFiles.getState({ userDataDir }).sections[0], active = Components.status(userDataDir);
+  assert.deepEqual(files.installed.map(row => [row.version, row.ready]), [[active.archiveSha1, true]]);
+  assert.equal(files.defaultVersion, active.archiveSha1);
   assert.equal(active.bytes, Buffer.byteLength('genuine x86_64 client') + Buffer.byteLength('genuine i386 client'));
+  assert.deepEqual(require('../src/core/runtime-install-origins').read(userDataDir).map(row => [row.managerId, row.version]),
+    [['steam-client-components', active.archiveSha1]], 'the files the bridge brought in are an automatic installation');
   // Status reads sizes only; a changed size reads as not installed without hashing.
   fs.appendFileSync(path.join(userDataDir, 'runtimes/steam-client-components', active.archiveSha1, 'steamclient.dll'), '!');
   assert.equal(Components.status(userDataDir), null);
   assert.equal(await bridge.uninstallRuntime({ userDataDir, version: '1.0.0' }), true);
   assert.equal(fs.existsSync(path.join(userDataDir, 'runtimes/steam-client-components')), false);
-  assert.equal(bridge.getState({ userDataDir }).sections[0].components[0].status, 'Not installed');
+  assert.deepEqual(ClientFiles.getState({ userDataDir }).installed, []);
   assert.equal(await Components.remove(userDataDir), false, 'nothing else is removed');
   // The next offer names the size of the last verified Valve download, offline.
   assert.deepEqual(Components.lastDownload(userDataDir), { filename: valve.resolved.filename, bytes: fs.statSync(valve.zip).size });
@@ -192,10 +197,10 @@ test('Runtimes lists the bridge as one managed row with its Valve files, and rem
   const running = offlineBridge(path.join(root, 'running'), { isRunning: () => true }).bridge;
   assert.doesNotMatch((await running.requirements({ name: 'Fixture' }, { userDataDir }))[0].detail, /starts Steam/, 'a running Steam client is not started again');
   assert.doesNotMatch((await bridge.requirements({ name: 'Fixture', startSteamClient: 'never' }, { userDataDir }))[0].detail, /starts Steam/, "Don't start keeps Steam closed");
-  // Play uses only managed versions; the registry leaves the row without custom registration.
-  require('../src/modules/shared/runtime/custom-runtime').instrumentManagers([bridge]);
-  assert.equal(bridge.getState({ userDataDir }).sections[0].customRuntime, false);
-  assert.equal(bridge.registerCustomRuntime, undefined);
+  // Both rows offer a registered custom version.
+  require('../src/modules/shared/runtime/custom-runtime').instrumentManagers([bridge, ClientFiles]);
+  assert.equal(bridge.getState({ userDataDir }).sections[0].customRuntime, true);
+  assert.equal(ClientFiles.getState({ userDataDir }).sections[0].customRuntime, true);
 });
 
 test('the inspector line names the bridge only after a Play that used an installed version', async t => {

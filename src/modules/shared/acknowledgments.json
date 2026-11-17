@@ -15,6 +15,7 @@
   { "label": "ReShade (BSD-3-Clause)", "url": "https://github.com/crosire/reshade" },
   { "label": "MAKO model processing (GPL-3.0-or-later)", "url": "https://github.com/eugeniosegala/MAKO" },
   { "label": "Valve SteamCMD (proprietary)", "url": "https://developer.valvesoftware.com/wiki/SteamCMD" },
+  { "label": "Valve Steam client, Windows client files (proprietary)", "url": "https://store.steampowered.com/about/" },
   { "label": "AMD FidelityFX FSR1 (MIT)", "url": "https://github.com/GPUOpen-Effects/FidelityFX-FSR" },
   { "label": "MetalDuck optical-flow frame generation (MIT)", "url": "https://github.com/Nycolazs/MetalDuck" },
   { "label": "MetalGoose frame generation techniques (reference)", "url": "https://github.com/Stallion77RepoOfficial/MetalGoose" },

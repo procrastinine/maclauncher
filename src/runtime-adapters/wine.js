@@ -191,7 +191,9 @@ function createBackend({source, dependencies = {}}) {
     resolveExecutable: (root, pin, {installationMetadata} = {}) => path.join(root, installationMetadata?.entry || source.layout?.entry || require('./wine-release').findWine(root)?.entry || 'bin/wine'),
     prepareInstall: options => Payload.preparePayload(options, dependencies),
     ...(dependencies.verifyArtifact ? {verifyArtifact: dependencies.verifyArtifact} : {}),
-    ...(dependencies.customRuntime === false ? {customRuntime:false} : {}), dependencies});
+    // A payload with its own custom inspector registers custom Wines on the
+    // composed manager below; its stored versions stay the base's.
+    ...(typeof Payload.configureCustom === 'function' ? {customRuntime:false} : {}), dependencies});
   const inspect = Payload.createPayloadResolver(dependencies);
   const resolvePayload = (install, options) => {
     if (install && Payload.validateInstallIdentity) {

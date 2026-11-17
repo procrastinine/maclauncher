@@ -314,7 +314,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     if (!root) throw new Error(`Select the complete ${label} runtime directory containing ${manifestRelative}.`);
     const stored = Bundled.readRegular(path.join(root, manifestRelative), Bundled.LIMITS.manifestBytes), manifest = JSON.parse(stored.bytes);
     const sourcePath = typeof sourceRelative === "function" ? sourceRelative(manifest) : sourceRelative;
-    const source = sourcePath === null ? stored : Bundled.readRegular(path.join(root, sourcePath), Bundled.LIMITS.manifestBytes);
+    const source = sourcePath == null ? stored : Bundled.readRegular(path.join(root, sourcePath), Bundled.LIMITS.manifestBytes);
     const executable = typeof executableRelative === "function" ? executableRelative(manifest) : executableRelative;
     const architectures = manifest.files?.find(file => file.path === executable)?.architectures || manifest.architectures || [];
     const arch = manifest.arch || (architectures.includes("arm64") ? "arm64" : architectures.includes("x86_64") ? "x64" : null);

@@ -79,6 +79,31 @@ function createPayloadResolver({ systemVersionSync = Host.systemVersionSync } = 
   return resolvePayload;
 }
 
-module.exports = { ROOT, WINE, REQUIRED, findRoot, readVersionFile, preparePayload, createPayloadResolver };
+// A WineCX Libraries folder the user selects, used where it is: the same
+// files a download needs, checked in place without writing into the folder.
+function inspectCustom(selected, { verification, systemVersionSync = Host.systemVersionSync } = {}) {
+  let libraries = fs.statSync(selected).isDirectory() ? selected : path.dirname(selected);
+  if (!isTree(libraries)) {
+    let parent = libraries;
+    for (let depth = 0; depth < 4 && !isTree(parent) && path.dirname(parent) !== parent; depth += 1) parent = path.dirname(parent);
+    try { libraries = isTree(parent) ? parent : findRoot(libraries); }
+    catch { throw new Error("Select a complete WineCX folder, including its Libraries folder with the Wine engine."); }
+  }
+  const wineRoot = path.join(libraries, "Wine"), relative = file => file.slice(ROOT.length + 1);
+  const inspected = Shared.inspectCustomTree(libraries, { label: LABEL, wineRoot, quick: ["Wine/bin/wineserver", "Wine/lib/wine/x86_64-unix/wine"],
+    required: REQUIRED.map(relative), executableRoot: path.join(wineRoot, "bin"), verification, systemVersionSync });
+  const versions = readVersionFile(libraries);
+  return { installDir: libraries, librariesRoot: libraries, wineRoot, engineRoot: wineRoot,
+    executablePath: path.join(wineRoot, "bin", "wine"), serverPath: path.join(wineRoot, "bin", "wineserver"),
+    libraryRoot: path.join(wineRoot, "lib"), capabilities: inspected.capabilities, minimumMacOS: inspected.minimumMacOS,
+    architectures: inspected.architectures, architecture: Shared.customArchitecture(inspected.architectures),
+    wineVersion: inspected.wineVersion || "", engineVersion: inspected.wineVersion || "",
+    componentVersions: versions.componentVersions || {}, gptkCapable: versions.gptkCapable === true,
+    ...(versions.runtimeVersion ? { runtimeVersion: versions.runtimeVersion } : {}) };
+}
+const configureCustom = (manager, _inspect, dependencies = {}) => Shared.configureCustom(manager,
+  (runtimePath, options = {}) => inspectCustom(runtimePath, { ...options, ...(dependencies.systemVersionSync ? { systemVersionSync: dependencies.systemVersionSync } : {}) }));
+
+module.exports = { ROOT, WINE, REQUIRED, findRoot, readVersionFile, preparePayload, createPayloadResolver, inspectCustom, configureCustom };
 
 module.exports.installDetail = (pin,selection) => (selection.repairRequired ? 'Reinstalls' : 'Downloads') + ' the WineCX Wine runtime' + (pin.downloadBytes ? ' (' + Math.ceil(pin.downloadBytes/1024/1024) + ' MB)' : '') + '.';

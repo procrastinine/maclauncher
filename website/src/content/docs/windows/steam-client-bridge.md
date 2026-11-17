@@ -31,11 +31,11 @@ Every other game starts without it.
 ## Playing with the bridge
 
 1. Press **Play** on the game.
-2. If the bridge isn't installed yet, MacLauncher asks one question, **Play with Steam?** The dialog names what **Play with Steam** downloads (the Steam client bridge and the Windows Steam client files from Valve) and says that Steam starts if it isn't running, because the Steam client goes online and signs in. Choose **Play with Steam**. When the same Play also needs another download, such as a WINE engine, that download's dialog lists the bridge instead and adds an **Also connect to Steam** checkbox, selected by default.
+2. If the bridge or the Windows Steam client files aren't installed yet, MacLauncher asks one question, **Play with Steam?** The dialog names what **Play with Steam** downloads (the Steam client bridge, the Windows Steam client files from Valve, or both, whichever you don't have yet) and says that Steam starts if it isn't running, because the Steam client goes online and signs in. Choose **Play with Steam**. When the same Play also needs another download, such as a WINE engine, that download's dialog lists the bridge instead and adds an **Also connect to Steam** checkbox, selected by default.
 3. MacLauncher downloads what's missing and starts Steam if it isn't running, without asking again, unless the game's **Steam client on Play** setting is **Don't start**.
 4. The game starts. There's nothing else to press. For an Unreal Engine game whose top-level `.exe` only starts the real game program, the bridge starts that program directly, so Steam is connected before the game's own code runs.
 
-Once the bridge is installed, later Plays use it without a dialog while Steam is running. When Steam isn't running, your **Steam client on Play** setting in **Settings → Launcher**, or the game's own choice, decides what happens; with **Ask**, the default, MacLauncher shows the same **Play with Steam?** question, as [Versions and settings](/maclauncher/tools/versions-and-settings/#steam-client-on-play) explains.
+Once both are installed, or registered from copies you already have, later Plays use them without a dialog while Steam is running. When Steam isn't running, your **Steam client on Play** setting in **Settings → Launcher**, or the game's own choice, decides what happens; with **Ask**, the default, MacLauncher shows the same **Play with Steam?** question, as [Versions and settings](/maclauncher/tools/versions-and-settings/#steam-client-on-play) explains.
 
 The Windows Steam client files come from Valve's current Steam client download. MacLauncher checks them against the content address Valve publishes (a fingerprint computed from the files' contents) and then keeps them, so later Plays don't download them again. The bridge doesn't need a particular version of the Steam client for Mac.
 
@@ -49,9 +49,11 @@ When you choose **Play Without Steam** in the download question, clear the check
 
 ## The bridge in Runtimes
 
-The bridge has its own section in Runtimes, **Runtimes → Steam client bridge**, under **Compatibility**. Its **Components** card lists the **Windows Steam client files**, with the start of their content address once they're installed. Below it, **Versions** lists the bridge versions from MacLauncher Builds with an **Install** button, and **Installed** lists the ones you have. Play always uses the newest installed version, so the section has no default to set, and it has no **Register custom…** button, because Play uses only the bridge packages installed here.
+The bridge has its own tab in Runtimes, **Runtimes → Steam client bridge**, under **Compatibility**, with two sections: **Steam client bridge** and **Windows Steam client files**. The bridge section lists the bridge versions from MacLauncher Builds. The client files section lists the version of Valve's current Steam client after **Refresh Valve versions**, which reads only the file directories of Valve's archives, and keeps every version you install there, so an older client stays available after Valve moves on. Both sections have **Install**, **Set default** and **Register custom…**. Play uses the version you picked for the game, then the default, then the newest one you have.
 
-To remove the bridge, press the trash button next to its version under **Installed**. Removing the last version also removes the Windows Steam client files, and the next Play of an eligible game offers both again.
+**Register custom…** adds a copy you already have without changing it. For the bridge, that's a bridge package folder, such as an installed version's folder, as long as it matches this MacLauncher and contains every part its manifest names. For the client files, it's a folder holding `steamclient.dll` and `steamclient64.dll`, each checked to be the 32-bit or 64-bit Windows file it should be.
+
+To remove a version, press the trash button next to it under **Installed**. Removing the last bridge version also removes the client files that came with the bridge, including copies from earlier MacLauncher versions, while client files you installed yourself or made the default stay. When a Play installs the client files for you, that copy is tidied away later, once a newer one is installed and nothing uses it, so copies don't pile up.
 
 ## What the bridge doesn't decide
 

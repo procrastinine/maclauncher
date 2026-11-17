@@ -174,7 +174,32 @@ function createPayload(source, dependencies = {}) {
     return resolvePayload;
   }
   const installDetail = (pin, selection) => `${selection.repairRequired ? 'Reinstalls' : 'Downloads'} ${label}${pin.downloadBytes ? ` (${Math.ceil(pin.downloadBytes / 1024 / 1024)} MB)` : ''}.`;
-  return {preparePayload, createPayloadResolver, installDetail};
+  // A Wine folder or application the user selects, used where it is: its tree
+  // is found by its files, as in a download, and nothing in it is moved,
+  // linked or written. A build that runs through an application's loader must
+  // already reach it from its own Unix loader path.
+  function inspectCustom(selected, {verification} = {}) {
+    let root = fs.statSync(selected).isDirectory() ? selected : path.dirname(selected), tree = findWine(root);
+    for (let depth = 0; !tree && root !== selected && depth < 4 && path.dirname(root) !== root; depth += 1) tree = findWine(root = path.dirname(root));
+    if (!tree) throw new Error(`Select a complete ${label} folder or application, including its Wine engine and libraries.`);
+    const loaders = Object.keys(source.upstream?.app || {}).map(cpu => [normalizeArchitecture(cpu), applicationLoader(source, normalizeArchitecture(cpu), dependencies)]);
+    const external = loaders.flatMap(([, file]) => file ? [file, fs.realpathSync(file)] : []);
+    const share = path.posix.join(tree.root, 'share') + '/', wineRoot = path.join(root, tree.root);
+    const inspected = Shared.inspectCustomTree(root, {label, wineRoot, quick: [tree.entry, tree.server].filter(Boolean),
+      required: fs.lstatSync(path.join(root, tree.entry)).isFile() ? [tree.entry] : [], external, skip: relative => relative.startsWith(share),
+      executableRoot: path.join(root, path.dirname(tree.entry)), verification, systemVersionSync: dependencies.systemVersionSync || Host.systemVersionSync});
+    for (const [architecture, loader] of loaders) {
+      if (!inspected.architectures.map(normalizeArchitecture).includes(architecture) || fs.existsSync(path.join(wineRoot, 'lib', 'wine', UNIX[architecture], 'wine'))) continue;
+      throw new Error(loader === null ? missingApplication(source, path.basename(root)) : `The selected ${label} does not reach its application's Wine loader.`);
+    }
+    return {installDir: root, wineRoot, engineRoot: wineRoot, executablePath: path.join(root, tree.entry),
+      ...(tree.server ? {serverPath: path.join(root, tree.server)} : {}), libraryRoot: path.join(wineRoot, 'lib'),
+      capabilities: inspected.capabilities, minimumMacOS: inspected.minimumMacOS, architectures: inspected.architectures,
+      architecture: Shared.customArchitecture(inspected.architectures), wineVersion: inspected.wineVersion || '',
+      engineVersion: inspected.wineVersion || '', componentVersions: {}, ...(inspected.wineVersion ? {runtimeVersion: inspected.wineVersion} : {})};
+  }
+  const configureCustom = manager => Shared.configureCustom(manager, inspectCustom);
+  return {preparePayload, createPayloadResolver, installDetail, inspectCustom, configureCustom};
 }
 
 const managers = new Map();
@@ -184,7 +209,7 @@ function createManager(id, {dependencies = {}} = {}) {
   const Catalog = createCatalog(source, dependencies), Payload = createPayload(source, dependencies);
   return require('../runtime-sources/manager').createSourceBackedManager({source, adapter: Wine, dependencies: {...dependencies, catalog: Catalog, payload: Payload,
     discoverCatalog: dependencies.discoverCatalog || Catalog.discover, extractArchive: dependencies.extractArchive || require('../modules/shared/runtime/safe-archive').extractArchive,
-    customRuntime: false, verifyArtifact: options => Catalog.verify(options)}});
+    verifyArtifact: options => Catalog.verify(options)}});
 }
 function manager(id) { if (!managers.has(id)) managers.set(id, createManager(id)); return managers.get(id); }
 module.exports = {createCatalog, createPayload, createManager, manager, findWine, applicationLoader};

@@ -10,7 +10,7 @@ const Clients = require('../../shared/reshade/steam-client-models');
 const Steam = require('../../shared/runtime/steamworks/installed-client');
 const ClientStart = require('../../shared/runtime/steamworks/client-start');
 const { readGameAppId } = require('../../shared/runtime/steamworks/app-id');
-const Components = require('./steam-client-components');
+const ClientFiles = require('./steam-client-files');
 const Adapter = require('../../../runtime-adapters/steam-bridge');
 const { selectLogicalLibraries } = require('../../../core/logical-libraries');
 const { peArchitecture } = require('../../../core/binary-arch');
@@ -59,8 +59,7 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
   // One backend retains every installed version and its existing state.
   const manager = Object.assign(Object.create(base), { ui: { ...base.ui, groupId: source.kind, tabLabel: source.manager.tabLabel,
     sectionLabel: source.manager.sectionLabel, management: 'managed', order: source.order, category: source.manager.category },
-    distributionRequired: false, customRuntime: false });
-  manager.registerCustomRuntime = undefined;
+    distributionRequired: false });
   const skippedPath = directory => path.join(directory, 'runtimes/steam-bridge-skipped.json');
   const skipped = directory => readJsonObject(skippedPath(directory))?.apps || [];
   function skipOptional(plan, { userDataDir } = {}) {
@@ -77,28 +76,26 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     const result = await installRuntime.call(this, options);
     const selected = base.resolveSelection(null, {}, options.userDataDir, { version: result.version, verification: 'status' });
     if (!selected.ready) throw new Error(selected.reason);
-    // The Valve files take only the install context. A local archive in
-    // `options` is the bridge package's own archive.
-    await Components.install({ userDataDir: options.userDataDir, signal: options.signal, onProgress: options.onProgress });
+    // Valve's client files come with the bridge when none are usable. They
+    // take only the install context; a local archive in `options` is the
+    // bridge package's own archive.
+    await ClientFiles.ensure({ userDataDir: options.userDataDir, settings: options.settings, signal: options.signal, onProgress: options.onProgress });
     clearSkipped(options.userDataDir);
     return result;
   };
+  // Removing the bridge's last version also removes the client files it
+  // brought in; versions the user installed or chose stay.
   const uninstallRuntime = manager.uninstallRuntime;
   manager.uninstallRuntime = async function(options = {}) {
     const result = await uninstallRuntime.call(this, options);
-    if (options.userDataDir && !base.core.listInstalled(options.userDataDir).length) await Components.remove(options.userDataDir);
+    if (options.userDataDir && !base.core.listInstalled(options.userDataDir).length) await ClientFiles.removeAutomatic(options);
     return result;
   };
-  // The Valve files are listed in the bridge's Runtimes section with the
-  // generic section components; status reads no file contents.
   const getState = manager.getState;
   manager.getState = function(options = {}) {
-    const state = getState.call(this, options), files = Components.status(options.userDataDir);
-    const extra = { description: 'Connects Windows Steam games in CrossOver, Sikarugir and WineCX to the Steam client for Mac. Play offers it for a Windows Steam game while the Steam client for Mac is installed.',
-      components: [{ id: 'steam-client-components', label: 'Windows Steam client files', ...(files ? { version: files.archiveSha1.slice(0, 12) } : {}),
-        status: files ? 'Installed' : 'Not installed', available: Boolean(files),
-        description: "steamclient.dll and steamclient64.dll from Valve's current Steam client download, checked against its content address. They are installed with the bridge and removed with its last version." }] };
-    return { ...state, ...extra, sections: (state.sections || []).map(section => ({ ...section, ...extra, customRuntime: false })) };
+    const state = getState.call(this, options);
+    const extra = { description: "Connects Windows Steam games in CrossOver, Sikarugir and WineCX to the Steam client for Mac with Valve's Windows Steam client files, listed beside it. Play offers it for a Windows Steam game while the Steam client for Mac is installed." };
+    return { ...state, ...extra, sections: (state.sections || []).map(section => ({ ...section, ...extra })) };
   };
   // One inspector line for a game whose last Play used the bridge, while that
   // version remains installed.
@@ -107,15 +104,22 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     if (typeof version !== 'string' || !version || !userDataDir || !base.core.listInstalled(userDataDir).some(row => row.version === version)) return null;
     return { label: 'Steam', value: `Steam client bridge ${version}` };
   }
-  function installed(userDataDir) {
-    const selected = base.resolveSelection(null, {}, userDataDir, { verification: 'status' });
+  // The bridge and client files a Play uses: each one's game choice, saved
+  // default or registered folder, then its installed version.
+  function installed(context) {
+    const selected = manager.resolveSelection(null, context.settings || {}, context.userDataDir, { verification: 'status' });
+    return selected.ready ? selected.install : null;
+  }
+  function clientFiles(context, verification = 'status') {
+    const selected = ClientFiles.resolveSelection(null, context.settings || {}, context.userDataDir, { verification });
     return selected.ready ? selected.install : null;
   }
 
   async function requirements(entry, context) {
     const game = identifyGame(entry);
-    if (!game || !discoverClient() || skipped(context.userDataDir).includes(String(game.appId)) || installed(context.userDataDir) && Components.current(context.userDataDir)) return [];
-    const local = installed(context.userDataDir);
+    if (!game || !discoverClient() || skipped(context.userDataDir).includes(String(game.appId))) return [];
+    const local = installed(context), files = clientFiles(context);
+    if (local && files) return [];
     const unusable = base.getState({ userDataDir: context.userDataDir }).installed.filter(row => row.ready === false);
     const selected = base.resolveSelection(null, {}, context.userDataDir, { verification: 'status',
       compatible: pin => !unusable.some(row => row.version === pin.version) });
@@ -125,10 +129,10 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     // Valve download recorded them.
     const name = entry?.name || 'this game', size = bytes => bytes > 0 ? ` (${Math.max(0.1, bytes / 1048576).toFixed(1)} MB)` : '';
     const bytes = !local && pin?.asset?.bytes > 0 ? pin.asset.bytes : 0;
-    const previous = Components.lastDownload(context.userDataDir);
+    const previous = ClientFiles.components.lastDownload(context.userDataDir);
     const valve = `the Windows Steam client files from Valve${previous ? ` (about ${Math.max(0.1, previous.bytes / 1048576).toFixed(1)} MB)` : ''}`;
     const version = local?.version || pin?.version || null;
-    const downloads = label => local ? valve : `${label}${size(bytes)} and ${valve}`;
+    const downloads = label => [local ? null : `${label}${size(bytes)}`, files ? null : valve].filter(Boolean).join(' and ');
     const starts = isRunning() === false && ClientStart.clientStartEnabled(entry, context.settings) ? ', then starts Steam' : '';
     const until = 'until the bridge is installed in Runtimes.';
     const replacement = !local && unusable.length ? ` Installed bridge ${unusable[0].version} cannot be used: ${unusable[0].error}` : '';
@@ -140,7 +144,7 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
   async function prepare(entry, context, { installation, prefixPath, architecture, environment, integration = 'native' } = {}) {
     const game = identifyGame(entry), native = discoverClient();
     if (!game || !native || skipped(context.userDataDir).includes(String(game.appId))) return null;
-    const current = installed(context.userDataDir), components = Components.current(context.userDataDir);
+    const current = installed(context), components = clientFiles(context, 'full');
     if (!current || !components) return null;
     try {
       await context.useSteamClient?.(true); // Canonical startup consent and local IPC policy.

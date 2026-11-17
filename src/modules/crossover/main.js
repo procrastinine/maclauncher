@@ -187,7 +187,7 @@ const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.en
     ],
     resolveGraphicsInputs: (entry, context) => resolveGraphicsInputs(entry, context) };
 const runtimeProviders = [crossoverProvider, ...wineProviders];
-const runtimeManagers = [...require("./temporal/vulkan-dlss").managers, require('./temporal/vulkan/manager'), ...Sources.all().map(source => source.manager()), require('./runtime/maclauncher-dxvk'), require('./runtime/winemac'), require('./runtime/steam-bridge'), ...Object.values(require("./temporal/support-manager").managers)];
+const runtimeManagers = [...require("./temporal/vulkan-dlss").managers, require('./temporal/vulkan/manager'), ...Sources.all().map(source => source.manager()), require('./runtime/maclauncher-dxvk'), require('./runtime/winemac'), require('./runtime/steam-bridge'), require('./runtime/steam-client-files'), ...Object.values(require("./temporal/support-manager").managers)];
 const providerForRuntime = runtimeId => runtimeProviders.find(provider => provider.runtimeId === runtimeId);
 const providerForEntry = (entry, context) => providerForRuntime(context?.runtimeId || entry?.runtimeId || manifest.runtime.default);
 async function resolveGraphicsInputs(entry, context = {}, resolved, plan) {

@@ -33,6 +33,13 @@ function installFixture(manager, userDataDir) {
   } else if(manager.id === 'gamemaker-official') { version='2026.1.0.1'; directory=path.join(userDataDir,'runtimes',manager.id,version); }
   else if(manager.id === 'mpv-plugins') return Object.keys(require('../src/modules/video/plugins').packages).map(sectionId=>
     stage(path.join(userDataDir,'runtimes',manager.id,sectionId,version),{version,sectionId,architecture}));
+  else if(manager.id === 'steam-client-components') {
+    // Valve's client files: a version record beside its folder, damaged.
+    version='a'.repeat(40);const root=path.join(userDataDir,'runtimes',manager.id);
+    write(path.join(root,version+'.json'),JSON.stringify({archiveSha1:version,source:'https://client-update.akamai.steamstatic.com/bins.zip.'+version,
+      clients:{x86_64:'steamclient64.dll',i386:'steamclient.dll'},files:[{path:'steamclient64.dll',size:1,sha256:'b'.repeat(64)}],installedAt:'2026-11-17T00:00:00.000Z'}));
+    return [stage(path.join(root,version),{version,architecture,sectionId})];
+  }
   else if(core?.normalizeMajor) {version='8.0.0';sectionId='v8';directory=path.join(core.installRootDir(userDataDir),'8',version);}
   else if(core?.installRootDir && !core.getInstallDir) directory=path.join(core.installRootDir(userDataDir),version);
   else

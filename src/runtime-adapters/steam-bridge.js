@@ -63,14 +63,26 @@ function createBackend({ source, dependencies = {} }) {
   const Bundled = require('../modules/shared/runtime/bundled-native');
   const catalog = new URL(source.discover.catalog);
   const repository = catalog.pathname.split('/').filter(Boolean).slice(0, 2).join('/');
-  return createProjectBuildManager({ projectId: source.manager.id, label: source.label, repository,
+  const manager = createProjectBuildManager({ projectId: source.manager.id, label: source.label, repository,
     upstreamUrl: source.credits.url, upstreamLabel: source.labels.source,
-    manifestRelative: 'manifest.json', executableRelative: source.layout.entry, dataOnly: true, supportsDefault: false,
+    manifestRelative: 'manifest.json', executableRelative: source.layout.entry, dataOnly: true,
     validateManifest(manifest) {
       if (manifest.managerId !== source.manager.id || !manifest.steamBridge?.native || !manifest.steamBridge?.windows || !manifest.steamBridge?.clientEnvironment)
         throw new Error('The Steam bridge package lacks the managed loader paths required by this launcher and needs replacement.');
     },
     async verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); }, dependencies });
+  // A folder the user selects is complete when every part its manifest names
+  // is a file in its payload.
+  const inspect = manager.customRuntime?.inspect, fs = require('node:fs');
+  if (inspect) require('../modules/shared/runtime/custom-runtime').configure(manager, { inspect(runtimePath, options) {
+    const selected = inspect(runtimePath, options), root = selected.payloadRoot || selected.root;
+    for (const part of bridgeParts(selected.manifest)) {
+      const file = path.join(root, Bundled.relativeFile(part.path));
+      if (!fs.lstatSync(file, { throwIfNoEntry: false })?.isFile()) throw new Error(`The selected ${source.label} folder is missing ${part.path}.`);
+    }
+    return selected;
+  } });
+  return manager;
 }
 // The sealed package's own manifest is the semantic part inventory. CPU and
 // logical-library alternatives are measured and admitted by the shared core.
@@ -149,8 +161,10 @@ const { parseSteamVdf } = require('../core/steam-installed-games');
 const { readJsonObject, writeJsonAtomic } = require('../core/json-files');
 const ORIGIN = 'https://client-update.akamai.steamstatic.com';
 const MANIFEST = ORIGIN + '/steam_client_ubuntu12';
+const NAMES = ['steamclient64.dll', 'steamclient.dll'];
 const source = Upstream.service({ hosts: [new URL(ORIGIN).hostname] });
 const verified = new Map();
+const SHA1 = /^[a-f0-9]{40}$/;
 const store = userDataDir => path.join(userDataDir, 'runtimes/steam-client-components');
 // The total behind the last verified download. Play's consent shows its size
 // offline; the record stays when the files are removed.
@@ -159,21 +173,45 @@ function lastDownload(userDataDir) {
   const record = readJsonObject(downloadRecord(userDataDir));
   return typeof record?.filename === 'string' && Number.isSafeInteger(record.totalBytes) && record.totalBytes > 0 ? { filename: record.filename, bytes: record.totalBytes } : null;
 }
+// Every archive of Valve's current client listing, with its content address,
+// SHA-256 and size, and the listing's client version.
 function resolveManifest(text) {
   const value = parseSteamVdf(text), pending = [value], matches = [];
+  const manifestVersion = Object.values(value || {}).map(row => row?.version).find(version => /^\d{1,20}$/.test(String(version || '')));
   while (pending.length) for (const [key, row] of Object.entries(pending.shift())) {
     if (!row || typeof row !== 'object') continue;
     const filename = row.file;
     if (typeof filename === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*\.zip\.[a-f0-9]{40}$/.test(filename)) {
-      const bytes = Number(row.size); matches.push({ filename, url: ORIGIN + '/' + filename, sha1: filename.slice(-40), ...(Number.isSafeInteger(bytes) && bytes > 0 ? { bytes } : {}) });
+      const bytes = Number(row.size);
+      matches.push({ filename, url: ORIGIN + '/' + filename, sha1: filename.slice(-40), ...(Number.isSafeInteger(bytes) && bytes > 0 ? { bytes } : {}),
+        ...(/^[a-f0-9]{64}$/.test(row.sha2 || '') ? { sha256: row.sha2 } : {}), ...(manifestVersion ? { manifestVersion: String(manifestVersion) } : {}) });
     } else pending.push(row);
   }
   if (!matches.length) throw new Error('Valve did not list content-addressed client archives.');
   return matches;
 }
-function current(userDataDir) {
-  const root = store(userDataDir), record = readJsonObject(path.join(root, 'active.json'));
-  if (!record || !/^[a-f0-9]{40}$/.test(record.archiveSha1 || '') || !record.files || !record.clients) return null;
+// Installed versions: one record per content address beside its folder, and
+// the record earlier launchers kept only as active.json.
+function records(userDataDir) {
+  const root = store(userDataDir), result = new Map();
+  let names = [];
+  try { names = fs.readdirSync(root); } catch { return []; }
+  for (const name of names.sort()) {
+    const sha = /^([a-f0-9]{40})\.json$/.exec(name)?.[1], record = sha && readJsonObject(path.join(root, name));
+    if (sha && record?.archiveSha1 === sha) result.set(sha, record);
+  }
+  const active = readJsonObject(path.join(root, 'active.json'));
+  if (SHA1.test(active?.archiveSha1 || '') && !result.has(active.archiveSha1)) result.set(active.archiveSha1, active);
+  return [...result.values()];
+}
+function recordFor(userDataDir, version) {
+  return version ? records(userDataDir).find(record => record.archiveSha1 === version) || null : readJsonObject(path.join(store(userDataDir), 'active.json'));
+}
+// A verified installed version: the given content address, or the one
+// installed last. Its files are hashed once per change.
+function current(userDataDir, version) {
+  const root = store(userDataDir), record = recordFor(userDataDir, version);
+  if (!record || !SHA1.test(record.archiveSha1 || '') || !record.files || !record.clients) return null;
   const directory = path.join(root, record.archiveSha1);
   try {
     for (const item of record.files) {
@@ -190,29 +228,84 @@ function current(userDataDir) {
     return { ...record, root: directory };
   } catch { return null; }
 }
-// Runtimes status reads the active record and file sizes without hashing.
-function status(userDataDir) {
+// Runtimes status reads a version's record and file sizes without hashing.
+function status(userDataDir, version) {
   try {
-    const record = readJsonObject(path.join(store(userDataDir), 'active.json'));
-    if (!record || !/^[a-f0-9]{40}$/.test(record.archiveSha1 || '') || !Array.isArray(record.files) || !record.files.length) return null;
+    const record = recordFor(userDataDir, version);
+    if (!record || !SHA1.test(record.archiveSha1 || '') || !Array.isArray(record.files) || !record.files.length) return null;
     const directory = path.join(store(userDataDir), record.archiveSha1);
     for (const item of record.files) {
       if (!/^[A-Za-z0-9._-]+$/.test(item?.path || '') || fs.lstatSync(path.join(directory, item.path), { throwIfNoEntry: false })?.size !== item.size) return null;
     }
-    return { archiveSha1: record.archiveSha1, source: record.source, bytes: record.files.reduce((sum, item) => sum + item.size, 0) };
+    return { archiveSha1: record.archiveSha1, source: record.source, bytes: record.files.reduce((sum, item) => sum + item.size, 0),
+      ...(record.manifestVersion ? { manifestVersion: record.manifestVersion } : {}), ...(record.installedAt ? { installedAt: record.installedAt } : {}) };
   } catch { return null; }
 }
-// Removing the bridge's last version also removes these files; Play can
-// download them again after consent.
-async function remove(userDataDir) {
+// Without a version, removes every version and the store. With one, removes
+// that version's folder and record.
+async function remove(userDataDir, version) {
   const root = store(userDataDir);
   if (!fs.lstatSync(root, { throwIfNoEntry: false })) return false;
   Writable.assertOwnDirectory(userDataDir, root, { create: false });
-  return require('../modules/shared/runtime/runtime-components').removeOwned(root, userDataDir);
+  const Shared = require('../modules/shared/runtime/runtime-components');
+  if (!version) return Shared.removeOwned(root, userDataDir);
+  if (!SHA1.test(version)) throw new Error('Choose an installed Valve client version.');
+  const active = readJsonObject(path.join(root, 'active.json'));
+  for (const file of [path.join(root, version + '.json'), ...(active?.archiveSha1 === version ? [path.join(root, 'active.json')] : [])]) fs.rmSync(file, { force: true });
+  const directory = path.join(root, version);
+  const removed = fs.lstatSync(directory, { throwIfNoEntry: false }) ? await Shared.removeOwned(directory, userDataDir) : true;
+  if (!fs.readdirSync(root).length) fs.rmdirSync(root);
+  return removed;
 }
-// Called only from the consented managed-install action. Discovery/status use current().
-async function install({ userDataDir, signal, onProgress, resolved } = {}) {
-  const existing = current(userDataDir); if (existing) return existing;
+// The listed archive that holds the client DLLs, found from each archive's zip
+// directory read in parts, without downloading the archives. Archives of the
+// family an earlier download used are read first.
+async function zipNames(listed, { signal, range = Upstream.range } = {}) {
+  const read = (start, length) => range(Upstream.listedFile({ filename: listed.filename, url: listed.url }), start, length, { signal });
+  const total = listed.bytes || (await read(0, 1)).total, tail = Math.min(total, 65557), end = await read(total - tail, tail);
+  let at = -1;
+  for (let i = end.bytes.length - 22; i >= 0; i--) if (end.bytes.readUInt32LE(i) === 0x06054b50) { at = i; break; }
+  if (at < 0) throw new Error(listed.filename + ' has no zip directory.');
+  const size = end.bytes.readUInt32LE(at + 12), offset = end.bytes.readUInt32LE(at + 16);
+  if (size > 8 << 20 || offset + size > total) throw new Error(listed.filename + ' has an unsupported zip directory.');
+  const directory = offset >= total - tail ? end.bytes.subarray(offset - (total - tail), offset - (total - tail) + size) : (await read(offset, size)).bytes;
+  const names = [];
+  for (let i = 0; i + 46 <= directory.length && directory.readUInt32LE(i) === 0x02014b50;) {
+    const length = directory.readUInt16LE(i + 28), extra = directory.readUInt16LE(i + 30), comment = directory.readUInt16LE(i + 32);
+    names.push(directory.toString('utf8', i + 46, i + 46 + length)); i += 46 + length + extra + comment;
+  }
+  return names;
+}
+const family = filename => String(filename || '').replace(/\.zip\.[a-f0-9]{40}$/, '');
+async function discover({ userDataDir, signal, range, resolved } = {}) {
+  if (!resolved) {
+    const response = await source.request(MANIFEST, { signal, maxBytes: 2 * 1024 * 1024, maxRedirects: 0 });
+    if (response.status !== 200) throw new Error('Valve client component metadata is unavailable.');
+    resolved = resolveManifest(response.body.toString('utf8'));
+  }
+  const known = new Set(records(userDataDir).map(record => family(path.posix.basename(String(record.source || '')))));
+  const ordered = [...resolved].sort((a, b) => Number(!known.has(family(a.filename))) - Number(!known.has(family(b.filename))));
+  for (const candidate of ordered) {
+    const names = (await zipNames(candidate, { signal, range })).map(name => path.posix.basename(name).toLowerCase());
+    if (!NAMES.every(name => names.includes(name))) continue;
+    const row = { version: candidate.sha1, ...candidate, fetchedAt: new Date().toISOString() };
+    const root = store(userDataDir); Writable.assertOwnDirectory(userDataDir, root);
+    writeJsonAtomic(path.join(root, 'catalog.json'), { schemaVersion: 1, rows: [row] });
+    return [row];
+  }
+  throw new Error('Valve archives did not contain the Windows Steam client DLLs.');
+}
+// The versions the last Refresh listed. Reading it is offline.
+function catalog(userDataDir) {
+  const rows = readJsonObject(path.join(store(userDataDir), 'catalog.json'))?.rows;
+  return Array.isArray(rows) ? rows.filter(row => SHA1.test(row?.sha1 || '') && row.version === row.sha1 && row.url === ORIGIN + '/' + row.filename) : [];
+}
+// Called only from consented installs. Without a version it keeps the
+// version installed last; with one it installs that listed version.
+async function install({ userDataDir, signal, onProgress, resolved, version } = {}) {
+  const existing = current(userDataDir, version); if (existing) return existing;
+  if (version && !resolved) resolved = catalog(userDataDir).filter(row => row.sha1 === version);
+  if (version && !resolved?.length) throw new Error('Refresh the Valve client versions before installing this one.');
   if (!resolved) {
     const response = await source.request(MANIFEST, { signal, maxBytes: 2 * 1024 * 1024, maxRedirects: 0 });
     if (response.status !== 200) throw new Error('Valve client component metadata is unavailable.');
@@ -229,10 +322,11 @@ async function install({ userDataDir, signal, onProgress, resolved } = {}) {
       const archive = path.join(stage, 'client.zip');
       await Upstream.download({ url: resolved.url, name: resolved.filename, ...(resolved.bytes ? { bytes: resolved.bytes } : {}), digest: { algorithm: 'sha1', value: expected[1] } }, archive, { signal, onProgress });
       if (hashFile(archive, 'sha1') !== expected[1]) throw new Error('Valve component archive differs from its content address.');
+      if (resolved.sha256 && hashFile(archive) !== resolved.sha256) throw new Error('Valve component archive differs from its listed SHA-256.');
       totalBytes += fs.statSync(archive).size;
       const listing = await execute('/usr/bin/unzip', ['-Z1', archive], { signal, timeout: 120000 });
       const members = listing.stdout.trim().split('\n');
-      const selected = ['steamclient64.dll', 'steamclient.dll'].map(name => members.filter(member => path.posix.basename(member).toLowerCase() === name));
+      const selected = NAMES.map(name => members.filter(member => path.posix.basename(member).toLowerCase() === name));
       if (selected.some(matches => !matches.length)) continue;
       const paths = selected.flat();
       if (paths.some(member => member.startsWith('/') || member.includes('\\') || member.split('/').some(part => part === '..' || part === '.')))
@@ -256,6 +350,8 @@ async function install({ userDataDir, signal, onProgress, resolved } = {}) {
         try { const file = path.join(directory, item.path); return fs.lstatSync(file).isFile() && hashFile(file) === item.sha256; }
         catch { return false; }
       });
+      const record = { archiveSha1: expected[1], source: resolved.url, clients, files,
+        ...(resolved.manifestVersion ? { manifestVersion: resolved.manifestVersion } : {}), installedAt: new Date().toISOString() };
       let damaged, replaced = false;
       try {
         if (!valid) {
@@ -267,7 +363,8 @@ async function install({ userDataDir, signal, onProgress, resolved } = {}) {
           fs.renameSync(payload, directory);
           replaced = true;
         }
-        writeJsonAtomic(path.join(root, 'active.json'), { archiveSha1: expected[1], source: resolved.url, clients, files });
+        writeJsonAtomic(path.join(root, 'active.json'), record);
+        writeJsonAtomic(path.join(root, expected[1] + '.json'), record);
       } catch (error) {
         if (replaced) fs.rmSync(directory, { recursive: true, force: true });
         if (damaged) fs.renameSync(damaged, directory);
@@ -275,12 +372,11 @@ async function install({ userDataDir, signal, onProgress, resolved } = {}) {
       }
       if (damaged) fs.rmSync(damaged, { recursive: true, force: true });
       try { writeJsonAtomic(downloadRecord(userDataDir), { filename: resolved.filename, totalBytes }); } catch {}
-      return current(userDataDir);
+      return current(userDataDir, expected[1]);
     } finally { fs.rmSync(stage, { recursive: true, force: true }); }
   }
   throw new Error('Valve archives did not contain the Windows Steam client DLLs.');
 }
-return { current, status, lastDownload, install, remove, resolveManifest, MANIFEST };
-
+return { current, status, records, catalog, discover, zipNames, lastDownload, install, remove, resolveManifest, MANIFEST, ORIGIN };
 })();
 module.exports = { apply, windowsPath, windowsArguments, createBackend, bridgeParts, buildRecord, listBuilds, projectParts, clientComponents };

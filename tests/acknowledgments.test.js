@@ -27,6 +27,7 @@ test('every registered runtime manager has a linked upstream project in Credits'
     'dxvk-nvapi': 'https://github.com/jp7677/dxvk-nvapi',
     'vkd3d-proton': 'https://github.com/metalsharp/VKD3D-Proton-MacOS',
     'maclauncher-steam-bridge': 'https://github.com/ValveSoftware/Proton',
+    'steam-client-components': 'https://store.steampowered.com/about/',
     easyrpg: 'https://github.com/EasyRPG/Player',
     ffdec: 'https://github.com/jindrapetrik/jpexs-decompiler',
     fna: 'https://github.com/FNA-XNA/FNA',
