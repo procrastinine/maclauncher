@@ -202,6 +202,11 @@ test('included shaders do not register a runtime manager or shader-pack navigati
   const markup = render([manager('other', { tabLabel: 'Other' })]);
   assert.doesNotMatch(markup, /ReShade ·|Shader packs|runtime-panel-reshade-shaders/);
 });
+// Set default belongs to each ready row that is not already the default, when
+// its manager offers defaults and the row does not decline them.
+const setDefaultActions = markup => (markup.match(/>\s*Set default\s*</g) || []).length;
+const offeredDefaults = (state, rows) => state.supportsDefault ? rows.filter(row => row.ready !== false &&
+  row.supportsDefault !== false && row.version !== state.defaultVersion).length : 0;
 test('CrossOver and Sikarugir manage one shared DXMT support download under DirectX to Metal', () => {
   const registry = require('../src/modules/registry');
   const source = require('../src/modules/crossover/temporal/support-manager');
@@ -221,8 +226,8 @@ test('CrossOver and Sikarugir manage one shared DXMT support download under Dire
   assert.match(markup, /class="runtimePanelTitle">DXMT<\/div>/);
   assert.match(markup, /id="runtime-group-panel-directx-metal"/);
   assert.doesNotMatch(markup, /class="btn primary"[^>]*>Install/);
-  // An installed DXMT version can become the default; games may still choose their own.
-  assert.equal(markup.match(/>\s*Set default\s*</g).length, 1);
+  // Whether the installed DXMT version can become the default follows the manager; games may still choose their own.
+  assert.equal(setDefaultActions(markup), offeredDefaults(bridge.sections[0], [install]));
   assert.equal(markup.match(/class="runtimePanelTitle">DXMT<\/div>/g).length, 1);
   assert.doesNotMatch(markup, /DXMT · support/);
   for (const engine of engines) assert.doesNotMatch(render([...engines, bridge], engine.id), /class="runtimePanelTitle">DXMT<\/div>/, `${engine.id}: no separate copy`);
@@ -1318,15 +1323,15 @@ test('effective provider arrays expose all used settings without changing saved 
  }
 });
 
-test('installed and custom translator rows offer defaults while Included references remain read-only', t => {
+test('translator rows offer defaults as their manager does while Included references remain read-only', t => {
   const {createManager}=require('../src/modules/shared/runtime/translator-managers');
   const translator=createManager('dxvk'),state=translator.getState({});
-  assert.equal(state.supportsDefault,true);
   const reference={version:'host',versionLabel:'Host component',reference:true,readOnly:true,removable:false,supportsDefault:false,ready:true};
   const custom={version:'registered',versionLabel:'Registered component',custom:true,ready:true};
   const runtime=rows=>({...state,id:translator.id,label:translator.label,ui:translator.ui,installed:rows,sections:undefined,defaultVersion:'not-installed'});
-  assert.doesNotMatch(render([runtime([reference])],translator.id),/Set default/);
-  assert.equal(render([runtime([custom,reference])],translator.id).match(/>\s*Set default\s*</g).length,1);
+  // Custom registrations are user-managed versions: they follow the manager's defaults like installed rows.
+  assert.equal(setDefaultActions(render([runtime([reference])],translator.id)),offeredDefaults({...state,defaultVersion:'not-installed'},[reference]));
+  assert.equal(setDefaultActions(render([runtime([custom,reference])],translator.id)),offeredDefaults({...state,defaultVersion:'not-installed'},[custom,reference]));
   const driver=manager('vulkan-driver',{groupId:'vulkan-drivers'}, {versions:['1.4.2']},[{version:'1.4.1',ready:true}]);
   driver.supportsDefault=true;driver.defaultVersion='1.4.2';
   assert.match(render([driver]),/Set default/);
