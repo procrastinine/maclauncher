@@ -83,3 +83,32 @@ test('automatic Wine composition uses a compatible default of its existing engin
   const still = await Translators.resolve(install, 'sikarugir', ctx, { managers: [other], executableArchitecture: 'x86_64', host: { macOSVersion: '26.0', physicalAppleGPU: false } });
   assert.equal(still.components['d3d-renderer'].used.engine, 'dxmt'); assert.equal(still.components['d3d-renderer'].used.included, true);
 });
+
+test('automatic Vulkan keeps the Wine own KosmicKrisp when MacLauncher KosmicKrisp has a default version', async t => {
+  // Automatic means the Wine's own choice; MacLauncher's builds apply only when chosen explicitly.
+  const root = scratch(t), Managed = require('../src/modules/shared/vulkan/managed'), { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/runtime/template-closure');
+  const wine = path.join(root, 'wine'), executablePath = put(path.join(wine, 'bin/wine'), image({ cpu: X64, fileType: 2 }));
+  put(path.join(wine, 'lib/wine/x86_64-unix/ntdll.so'), image({ cpu: X64 }));
+  const templateRoot = path.join(root, 'support'), own = put(path.join(templateRoot, RELATIVE_PATHS.frameworks, 'libvulkan_kosmickrisp.dylib'), image({ cpu: X64 }));
+  put(path.join(templateRoot, RELATIVE_PATHS.frameworks, 'libvulkan.1.dylib'), image({ cpu: X64 }));
+  const icd = put(path.join(templateRoot, RELATIVE_PATHS.vulkan, 'kosmickrisp_mesa_icd.json'), '{}');
+  fs.writeFileSync(icd, JSON.stringify({ ICD: { library_path: path.relative(path.dirname(icd), own), api_version: '1.4.0' } }));
+  const install = { engineRoot: wine, crossoverRoot: wine, templateRoot, executablePath, architecture: 'x64', version: 'authored-wine' };
+  const version = '27.0.0-devel-MCLv13', manager = Managed.createManager();
+  const files = path.join(root, 'profile/runtimes', manager.id, 'x64', version, 'payload/files'), driver = put(path.join(files, 'libvulkan_kosmickrisp.dylib'), image({ cpu: X64 }));
+  put(path.join(files, 'libvulkan.1.dylib'), image({ cpu: X64 }));
+  const ours = { version, architecture: 'x64', translatorRoot: files, installDir: files, executablePath: driver,
+    translator: Description.describeTranslator(files, { engine: 'kosmickrisp', source: manager.id, version }) };
+  t.mock.method(manager, 'getState', () => ({ installed: [ours] }));
+  t.mock.method(manager, 'resolveSelection', () => ({ ready: true, install: ours, architecture: 'x64' }));
+  const ctx = { runtimeId: 'sikarugir', userDataDir: path.join(root, 'profile'), settings: { runtimes: { [manager.id]: { defaultVersion: version } } }, runtimeSettings: {}, logger: { warn() {} } };
+  const plan = await Translators.resolve(install, 'sikarugir', ctx, { managers: [manager], executableArchitecture: 'x86_64', host: { macOSVersion: '26.0', physicalAppleGPU: true } });
+  const vulkan = plan.components['vulkan-driver'];
+  const offered = Translators.inventory(install, 'sikarugir', ctx, { managers: [manager], consumerArchitecture: 'x64' }).choices;
+  assert.ok(offered.some(item => item.managerId === manager.id && item.preferred), 'the installed MacLauncher KosmicKrisp is offered with its default version');
+  assert.equal(vulkan.value, 'automatic'); assert.equal(vulkan.used.engine, 'kosmickrisp');
+  assert.equal(vulkan.used.id, 'included:vulkan-driver:kosmickrisp', 'automatic stays on the Wine own KosmicKrisp');
+  const chosen = await Translators.resolve(install, 'sikarugir', { ...ctx, runtimeSettings: { translatorVulkan: `${manager.id}:${version}` } },
+    { managers: [manager], executableArchitecture: 'x86_64', host: { macOSVersion: '26.0', physicalAppleGPU: true } });
+  assert.equal(chosen.components['vulkan-driver'].used.root, files, 'an explicit pick uses MacLauncher KosmicKrisp');
+});
