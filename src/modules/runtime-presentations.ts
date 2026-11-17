@@ -23,6 +23,9 @@ export function presentRuntimeManagers<T extends { id: string; ui?: Record<strin
     const current = managerUi[manager.id], group = groupUi[current?.groupId || manager.ui?.groupId];
     if (!current && !group) return manager;
     const ui = { ...manager.ui, ...current, ...group };
+    // A manager's CPU presentation overrides its group's default.
+    const cpuBuildLabels = current?.cpuBuildLabels ?? manager.ui?.cpuBuildLabels;
+    if (typeof cpuBuildLabels === "boolean") ui.cpuBuildLabels = cpuBuildLabels;
     const sections = sectionUi[manager.id];
     return { ...manager, ui, ...(sections && manager.sections ? {
       sections: manager.sections.map(section => sections[section.id] ? { ...section, ...sections[section.id] } : section)

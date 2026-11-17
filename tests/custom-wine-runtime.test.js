@@ -113,7 +113,7 @@ function signedApplication(root) {
   const contents = path.join(root, "MetalSharp Wine.app", "Contents"), unix = path.join(contents, "lib", "wine", "aarch64-unix");
   write(path.join(contents, "MacOS", "wine"), macho(2, { cpu: "arm64" }), 0o755);
   write(path.join(contents, "MacOS", "wineserver"), macho(2, { cpu: "arm64", marker: "WINEMSYNC" }), 0o755);
-  write(path.join(unix, "ntdll.so"), Buffer.concat([macho(6, { cpu: "arm64" }), Buffer.from("wine-7.0\0")]));
+  write(path.join(unix, "ntdll.so"), Buffer.concat([macho(6, { cpu: "arm64" }), Buffer.from("wine-11.20 (MetalSharp Wine 7.0)\0")]));
   write(path.join(unix, "wine.app", "Contents", "MacOS", "wine"), macho(2, { cpu: "arm64" }), 0o755);
   for (const bundle of [contents, path.join(unix, "wine.app", "Contents")]) write(path.join(bundle, "embedded.provisionprofile"), "profile");
   write(path.join(contents, "_CodeSignature", "CodeResources"), "seal");
@@ -130,6 +130,7 @@ test("a signed Wine application the user selects is registered with its seal int
   const before = snapshot(path.join(root, "Applications"));
   const registered = await register(manager, userDataDir, app);
   assert.deepEqual(registered.architectures, ["arm64"], "the application's own share files do not decide its CPU");
+  assert.equal(registered.wineVersion, "11.20", "publisher-decorated ntdll version is read without confusing the product version");
   assert.equal(registered.wineRoot, path.join(app, "Contents"));
   assert.equal(registered.executablePath, path.join(app, "Contents", "MacOS", "wine"));
   const selected = manager.resolveSelection({}, {}, userDataDir, { version: app });

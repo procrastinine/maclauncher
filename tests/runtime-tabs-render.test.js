@@ -1595,7 +1595,7 @@ test('an installed version this launcher cannot use reads as incompatible and is
   const runtime=manager('pe-component',{cpuBuildLabels:true},{versions:['1']},[{version:'1',ready:true,architecture:'x86_64',translator:{files:[{format:'pe'}]}}]);
   runtime.automaticArchitecture='arm64';
   assert.doesNotMatch(render([runtime]), /data-cpu-build=|badge">Intel|badge">x64/);
-  runtime.ui.cpuBuildLabels=false;delete runtime.installed[0].translator;
+  runtime.ui.groupId='directx-vulkan';runtime.ui.cpuBuildLabels=false;delete runtime.installed[0].translator;
   assert.doesNotMatch(render([runtime]), /data-cpu-build=|badge">Intel|badge">x64/);
   for(const manager of require('../src/modules/crossover/temporal/vulkan-dlss').createManagers())assert.equal(manager.ui.cpuBuildLabels,false);
   runtime.ui.cpuBuildLabels=false;delete runtime.installed[0].translator;

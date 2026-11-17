@@ -162,7 +162,7 @@ function wineVersion(wineRoot) {
     try {
       const file = path.join(wineRoot, "lib", "wine", unix, "ntdll.so");
       if (fs.statSync(file).size > 64 * 1024 * 1024) continue;
-      const version = /wine-(\d+\.\d+(?:\.\d+)?(?:-rc\d+)?)\0/.exec(fs.readFileSync(file).toString("latin1"))?.[1];
+      const version = /wine-(\d+\.\d+(?:\.\d+)?(?:-rc\d+)?)(?=\0|[ \t]\()/.exec(fs.readFileSync(file).toString("latin1"))?.[1];
       if (version) return version;
     } catch {}
   }
