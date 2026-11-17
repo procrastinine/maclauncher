@@ -93,3 +93,32 @@ test("Apple-Silicon-only runtimes leave an Intel Mac's game types with their req
   for (const id of ["android", "macapk", "android-aim", "playcover"])
     assert.ok(unavailableReason(registry.getRuntimeManagerUi(id)?.hostFeature, intel), `${id} is not offered on Intel`);
 });
+
+test("repeated host reads stat the Rosetta runtime once, again after a second while it is absent, and again after MacLauncher installs it", t => {
+  if (process.platform !== "darwin" || process.arch !== "arm64") return t.skip("Rosetta is read only on Apple silicon");
+  const fs = require("node:fs"), { RUNTIME_PATH } = require("../src/modules/shared/runtime/rosetta");
+  let present = false, stats = 0, clock = 0;
+  const statSync = fs.statSync;
+  t.mock.method(fs, "statSync", function(file, ...rest) {
+    if (file !== RUNTIME_PATH) return statSync.call(this, file, ...rest);
+    stats++;
+    if (!present) throw Object.assign(new Error("absent"), { code: "ENOENT" });
+    return { isFile: () => true };
+  });
+  t.mock.method(performance, "now", () => clock);
+  Host.forgetRosettaStatus();
+  t.after(() => Host.forgetRosettaStatus());
+  for (let i = 0; i < 100; i++) assert.equal(Host.getHostCapabilities().rosettaAvailable, false);
+  assert.equal(stats, 1, "an absent Rosetta is read once within a second");
+  present = true;
+  clock += 500;
+  assert.equal(Host.getHostCapabilities().rosettaAvailable, false);
+  clock += 600;
+  assert.equal(Host.getHostCapabilities().rosettaAvailable, true, "a Rosetta installed meanwhile is seen after a second");
+  for (let i = 0; i < 100; i++) Host.getHostCapabilities();
+  assert.equal(stats, 2, "a present Rosetta is not read again");
+  Host.forgetRosettaStatus();
+  present = false;
+  assert.equal(Host.getHostCapabilities().rosettaAvailable, false, "an installation by MacLauncher reads it again at once");
+  assert.equal(stats, 3);
+});

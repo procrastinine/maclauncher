@@ -158,6 +158,7 @@ function createRosettaService({ platform = process.platform, arch, fileSystem = 
         await runInstaller({ ...context, licenseAccepted: true, plan });
         throwIfAborted(context.signal);
         const installed = getStatus({ force: true, verify: true });
+        require("./host-capabilities").forgetRosettaStatus();
         if (!installed.available) throw new Error("Apple's installer did not make Intel translation available.");
         context.logger?.info?.(`[runtime] Rosetta ${installed.version || "system component"} on macOS ${installed.systemVersion || "unknown"} (${installed.systemBuild || "unknown"})`);
         return installed;

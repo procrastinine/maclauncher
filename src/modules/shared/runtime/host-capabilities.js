@@ -4,6 +4,21 @@ const {METAL4, requirementSupport, versionAtLeast, normalizeArchitecture} = requ
 
 const SYSTEM_VERSION = "/System/Library/CoreServices/SystemVersion.plist";
 let hardwareArchitecture, systemVersion;
+// Rosetta stays installed once its runtime is present. Its absence is read
+// again at most once a second, and at once after MacLauncher installs it, so
+// status reads do not stat the runtime on every call.
+let rosettaPresent = false, rosettaCheckedAt = -Infinity;
+function nativeRosettaAvailable(fileSystem) {
+  if (rosettaPresent) return true;
+  const now = performance.now();
+  if (now - rosettaCheckedAt < 1000) return false;
+  rosettaCheckedAt = now;
+  try { rosettaPresent = fileSystem.statSync(require("./rosetta").RUNTIME_PATH).isFile(); } catch { rosettaPresent = false; }
+  return rosettaPresent;
+}
+function forgetRosettaStatus() { rosettaPresent = false; rosettaCheckedAt = -Infinity; }
+// Metal 4 eligibility follows only the platform, CPU and macOS version.
+const metal4Eligibility = new Map();
 
 // Launcher defaults follow its process CPU, including an Intel launcher under Rosetta.
 function defaultArchitecture() { return process.arch; }
@@ -52,11 +67,18 @@ function getHostCapabilities(options = {}) {
     rosettaAvailable = translated;
     if (!rosettaAvailable && platform === "darwin" && hardwareArch === "arm64") {
       // The Rosetta service owns its runtime location, prompt and installation.
-      try { rosettaAvailable = fileSystem.statSync(require("./rosetta").RUNTIME_PATH).isFile(); } catch {}
+      if (native) rosettaAvailable = nativeRosettaAvailable(fileSystem);
+      else try { rosettaAvailable = fileSystem.statSync(require("./rosetta").RUNTIME_PATH).isFile(); } catch {}
     }
   }
   const metal = options.metal || {state: "unknown"};
-  const metal4Eligible = requirementSupport(METAL4, {platform, hardwareArch, macOSVersion}).supported === true;
+  const eligibility = `${platform}\0${hardwareArch}\0${macOSVersion}`;
+  let metal4Eligible = metal4Eligibility.get(eligibility);
+  if (metal4Eligible === undefined) {
+    metal4Eligible = requirementSupport(METAL4, {platform, hardwareArch, macOSVersion}).supported === true;
+    if (metal4Eligibility.size >= 32) metal4Eligibility.clear();
+    metal4Eligibility.set(eligibility, metal4Eligible);
+  }
   const devices = metal.state === "ready" ? metal.devices || [] : [];
   const metal4Supported = !metal4Eligible ? false : metal.state === "ready" ?
     devices.some(device => Object.values(device.metalfx || {}).some(operation => operation.metal4Supported === true)) : null;
@@ -74,4 +96,4 @@ function architectureSupport(architecture, host = getHostCapabilities()) {
     reason: arch === "arm64" ? "Requires a Mac with Apple Silicon." : arch === "x64" ? "Requires an Intel Mac or Rosetta on Apple Silicon." : "Unsupported runtime architecture."};
 }
 
-module.exports = {getHostCapabilities, architectureSupport, defaultArchitecture, versionAtLeast};
+module.exports = {getHostCapabilities, architectureSupport, defaultArchitecture, versionAtLeast, forgetRosettaStatus};
