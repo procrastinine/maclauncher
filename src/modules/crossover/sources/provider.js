@@ -34,6 +34,32 @@ function resolveSaveLocations(entry, context, { source }) {
   }
   return { primaryDirectory: directories[0]?.directory || null, directories };
 }
+// Both Wine launch routes retain helper selection until their owned session
+// has retired, including a spawn whose ownership callback rejects.
+async function withGraphicsLifecycle(plan,context,start){
+  if(typeof plan.graphics?.restore!=="function")return start();
+  let owned,restoration;
+  const restore=()=>restoration||=Promise.resolve().then(()=>plan.graphics.restore());
+  const report=error=>warnGraphics(context.logger,"[runtime] Wine graphics restoration failed",error.message);
+  const register=child=>{
+    if(owned===child)return;owned=child;
+    const previous=child.runtimeRetirement;let finished;
+    const stopped=new Promise(resolve=>{finished=resolve;});
+    child.runtimeRetirement=stopped.then(async()=>{await Promise.resolve();await Lifecycle.waitForProcessStop(child);await previous;return restore();});
+    void child.runtimeRetirement.catch(report);
+    child.once("exit",finished);child.once("close",finished);
+    child.once("error",()=>{if(!child.pid||child.exitCode!=null||child.signalCode!=null)finished();});
+    if(child.exitCode!=null||child.signalCode!=null)finished();
+  };
+  const spawned=context.onProcessSpawn;
+  context.onProcessSpawn=child=>{register(child);return spawned?.(child);};
+  try{const child=await start();register(child);return child;}
+  catch(error){
+    if(owned&&owned.exitCode==null&&owned.signalCode==null)try{await Lifecycle.requestProcessStop(owned);await Lifecycle.waitForProcessStop(owned);}catch(failure){report(failure);}
+    if(!owned||owned.exitCode!=null||owned.signalCode!=null)try{await restore();}catch(failure){report(failure);}
+    throw error;
+  }finally{context.onProcessSpawn=spawned;}
+}
 // The runtime provider of a Wine source that runs its own Wine loader.
 function createProvider({ source, manager, launch = WineLaunch.forSource(source), platform = process.platform, launchDependencies } = {}) {
   const runtimeManager = () => manager || source.manager();
@@ -60,6 +86,7 @@ function createProvider({ source, manager, launch = WineLaunch.forSource(source)
       const manager = existing ? { resolveSelection: () => ({ ready: true, install: existing.install, version: existing.path }) } : runtimeManager();
       return [...await require("../temporal").requirements(entry, { ...context, runtimeId: id }, { manager }),
         ...await Translators.driverRequirements(context),
+        ...await require("./wine-graphics").wineVulkanRequirements(entry,context),
         ...await require("../temporal/vulkan-dlss").requirements(entry, context),
         ...await require("../runtime/steam-bridge").requirements(entry, { ...context, runtimeId: id })];
     },
@@ -98,43 +125,8 @@ function createProvider({ source, manager, launch = WineLaunch.forSource(source)
       if (platform !== "darwin") throw new Error(`${source.label} requires macOS.`);
       if (!supportsEntry(entry)) throw new Error(notSupported);
       const plan = await launch.prepareLaunch(entry, context, { ...launchDependencies, manager: runtimeManager() });
-      if (typeof plan.graphics?.restore !== "function") return WineAdapter.launch(plan, context, { supervisorArguments: launch.supervisorArguments });
-      let owned, restoration;
-      const restore = () => restoration ||= Promise.resolve().then(() => plan.graphics.restore());
-      const report = error => warnGraphics(context.logger, "[runtime] Wine graphics restoration failed", error.message);
-      const register = child => {
-        if (owned === child) return;
-        owned = child;
-        const previous = child.runtimeRetirement;
-        let finished;
-        const stopped = new Promise(resolve => { finished = resolve; });
-        child.runtimeRetirement = stopped.then(async () => {
-          await Promise.resolve();
-          await Lifecycle.waitForProcessStop(child);
-          await previous;
-          return restore();
-        });
-        void child.runtimeRetirement.catch(report);
-        child.once("exit", finished);child.once("close", finished);
-        child.once("error", () => { if (!child.pid || child.exitCode != null || child.signalCode != null) finished(); });
-        if (child.exitCode != null || child.signalCode != null) finished();
-      };
-      const spawned = context.onProcessSpawn;
-      context.onProcessSpawn = child => { register(child);return spawned?.(child); };
-      try {
-        const child = await WineAdapter.launch(plan, context, { supervisorArguments: launch.supervisorArguments });
-        register(child);return child;
-      } catch (error) {
-        if (owned && owned.exitCode == null && owned.signalCode == null) {
-          try { await Lifecycle.requestProcessStop(owned);await Lifecycle.waitForProcessStop(owned); }
-          catch (failure) { report(failure); }
-        }
-        if (!owned || owned.exitCode != null || owned.signalCode != null) {
-          try { await restore(); } catch (failure) { report(failure); }
-        }
-        throw error;
-      } finally { context.onProcessSpawn = spawned; }
+      return withGraphicsLifecycle(plan,context,()=>WineAdapter.launch(plan,context,{supervisorArguments:launch.supervisorArguments}));
     }
   };
 }
-module.exports = { createProvider, createLog, resolveSaveLocations, SUPPORTS };
+module.exports = { createProvider, createLog, resolveSaveLocations, withGraphicsLifecycle, SUPPORTS };

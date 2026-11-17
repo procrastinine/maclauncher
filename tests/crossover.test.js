@@ -766,6 +766,26 @@ test("CrossOver launches with the global and game values of its chosen translato
   assert.doesNotMatch(passed, /stored\/before\/lock/);
 });
 
+test('CrossOver applies a selected WineVulkan helper after prefix preparation and restores later failures',async t=>{
+  const directory=fixture(t),userDataDir=path.join(directory,'data'),game=path.join(directory,'game');pe(path.join(game,'Game.exe'),{machine:0x8664});
+  const installed=Manager.importRuntime({userDataDir,runtimePath:app(path.join(directory,'CrossOver.app'))});
+  const entry={...Detection.decorateEntry({gameId:'vulkan-lifecycle',gamePath:game,moduleId:'rgss'}),runtimeId:'crossover'},events=[];
+  const context={userDataDir,settings:{},runtimeSettings:{version:installed.version,graphicsBackend:'wined3d'}};
+  const Graphics=require('../src/modules/crossover/sources/wine-graphics');
+  t.mock.method(Graphics,'prepareWineVulkan',async()=>({}));
+  t.mock.method(require('../src/modules/crossover/runtime/graphics-loader'),'prepare',async()=>path.join(directory,'loader/bin/wineloader'));
+  t.mock.method(require('../src/modules/shared/runtime/wine-processes'),'runningState',async()=>({running:false}));
+  t.mock.method(Graphics,'prepareWineVulkanView',async(_selected,options)=>{
+    assert.ok(fs.existsSync(path.join(options.prefixPath,'system.reg')),'ordinary bottle setup precedes helper replacement');
+    return{env:{WINEDLLPATH:'/selected/module',WINEDLLOVERRIDES:'winevulkan=b'},native:{file:'/owned/selected.so',sha256:'a'.repeat(64)},applyPrefix:async()=>events.push('apply'),restore:async()=>events.push('restore')};
+  });
+  const run=async(_command,args)=>{const bottle=args[args.indexOf('--bottle')+1];fs.mkdirSync(bottle,{recursive:true});fs.writeFileSync(path.join(bottle,'cxbottle.conf'),'[Bottle]\n');fs.writeFileSync(path.join(bottle,'system.reg'),'registry');return{stdout:'',stderr:''};};
+  const launch=await Launch.prepareLaunch(entry,context,{run});assert.match(launch.environment.WINEDLLPATH,/^\/selected\/module/);assert.match(launch.environment.WINEDLLOVERRIDES,/winevulkan=b/);
+  assert.equal(typeof launch.graphics.restore,'function');await launch.graphics.restore();assert.deepEqual(events,['apply','restore']);
+  const original=new Error('later Steam preparation rejected');t.mock.method(Steps,'steamBridge',async()=>{throw original;});
+  await assert.rejects(Launch.prepareLaunch(entry,context,{run}),error=>error===original);assert.deepEqual(events,['apply','restore','apply','restore']);
+});
+
 test("CrossOver loader failure preserves ordinary vendor launch, Steam and final game environment", async t => {
   const directory = fixture(t), userDataDir = path.join(directory, 'data'), game = path.join(directory, 'game');
   const original = pe(path.join(game, 'Game.exe'), {machine: 0x8664});

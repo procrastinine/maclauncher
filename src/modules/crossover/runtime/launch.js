@@ -230,6 +230,10 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
       loaderFailure = error;return null;
     }
   };
+  const Graphics=require("../sources/wine-graphics"),vulkanSelection=await Graphics.prepareWineVulkan(entry,context,selected.install,{translatorPlan});
+  let vulkanView;
+  const graphics=vulkanSelection?{async restore(){await vulkanView?.restore();},get vulkanNative(){return vulkanView?.native;}}:null;
+  try {
   const requestedCameraBridge = Boolean(cameraBridge);
   // Verify the camera bridge's native closure before replacing a private game
   // DLL. A loader failure must leave the ordinary vendor game path available.
@@ -280,7 +284,7 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     if ((overrides.CX_GRAPHICS_BACKEND || environment.CX_GRAPHICS_BACKEND) !== 'wined3d') { delete overrides.CX_LIBVULKAN; delete environment.CX_LIBVULKAN; }
     if (translatorView.dllOverrides.length) { dll = [dll, ...translatorView.dllOverrides].filter(Boolean).join(';'); overrides.WINEDLLOVERRIDES = dll; environment.WINEDLLOVERRIDES = dll; }
   }
-  if (overrides.DYLD_INSERT_LIBRARIES || cameraBridge || winemac || translatorView && Object.keys(translatorView.links).length) {
+  if (overrides.DYLD_INSERT_LIBRARIES || cameraBridge || winemac || vulkanSelection || translatorView && Object.keys(translatorView.links).length) {
     if (!loader && !loaderFailure) loader = await prepareLoader();
     if (loader) {
       Object.assign(overrides, GraphicsLoader.environment(loader, overrides, { cameraBridge, translatorView, installation: selected.install }));
@@ -303,6 +307,14 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     }
     context.graphicsBridgeFailure = {provider: "crossover-loader", reason: String(loaderFailure.message || loaderFailure)};
     warnGraphics(context.logger, "CrossOver graphics loader could not be prepared. Using the vendor renderer without shared graphics processing.", context.graphicsBridgeFailure.reason);
+  }
+  if(vulkanSelection){
+    loader ||= await prepareLoader();
+    if(!loader)throw Error("The selected WineVulkan helper needs the prepared Wine loader view.");
+    vulkanView=await Graphics.prepareWineVulkanView(vulkanSelection,{prefixPath:bottlePath,dllRoot:path.resolve(path.dirname(loader),"../lib/wine"),layout:translatorPlan.layout,signal:context.signal});
+    context.signal?.throwIfAborted();await vulkanView.applyPrefix();
+    for(const target of [environment,overrides])target.WINEDLLPATH=[vulkanView.env.WINEDLLPATH,target.WINEDLLPATH].filter(Boolean).join(path.delimiter);
+    dll=[dll,vulkanView.env.WINEDLLOVERRIDES].filter(Boolean).join(';');environment.WINEDLLOVERRIDES=dll;overrides.WINEDLLOVERRIDES=dll;
   }
   const steam = await Steps.steamBridge(entry, context, { install: selected.install, prefixPath: bottlePath,
     architecture: selectedExecutable.executableArchitecture, environment, executablePath });
@@ -347,7 +359,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   timing('ready');
   const processPlan=require('../../../core/runtime-process-plan').measuredProcessPlan({build:'crossover:'+selected.version,invocationPath:executablePath,sourceExecutablePath:selected.install.graphicsExecutablePath||selected.install.loaderPath,architecture:translatorPlan.layout?.architecture,guestArch:require('../../../core/binary-arch').peArchitecture(require('../../shared/runtime/binary-compatibility').requiredMachine(selectedExecutable.executableArchitecture)),host:host||require('../../shared/runtime/host-capabilities').getHostCapabilities()});
   context.processPlan=processPlan;
-  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, windowsExecutablePath, windowsWorkingDirectory, environment, args, translatorPlan, existingEnvironment, processPlan };
+  return { ...selected, directory, gameRoot, workingDirectory, bottlePath, executablePath, windowsExecutablePath, windowsWorkingDirectory, environment, args, translatorPlan, existingEnvironment, processPlan,...(graphics?{graphics}:{}) };
+  }catch(error){try{await graphics?.restore();}catch(failure){warnGraphics(context.logger,"[runtime] Wine graphics restoration failed",failure.message);}throw error;}
 }
 
 module.exports = { runtimeDirectory, buildEnvironment, wineEnvironmentString, ensureBottle, prepareLaunch, runSupervised, SUPERVISOR };

@@ -435,12 +435,25 @@ async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, la
 }
 // The graphics component declares complete WineVulkan client/native pairs.
 // CPU selection comes from their headers and the selected Wine's native loader.
-function wineVulkanSelection(root, install, { layout = wineLayout(install), signal } = {}) {
-  const relative = "temporal/vulkan/selection.json", descriptor = path.join(root, relative);
+function wineVulkanProfile(profile,layout){
+  const Native=require("../../shared/runtime/bundled-native"),Identity=require("../../shared/runtime/verified-identity"),files=new Map();
+  if(!Array.isArray(profile?.files)||!profile.files.length)return null;
+  for(const row of profile.files){
+    if(typeof row?.relative!=="string"||!/^[a-f0-9]{64}$/.test(row.sha256||""))return null;
+    Native.relativeFile(row.relative);const file=path.join(layout.root,row.relative);
+    try{
+      if(!Closure.inside(fs.realpathSync(layout.root),fs.realpathSync(file))||Identity.fileDigest(file).sha256!==row.sha256)return null;
+      files.set(fs.realpathSync(file),row.sha256);
+    }catch(error){if(!["ENOENT","ENOTDIR"].includes(error.code))throw error;return null;}
+  }
+  return files;
+}
+function wineVulkanSelection(root, install, { layout = wineLayout(install), signal, module: supplied } = {}) {
+  const relative = supplied ? "manifest.json" : "temporal/vulkan/selection.json", descriptor = path.join(root, relative);
   if (!fs.existsSync(descriptor)) return null;
   const Native = require("../../shared/runtime/bundled-native");
   const Identity = require("../../shared/runtime/verified-identity");
-  const manifest = require("../../shared/reshade/publication").forRoot(root);
+  const manifest = supplied?.manifest || require("../../shared/reshade/publication").forRoot(root);
   const read = (name, expected, maximum) => {
     Native.relativeFile(name);
     const file = path.join(root, name), fact = manifest.files.find(row => row.path === name);
@@ -450,7 +463,14 @@ function wineVulkanSelection(root, install, { layout = wineLayout(install), sign
     if (bytes.sha256 !== fact.sha256 || bytes.size !== fact.size) fail("The WineVulkan graphics input changed.");
     return { file, sha256: bytes.sha256, bytes: bytes.bytes };
   };
-  const declaration = read(relative, null, 64 * 1024), value = JSON.parse(declaration.bytes.toString("utf8"));
+  let declaration, value;
+  if (supplied) {
+    const stored = Native.readRegular(descriptor, Native.LIMITS.manifestBytes);
+    if (JSON.stringify(JSON.parse(stored.bytes)) !== JSON.stringify(supplied.manifest)) fail("The selected WineVulkan module changed during preparation.");
+    declaration = {file:descriptor,sha256:stored.sha256};
+    const entry = item => ({file:path.relative(root,item.file).split(path.sep).join("/"),sha256:item.sha256});
+    value = {schema:1,pairs:supplied.pairs.map(pair=>({...pair,client:entry(pair.client),native:entry(pair.native)}))};
+  } else { declaration = read(relative, null, 64 * 1024);value = JSON.parse(declaration.bytes.toString("utf8")); }
   if (value?.schema !== 1 || !Array.isArray(value.pairs) || value.pairs.length > 8)
     fail("The WineVulkan graphics declaration is invalid.");
   const machine = require("../../shared/runtime/binary-compatibility").requiredMachine(layout.primaryWindows?.replace(/-windows$/, ""));
@@ -466,19 +486,9 @@ function wineVulkanSelection(root, install, { layout = wineLayout(install), sign
     const image = images.slices.find(row => row.architecture === layout.architecture && row.platform === 1);
     if (!pe?.isDll || pe.form !== "builtin") fail("The WineVulkan client is not a Wine builtin DLL.");
     if (!machine || pe.machine !== machine || !image) continue;
-    const profile = new Map();
-    if (!Array.isArray(pair.runtimeProfile?.files) || !pair.runtimeProfile.files.length) continue;
+    const profile = wineVulkanProfile(pair.runtimeProfile,layout);
+    if(!profile)continue;
     let compatible = true;
-    for (const row of pair.runtimeProfile.files) {
-      if (typeof row?.relative !== "string" || !/^[a-f0-9]{64}$/.test(row.sha256 || "")) { compatible = false;break; }
-      Native.relativeFile(row.relative);
-      const file = path.join(layout.root, row.relative);
-      try {
-        if (!Closure.inside(fs.realpathSync(layout.root), fs.realpathSync(file)) || Identity.fileDigest(file).sha256 !== row.sha256) { compatible = false;break; }
-      } catch (error) { if (!["ENOENT", "ENOTDIR"].includes(error.code)) throw error;compatible = false;break; }
-      profile.set(fs.realpathSync(file), row.sha256);
-    }
-    if (!compatible) continue;
     const dependencies = [];
     for (const dependency of image.dependencies) {
       if (/^\/(?:usr\/lib|System\/Library)\//.test(dependency.path)) continue;
@@ -495,12 +505,83 @@ function wineVulkanSelection(root, install, { layout = wineLayout(install), sign
     }
     const original = path.join(layout.primaryWindowsRoot, "winevulkan.dll");
     if (!compatible || !fs.existsSync(original) || profile.get(fs.realpathSync(original)) !== Identity.fileDigest(original).sha256) continue;
+    try { require("../temporal/vulkan/selection").inspectClientName({file:client.file,sha256:client.sha256}); }
+    catch(error){if(error.message==="WineVulkan client needs a distinct builtin export name.")continue;throw error;}
     matches.push({ client: { file: client.file, sha256: client.sha256, original: { file: original, sha256: Identity.fileDigest(original).sha256 } },
       native: { file: native.file, sha256: native.sha256, dependencies },
       inputs: [declaration, client, native].map(({ file, sha256 }) => ({ path: file, sha256 })) });
   }
   if (matches.length > 1) fail("The WineVulkan graphics package has more than one matching pair.");
   return matches[0] || null;
+}
+function wineVulkanRuntimeSelection(entry, context, install, {translatorPlan=context.translatorPlan, root, manager=require("../temporal/vulkan/manager")}={}) {
+  if (!translatorPlan?.components?.["vulkan-driver"]?.used) return {selection:null};
+  const layout=translatorPlan.layout||wineLayout(install), Architecture=require("../../shared/runtime/architecture");
+  if(!Architecture.targetArchitecture(layout.architecture))return {selection:null};
+  const selected=Architecture.withArchitecture(Architecture.normalizeArchitecture(layout.architecture),()=>manager.resolveSelection({...entry,runtimeId:manager.id},context.settings,context.userDataDir,{verification:"status"}));
+  if(selected.ready&&selected.install){
+    const module=manager.inspectPayload(selected.install.modulePayloadRoot||selected.install.payloadRoot||selected.install.executablePath);
+    const selection=wineVulkanSelection(module.root,install,{layout,signal:context.signal,module});
+    if(selection)return {selection,manager,selected,managed:true};
+  }
+  root ||= require("../../shared/reshade").runtimeRoot(context.app);
+  return {selection:wineVulkanSelection(root,install,{layout,signal:context.signal}),manager,selected};
+}
+async function prepareWineVulkan(entry, context, install, options) {
+  const resolved=wineVulkanRuntimeSelection(entry,context,install,options);
+  if(resolved.selection&&resolved.managed){
+    await context.useRuntime?.({managerId:resolved.manager.id,version:resolved.selected.version,
+      sourcePath:resolved.selected.install.installDir||resolved.selected.install.modulePayloadRoot||resolved.selected.install.executablePath});
+  }
+  return resolved.selection;
+}
+async function prepareWineVulkanView(selection,{prefixPath,dllRoot,layout,signal}){
+  const directory=path.join(dllRoot,"maclauncher-vulkan",crypto.createHash("sha256").update(prefixPath).digest("hex").slice(0,20));
+  Writable.assertOwnDirectory(dllRoot,directory);
+  const dependencies=selection.native.dependencies.map(dependency=>{
+    const file=path.join(dllRoot,layout.unixName,dependency.name);
+    if(!fs.existsSync(file))return dependency;
+    if(require("../../shared/runtime/verified-identity").fileDigest(file).sha256!==dependency.sha256)fail("The prepared WineVulkan dependency differs from the selected Wine.");
+    return {...dependency,file:fs.realpathSync(file)};
+  });
+  return require("../temporal/vulkan/selection").prepareSelection({...selection,prefixPath,dllRoot:directory,windows:layout.primaryWindows,unixName:layout.unixName,
+    native:{...selection.native,dependencies},signal});
+}
+async function wineVulkanRequirements(entry,context,{install,translatorPlan=context.translatorPlan,root,manager=require("../temporal/vulkan/manager")}={}){
+  if(!translatorPlan?.components?.["vulkan-driver"]?.used)return [];
+  if(!install){
+    const source=require(".").get(context.runtimeId||entry.runtimeId||"crossover");
+    install=context.wineEnvironment?.install||source.manager().resolveSelection(entry,context.settings,context.userDataDir,context.runtimeSettings).install;
+  }
+  if(!install)return [];
+  const resolved=wineVulkanRuntimeSelection(entry,context,install,{translatorPlan,root,manager});
+  if(resolved.selection){
+    if(resolved.managed)context.recordRuntimeUse?.({managerId:manager.id,version:resolved.selected.version,sourcePath:resolved.selected.install.installDir||resolved.selected.install.modulePayloadRoot||resolved.selected.install.executablePath});
+    return [];
+  }
+  // Only an explicitly requested scene feature asks for an absent module.
+  // Unprofiled or incompatible Wine versions keep their publisher renderer.
+  if(context.runtimeSettings?.dlss!==true&&!DLSS.needsSceneInputs(entry.effects))return [];
+  const layout=translatorPlan.layout||wineLayout(install),Architecture=require("../../shared/runtime/architecture");
+  if(!Architecture.targetArchitecture(layout.architecture)||!layout.primaryWindowsRoot||!layout.unixRoot)return [];
+  const compatible=pin=>{
+    const binding=pin.runtimeProfile||pin.capabilities?.runtimeProfile||pin.projectPackage?.capabilities?.runtimeProfile;
+    const files=wineVulkanProfile(binding,layout),original=path.join(layout.primaryWindowsRoot,"winevulkan.dll"),native=path.join(layout.unixRoot,"winevulkan.so");
+    if(!files||!fs.existsSync(original)||!fs.existsSync(native)||!files.has(fs.realpathSync(original))||!files.has(fs.realpathSync(native)))return false;
+    const image=require("../../shared/runtime/macho-load-commands").readMachOLoadCommands(native,{signal:context.signal}).slices.find(row=>row.architecture===layout.architecture);
+    return Boolean(image&&image.dependencies.every(row=>{
+      if(/^\/(?:usr\/lib|System\/Library)\//.test(row.path))return true;
+      if(!/^@(?:rpath|loader_path)\/([^/]+)$/.test(row.path))return false;
+      const file=path.join(layout.unixRoot,path.basename(row.path));return fs.existsSync(file)&&files.has(fs.realpathSync(file));
+    }));
+  };
+  const catalog=Architecture.withArchitecture(Architecture.normalizeArchitecture(layout.architecture),()=>manager.core.catalog);
+  if(!catalog.some(compatible))return [];
+  const selected=Architecture.withArchitecture(Architecture.normalizeArchitecture(layout.architecture),()=>manager.resolveSelection({...entry,runtimeId:manager.id},context.settings,context.userDataDir,{verification:"status",compatible}));
+  const pin=catalog.find(pin=>pin.version===selected.version);
+  if(selected.ready||!pin||!compatible(pin))return [];
+  return [{managerId:manager.id,version:selected.version,requiresDownload:true,companion:true,installOptions:{architecture:Architecture.normalizeArchitecture(layout.architecture)},
+    label:manager.label,...(pin.asset?.bytes?{bytes:pin.asset.bytes}:{}),detail:"Provides scene frames through the selected Wine's matching Vulkan interface."}];
 }
 // `source` is the Wine source descriptor (sources/<id>.js). Without a
 // translator plan, the Sikarugir Template's own renderer selection applies.
@@ -639,8 +720,7 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
       if (restored) fail("The WineVulkan selection has already been restored.");
       if (writesBuiltinPrefix) await registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, layout);
       if (!prepared) {
-        prepared = await require("../temporal/vulkan/selection").prepareSelection({ ...vulkanSelection,
-          prefixPath, dllRoot, windows: layout.primaryWindows, unixName: layout.unixName, signal });
+        prepared = await prepareWineVulkanView(vulkanSelection,{prefixPath,dllRoot,layout,signal});
         // Publish cleanup before the first prefix replacement, including aborts.
         if (restored) { await prepared.restore();fail("The WineVulkan selection was cancelled."); }
         env.WINEDLLPATH = [prepared.env.WINEDLLPATH, env.WINEDLLPATH].filter(Boolean).join(path.delimiter);
@@ -656,5 +736,5 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
   return result;
 }
 
-module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, publisherSigned, graphicsLayerAttachable, graphicsLayerRoute, runtimeLibraryRoute, prepareRuntimeLibraryView, gameLoader, keepBundleLoader, gameBundleInfo, prepareGraphicsView, wineVulkanSelection, capabilitiesFor,
+module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, VIEW_LAYOUT, publisherSigned, graphicsLayerAttachable, graphicsLayerRoute, runtimeLibraryRoute, prepareRuntimeLibraryView, gameLoader, keepBundleLoader, gameBundleInfo, prepareGraphicsView, wineVulkanSelection, wineVulkanRuntimeSelection, prepareWineVulkan, prepareWineVulkanView, wineVulkanRequirements, capabilitiesFor,
   __test: { capabilitiesFor, ownDirectory, prepareLoaderView, CORE_DLLS } };

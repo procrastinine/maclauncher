@@ -232,8 +232,14 @@ test("Wine preparation restores a selected builtin after a later preparation fai
 
 test("WineVulkan selection follows the selected Vulkan driver without HUD or DLSS demand", async t => {
   const directory=fixture(t), entry=game(directory), install=installation(directory), dependencies=adapters(install), originalResolve=dependencies.resolveTranslators;
+  fs.mkdirSync(path.join(install.wineRoot,"lib/wine/x86_64-unix"),{recursive:true});
+  fs.mkdirSync(path.join(install.wineRoot,"lib/wine/x86_64-windows"),{recursive:true});
+  fs.writeFileSync(path.join(install.wineRoot,"lib/wine/x86_64-unix/ntdll.so"),require('./fixtures/macho-image').image({cpu:require('./fixtures/macho-image').X64}));
   const selected={inputs:[]}, calls=[];
-  t.mock.method(require("../src/modules/crossover/sources/wine-graphics"),"wineVulkanSelection",(root,actual)=>{calls.push({root,actual});return selected;});
+  t.mock.method(require("../src/modules/crossover/sources/wine-graphics"),"prepareWineVulkan",async(_entry,_context,actual,options)=>{
+    if(!options.translatorPlan.components["vulkan-driver"]?.used)return null;
+    calls.push({root:options.root,actual});return selected;
+  });
   dependencies.graphicsRoot=path.join(directory,"included-graphics");
   dependencies.resolveTranslators=async(...args)=>{
     const plan=await originalResolve(...args);

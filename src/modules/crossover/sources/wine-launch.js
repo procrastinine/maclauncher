@@ -270,9 +270,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   let { view: cameraView, gameRoot, executablePath } = folder;cameraBridge = folder.cameraBridge;
   const GraphicsInputs = require("../graphics-inputs");
   context.graphicsInputs = GraphicsInputs.inputs(selected.install, GraphicsInputs.merge(cameraBridge?.inputs, vulkanCamera?.inputs, plans.sceneInputs), { fallback: "x86_64" });
-  const vulkanSelection = translatorPlan.components["vulkan-driver"]?.used
-    ? require("./wine-graphics").wineVulkanSelection(dependencies.graphicsRoot || require("../../shared/reshade").runtimeRoot(context.app), selected.install,
-      { layout: translatorPlan.layout, signal: context.signal }) : null;
+  const vulkanSelection = await require("./wine-graphics").prepareWineVulkan(entry,context,selected.install,
+    {translatorPlan,root:dependencies.graphicsRoot});
   const nativeInputs = [selected.install.executablePath, selected.install.serverPath,
     ...(translatorPlan.layout.unixRoot ? ["ntdll.so", "wine"].map(name => path.join(translatorPlan.layout.unixRoot, name)).filter(file => fs.existsSync(file)) : [])]
     .map(file => ({ path: file, sha256: require("../../shared/runtime/verified-identity").fileDigest(file).sha256 }));
