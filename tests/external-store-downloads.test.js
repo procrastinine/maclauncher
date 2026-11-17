@@ -75,7 +75,7 @@ test("Epic reuses credentials read-only and sends the selected historical manife
   const coordinator = require('../src/core/runtime-coordinator').createRuntimeCoordinator(), client = coordinator.client();
   t.after(() => client.close());
   const helperSettings = { runtimes: { legendary: { defaultVersion: '0.21.2' } } }, consent = async () => true;
-  const commands = [], original = { access_token: "epic-fixture-access", refresh_token: "epic-fixture-refresh", displayName: "sample" };
+  const commands = [], original = { access_token: "epic-example-access", refresh_token: "epic-fixture-refresh", displayName: "sample" };
   const { root, service } = fixture(t, "epic", { findSession: () => original,
     getHelperContext: () => ({ settings: helperSettings, confirmRuntimeInstall: consent, runtimeCoordinator: client }),
     ensureLegendary: async context => { assert.equal(context.settings, helperSettings); assert.equal(context.confirmRuntimeInstall, consent);
@@ -172,7 +172,7 @@ test("GOG default duplicates skip offline transfer and Galaxy setup while custom
 });
 test("Epic duplicate identity uses the actual manifest build ID and skips another install", async t => {
   let installs = 0, prompts = 0;
-  const { service } = fixture(t, "epic", { findSession: () => ({ access_token: "epic-fixture-access", refresh_token: "epic-fixture-refresh", displayName: "sample" }),
+  const { service } = fixture(t, "epic", { findSession: () => ({ access_token: "epic-example-access", refresh_token: "epic-fixture-refresh", displayName: "sample" }),
     confirmDuplicate: async () => { prompts++; return "use-existing"; }, ensureLegendary: async () => ({ pythonPath: "/fixture/python", packagesPath: "/fixture/packages" }),
     execute: async (_command, _args, options) => {
       const request = JSON.parse(options.input), args = request.args;

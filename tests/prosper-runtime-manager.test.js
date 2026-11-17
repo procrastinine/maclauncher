@@ -89,9 +89,11 @@ test('Prosper ordinary preparation uses the original dump without enumerating or
 });
 
 test('Prosper save locations follow upstream environment defaults and explicit overrides', () => {
-  assert.deepEqual(resolveSaveLocations({}, {}, {HOME: '/Users/example'}).directories.map(row => row.directory),
-    ['/Users/example/.local/share/prosper/savedata0', '/Users/example/.local/share/prosper/savedata-mem']);
-  assert.deepEqual(resolveSaveLocations({}, {}, {HOME: '/Users/example', XDG_DATA_HOME: '/data'}).directories.map(row => row.directory),
+  // Upstream's default data directory is $HOME/.local/share, under a synthetic HOME.
+  const home = path.join(path.sep, 'fixture-home'), xdgDefault = path.join(home, '.local', 'share', 'prosper');
+  assert.deepEqual(resolveSaveLocations({}, {}, {HOME: home}).directories.map(row => row.directory),
+    [path.join(xdgDefault, 'savedata0'), path.join(xdgDefault, 'savedata-mem')]);
+  assert.deepEqual(resolveSaveLocations({}, {}, {HOME: home, XDG_DATA_HOME: '/data'}).directories.map(row => row.directory),
     ['/data/prosper/savedata0', '/data/prosper/savedata-mem']);
   assert.deepEqual(resolveSaveLocations({}, {}, {PROSPER_SAVE0: '/save', PROSPER_SAVEDATA_DIR: '/memory'}).directories.map(row => row.directory), ['/save', '/memory']);
   assert.deepEqual(resolveSaveLocations({saveDirOverride: '/chosen'}, {}, {}).directories.map(row => row.directory), ['/chosen/savedata0', '/chosen/memory']);
