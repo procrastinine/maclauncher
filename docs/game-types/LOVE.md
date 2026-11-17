@@ -14,7 +14,7 @@ Library metadata reads literal `t.window.title` and `t.window.icon` values from 
 
 | Runtime | Delivery |
 | --- | --- |
-| LÖVE (default) | Official release or nightly build from **Runtimes → LÖVE** |
+| LÖVE (default) | Release, nightly or MacLauncher Builds package from **Runtimes → LÖVE** |
 | Game's macOS app | A LÖVE app bundle imported as is |
 | CrossOver, Sikarugir, WineCX | Windows runtimes for the game's Windows executable |
 
@@ -24,10 +24,15 @@ An imported LÖVE app bundle can switch to **Game's macOS app**, whereas package
 
 **Runtimes → LÖVE** lists releases and nightly builds:
 
-- Releases come from GitHub releases of `love2d/love` with 64-bit Mac players, from 0.7 onward. Each LÖVE line has its own section: **LÖVE 11**, and a section for each earlier line that is listed or installed, such as **LÖVE 0.10**. Releases install under `userData/runtimes/love/stable/<version>/`.
+- Releases come from GitHub releases of `love2d/love`. Each LÖVE line has its own section: **LÖVE 11**, and a section for each earlier line that is listed or installed, such as **LÖVE 0.10**. Releases install under `userData/runtimes/love/stable/<version>/`. Installation checks the actual executable architecture and required native dependencies.
+- MacLauncher Builds packages come from the `love` project catalog in `procrastinine/maclauncher-builds` and appear beside upstream releases in their matching LÖVE line.
 - **LÖVE 12 nightly** lists GitHub Actions artifacts from the `love2d/love` main-branch workflow, labeled by version and build hash, in a separate catalog. Nightlies install under `userData/runtimes/love/nightly/<buildKey>/`.
 
 Play uses a version chosen for the game, then the detected bundle version, then the channel's default version. A manual per-game version stays exact. For a recommendation or default, an exact local copy is preferred; otherwise Play uses the newest ready installed copy in the same API family, in which releases before 1.0 keep their minor line and LÖVE 11 and 12 remain separate families.
+
+On Apple silicon, Automatic can prefer an installed native package of the same engine version for an archive whose Lua source or bytecode supports its LuaJIT version. LuaJIT 2.0 bytecode retains the compatible Intel route. Saved game choices and defaults remain authoritative.
+
+Refresh reads the upstream catalogs; Install accepts a listed version, and installed versions can be removed or set as the default. A custom executable or app bundle is checked for a usable CPU and required native files. A ready installed runtime needs no download or consent. Automatic installation leaves the saved default unchanged and uses the shared runtime retention rules; explicit installations and choices remain until removed.
 
 In the inspector, **Channel** can keep a game on the LÖVE 11 line or on nightly builds. The detected version then applies only when it belongs to that line, and otherwise the line's default version does. When no channel is chosen, **Automatic** names the line of the version that Play uses, such as LÖVE 0.10 for a game made for 0.10.2. Choosing a LÖVE 11 release or a nightly build in the version menu also selects its channel, while a release from an earlier line leaves the channel on **Automatic**. Per-game choices are stored in `runtimeData.love.channel` and `runtimeData.love.version`.
 
