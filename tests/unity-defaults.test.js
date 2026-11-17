@@ -60,3 +60,22 @@ test('an exact Unity preference still verifies its complete player profile', t =
   assert.equal(changed.ready, false); assert.equal(changed.profile, null);
   assert.deepEqual(settings, before);
 });
+
+test('registered Unity defaults retain exact detection and explicit game compatibility', async t => {
+  const userDataDir = scratch(t), manager = createManager(), exact = '2020.1.17f1', other = '2020.1.18f1';
+  const file = installed(manager, userDataDir, exact); installed(manager, userDataDir, other);
+  const directory = path.resolve(file, '../../../../../');
+  const Custom = require('../src/modules/shared/runtime/custom-runtime'); Custom.instrumentManagers([manager]);
+  await manager.registerCustomRuntime({ userDataDir, runtimePath: directory, sectionId: 'default' });
+  const preference = manager.applySettingsUpdate('setDefault', { version: directory }, {});
+  const settings = { runtimes: { unity: preference } };
+  const selected = manager.resolveSelection({ moduleData: { detectedVersion: exact } }, settings, userDataDir);
+  assert.equal(selected.ready, true); assert.equal(selected.version, exact);
+  assert.equal(Launch.validateSelection({ detectedVersion: exact }, selected).profile.templatePath, selected.profile.templatePath);
+  const different = manager.resolveSelection({ moduleData: { detectedVersion: other } }, settings, userDataDir);
+  assert.equal(different.ready, true); assert.equal(different.version, other);
+  const missing = manager.resolveSelection({}, settings, userDataDir);
+  assert.equal(missing.ready, false); assert.match(missing.reason, /exact Unity player version/);
+  const explicit = manager.resolveSelection({ moduleData: { detectedVersion: other }, runtimeData: { unity: { version: directory } } }, settings, userDataDir);
+  assert.equal(explicit.ready, false); assert.match(explicit.reason, /selected player provides/);
+});

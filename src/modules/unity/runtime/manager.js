@@ -118,10 +118,16 @@ function createManager({ dependencies = {} } = {}) {
     const profile = readProfile({ ...install, version: record.version });
     if (!profile) throw new Error("Select a complete Unity Mono player component with its player profile.");
     return { ...install, profile };
-  }, selection(install, { entry }) {
+  }, selection(install, { entry, settings, userDataDir, options = {} }) {
     const detected = entry?.moduleData?.detectedVersion;
-    if (detected && detected !== install.runtimeVersion) throw new Error(`This game needs Unity ${detected}. The selected player provides ${install.runtimeVersion}.`);
-    return { profile: install.profile };
+    if (!VERSION.test(detected || "")) throw new Error("The game does not report an exact Unity player version.");
+    if (detected !== install.runtimeVersion) {
+      const explicit = [options.version, entry?.runtimeData?.[entry?.runtimeId || "unity"]?.version, entry?.runtimeData?.unity?.version]
+        .some(value => Custom.isPath(value));
+      if (explicit) throw new Error(`This game needs Unity ${detected}. The selected player provides ${install.runtimeVersion}.`);
+      return resolveSelection(entry, settings, userDataDir);
+    }
+    return { version: install.runtimeVersion, profile: install.profile };
   } });
   return manager;
 }
