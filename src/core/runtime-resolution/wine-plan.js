@@ -41,9 +41,16 @@ const KOSMICKRISP_DECLINED = 'kosmickrisp-pairing';
 // The downloads of the current plan's paired Vulkan driver (resolve): the
 // MacLauncher KosmicKrisp build, and MacLauncher's MoltenVK scene build where
 // KosmicKrisp cannot run or, for DXVK alone, when its download is declined.
-async function driverRequirements(context, { host = {} } = {}) {
+async function driverRequirements(context, { host = {}, managers = [] } = {}) {
+  const row = context.translatorPlan?.components?.['vulkan-driver'];
+  const selected = row?.used || (!row?.fallback && row?.selected);
+  const manager = managers.find(item => item.id === selected?.managerId);
+  const architecture = Architecture.targetArchitecture(selected?.architecture) || Architecture.targetArchitecture(context.translatorPlan?.layout?.architecture);
+  const loaders = manager?.loaderManager && architecture ? require('../../modules/shared/vulkan/loader-manager').requirements(context,
+    { manager: manager.loaderManager, architecture }) : [];
+  const together = requirements => [...loaders, ...requirements];
   const pending = context.translatorPlan?.vulkanPending;
-  if (!pending) return [];
+  if (!pending) return loaders;
   const Managed = require('../../modules/shared/vulkan/managed');
   let carrier = null;
   if (pending.carrier) {
@@ -54,11 +61,11 @@ async function driverRequirements(context, { host = {} } = {}) {
   }
   const capabilities = pending.kosmicKrisp && pending.architecture && await kosmicKrispHost(host, context);
   const offer = capabilities && require('../../modules/shared/vulkan').kosmicKrispOffer(context, { architecture: pending.architecture, managers: [], hostCapabilities: capabilities });
-  if (!offer) return carrier ? [carrier] : [];
+  if (!offer) return together(carrier ? [carrier] : []);
   // vkd3d-proton does not start on MoltenVK, so its pairing needs KosmicKrisp.
   if (pending.vkd3d) {
     const { optional, cancelLabel, ...required } = offer;
-    return [{ ...required, detail: 'MacLauncher\'s vkd3d-proton runs on KosmicKrisp, which also forwards DLSS frames.' }];
+    return together([{ ...required, detail: 'MacLauncher\'s vkd3d-proton runs on KosmicKrisp, which also forwards DLSS frames.' }]);
   }
   // With another download of this Play, the offer is a line of that dialog,
   // and clearing its checkbox skips it.
@@ -67,11 +74,11 @@ async function driverRequirements(context, { host = {} } = {}) {
   // own automatic Direct3D choice and Vulkan driver for this Play.
   if (pending.moltenVK === false) {
     const automatic = Plan.sourceLabels(context.runtimeId || context.translatorPlan?.runtime).automatic;
-    return [{ ...offer, ...companion, cancelLabel: 'Use ' + automatic.replace(/\b(automatic|choice)\b/g, word => word[0].toUpperCase() + word.slice(1)),
-      declines: [KOSMICKRISP_DECLINED], detail: `MacLauncher's DXVK runs on KosmicKrisp, which also forwards DLSS frames. Skipping uses ${automatic} instead of MacLauncher's DXVK.` }];
+    return together([{ ...offer, ...companion, cancelLabel: 'Use ' + automatic.replace(/\b(automatic|choice)\b/g, word => word[0].toUpperCase() + word.slice(1)),
+      declines: [KOSMICKRISP_DECLINED], detail: `MacLauncher's DXVK runs on KosmicKrisp, which also forwards DLSS frames. Skipping uses ${automatic} instead of MacLauncher's DXVK.` }]);
   }
-  return [{ ...offer, ...companion, detail: 'MacLauncher\'s DXVK runs on KosmicKrisp, which also forwards DLSS frames. Skipping uses MacLauncher\'s MoltenVK build.',
-    ...(carrier ? { fallback: carrier } : {}) }];
+  return together([{ ...offer, ...companion, detail: 'MacLauncher\'s DXVK runs on KosmicKrisp, which also forwards DLSS frames. Skipping uses MacLauncher\'s MoltenVK build.',
+    ...(carrier ? { fallback: carrier } : {}) }]);
 }
 async function resolve(install, runtime, context, { executableArchitecture, host = {}, ...dependencies } = {}) {
   const input = await optionsInventory(install, runtime, context, dependencies);

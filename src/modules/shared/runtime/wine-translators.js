@@ -344,7 +344,7 @@ function environmentContext(context, install) {
 let resolverInstance;
 const wineResolver=()=>resolverInstance ||= require('../../../core/runtime-resolution/wine-plan').createWineResolver({optionsInventory,sourceFor});
 const resolve=(...args)=>wineResolver().resolve(...args);
-const driverRequirements=(...args)=>wineResolver().driverRequirements(...args);
+const driverRequirements=(context, options = {})=>wineResolver().driverRequirements(context, { ...options, managers: options.managers || runtimeManagers() });
 function engines(plan) {
   const result = Object.fromEntries(Object.entries(plan.components).map(([component, row]) => [component, row.used?.engine || null]));
   const used = [...new Set(Roles.usedRenderers(plan).map(item => item.settingsEngine || item.engine))];
