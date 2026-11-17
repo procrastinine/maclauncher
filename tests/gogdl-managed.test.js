@@ -13,15 +13,16 @@ function fixture(t) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const bytes = new Map(), rows = [], releases = []; let downloads = 0, consent = 0;
   const start = Harness.network.requests.length; t.after(() => { Harness.network.routes = null; });
-  const add = (version, cpu = ARM64) => {
+  const add = (version, cpu = ARM64, tag = 'v' + version) => {
     const content = image({ cpu, fileType: 2 }), name = `gogdl_macos_${cpu === X64 ? 'x86_64' : 'arm64'}`;
-    const url = `https://github.com/Heroic-Games-Launcher/heroic-gogdl/releases/download/v${version}/${name}`;
-    const release = Harness.githubRelease('Heroic-Games-Launcher/heroic-gogdl', 'v' + version, [name]);
+    const url = `https://github.com/Heroic-Games-Launcher/heroic-gogdl/releases/download/${tag}/${name}`;
+    const release = Harness.githubRelease('Heroic-Games-Launcher/heroic-gogdl', tag, [name]);
     release.assets[0].size = content.length; release.assets[0].digest = 'sha256:' + digest(content);
     const present = releases.find(row => row.tag_name === release.tag_name); if (present) present.assets.push(...release.assets); else releases.push(release);
     Harness.network.routes = Harness.githubRoutes('Heroic-Games-Launcher/heroic-gogdl', releases);
     bytes.set(url, content); rows.push({ version, revision: version, architecture: cpu === X64 ? 'x64' : 'arm64',
       files: [{ name, url, bytes: content.length, digest: { algorithm: 'sha256', value: digest(content) } }] });
+    return release;
   };
   const manager = createManager({ hostArch: 'arm64', systemVersionSync: () => '26.0', downloadToFile: async (url, file) => {
     downloads++; fs.writeFileSync(file, bytes.get(url)); return { sha256: digest(bytes.get(url)) };
@@ -110,4 +111,23 @@ test('shared origins retire only superseded automatic GOG copies and preserve ex
   await f.manager.installRuntime({ ...f.context, version: '3.0.0', automatic: true, architecture: 'arm64' });
   assert.deepEqual((await prune({ runtimes: { gogdl: saved } })).removed, []);
   assert.ok(f.manager.getState(f.context).installed.some(row => row.version === '2.0.0'), 'already-installed default survives');
+});
+
+test('GOG Refresh preserves safe publisher preview and nonnumeric tags with real source identities', async t => {
+  const f = fixture(t), preview = f.add('2.0.0-rc.1'); preview.prerelease = true;
+  f.add('nightly20311201', ARM64, 'nightly20311201'); f.add('1.5.0');
+  for (const unsafe of ['bad/tag', '../escape', 'bad\ncontrol', 'bad tag']) f.add('unsafe', ARM64, unsafe);
+  const rows = await Core.source.discover();
+  assert.ok(rows.some(row => row.version === '2.0.0-rc.1'));
+  assert.ok(rows.some(row => row.version === 'nightly20311201'));
+  assert.ok(rows.every(row => !/bad|escape/.test(row.version)));
+  const candidate = rows.find(row => row.version === '2.0.0-rc.1');
+  const commit = tag => Harness.network.routes['https://api.github.com/repos/Heroic-Games-Launcher/heroic-gogdl/tags'].find(row => row.name === tag).commit.sha;
+  assert.match(candidate.files[0].url, /v2\.0\.0-rc\.1/); assert.equal(candidate.revision, commit('v2.0.0-rc.1'));
+  await f.manager.refreshCatalog(f.context);
+  const state = f.manager.getState(f.context);
+  assert.ok(state.catalog.versions.includes('2.0.0-rc.1')); assert.ok(state.catalog.versions.includes('nightly20311201'));
+  const installed = await f.manager.installRuntime({ ...f.context, version: 'nightly20311201' });
+  assert.deepEqual(installed.architectures, ['arm64']);
+  assert.equal(installed.upstreamRevision, commit('nightly20311201'));
 });

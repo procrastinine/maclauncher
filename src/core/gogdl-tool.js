@@ -19,13 +19,13 @@ function macExecutable(assets, arch) {
 // One row per CPU with a Mac executable in the release.
 function recognize(release) {
   const version = String(release.tag_name || '').replace(/^v(?=\d)/, '');
-  if (!/^\d+(?:\.\d+)+$/.test(version)) return [];
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(version)) return [];
   return ['arm64', 'x64'].flatMap(arch => {
     const asset = macExecutable(release.assets, arch);
     return asset ? [{ version, architecture: arch, assets: [asset] }] : [];
   });
 }
-const source = Upstream.github({ repository: `${GOGDL.owner}/${GOGDL.repo}`, allArchitectures: true, recognize });
+const source = Upstream.github({ repository: `${GOGDL.owner}/${GOGDL.repo}`, prerelease: true, allArchitectures: true, recognize });
 
 const newer = (a, b) => b.version.localeCompare(a.version, undefined, { numeric: true });
 async function valid(file, record) {
