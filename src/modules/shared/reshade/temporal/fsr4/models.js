@@ -5,12 +5,16 @@ const {withRuntimeMutation}=require('../../../../../core/coordinated-runtime-man
 const {downloadApproved}=require('../../../runtime/tool-install'),Upstream=require('../../../runtime/upstream');
 const {runDownloadTask}=require('../../../runtime/download-manager');
 const descriptor={managerId:spec.managerId,version:spec.version,label:spec.label,sourceUrl:spec.sourceUrl,downloadBytes:spec.archiveBytes};
-function directory(userDataDir){if(!path.isAbsolute(userDataDir||''))throw Error('Launcher data directory is unavailable.');return path.join(userDataDir,'runtimes',spec.managerId,spec.version);}
-function read(userDataDir){try{const root=directory(userDataDir);Writable.assertOwnDirectory(userDataDir,root,{create:false});const record=JSON.parse(fs.readFileSync(path.join(root,'runtime.json'),'utf8'));
- if(record.version!==spec.version||record.archiveSha256!==spec.archiveSha256||record.preparation!==1||!Array.isArray(record.profiles)||!record.profiles.includes('int8-lite')||record.profiles.some(p=>!['int8-lite','int8-lite-lossy'].includes(p)))return null;
+const Releases=require('./model-catalog');
+function directory(userDataDir,version=spec.version){if(!path.isAbsolute(userDataDir||''))throw Error('Launcher data directory is unavailable.');if(!Releases.validVersion(version))throw Error('Choose a valid FSR model version.');return path.join(userDataDir,'runtimes',spec.managerId,version);}
+function readDirectory(root,version){try{for(const directory of [root,path.join(root,'build'),path.join(root,'build/fsr412_model')]){const stat=fs.lstatSync(directory);if(!stat.isDirectory()||stat.isSymbolicLink())return null;}const receipt=path.join(root,'runtime.json'),stat=fs.lstatSync(receipt);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>1024*1024)return null;const record=JSON.parse(fs.readFileSync(receipt,'utf8'));
+ if(!Releases.validVersion(record.version)||version&&record.version!==version||!record.sourceSpec&&record.archiveSha256!==spec.archiveSha256||record.sourceSpec&&(!Releases.validEntry(record.sourceSpec)||record.sourceSpec.version!==record.version||record.sourceSpec.archiveSha256!==record.archiveSha256)||record.preparation!==1||!Array.isArray(record.profiles)||!record.profiles.includes('int8-lite')||record.profiles.some(p=>!['int8-lite','int8-lite-lossy'].includes(p)))return null;
  for(const name of ['initializers-lite.bin','initializers-lite-ultraperformance.bin']){const stat=fs.lstatSync(path.join(root,'build/fsr412_model',name));if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==27392)return null;}
- return {...descriptor,directory:root,build:path.join(root,'build'),profiles:record.profiles,ready:true};
+ const architectures=new Set();for(const helper of record.helpers||[]){if(!['bin/dxc','lib/libdxcompiler.dylib'].includes(helper.path))return null;const file=path.join(root,'tools',helper.path),stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink())return null;const data=fs.readFileSync(file);if(data.length!==helper.bytes||sha(data)!==helper.sha256)return null;for(const cpu of require('../../../runtime/local-native').readMachOArchitectures(file))architectures.add(cpu);}
+ return {...descriptor,version:record.version,directory:root,installDir:root,runtimePath:root,sourcePath:root,build:path.join(root,'build'),profiles:record.profiles,helperArchitectures:[...architectures],ready:true};
 }catch{return null;}}
+function read(userDataDir,version=spec.version){try{const root=directory(userDataDir,version);Writable.assertOwnDirectory(userDataDir,root,{create:false});return readDirectory(root,version);}catch{return null;}}
+function listInstalled(userDataDir){try{return fs.readdirSync(path.dirname(directory(userDataDir))).filter(Releases.validVersion).map(version=>read(userDataDir,version)).filter(Boolean).sort((a,b)=>b.version.localeCompare(a.version,undefined,{numeric:true}));}catch{return [];}}
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 // Read the actual imported tree. These are operational limits and path checks,
 // independent of a release's file count, file hashes or enclosing directory name.
@@ -46,9 +50,10 @@ async function findModel(directory,depth=0){
 }
 async function execute(executable,args,signal){return new Promise((resolve,reject)=>{const child=spawn(executable,args,{...(signal?{signal}:{}),env:{...Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('PYTHON'))),PATH:'/usr/bin:/bin:/usr/sbin:/sbin',PYTHONDONTWRITEBYTECODE:'1',PYTHONNOUSERSITE:'1'},stdio:['ignore','pipe','pipe']});let error='';child.stdout.resume();child.stderr.on('data',b=>{error=(error+b).slice(-8192)});child.on('error',reject);child.on('close',code=>code===0?resolve():reject(Error('FSR 4.1.2 preparation failed: '+error)));});}
 async function prepareData(context,input){
+ const source=context.sourceSpec||spec;
  const installed=require('./index').inspect(context.root);if(!installed||!installed.profiles.includes('int8-lite'))throw Error('Install the FSR 4 v3.2 provider first.');
  const files=await verify(input);
- const root=directory(context.userDataDir);Writable.assertOwnDirectory(context.userDataDir,root);
+ const root=directory(context.userDataDir,source.version);Writable.assertOwnDirectory(context.userDataDir,root);
  // The runtime stays in this final directory: prepared provenance paths remain
  // valid after publication. A receipt is written only once all variants exist.
  // Keep a previously usable receipt while preparing additional profiles.
@@ -83,12 +88,12 @@ async function prepareData(context,input){
    if(!profiles.includes('int8-lite-lossy'))profiles.push('int8-lite-lossy');
  }
  await execute(python,['-I','-B',path.join(root,'tools/prepare-model.py'),root,installed.directory,...profiles],context.signal);
- Writable.atomicWrite(path.join(root,'runtime.json'),JSON.stringify({version:spec.version,archiveSha256:spec.archiveSha256,preparation:1,profiles,files,helpers}),{root:context.userDataDir});return read(context.userDataDir);
+ Writable.atomicWrite(path.join(root,'runtime.json'),JSON.stringify({version:source.version,archiveSha256:source.archiveSha256,sourceSpec:source,preparation:1,profiles,files,helpers}),{root:context.userDataDir});return read(context.userDataDir,source.version);
 }
-async function importRuntime(context={}){const input=fs.realpathSync(context.runtimePath),root=directory(context.userDataDir);if(input===root||input.startsWith(root+path.sep))throw Error('Choose model data outside its managed storage.');
+async function importRuntime(context={}){const source=context.sourceSpec||spec;if(!Releases.validEntry(source))throw Error('Choose an available FSR model source.');const input=fs.realpathSync(context.runtimePath),root=directory(context.userDataDir,source.version);if(input===root||input.startsWith(root+path.sep))throw Error('Choose model data outside its managed storage.');
  return withRuntimeMutation({...descriptor,sourcePath:input},async()=>{
   if(fs.statSync(input).isDirectory()){const model=await findModel(input);if(model)return prepareData(context,model);throw Error('Choose the upstream model data directory or release zip.');}
-  if(sha(await fs.promises.readFile(input))!==spec.archiveSha256)throw Error('Choose the original FSR 4 v3.2 release zip.');
+  if(sha(await fs.promises.readFile(input))!==source.archiveSha256)throw Error('The FSR model archive differs from the selected release.');
   const scratch=path.join(root,'.import-'+crypto.randomUUID());Writable.assertOwnDirectory(context.userDataDir,scratch);
   try{await require('../../../runtime/safe-archive').extractArchive(input,scratch,context.signal);const model=await findModel(scratch);if(!model)throw Error('The upstream archive has no usable Lite model data.');return await prepareData({...context,verifiedArchive:true},model);}
   finally{await fs.promises.rm(scratch,{recursive:true,force:true});}
@@ -99,20 +104,22 @@ async function downloadArchive(source,file,signal,onProgress){
  const stat=await fs.promises.stat(file);if(sha(await fs.promises.readFile(file))!==source.sha256)throw Error('The FSR model download differs from its pinned release.');
 }
 async function install(context={}){
- const current=read(context.userDataDir),needsLossy=context.fsr4Profile==='int8-lite-lossy';if(current&&(!needsLossy||current.profiles.includes('int8-lite-lossy')))return current;
- if(!await downloadApproved(context,{...descriptor,downloadBytes:spec.archiveBytes+(needsLossy?spec.lossy.archiveBytes:0),message:'Download FSR 4.1.2 model data?',detail:needsLossy?'Downloads the fsr4-native-macos release and the Lite Lossy weights (37.1 MB) and prepares the FSR 4.1.2 Lite and Lite Lossy models in the launcher profile.':'Downloads the fsr4-native-macos release (27.6 MB) and prepares the FSR 4.1.2 Lite model in the launcher profile.',requiresDownload:true,kind:'tool',confirmLabel:'Download and Continue'}))return null;
+ const source=context.sourceSpec||spec;if(!Releases.validEntry(source))throw Error('Choose an available FSR model source.');
+ const current=read(context.userDataDir,source.version),needsLossy=context.fsr4Profile==='int8-lite-lossy';if(current&&(!needsLossy||current.profiles.includes('int8-lite-lossy')))return current;
+ if(!await downloadApproved(context,{...descriptor,version:source.version,downloadBytes:source.archiveBytes+(needsLossy?spec.lossy.archiveBytes:0),message:'Download FSR 4.1.2 model data?',detail:'Downloads the selected release and prepares its compatible Lite model data in the launcher profile.',requiresDownload:true,kind:'tool',confirmLabel:'Download and Continue'}))return null;
  return runDownloadTask(context.downloads,{...descriptor,kind:'download',dedupeKey:'fsr4-models:'+context.userDataDir},async task=>{
-  const root=directory(context.userDataDir);Writable.assertOwnDirectory(context.userDataDir,root);const file=path.join(root,'.release-'+crypto.randomUUID()+'.zip');
+  const root=directory(context.userDataDir,source.version);Writable.assertOwnDirectory(context.userDataDir,root);const file=path.join(root,'.release-'+crypto.randomUUID()+'.zip');
   const signal=context.signal&&task.signal?AbortSignal.any([context.signal,task.signal]):context.signal||task.signal;
   let lossyArchive;
   try{
     if(needsLossy){lossyArchive=path.join(root,'.lite-lossy-'+crypto.randomUUID()+'.7z');await downloadArchive({filename:'fsr4-lite-lossy.7z',url:spec.lossy.url,bytes:spec.lossy.archiveBytes,sha256:spec.lossy.sha256},lossyArchive,signal);}
-    await downloadArchive({filename:'fsr4-mac-v3.2-crossover.zip',url:spec.url,bytes:spec.archiveBytes,sha256:spec.archiveSha256},file,signal,task.onProgress);
+    await downloadArchive({filename:path.basename(new URL(source.url).pathname),url:source.url,bytes:source.archiveBytes,sha256:source.archiveSha256},file,signal,task.onProgress);
     // Import uses the same bounded verification as a local release archive.
     const temporary=path.join(path.dirname(root),'.release-'+crypto.randomUUID()+'.zip');await fs.promises.rename(file,temporary);
-    try{return await importRuntime({...context,signal,lossyArchive,runtimePath:temporary});}finally{await fs.promises.rm(temporary,{force:true});}
+    try{return await importRuntime({...context,sourceSpec:source,signal,lossyArchive,runtimePath:temporary});}finally{await fs.promises.rm(temporary,{force:true});}
   }finally{await fs.promises.rm(file,{force:true});if(lossyArchive)await fs.promises.rm(lossyArchive,{force:true});}
  },{onProgress:context.onProgress});
 }
-function environment(userDataDir,profile){const current=read(userDataDir);if(!current?.profiles.includes(profile))throw Error('Download or import the selected FSR 4.1.2 model data.');return {FSR4_MODEL_ROOT:current.directory,FSR4_MODEL_BUILD_DIR:current.build};}
-module.exports={descriptor,directory,read,verify,importRuntime,install,environment};
+function environment(userDataDir,profile,version){const current=path.isAbsolute(version||'')?readDirectory(version):read(userDataDir,version);if(!current?.profiles.includes(profile))throw Error('Download or import the selected FSR 4.1.2 model data.');return {FSR4_MODEL_ROOT:current.directory,FSR4_MODEL_BUILD_DIR:current.build};}
+function inspectCustom(runtimePath){const current=readDirectory(runtimePath);if(!current)throw Error('Choose a prepared FSR 4 model directory with compatible initializer arenas.');return current;}
+module.exports={descriptor,directory,read,readDirectory,listInstalled,verify,importRuntime,install,environment,inspectCustom};

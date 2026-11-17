@@ -64,16 +64,17 @@ function resolve(root, {platform = process.platform, macOSVersion, hardwareArch}
   return Requirements.requirementSupport({ ...Requirements.FSR4, minimumMacOS: installed.minimumMacOS }, actual).supported === false
     ? null : installed;
 }
-function profileOptions(installed, userDataDir) {
+function profileOptions(installed, userDataDir, options = {}) {
   const labels={'exact-fast':'Exact Fast (4.1.1)',lite:'Lite (4.1.1)',lite2:'Lite 2 (4.1.1)',
     'int8-lite':'Lite (4.1.2)','lossy2-412':'Lossy (4.1.2)','int8-lite-lossy':'Lite Lossy (4.1.2)'};
   return SOURCE.profiles.map(profile=>{
     const supported=installed?.profiles?.includes(profile.id)===true;
-    const data=profile.userData?require('./models').read(userDataDir):null;
+    const chosen=profile.userData?require('../../runtime/fsr4-models-manager').selection({...options,userDataDir}):null;
+    const data=chosen?.current;
     const ready=supported&&(!profile.userData||data?.profiles.includes(profile.id)===true);
     return {id:profile.id,label:labels[profile.id],model:profile.model,available:ready,
       reason:!supported?'The installed FSR 4 provider does not support this profile.':!ready?'Download or import the FSR 4.1.2 model data.':null,
-      ...(profile.userData?{delivery:{...require('./models').descriptor,...(profile.id==='int8-lite-lossy'?{downloadBytes:require('./model.json').archiveBytes+require('./model.json').lossy.archiveBytes}:{}),requiresDownload:!data?.profiles.includes(profile.id),canImport:true}}:{})};
+      ...(profile.userData?{delivery:{...require('./models').descriptor,...(chosen?.version?{version:chosen.version}:{}),...(chosen?.sourceSpec?{downloadBytes:chosen.sourceSpec.archiveBytes+(profile.id==='int8-lite-lossy'?chosen.sourceSpec.lossy.archiveBytes:0)}:{}),requiresDownload:!data?.profiles.includes(profile.id),canImport:true}}:{})};
   });
 }
 function prepare(root, options = {}) {

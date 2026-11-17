@@ -148,7 +148,7 @@ function capabilities(root, host, options = {}) {
     graphics.temporalProfiles={...graphics.temporalProfiles,...Object.fromEntries(providers.flatMap(({methods,installed})=>
       Array.isArray(installed.profiles)?methods.map(method=>[method,[...installed.profiles]]):[]))};
     const fsr4=providers.find(value=>value.methods.includes("fsr4"));
-    if(fsr4)graphics.temporalProfileOptions={...graphics.temporalProfileOptions,fsr4:fsr4.api.profileOptions(fsr4.installed,options.userDataDir)};
+    if(fsr4)graphics.temporalProfileOptions={...graphics.temporalProfileOptions,fsr4:fsr4.api.profileOptions(fsr4.installed,options.userDataDir,options)};
     graphics.temporalMethods=graphics.temporalMethods?.filter(method=>!portable.includes(method)||installed.includes(method));
     if(graphics.xessSceneAPI===1&&(!options.selectedMethods||options.selectedMethods.temporal?.includes("xess"))&&require("./xess").resolve(root,options))
       graphics.temporalMethods=[...new Set([...(graphics.temporalMethods||[]),"xess"])];
@@ -230,11 +230,12 @@ async function prepare(value, { root, userDataDir, signal, graphicsHost = null, 
   let fsr4ModelEnvironment={};
   if(settings.temporalMethod==='fsr4' && ['int8-lite','int8-lite-lossy'].includes(settings.fsr4Profile)) {
     const library=require('./temporal/fsr4/models');
-    const current=library.read(userDataDir);
-    const installed=current?.profiles.includes(settings.fsr4Profile)?current:await library.install({...modelContext,root,userDataDir,signal,fsr4Profile:settings.fsr4Profile});
+    const manager=require('./runtime/fsr4-models-manager'),context={...modelContext,root,userDataDir,signal,fsr4Profile:settings.fsr4Profile};
+    const current=manager.selection(context).current;
+    const installed=current?.profiles.includes(settings.fsr4Profile)?current:await manager.installRuntime(context);
     if(!installed?.profiles.includes(settings.fsr4Profile))throw unavailable('Import the selected FSR 4.1.2 model data in Runtimes.');
-    await modelContext.useRuntime?.({managerId:library.descriptor.managerId,sectionId:'default',version:library.descriptor.version,sourcePath:installed.directory});
-    fsr4ModelEnvironment=library.environment(userDataDir,settings.fsr4Profile);
+    await modelContext.useRuntime?.({managerId:library.descriptor.managerId,sectionId:'default',version:installed.version,sourcePath:installed.directory});
+    fsr4ModelEnvironment=library.environment(userDataDir,settings.fsr4Profile,installed.custom?installed.directory:installed.version);
   }
   const required = [];
   if (settings.spatialMethod === "ls1") required.push(settings.ls1Mode === "quality" ? "ls1Quality" : "ls1Performance");

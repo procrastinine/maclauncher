@@ -54,5 +54,7 @@ test('Runtimes FSR 4.1.2 model data installs both profiles and names what is ins
  assert.deepEqual(section.capabilities.map(row=>row.available),[true,true]);
  const calls=[];t.mock.method(Library,'install',async context=>{calls.push(context.fsr4Profile);return null;});
  await Manager.installRuntime({userDataDir,root:'/nonexistent'});await Manager.performSetupAction({userDataDir,root:'/nonexistent',setupActionId:'download'});await Manager.installRuntime({userDataDir,root:'/nonexistent',fsr4Profile:'int8-lite'});
- assert.deepEqual(calls,['int8-lite-lossy','int8-lite-lossy','int8-lite']);
+ assert.deepEqual(calls,[],'an installed compatible profile never enters its download/install path');
+ record(['int8-lite']);await Manager.installRuntime({userDataDir,root:'/nonexistent'});await Manager.performSetupAction({userDataDir,root:'/nonexistent',setupActionId:'download'});
+ assert.deepEqual(calls,['int8-lite-lossy','int8-lite-lossy']);
 });

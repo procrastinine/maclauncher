@@ -137,7 +137,7 @@ async function prepareLegacy(entry, { userDataDir, app, signal, runtimeId, logge
   }
   const support = Graphics.capabilities(root, graphicsHost, { graphicsInputs, selectedMethods: ExecutionRequirements.analyze(entry).methods });
   const graphicsEnvironment = Graphics.enabled(graphicsSettings) ?
-    await Graphics.prepare(graphicsSettings, { root, userDataDir, signal, useModel, graphicsHost, graphicsInputs, graphicsCapabilities: support, logger }) : {};
+    await Graphics.prepare(graphicsSettings, { root, userDataDir, signal, useModel, useRuntime, settings: launcherSettings, graphicsHost, graphicsInputs, graphicsCapabilities: support, logger }) : {};
   if (!/^[\w-]+$/.test(entry.gameId || "")) throw new Error("ReShade requires a saved game.");
   if (live) {
     // Optional providers are bound only by their selected method. A shader-only
