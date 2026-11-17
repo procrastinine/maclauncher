@@ -45,9 +45,12 @@ test('Java bridge versions retain their distinct qualified CPU and interface req
       assert.equal(successor.helperVersion, profile.helperVersion);
     }
   }
-  const pin = pinForProfile('steamworks4j-1.9.0-ml1');
-  assert.throws(() => resolveProfile({ id: 'steamworks4j-1.9.0-ml1', pin, architecture: 'arm64' }),
+  // A profile is accepted only for the CPUs it declares.
+  const single = catalog.find(profile => profile.architectures.length === 1);
+  const other = single.architectures[0] === 'arm64' ? 'x86_64' : 'arm64';
+  assert.throws(() => resolveProfile({ id: single.id, pin: pins.find(item => item.version === single.helperVersion), architecture: other }),
     { code: 'STEAM_API_PROFILE_CHANGED' });
+  const pin = pinForProfile('steamworks4j-1.9.0-ml1');
   assert.throws(() => resolveProfile({ id: 'steamworks4j-1.9.0-ml1', pin, architecture: 'x86_64',
     requiredInterfaces: ['SteamUser023'] }), { code: 'STEAM_API_INTERFACES_UNAVAILABLE' });
   assert.throws(() => resolveProfile({ id: 'steamworks4j-1.10.0-ml1', pin, architecture: 'x86_64',

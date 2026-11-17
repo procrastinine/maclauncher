@@ -72,7 +72,7 @@ test("native runtime resources contain exactly the selected included builds, wha
   for (const arch of ["arm64", "x64"]) {
     const plan = Model.createPlan({ arch, maximumMacOS: "13.0" });
     assert.deepEqual(plan.packages, [], "Game engines use managed delivery");
-    assert.equal(new Set(plan.supplementals.map(item => `${item.id}/${item.arch}`)).size, plan.supplementals.length, "One build per included helper and processor");
+    assert.equal(new Set(plan.supplementals.map(item => `${item.id}/${item.version}/${item.arch}`)).size, plan.supplementals.length, "One build per included helper version and processor");
     const resources = Model.resourceRules(plan, Content.applyBuildPolicy(doMergeConfigs([packageConfig().build])).extraResources)
       .find(rule => rule.from === "src/resources");
     const matcher = new FileMatcher(path.join(projectRoot, resources.from), "/resources", value => value, resources.filter);

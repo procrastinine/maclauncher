@@ -67,10 +67,12 @@
     },
     "bridgeVersion": {
       "includedPackage": "java-steamworks",
-      "arch": "x64"
+      "arch": "universal",
+      "upstreamVersion": "1.9.0"
     },
     "architectures": [
-      "x86_64"
+      "x86_64",
+      "arm64"
     ],
     "interfaces": [
       "STEAMAPPS_INTERFACE_VERSION008",
@@ -107,7 +109,8 @@
     },
     "bridgeVersion": {
       "includedPackage": "java-steamworks",
-      "arch": "universal"
+      "arch": "universal",
+      "upstreamVersion": "1.10.0"
     },
     "architectures": [
       "x86_64",

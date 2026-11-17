@@ -9,6 +9,7 @@ const Classes = require("../src/modules/java/runtime/steamworks/class-file");
 const Runtime = require("../src/modules/java/runtime/steamworks/runtime");
 const Java = require("../src/modules/java/main");
 const JavaCore = require("../src/modules/java/runtime/java-runtime");
+const Native = require("../src/modules/shared/runtime/local-native");
 const { writeZipArchive } = require("./helpers/zip-fixture");
 const jar = (file, entries) => writeZipArchive(file, entries.sort((a, b) => a[0].localeCompare(b[0], "en")).map(([name, data]) => ({ name, data })));
 
@@ -32,6 +33,21 @@ function javaClass({ name = "Game", calls = true, owner = "SteamAPI", method = "
   return Buffer.concat([Buffer.from([0xca, 0xfe, 0xba, 0xbe]), u2(0), u2(52), u2(pool.length + 1), ...pool,
     u2(0x21), u2(self), u2(parent), u2(0), u2(0), u2(1), u2(9), u2(main), u2(descriptor), u2(1),
     u2(codeName), u4(code.length), code, u2(0)]);
+}
+// A Mach-O library header per CPU; more than one CPU makes a universal file.
+const CPU_TYPES = { x86_64: 0x01000007, arm64: 0x0100000c };
+function machO(architectures) {
+  const thin = arch => { const header = Buffer.alloc(32); header.writeUInt32LE(0xfeedfacf); header.writeUInt32LE(CPU_TYPES[arch], 4); header.writeUInt32LE(6, 12); return header; };
+  if (architectures.length === 1) return thin(architectures[0]);
+  const table = Buffer.alloc(8 + 20 * architectures.length);
+  table.writeUInt32BE(0xcafebabe); table.writeUInt32BE(architectures.length, 4);
+  architectures.forEach((arch, index) => { table.writeUInt32BE(CPU_TYPES[arch], 8 + index * 20); table.writeUInt32BE(table.length + index * 32, 16 + index * 20); table.writeUInt32BE(32, 20 + index * 20); });
+  return Buffer.concat([table, ...architectures.map(thin)]);
+}
+// The included bridge's CPUs are measured from its JNI file; a legacy bridge measures Intel only.
+function intelOnlyBridge(t) {
+  const read = Native.readMachOArchitectures;
+  t.mock.method(Native, "readMachOArchitectures", (file, options) => path.basename(file) === "libsteamworks4j.dylib" ? ["x86_64"] : read(file, options));
 }
 function fixture(t, options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-java-steam-"));
@@ -57,7 +73,7 @@ test("Java Steam requires an executable call and exact wrapper bytes, rather tha
   const required = Consumer.requirement(source.entry, source.options);
   assert.equal(required.pin.version, "1.9.0");
   assert.equal(required.evidence.appId.value, 480);
-  assert.deepEqual(required.evidence.architectures, ["x86_64"]);
+  assert.deepEqual(required.evidence.architectures, source.pin.architectures);
   jar(source.jarPath, source.entries.map(([name, bytes]) => [name, name === "Game.class" ? javaClass() : Buffer.concat([bytes, Buffer.from([0])])] ));
   assert.throws(() => Consumer.requirement(source.entry, source.options), { code: "JAVA_STEAM_VERSION_UNKNOWN" });
 });
@@ -157,9 +173,9 @@ test("Java selects the successor helper profile while retaining the exact JNI br
   const source = fixture(t, { appId: 480 }), resourcesRoot = path.join(source.root, "resources"), pin = { ...source.pin };
   const declaration = require("../src/modules/shared/runtime/included-package-metadata").declarations(require("../src/modules/java/runtime/steamworks/distribution-supplementals.json")).find(item => item.version === pin.bridgeVersion);
   const originalDeclaration = { ...declaration }; t.after(() => Object.assign(declaration, originalDeclaration));
-  const directory = path.join(resourcesRoot, "native-runtimes/java-steamworks", pin.bridgeVersion, "x64");
+  const directory = path.join(resourcesRoot, "native-runtimes", declaration.directoryRelative);
   fs.mkdirSync(directory, { recursive: true });
-  const native = Buffer.alloc(32); native.writeUInt32LE(0xfeedfacf); native.writeUInt32LE(0x01000007, 4); native.writeUInt32LE(6, 12);
+  const native = machO(pin.architectures);
   const agent = Buffer.from("fixture loader agent");
   pin.jniSha256 = digest(native); pin.jniSize = native.length; pin.agentSha256 = digest(agent);
   fs.writeFileSync(path.join(directory, "libsteamworks4j.dylib"), native);
@@ -169,7 +185,10 @@ test("Java selects the successor helper profile while retaining the exact JNI br
     agentSha256: pin.agentSha256, agentClassMajor: 52,
     files: [{ path: "libsteamworks4j.dylib", size: native.length, sha256: pin.jniSha256, mode: 0o644 },
       { path: "steam-agent.jar", size: agent.length, sha256: pin.agentSha256, mode: 0o644 }] };
-  const seal = () => { const bytes = Buffer.from(JSON.stringify(record)); fs.writeFileSync(path.join(directory, "helper.json"), bytes); declaration.manifestSha256 = digest(bytes); };
+  // The included declaration owns the package inventory and manifest identity.
+  const seal = () => { const bytes = Buffer.from(JSON.stringify(record)); fs.writeFileSync(path.join(directory, "helper.json"), bytes);
+    declaration.manifestSha256 = digest(bytes);
+    declaration.files = [...record.files, { path: "helper.json", size: bytes.length, sha256: declaration.manifestSha256, mode: 0o644 }]; };
   seal();
   t.mock.method(Consumer, "requirement", () => ({ pin, evidence: { appId: { value: 480 }, gameRoot: source.root } }));
   const helper = path.join(source.root, "api.dylib"); fs.writeFileSync(helper, "independent API fixture");
@@ -235,6 +254,7 @@ test("Java exact runtime choices and required JNI CPU do not fall back to anothe
   assert.equal(JavaCore.resolveBestInstalled({ userDataDir, line: 17, version: "17.0.20.1+1", variant: "x64", hostArch: "arm64", strictVariant: true }), null);
   assert.equal(JavaCore.resolveBestInstalled({ userDataDir, line: 17, version: "17.0.20.1+1", variant: "x64", hostArch: "arm64" }).variant, "arm64");
   const original = Consumer.requirement;
+  intelOnlyBridge(t);
   Consumer.requirement = () => ({ pin: Runtime.Catalog.find(pin => pin.version === "1.9.0") });
   try {
     assert.equal(Runtime.requiredVariant(source.entry, { hostArch: "arm64", preferredVariant: "arm64" }), "x64");
@@ -251,6 +271,7 @@ test("Java Play requests the exact missing Intel JVM for a legacy bridge without
   source.entry.runtimeData.java = { line: 17, version };
   const settings = { runtimes: { java: { defaultLine: 17, lines: { 17: { defaultVersion: version, defaultVariant: "arm64" } } } } };
   const before = JSON.stringify(settings), original = Consumer.requirement;
+  intelOnlyBridge(t);
   Consumer.requirement = () => ({ pin: Runtime.Catalog.find(pin => pin.version === "1.9.0") });
   try {
     const plan = await Java.ensureRuntime(source.entry, { userDataDir, settings, runtimeId: "java" });
@@ -269,6 +290,7 @@ test("Java native Steam launch keeps the original JAR, application arguments, pe
   source.entry.runtimeData.java = { line: 17, version };
   const requirement = Consumer.requirement, prepare = Runtime.prepareLaunch, rosetta = JavaCore.isRosettaAvailable;
   const prepared = [], launches = [], leases = [];
+  intelOnlyBridge(t);
   const environment = { SteamAppId: "480", GseSavePath: path.join(userDataDir, "games/java-one/steam"), DYLD_INSERT_LIBRARIES: "/other/helper.dylib" };
   Consumer.requirement = () => ({ pin: Runtime.Catalog.find(pin => pin.version === "1.9.0") });
   Runtime.prepareLaunch = async (entry, _context, install) => { prepared.push({ entry, install }); return { vmArgs: ["-javaagent:/included/agent.jar=/game/loader.properties"], environment }; };

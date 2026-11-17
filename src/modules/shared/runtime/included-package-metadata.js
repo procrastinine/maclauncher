@@ -10,9 +10,13 @@ function applicationLock() {
   return require(file);
 }
 
-function record({ id, arch }, lock = applicationLock()) {
+// A MacLauncher Builds release is "<upstream version>-MCLv<n>". A reference names the upstream
+// version when one package has more than one included upstream release, e.g. Steamworks4j 1.9 and 1.10.
+const upstreamOf = version => String(version).replace(/-MCLv\d+$/, "");
+
+function record({ id, arch, upstreamVersion }, lock = applicationLock()) {
   const matches = lock.packages.filter(item => item.id === id &&
-    (arch === undefined || item.arch === arch));
+    (arch === undefined || item.arch === arch) && (upstreamVersion === undefined || upstreamOf(item.version) === upstreamVersion));
   const versions = new Set(matches.map(item => item.version));
   if (!matches.length || versions.size !== 1)
     throw new Error("An included package reference must select one locked version: " + id);
@@ -35,7 +39,7 @@ function resolveValue(value, lock) {
   if (Array.isArray(value)) return value.map(item => resolve(item, lock));
   if (!value || typeof value !== "object") return value;
   if (typeof value.includedPackage === "string")
-    return record({ id: value.includedPackage, arch: value.arch }, lock).version;
+    return record({ id: value.includedPackage, arch: value.arch, upstreamVersion: value.upstreamVersion }, lock).version;
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolve(item, lock)]));
 }
 

@@ -1,7 +1,11 @@
 [
   {
     "version": "1.9.0",
-    "bridgeVersion": "1.9.0-MCLv8",
+    "bridgeVersion": {
+      "includedPackage": "java-steamworks",
+      "arch": "universal",
+      "upstreamVersion": "1.9.0"
+    },
     "abiProfile": "steamworks4j-1.9.0-ml1",
     "helperAbiProfile": "steamworks4j-1.9.0-ml1-offline-abi0.5.0",
     "helperVersion": {
@@ -189,7 +193,11 @@
   },
   {
     "version": "1.10.0",
-    "bridgeVersion": "1.10.0-MCLv7",
+    "bridgeVersion": {
+      "includedPackage": "java-steamworks",
+      "arch": "universal",
+      "upstreamVersion": "1.10.0"
+    },
     "abiProfile": "steamworks4j-1.10.0-ml1",
     "helperAbiProfile": "steamworks4j-1.10.0-ml1-offline-abi0.5.0",
     "helperVersion": {

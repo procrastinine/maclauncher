@@ -6,6 +6,7 @@ const Ios = require("../src/modules/ios/prepare");
 const Java = require("../src/modules/java/runtime/java-runtime");
 const Steam = require("../src/modules/java/runtime/steamworks/runtime");
 const Consumer = require("../src/modules/java/runtime/steamworks/consumer");
+const Native = require("../src/modules/shared/runtime/local-native");
 
 function rosettaLauncher(t) {
   const descriptor = Object.getOwnPropertyDescriptor(process, "arch");
@@ -54,8 +55,10 @@ test("Java retains an Intel launcher default while deriving Rosetta and runnable
 });
 
 test("Java Steam admits a selected ARM JVM under Rosetta without changing JNI or default CPU policy", t => {
-  const host = rosettaLauncher(t), pin = { architectures: ["arm64", "x86_64"] };
+  // The bridge's CPUs are measured from its included JNI file; each step sets that measurement.
+  const host = rosettaLauncher(t), pin = { ...Steam.Catalog[0], architectures: ["arm64", "x86_64"] }, read = Native.readMachOArchitectures;
   t.mock.method(Consumer, "requirement", () => ({ pin }));
+  t.mock.method(Native, "readMachOArchitectures", (file, options) => path.basename(file) === "libsteamworks4j.dylib" ? pin.architectures : read(file, options));
   assert.equal(Steam.requiredVariant({}), "x64");
   assert.equal(Steam.requiredVariant({}, { explicitVariant: "arm64" }), "arm64");
   assert.equal(Steam.requiredVariant({}, { preferredVariant: "arm64" }), "arm64");
