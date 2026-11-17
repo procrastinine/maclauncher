@@ -208,6 +208,9 @@ async function resolve(install, runtime, context, { executableArchitecture, host
   } else if (vulkan.selected && !vulkan.inherited && !vulkan.fallback && require('../../modules/crossover/temporal/vulkan-dlss').routeForwards(plan, executableArchitecture) &&
       !require('../../modules/crossover/temporal/vulkan-dlss').carrierDriver(plan))
     Object.assign(vulkan, { reasonCode: 'dlss-forwarding', reason: 'This Vulkan driver does not forward DLSS frames.' });
+  const vulkanRequirements = [...new Set(Roles.usedRenderers(plan).flatMap(item => item.vulkanRequires || []))];
+  if (vulkan.used && vulkanRequirements.length)
+    vulkan.used = await Description.prepareVulkanFeatures(vulkan.used, vulkanRequirements, context);
   plan.warnings = Plan.fallbackWarnings(plan);
   plan.warnings.push(...(plan.components.video.used?.videoPreparation?.warnings || []));
   if (plan.components.d3d12.used?.engine === 'vkd3d-proton' && plan.components['vulkan-driver'].used?.engine !== 'kosmickrisp')

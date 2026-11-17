@@ -76,11 +76,12 @@ function displayText(value) { return String(value ?? '').replace(/[\s\x00-\x1f\x
 // are prepared again once.
 const DESCRIPTION_FORMAT = 3;
 function inspectionKey(root, options) {
-  const { logger, userDataDir, signal, ...selection } = options;
-  // A Vulkan driver's description also holds the features the graphics
-  // payload's helper measured, so a new helper describes it once again.
-  const helper = engineKinds.get(selection.engine) === 'vulkan-driver' && require('./vulkan-features').helper();
-  return JSON.stringify([fs.realpathSync(root), selection, DESCRIPTION_FORMAT, ...(helper ? [helper.key] : [])]);
+  const { logger, userDataDir, signal, vulkanRequirements, entryPoint, ...selection } = options;
+  // A Vulkan driver's description also holds selected-Play measurements;
+  // those facts belong to the helper's actual contents.
+  const helper = (selection.component === 'vulkan-driver' || engineKinds.get(selection.engine) === 'vulkan-driver') && require('./vulkan-features').helper();
+  const canonical = Object.fromEntries(Object.entries(selection).sort(([a], [b]) => a.localeCompare(b)));
+  return JSON.stringify([fs.realpathSync(root), canonical, DESCRIPTION_FORMAT, ...(helper ? [helper.key] : [])]);
 }
 function unchangedInspection(entry) {
   return entry && Array.isArray(entry.observed) && entry.observed.length &&
@@ -127,6 +128,20 @@ async function prepareTranslator(root, options = {}) {
   let key;
   try { key = inspectionKey(root, options); } catch { return value; }
   const entry = inspections.get(key), file = inspectionFile(key, options.userDataDir);
+  const requirements = Array.isArray(options.vulkanRequirements) ? options.vulkanRequirements : [];
+  if (entry && value.component === 'vulkan-driver' && requirements.some(name => typeof value.vulkanFeatures?.[name] !== 'boolean')) {
+    const Vulkan = require('./vulkan-features'), tool = Vulkan.helper();
+    if (tool) {
+      options.signal?.throwIfAborted();
+      const features = Vulkan.measure(value.files, { tool, entryPoint: options.entryPoint });
+      options.signal?.throwIfAborted();
+      if (features && unchangedInspection(entry)) {
+        entry.value = { ...entry.value, vulkanFeatures: { ...entry.value.vulkanFeatures, ...features }, vulkanFeatureHelper: tool.key };
+        entry.persistedPath = null;
+        value = compactDescription(entry.value);
+      }
+    }
+  }
   if (file && entry && entry.persistedPath !== file && unchangedInspection(entry)) {
     options.signal?.throwIfAborted();
     try {
@@ -135,6 +150,31 @@ async function prepareTranslator(root, options = {}) {
     } catch (error) { warn(options.logger || console, `[translators] Could not retain component description: ${error.message}`); }
   }
   return copyDescription(value);
+}
+function vulkanFeatureOptions(driver, { userDataDir, logger, signal } = {}) {
+  return { engine: driver.engine, source: driver.source, version: driver.version, component: 'vulkan-driver', userDataDir, logger, signal };
+}
+// Inventories may use facts retained by a selected Play, but never query a driver.
+function cachedVulkanFeatures(driver, options = {}) {
+  if (driver?.component !== 'vulkan-driver' || !driver.root) return null;
+  const value = cachedTranslator(driver.root, vulkanFeatureOptions(driver, options));
+  if (value?.vulkanFeatures) return { vulkanFeatures: value.vulkanFeatures, vulkanFeatureHelper: value.vulkanFeatureHelper };
+  if (driver.vulkanFeatureHelper && driver.vulkanFeatureHelper !== require('./vulkan-features').helper()?.key)
+    return { vulkanFeatures: undefined, vulkanFeatureHelper: undefined };
+  return null;
+}
+async function prepareVulkanFeatures(driver, requirements = [], options = {}) {
+  if (driver?.component !== 'vulkan-driver') return driver;
+  const value = { ...driver, ...cachedVulkanFeatures(driver, options) };
+  if (!requirements.some(name => typeof value.vulkanFeatures?.[name] !== 'boolean')) return value;
+  try {
+    const prepared = await prepareTranslator(driver.root, { ...vulkanFeatureOptions(driver, options),
+      entryPoint: driver.entryPoint, vulkanRequirements: requirements });
+    return prepared.vulkanFeatures ? { ...value, vulkanFeatures: prepared.vulkanFeatures, vulkanFeatureHelper: prepared.vulkanFeatureHelper } : value;
+  } catch {
+    options.signal?.throwIfAborted();
+    return value;
+  }
 }
 /** Synchronous custom-runtime.inspect seam; unchanged observed files reuse facts. */
 function describeTranslator(root, options = {}) {
@@ -272,9 +312,8 @@ function inspectDescription(root, { engine, source, version, component, id, apis
   })])];
   const floors = files.flatMap(file => file.macosFloor ? [file.macosFloor] : []);
   for (const warning of warnings) warn(logger, `[translators] ${warning}`);
-  const vulkanFeatures = component === 'vulkan-driver' ? require('./vulkan-features').measure(files) : undefined;
   const result = description({ id: id || `${engine}:${root}`, root, component, engine, source, version, apis, form, files,
-    warnings, ...(pluginDirectories === undefined ? {} : { pluginDirectories }), ...(vulkanFeatures ? { vulkanFeatures } : {}),
+    warnings, ...(pluginDirectories === undefined ? {} : { pluginDirectories }),
     macosFloor: floors.sort(compareVersions).at(-1) || null });
   if (!result.version && engine === 'gstreamer') result.version = require('./gstreamer-source').libraryVersion(result);
   return result;
@@ -347,4 +386,4 @@ function inspectFileFacts(original) {
   return { ...result, format: 'unknown', macosFloor: null };
 }
 module.exports = { COMPONENTS, ENGINES, FORMS, description, installationDescription, restoreInstallationDescription, label,
-  cachedTranslator, prepareTranslator, describeTranslator, inspectFile, compareVersions };
+  cachedTranslator, prepareTranslator, cachedVulkanFeatures, prepareVulkanFeatures, describeTranslator, inspectFile, compareVersions };

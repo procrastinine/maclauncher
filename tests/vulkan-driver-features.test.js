@@ -2,23 +2,30 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const read = file => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 
-// A stand-in for the graphics payload's maclauncher-vulkan-features helper: it
-// answers with the device features each fixture driver reports and counts its runs.
+// Only the helper's process I/O is injected. Driver inspection, selection,
+// content identity and persisted description caches remain production code.
 function helperFixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "vulkan-features-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const file = path.join(root, "maclauncher-vulkan-features"), runs = path.join(root, "runs");
-  fs.writeFileSync(file, `#!/bin/sh\necho "$1" >> "${runs}"\ncase "$1" in\n` +
-    `  *MoltenVK*) echo '{"schema":1,"devices":[{"name":"Apple M2 Max","features":{"geometryShader":false,"tessellationShader":true}}]}' ;;\n` +
-    `  *kosmickrisp*) echo '{"schema":1,"devices":[{"name":"Apple M2 Max","features":{"geometryShader":true,"tessellationShader":true}}]}' ;;\n` +
-    `  *) echo "not a Vulkan driver" >&2; exit 3 ;;\nesac\n`, { mode: 0o755 });
-  const driver = (name, library) => {
+  const file = path.join(root, "maclauncher-vulkan-features"), queries = [], answers = new Map();
+  fs.writeFileSync(file, "feature helper fixture A", { mode: 0o755 });
+  const Reshade = require("../src/modules/shared/reshade"), Vulkan = require("../src/modules/shared/runtime/vulkan-features");
+  let runtimeRoot = root;
+  t.mock.method(Reshade, "runtimeRoot", () => runtimeRoot);
+  const measure = Vulkan.measure;
+  t.mock.method(Vulkan, "measure", (files, options) => measure(files, { ...options, run: (command, args) => {
+    const library = args.at(-1); queries.push({ command, library });
+    const features = answers.get(library) || (library.includes("MoltenVK") ? { geometryShader: false, tessellationShader: true }
+      : library.includes("kosmickrisp") ? { geometryShader: true, tessellationShader: true } : null);
+    return features ? { status: 0, stdout: JSON.stringify({ schema: 1, devices: [{ features }] }) } : { status: 3, stdout: "" };
+  } }));
+  const driver = (name, library, options) => {
     const directory = path.join(root, name);
     fs.mkdirSync(directory);
-    fs.writeFileSync(path.join(directory, library), require("./fixtures/macho-image").image());
+    fs.writeFileSync(path.join(directory, library), require("./fixtures/macho-image").image(options));
     return directory;
   };
-  return { tool: { file, key: `fixture:${root}` }, driver, runs: () => fs.existsSync(runs) ? fs.readFileSync(runs, "utf8").trim().split("\n").length : 0 };
+  return { root, file, driver, measure, queries, answers, runs: () => queries.length, moveHelper: value => { runtimeRoot = value; } };
 }
 function withHelper(t, tool) {
   const VulkanFeatures = require("../src/modules/shared/runtime/vulkan-features"), original = VulkanFeatures.helper;
@@ -26,29 +33,103 @@ function withHelper(t, tool) {
   t.after(() => { VulkanFeatures.helper = original; });
 }
 
-test("an installed Vulkan driver's description records the device features its library reports, measured once", t => {
+test("offline descriptions never measure drivers; selected preparation retains only measured facts", async t => {
   const Description = require("../src/modules/shared/runtime/translator-description");
   const fixture = helperFixture(t);
   const moltenvk = fixture.driver("moltenvk", "libMoltenVK.dylib"), kosmic = fixture.driver("kosmickrisp", "libvulkan_kosmickrisp.dylib");
-  // Without the helper the driver is described with nothing measured.
-  withHelper(t, null);
-  assert.equal(Object.hasOwn(Description.describeTranslator(moltenvk, { engine: "moltenvk", version: "1.4.2", source: "fixture" }), "vulkanFeatures"), false);
-  // With it, the same driver is described again and measured, once per installed version.
-  withHelper(t, fixture.tool);
-  assert.equal(Description.describeTranslator(moltenvk, { engine: "moltenvk", version: "1.4.2", source: "fixture" }).vulkanFeatures.geometryShader, false);
-  assert.equal(Description.describeTranslator(moltenvk, { engine: "moltenvk", version: "1.4.2", source: "fixture" }).vulkanFeatures.geometryShader, false);
+  fs.writeFileSync(path.join(moltenvk, "libSPIRV-Tools.dylib"), require("./fixtures/macho-image").image());
+  fs.writeFileSync(path.join(moltenvk, "libzstd.dylib"), require("./fixtures/macho-image").image());
+  const options = { engine: "moltenvk", version: "1.4.2", source: "fixture", component: "vulkan-driver", userDataDir: path.join(fixture.root, "profile") };
+  const offline = Description.describeTranslator(moltenvk, options);
+  assert.equal(Object.hasOwn(offline, "vulkanFeatures"), false);
+  await Description.prepareTranslator(moltenvk, options);
+  Description.describeTranslator(kosmic, { engine: "kosmickrisp", version: "27.0.0", source: "fixture" });
+  assert.equal(fixture.runs(), 0, "custom inspection and local inventory do not load either driver");
+  const selected = { ...offline, entryPoint: path.join(moltenvk, "libMoltenVK.dylib") };
+  const prepared = await Description.prepareVulkanFeatures(selected, ["geometryShader"], options);
+  assert.equal(prepared.vulkanFeatures.geometryShader, false);
+  assert.equal((await Description.prepareVulkanFeatures(selected, ["geometryShader"], options)).vulkanFeatures.geometryShader, false);
   assert.equal(fixture.runs(), 1, "a described driver is not measured again");
-  assert.equal(Description.describeTranslator(kosmic, { engine: "kosmickrisp", version: "27.0.0", source: "fixture" }).vulkanFeatures.geometryShader, true);
-  // The install record keeps the measurement.
-  assert.deepEqual(Description.installationDescription(Description.describeTranslator(moltenvk, { engine: "moltenvk", version: "1.4.2", source: "fixture" })).vulkanFeatures,
+  assert.equal(fixture.queries[0].library, selected.entryPoint, "dependencies are not probe candidates");
+  assert.deepEqual(Description.installationDescription(Description.cachedTranslator(moltenvk, options)).vulkanFeatures,
     { geometryShader: false, tessellationShader: true });
-  // A library the helper cannot measure leaves the driver unmeasured.
+  const filename = require.resolve('../src/modules/shared/runtime/translator-description');
+  delete require.cache[filename];
+  assert.deepEqual(require(filename).cachedTranslator(moltenvk, options).vulkanFeatures,
+    { geometryShader: false, tessellationShader: true }, 'a cold offline reader restores the successful facts');
+  assert.equal(fixture.runs(), 1);
+  // Failure stays unknown and may be retried by a later actual Play.
   const other = fixture.driver("other", "libother.dylib");
-  assert.equal(Object.hasOwn(Description.describeTranslator(other, { engine: "moltenvk", version: "9", source: "fixture" }), "vulkanFeatures"), false);
+  const unknown = Description.describeTranslator(other, { engine: "moltenvk", version: "9", source: "fixture" });
+  assert.equal(Object.hasOwn(await Description.prepareVulkanFeatures(unknown, ["geometryShader"], options), "vulkanFeatures"), false);
+  fixture.answers.set(path.join(other, "libother.dylib"), { geometryShader: true });
+  assert.equal((await Description.prepareVulkanFeatures(unknown, ["geometryShader"], options)).vulkanFeatures.geometryShader, true);
+  const before = fixture.runs(), moved = path.join(fixture.root, "new-envelope"); fs.mkdirSync(moved);
+  fs.copyFileSync(fixture.file, path.join(moved, path.basename(fixture.file))); fixture.moveHelper(moved);
+  assert.equal((await Description.prepareVulkanFeatures(prepared, ["geometryShader"], options)).vulkanFeatures.geometryShader, false);
+  assert.equal(fixture.runs(), before, "identical helper contents in a new envelope reuse the measurement");
+  fs.appendFileSync(path.join(moved, path.basename(fixture.file)), " changed");
+  await Description.prepareVulkanFeatures(prepared, ["geometryShader"], options);
+  assert.equal(fixture.runs(), before + 1, "changed actual helper contents invalidate the measurement");
+  fixture.moveHelper(path.join(fixture.root, "absent"));
+  const absent = await Description.prepareVulkanFeatures(unknown, ["unresolvedFeature"], options);
+  assert.equal(absent.vulkanFeatures, undefined); assert.equal(fixture.runs(), before + 1);
   // The helper is a graphics payload target.
   assert.match(read("src/modules/shared/reshade/native/CMakeLists.txt"), /add_executable\(maclauncher-vulkan-features src\/vulkan-features\.c\)/);
   assert.match(read("src/modules/shared/reshade/native/vulkan-features.c"), /dlsym\(driver, "vk_icdGetInstanceProcAddr"\)/);
   assert.equal(require("../src/modules/shared/reshade/features.json").graphics.vulkanFeatureQueryAPI, 1);
+});
+
+test('the exact selected ICD resolves one driver and a denied query stays unknown', t => {
+  const fixture = helperFixture(t), Description = require('../src/modules/shared/runtime/translator-description');
+  const directory = fixture.driver('icds', 'libMoltenVK.dylib');
+  fs.writeFileSync(path.join(directory, 'libSPIRV-Tools.dylib'), require('./fixtures/macho-image').image());
+  const icd = path.join(directory, 'driver.json');
+  fs.writeFileSync(icd, JSON.stringify({ ICD: { library_path: 'libMoltenVK.dylib' } }));
+  const description = Description.describeTranslator(directory, { engine: 'moltenvk', version: '1.4.2' });
+  const Vulkan = require('../src/modules/shared/runtime/vulkan-features');
+  const features = Vulkan.measure(description.files, { entryPoint: icd });
+  assert.equal(features.geometryShader, false);
+  assert.deepEqual(fixture.queries.map(row => row.library), [path.join(directory, 'libMoltenVK.dylib')]);
+  assert.equal(fixture.measure(description.files, { entryPoint: icd, run() { throw new Error('execution denied'); } }), undefined);
+  assert.deepEqual(Vulkan.driverLibraries(description.files.filter(file => file.format !== 'json')), [], 'no arbitrary dependency is a fallback driver');
+});
+
+test("ordinary Wine inventory is offline and Play measures only the finally selected driver's required features", async t => {
+  const Description = require("../src/modules/shared/runtime/translator-description"), Wine = require("../src/modules/shared/runtime/wine-translators");
+  const fixture = helperFixture(t), { image, X64 } = require("./fixtures/macho-image"), { peFixture } = require("./helpers/pe-fixture");
+  const put = (relative, bytes) => { const file = path.join(fixture.root, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file; };
+  const executablePath = put("wine/bin/wine", image({ cpu: X64, fileType: 2 }));
+  put("wine/lib/wine/x86_64-unix/ntdll.so", image({ cpu: X64 }));
+  fs.mkdirSync(path.join(fixture.root, "support/Frameworks/renderer"), { recursive: true });
+  const install = { engineRoot: path.join(fixture.root, "wine"), crossoverRoot: path.join(fixture.root, "wine"),
+    templateRoot: path.join(fixture.root, "support"), executablePath, architecture: "x64", version: "fixture-wine" };
+  const pe = peFixture({ is64: true }); pe.bytes.writeUInt16LE(0x2002, pe.peOffset + 22); pe.bytes.write("Wine builtin DLL\0", 64);
+  for (const file of ["d3d11.dll", "dxgi.dll"]) put("dxvk/" + file, pe.bytes);
+  const dxvk = { ...Description.describeTranslator(path.join(fixture.root, "dxvk"), { id: "fixture-dxvk", engine: "dxvk", version: "3.1.1", source: "fixture" }),
+    vulkanRequires: ["geometryShader"] };
+  const selectedRoot = fixture.driver("selected", "libMoltenVK.dylib", { cpu: X64 });
+  const unselectedRoot = fixture.driver("unselected", "libvulkan_kosmickrisp.dylib", { cpu: X64 });
+  const selected = { ...Description.describeTranslator(selectedRoot, { id: "selected", engine: "moltenvk", version: "1.4.2", source: "fixture" }),
+    entryPoint: path.join(selectedRoot, "libMoltenVK.dylib") };
+  const unselected = { ...Description.describeTranslator(unselectedRoot, { id: "unselected", engine: "kosmickrisp", version: "27.0", source: "fixture" }),
+    entryPoint: path.join(unselectedRoot, "libvulkan_kosmickrisp.dylib") };
+  const choices = [dxvk, selected, unselected], context = { runtimeId: "sikarugir", userDataDir: path.join(fixture.root, "profile"), settings: {},
+    runtimeSettings: { translatorRenderer: dxvk.id, translatorD3D11: dxvk.id, translatorVulkan: selected.id }, logger: { warn() {} } };
+  const options = { managers: [], choices, executableArchitecture: "x86_64", host: { macOSVersion: "26.0", physicalAppleGPU: false } };
+  const inventory = await Wine.optionsInventory(install, "sikarugir", context, options);
+  assert.ok(inventory.choices.some(item => item.id === selected.id)); assert.ok(inventory.choices.some(item => item.id === unselected.id));
+  assert.equal(fixture.runs(), 0);
+  const plan = await Wine.resolve(install, "sikarugir", context, options);
+  assert.equal(plan.components["vulkan-driver"].used.id, selected.id);
+  assert.equal(plan.components["vulkan-driver"].used.vulkanFeatures.geometryShader, false);
+  assert.deepEqual(fixture.queries.map(row => row.library), [selected.entryPoint]);
+  await Wine.resolve(install, "sikarugir", context, options);
+  assert.equal(fixture.runs(), 1, "a second selected resolve reuses successful cached facts");
+  const next = await Wine.optionsInventory(install, "sikarugir", context, options);
+  assert.equal(next.choices.find(item => item.id === selected.id).vulkanFeatures.geometryShader, false);
+  assert.equal(next.choices.find(item => item.id === unselected.id).vulkanFeatures, undefined);
+  assert.equal(fixture.runs(), 1);
 });
 
 // Installed choices as managedTranslators reads them from install records.
@@ -70,8 +151,8 @@ function installedChoices(t, measured = { "1.4.2": false, "27.0.0": true }) {
       ["macos-dxvk-v1.10.3", record("d3d-renderer", "dxvk", "1.10.3", { kind: "upstream", id: "macos", label: "DXVK-macOS" })],
       ["upstream-dxvk-3.1.1", record("d3d-renderer", "dxvk", "3.1.1", { kind: "upstream", id: "upstream", label: "DXVK" })]]),
     manager("dxvk", "dxvk", ["maclauncher-dxvk"], [["3.1.1-MCLv1", record("d3d-renderer", "dxvk", "3.1.1", { kind: "builds", label: "MacLauncher Builds" })]]),
-    // MoltenVK was installed before the helper existed; KosmicKrisp's install record holds its measurement.
-    manager("vulkan-moltenvk", "moltenvk", ["khronos-moltenvk"], [["1.4.2", record("vulkan-driver", "moltenvk", "1.4.2", "upstream")]]),
+    manager("vulkan-moltenvk", "moltenvk", ["khronos-moltenvk"], [["1.4.2", record("vulkan-driver", "moltenvk", "1.4.2", "upstream",
+      measured["1.4.2"] === undefined ? {} : { vulkanFeatures: { geometryShader: measured["1.4.2"] } })]]),
     manager("maclauncher-kosmickrisp", "kosmickrisp", ["maclauncher-kosmickrisp"], [["27.0.0", record("vulkan-driver", "kosmickrisp", "27.0.0", "upstream",
       { vulkanFeatures: { geometryShader: measured["27.0.0"] } })]]),
     manager("vulkan-kosmickrisp", "kosmickrisp", [], [["3.4.3", record("vulkan-driver", "kosmickrisp", "26.2.0", "upstream")]])];
@@ -88,9 +169,9 @@ test("translator releases carry the Vulkan features their source declaration req
   assert.deepEqual(byId("dxvk:3.1.1-MCLv1").vulkanRequires, ["geometryShader"], "MacLauncher DXVK 3.1.1");
   assert.deepEqual(byId("translator-dxvk:upstream-dxvk-3.1.1").vulkanRequires, ["geometryShader"], "DXVK 3.1.1");
   assert.equal(Object.hasOwn(byId("translator-dxvk:macos-dxvk-v1.10.3"), "vulkanRequires"), false, "DXVK-macOS 1.10.3 is not DXVK 2 or later");
-  assert.equal(byId("vulkan-moltenvk:1.4.2").vulkanFeatures.geometryShader, false, "a driver recorded before the helper is measured through its description");
+  assert.equal(byId("vulkan-moltenvk:1.4.2").vulkanFeatures.geometryShader, false, "a previously measured fact is retained without probing");
   assert.equal(byId("maclauncher-kosmickrisp:27.0.0").vulkanFeatures.geometryShader, true);
-  assert.deepEqual(described.filter(version => version !== "3.4.3"), ["1.4.2"], "a driver whose record holds a measurement is not described again");
+  assert.deepEqual(described, [], "installed inventories never backfill native measurements");
   assert.equal(Object.hasOwn(byId("vulkan-kosmickrisp:3.4.3"), "vulkanFeatures"), false, "a driver that could not be measured stays unmeasured");
 });
 

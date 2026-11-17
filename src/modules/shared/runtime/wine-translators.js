@@ -110,14 +110,6 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
       }
       if (description.source?.runtime && description.source.runtime !== runtime && Sources().get(description.source.runtime)?.ownComponents) continue;
       const root = install.translatorRoot || install.payloadRoot || (install.installDir && path.join(install.installDir, install.installationMetadata?.translatorRelative || '')) || install.root;
-      // A driver installed before the graphics payload could measure it is
-      // measured once through its retained description.
-      if (description.component === 'vulkan-driver' && !description.vulkanFeatures && require('./vulkan-features').helper()) {
-        let measured;
-        try { measured = describe(install.translatorRoot || install.payloadRoot || install.root || install.installDir,
-          { engine: manager.translatorEngine || manager.translator.engine, version: install.versionLabel || install.version, source: manager.id })?.vulkanFeatures; } catch {}
-        if (measured) description = { ...description, vulkanFeatures: measured };
-      }
       const value = { ...description, id: `${manager.id}:${install.version}`, root, entryPoint: install.executablePath || description.entryPoint,
         aliases: [...(description.aliases || []), ...(manager.formerIds || []).map(id => `${id}:${install.version}`)],
         managerId: manager.id, settingsEngine: manager.translatorEngine || manager.translator?.engine, runtimeVersion: install.version, architecture: Architecture.recordArchitecture(install) || selection?.architecture,
@@ -144,10 +136,12 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
   return choices;
 }
 function inventory(install, runtime, context, dependencies = {}) {
-  const result = dependencies.includedInventory || (install ? includedTranslators(install, runtime) : { included: [], warnings: [], layout: null });
+  const remembered = item => ({ ...item, ...Description.cachedVulkanFeatures(item, context) });
+  const included = dependencies.includedInventory || (install ? includedTranslators(install, runtime) : { included: [], warnings: [], layout: null });
+  const result = { ...included, included: included.included.map(remembered) };
   const managers = dependencies.managers || runtimeManagers();
   const consumerArchitecture = result.layout?.architecture || dependencies.consumerArchitecture;
-  const choices = dependencies.choices || managedTranslators(context, runtime, managers, consumerArchitecture);
+  const choices = (dependencies.choices || managedTranslators(context, runtime, managers, consumerArchitecture)).map(remembered);
   const current = context.wineEnvironment;
   const environment = current ? { label: sourceFor(runtime).labels.environment, selections: {} } : null;
   if (current) for (const [component, key] of [['d3d-renderer', 'graphicsBackend'], ['vulkan-driver', 'vulkanBackend']]) {
