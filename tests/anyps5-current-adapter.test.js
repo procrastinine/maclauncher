@@ -1,7 +1,13 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
 const Prepare=require('../src/modules/anyps5/prepare');
-const {fixture}=require('./helpers/anyps5-preparation-fixture.cjs');
+const {fixture:preparationFixture}=require('./helpers/anyps5-preparation-fixture.cjs');
+function fixture(t,options){
+ const f=preparationFixture(t,options);
+ const icon=require('../src/core/icon-utils').encodePngBitmap({width:256,height:256,buffer:Buffer.alloc(256*256*4,255)});
+ t.mock.method(require('../src/modules/shared/dock-icon'),'render',async()=>icon);
+ return f;
+}
 test('AnyPS5 current container preserves flat, prepared and custom-save operation',async t=>{
  for(const options of [{prepared:false},{prepared:true},{prepared:true,override:true}])await t.test(JSON.stringify(options),async t=>{
   const f=fixture(t,options),launch=await Prepare.prepareGame(f.entry,f.context,f.install,{runCommand:f.runCommand}),saves=f.entry.saveDirOverride||path.join(Prepare.gameDirectory(f.entry,f.context),'saves');
