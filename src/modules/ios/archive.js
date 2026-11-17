@@ -5,8 +5,9 @@ const Zip = require("../shared/runtime/zip");
 const { Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const LIMITS = { entries: 65534, directory: 16 * 1024 * 1024, file: 1024 ** 3, total: 8 * 1024 ** 3 };
-const crcTable = Uint32Array.from({ length: 256 }, (_, n) => { for (let i = 0; i < 8; i++) n = (n >>> 1) ^ ((n & 1) ? 0xedb88320 : 0); return n >>> 0; });
-function crc32(bytes, initial = 0xffffffff) { let crc = initial; for (const byte of bytes) crc = crcTable[(crc ^ byte) & 255] ^ (crc >>> 8); return crc >>> 0; }
+// The CRC-32 working register: chunks chain through `initial`, and the stored
+// checksum is the final register ^ 0xffffffff. zlib computes it natively.
+function crc32(bytes, initial = 0xffffffff) { return (zlib.crc32(bytes, (initial ^ 0xffffffff) >>> 0) ^ 0xffffffff) >>> 0; }
 function open(file) {
   const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
   try {

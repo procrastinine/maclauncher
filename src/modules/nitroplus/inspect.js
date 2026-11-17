@@ -106,6 +106,10 @@ function localFiles(root, detection) {
 
 function inspectGame(root, { inputPath, detection, includeEntries = false } = {}) {
   try {
+    // A folder without a script archive is not this engine's; its other files
+    // need no checks.
+    const listed = detection?.readdir ? detection.readdir(root) : fs.readdirSync(root, { withFileTypes: true });
+    if (!listed.some(item => item.isFile() && !item.isSymbolicLink() && item.name.toLowerCase() === "nss.npa")) return null;
     const files = localFiles(root, detection), scriptPath = files.get("nss.npa"), systemPath = files.get("system.npa");
     if (!scriptPath) return null;
     const scriptArchive = inspectArchive(scriptPath, { detection });

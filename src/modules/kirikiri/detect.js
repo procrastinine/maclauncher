@@ -81,7 +81,13 @@ function readXp3Index(filePath) {
   try { const archive = inspectArchive(filePath); return { files: [...archive.members.values()].map(member => member.name), protectedEntries: archive.protectedEntries, archiveBase: archive.base }; } catch { return null; }
 }
 
-function inspectRoot(rootDir, selectedArchive, selectedIndex) {
+// A detection session reads each candidate's XP3 index once, however many of
+// its probes ask: a folder's executables are each probed with every sibling.
+function sessionIndex(detection) {
+  return detection?.memo ? file => detection.memo("kirikiri-xp3-index", file, () => readXp3Index(file)) : readXp3Index;
+}
+
+function inspectRoot(rootDir, selectedArchive, selectedIndex, readIndex = readXp3Index) {
   let entries;
   try { entries = fs.readdirSync(rootDir, { withFileTypes: true }); } catch { return null; }
   const startup = entries.find(entry => entry.isFile() && entry.name.toLowerCase() === "startup.tjs");
@@ -90,7 +96,7 @@ function inspectRoot(rootDir, selectedArchive, selectedIndex) {
     .sort((a, b) => Number(b.name.toLowerCase() === "data.xp3") - Number(a.name.toLowerCase() === "data.xp3"))
     .map(entry => path.join(rootDir, entry.name));
   for (const archive of archives) {
-    const index = archive === selectedArchive && selectedIndex || readXp3Index(archive);
+    const index = archive === selectedArchive && selectedIndex || readIndex(archive);
     if (!index?.files.some(name => name.toLowerCase() === "startup.tjs")) continue;
     return { launchTarget: archive, sourceKind: "xp3", archivePath: archive, protectedEntries: index.protectedEntries };
   }
@@ -179,8 +185,9 @@ function detectGame(context) {
   const roots = context.isAppBundle
     ? ["Contents/Resources/game", "Contents/Resources/data", "Contents/Resources"].map(relative => path.join(context.rootDir, relative))
     : [context.rootDir];
+  const readIndex = sessionIndex(context.detection);
   for (const rootDir of roots) {
-    const selectedIndex = isFile && [".xp3", ".exe"].includes(extension) ? readXp3Index(inputPath) : null;
+    const selectedIndex = isFile && [".xp3", ".exe"].includes(extension) ? readIndex(inputPath) : null;
     // Some Windows hosts embed an XP3 containing only a plugin or identifier,
     // while their actual startup lives in sibling data.xp3. Such an EXE is not
     // a definitive archive input. Explicit .xp3 imports remain strict so an
@@ -188,7 +195,7 @@ function detectGame(context) {
     if (isFile && extension === ".xp3" && !selectedIndex) return null;
     const selectedArchive = selectedIndex && (extension === ".xp3" ||
       selectedIndex.files.some(name => name.toLowerCase() === "startup.tjs")) ? inputPath : null;
-    const info = inspectRoot(rootDir, selectedArchive, selectedIndex);
+    const info = inspectRoot(rootDir, selectedArchive, selectedIndex, readIndex);
     if (!info) continue;
     const version = detectScriptVersion(rootDir, info.sourceKind, info.archivePath);
     return {

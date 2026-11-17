@@ -47,10 +47,6 @@ function looksLikePeBinary(filePath) {
   return fileStartsWith(filePath, PE_MAGIC);
 }
 
-function looksLikeElfBinary(filePath) {
-  return fileStartsWith(filePath, ELF_MAGIC);
-}
-
 function readBuffer(fd, offset, length) {
   if (offset < 0 || length <= 0) return null;
   const buf = Buffer.alloc(length);
@@ -371,27 +367,30 @@ function findEmbeddedPckElf(fd, fileSize) {
   return null;
 }
 
+function findEmbeddedPckInFile(fd, fileSize) {
+  const header = readBuffer(fd, 0, 4);
+  if (header && header.equals(PACK_MAGIC)) {
+    return { offset: 0, size: fileSize };
+  }
+
+  const trailer = findEmbeddedPckTrailer(fd, fileSize);
+  if (trailer) return trailer;
+
+  const pe = findEmbeddedPckPe(fd, fileSize);
+  if (pe) return pe;
+
+  const elf = findEmbeddedPckElf(fd, fileSize);
+  if (elf) return elf;
+  return null;
+}
+
 function findEmbeddedPck(filePath) {
   let fd = null;
   try {
     const stat = fs.statSync(filePath);
     if (!stat.isFile()) return null;
-    const fileSize = stat.size;
     fd = fs.openSync(filePath, "r");
-
-    const header = readBuffer(fd, 0, 4);
-    if (header && header.equals(PACK_MAGIC)) {
-      return { offset: 0, size: fileSize };
-    }
-
-    const trailer = findEmbeddedPckTrailer(fd, fileSize);
-    if (trailer) return trailer;
-
-    const pe = findEmbeddedPckPe(fd, fileSize);
-    if (pe) return pe;
-
-    const elf = findEmbeddedPckElf(fd, fileSize);
-    if (elf) return elf;
+    return findEmbeddedPckInFile(fd, stat.size);
   } catch {
     return null;
   } finally {
@@ -401,7 +400,41 @@ function findEmbeddedPck(filePath) {
       } catch {}
     }
   }
-  return null;
+}
+
+function startsWith(buffer, magic) {
+  return Boolean(buffer && buffer.length >= magic.length && buffer.subarray(0, magic.length).equals(magic));
+}
+
+// One descriptor answers whether a file is an executable, from its name, mode
+// or first bytes, and where its embedded pack is. A folder scan otherwise
+// opens every file once per check.
+function inspectExecutable(filePath, stat, isExe) {
+  const modeExecutable = ((stat?.mode || 0) & 0o111) !== 0;
+  let fd = null, head = null;
+  try {
+    fd = fs.openSync(filePath, "r");
+    head = readBuffer(fd, 0, ELF_MAGIC.length);
+  } catch {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch {}
+    }
+    return { isElf: false, isExecutable: isExe || modeExecutable, embedded: null };
+  }
+  try {
+    const isElf = startsWith(head, ELF_MAGIC);
+    const isExecutable = isExe || isElf || startsWith(head, PE_MAGIC) || modeExecutable;
+    let embedded = null;
+    if (isExecutable) {
+      try {
+        const current = fs.fstatSync(fd);
+        embedded = current.isFile() ? findEmbeddedPckInFile(fd, current.size) : null;
+      } catch {}
+    }
+    return { isElf, isExecutable, embedded };
+  } finally {
+    try { fs.closeSync(fd); } catch {}
+  }
 }
 
 function parseConfigVersion(text) {
@@ -523,10 +556,8 @@ function detectFileInput(inputPath, rootDir, stat) {
   }
 
   const isExe = ext === ".exe";
-  const isElf = looksLikeElfBinary(inputPath);
-  const isExecutable = isExe || isElf || looksLikePeBinary(inputPath) || ((stat?.mode || 0) & 0o111) !== 0;
+  const { isElf, isExecutable, embedded } = inspectExecutable(inputPath, stat, isExe);
   if (isExecutable) {
-    const embedded = findEmbeddedPck(inputPath);
     if (embedded) {
       const version = detectVersionFromHeader(inputPath, embedded.offset, embedded.size);
       if (!version) return null;

@@ -205,7 +205,10 @@ function inspectClassic(filePath) {
     const headerStart = 3800004;
     if (reader.stat.size >= headerStart + 44) {
       const bytes = reader.read(headerStart, Math.min(4 * 1024 ** 2, reader.stat.size - headerStart));
-      for (let offset = 0; offset <= bytes.length - 44; offset++) {
+      // The masked magic fixes the bytes at +1, +3, +4 and +6; candidates are
+      // the positions of its 0xf7 byte, in order.
+      for (let at = bytes.indexOf(0xf7, 3); at >= 0 && at - 3 <= bytes.length - 44; at = bytes.indexOf(0xf7, at + 1)) {
+        const offset = at - 3;
         const magic = ((bytes.readUInt32LE(offset) & 0xff00ff00) | (bytes.readUInt32LE(offset + 4) & 0x00ff00ff)) >>> 0;
         if (magic !== 0xf7140067 || bytes.readUInt32LE(offset + 32) !== 800) continue;
         const length = bytes.readUInt32LE(offset + 36), settingsOffset = headerStart + offset + 40;

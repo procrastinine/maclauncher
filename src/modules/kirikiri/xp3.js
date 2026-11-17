@@ -15,12 +15,21 @@ function chunks(data, visit) {
     visit(data.toString("ascii", cursor, cursor + 4), data.subarray(cursor + 12, cursor + 12 + size)); cursor += 12 + size;
   }
 }
+// The first header within the search bound. One buffer is read in large
+// chunks; the bytes a header could span carry over to the next chunk.
+const SEARCH_CHUNK = 1024 * 1024;
 function findBase(fd, size) {
-  let cursor = 0, previous = Buffer.alloc(0);
-  while (cursor < Math.min(size, LIMITS.headerSearch)) {
-    const part = read(fd, Math.min(65536, size - cursor, LIMITS.headerSearch - cursor), cursor, size), data = Buffer.concat([previous, part]), at = data.indexOf(MAGIC);
-    if (at >= 0) return cursor - previous.length + at;
-    previous = data.subarray(Math.max(0, data.length - MAGIC.length + 1)); cursor += part.length;
+  const limit = Math.min(size, LIMITS.headerSearch), overlap = MAGIC.length - 1;
+  const buffer = Buffer.allocUnsafe(Math.min(SEARCH_CHUNK, limit) + overlap);
+  let cursor = 0, kept = 0;
+  while (cursor < limit) {
+    const length = Math.min(SEARCH_CHUNK, limit - cursor);
+    if (fs.readSync(fd, buffer, kept, length, cursor) !== length) throw new Error("Truncated XP3 archive.");
+    const end = kept + length, at = buffer.subarray(0, end).indexOf(MAGIC);
+    if (at >= 0) return cursor - kept + at;
+    const keep = Math.min(overlap, end);
+    buffer.copy(buffer, 0, end - keep, end);
+    kept = keep; cursor += length;
   }
   throw new Error("No bounded XP3 header was found in this file.");
 }
