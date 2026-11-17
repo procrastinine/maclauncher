@@ -121,7 +121,7 @@ function createManager({ dependencies = {}, upstream = createSource() } = {}) {
     if (!selected.version) throw new Error("No matching Steamworks4j JNI download is available.");
     return install({ ...options, version: selected.version });
   };
-  manager.ui = { category: "tools", tabLabel: "Steamworks4j", sectionLabel: "Steamworks4j", order: 235 };
+  manager.ui = { category: "tools", tabLabel: "Steamworks4j", sectionLabel: "Steamworks4j", order: 235, management: "managed" };
   return manager;
 }
 module.exports = createManager();

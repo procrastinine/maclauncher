@@ -47,6 +47,7 @@ test('every registered runtime manager has a linked upstream project in Credits'
     impacto: 'https://github.com/CommitteeOfZero/impacto',
     innoextract: 'https://github.com/dscharrer/innoextract',
     java: 'https://adoptium.net/',
+    'java-steamworks': 'https://github.com/code-disaster/steamworks4j',
     krkrsdl2: 'https://github.com/krkrsdl2/krkrsdl2',
     love: 'https://github.com/love2d/love',
     mkxpz: 'https://github.com/mkxp-z/mkxp-z',
