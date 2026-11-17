@@ -566,7 +566,7 @@ function openGLAttachmentEnvironment(entry, context, install, plan) {
   if(!source)return {...inherited,...plan.graphicsPolicy?.env};
   const translators=require("../../shared/runtime/wine-translators");
   const user=require("../../shared/runtime/translator-environment-launch").forLaunch(entry,context,translators.environmentIds(plan,source.id)).values;
-  return {...inherited,...source.launchEnvironment(install),...plan.graphicsPolicy?.env,...user};
+  return {...inherited,...source.launchEnvironment?.(install),...plan.graphicsPolicy?.env,...user};
 }
 function wineVulkanRuntimeSelection(entry, context, install, {translatorPlan=context.translatorPlan, root, manager=require("../temporal/vulkan/manager")}={}) {
   if (!translatorPlan) return {selection:null};
