@@ -44,7 +44,8 @@ function createManager(dependencies = {}) {
       selected = manager.resolveSelection(context.entry || {}, context.settings, context.userDataDir, { version: context.version });
     }
     if (!selected.version) throw missing("No Intel XeSS SDK releases are available.");
-    await manager.installRuntime({ ...context, version: selected.version, automatic: selected.automatic === true });
+    await manager.installRuntime({ ...context, version: selected.version,
+      automatic: typeof context.automatic === "boolean" ? context.automatic : selected.automatic === true });
     context.onRuntimeStateChange?.();
     return manager.resolveRuntime(context);
   };

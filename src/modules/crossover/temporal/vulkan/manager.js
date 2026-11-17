@@ -118,7 +118,8 @@ function createManager(dependencies = {}) {
       selected = manager.resolveSelection(entry, context.settings, context.userDataDir, { version: payload.toolVersion });
     }
     if (!selected.version) throw Error("No compatible WineVulkan helper versions are available.");
-    const installed = await manager.installRuntime({ ...context, version: selected.version, automatic: selected.automatic === true });
+    const installed = await manager.installRuntime({ ...context, version: selected.version,
+      automatic: typeof context.automatic === "boolean" ? context.automatic : selected.automatic === true });
     context.onRuntimeStateChange?.();
     return installed;
   };
