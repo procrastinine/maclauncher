@@ -16,7 +16,7 @@ function checked(input) {
 
 // Wine's builtin lookup uses IMAGE_EXPORT_DIRECTORY.Name, including for a
 // builtin found in the prefix. The complete client uses an owned module name.
-function clientName(input) {
+function clientName(input, dll = "winevulkan") {
   const pe = readPeExports(input.file), bytes = input.bytes;
   if (!pe?.isDll || pe.form !== 'builtin') throw Error('WineVulkan requires a complete Wine builtin client.');
   const at = bytes.readUInt32LE(60) + 24, magic = bytes.readUInt16LE(at);
@@ -28,20 +28,21 @@ function clientName(input) {
   };
   const nameAt = offset(bytes.readUInt32LE(offset(rva) + 12));
   const end = bytes.indexOf(0, nameAt), name = bytes.toString('ascii', nameAt, end);
-  if (end < nameAt || end - nameAt > 128 || !/^[a-z][a-z0-9-]*\.dll$/.test(name) || name === 'winevulkan.dll')
+  if (end < nameAt || end - nameAt > 128 || !/^[a-z][a-z0-9-]*\.dll$/.test(name) || name === dll + '.dll')
     throw Error('WineVulkan client needs a distinct builtin export name.');
-  if (!pe.exports.get('vkCreateInstance')?.executable || !pe.exports.get('vkGetInstanceProcAddr')?.executable)
+  if (dll === 'winevulkan' && (!pe.exports.get('vkCreateInstance')?.executable || !pe.exports.get('vkGetInstanceProcAddr')?.executable))
     throw Error('WineVulkan client Vulkan exports are unavailable.');
   return name;
 }
 
-async function prepareSelection({ prefixPath, dllRoot, windows, unixName, client, native, signal }) {
+async function prepareSelection({ prefixPath, dllRoot, windows, unixName, client, native, signal, dll = "winevulkan" }) {
+  if (!["winevulkan", "opengl32"].includes(dll)) throw Error("Unsupported builtin selection.");
   signal?.throwIfAborted();
   if (!/^[a-z0-9_]+-windows$/.test(windows || '') || !/^[a-z0-9_]+-unix$/.test(unixName || ''))
     throw Error('WineVulkan view directories are unavailable.');
   if (!path.isAbsolute(prefixPath || '') || !path.isAbsolute(dllRoot || '')) throw Error('WineVulkan needs a prepared Wine prefix and view.');
   const selected = checked(client), library = checked(native), original = checked(client.original);
-  const name = clientName(selected), stem = name.slice(0, -4);
+  const name = clientName(selected, dll), stem = name.slice(0, -4);
   const imports = new Set(readMachOLoadCommands(library.file).slices.flatMap(image => image.dependencies)
     .filter(item => item.path.startsWith('@rpath/')).map(item => item.path.slice(7)));
   const dependencies = new Map();
@@ -53,8 +54,8 @@ async function prepareSelection({ prefixPath, dllRoot, windows, unixName, client
   if (readPeExports(original.file)?.form !== 'builtin') throw Error('The original WineVulkan client is not a Wine builtin.');
   const directory = path.join(prefixPath, 'drive_c/windows', windows === 'i386-windows' ? 'syswow64' : 'system32');
   Writable.assertOwnDirectory(prefixPath, directory, { create: false });
-  const destination = path.join(directory, 'winevulkan.dll'), token = crypto.randomUUID();
-  const backup = path.join(directory, '.maclauncher-winevulkan-' + token);
+  const destination = path.join(directory, dll + '.dll'), token = crypto.randomUUID();
+  const backup = path.join(directory, '.maclauncher-' + dll + '-' + token);
   const aliases = [], copies = [], linkMatches = (file, target) => stat(file)?.isSymbolicLink() && fs.readlinkSync(file) === target;
   let moved = false, applied = false, restored = false, abortFailure;
   function restoreSync() {
@@ -105,7 +106,7 @@ async function prepareSelection({ prefixPath, dllRoot, windows, unixName, client
     checkpoint(); signal?.addEventListener('abort', onAbort, { once: true }); checkpoint();
   } catch (error) { restoreSync(); throw error; }
   return {
-    env: { WINEDLLPATH: dllRoot, WINEDLLOVERRIDES: 'winevulkan=b' },
+    env: { WINEDLLPATH: dllRoot, WINEDLLOVERRIDES: dll + '=b' },
     native: { file: nativePath, sha256: library.sha256 },
     async applyPrefix() {
       try {

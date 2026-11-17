@@ -566,7 +566,14 @@ function wineVulkanRuntimeSelection(entry, context, install, {translatorPlan=con
   if(selected.ready&&selected.install){
     const module=manager.inspectPayload(selected.install.modulePayloadRoot||selected.install.payloadRoot||selected.install.executablePath);
     const selection=wineVulkanSelection(module.root,install,{layout,signal:context.signal,module});
-    if(selection)return {selection,manager,selected,managed:true};
+    if(selection){
+      const ReShade=require("../../shared/reshade");
+      if(loadsUnsignedLibraries(install)&&ReShade.layerLoads(entry,{root:ReShade.runtimeRoot(context.app),graphicsHost:"window"})) {
+        selection.opengl=require("../temporal/opengl/selection").select(module.root,module.manifest,layout,translatorPlan.graphicsPolicy?.env);
+        if(selection.opengl) selection.inputs.push(...[selection.opengl.native,...selection.opengl.clients.map(pair=>pair.client)].map(row=>({path:row.file,sha256:row.sha256})));
+      }
+      return {selection,manager,selected,managed:true};
+    }
   }
   root ||= require("../../shared/reshade").runtimeRoot(context.app);
   return {selection:wineVulkanSelection(root,install,{layout,signal:context.signal}),manager,selected};
@@ -588,8 +595,15 @@ async function prepareWineVulkanView(selection,{prefixPath,dllRoot,layout,signal
     if(require("../../shared/runtime/verified-identity").fileDigest(file).sha256!==dependency.sha256)fail("The prepared WineVulkan dependency differs from the selected Wine.");
     return {...dependency,file:fs.realpathSync(file)};
   });
-  return require("../temporal/vulkan/selection").prepareSelection({...selection,prefixPath,dllRoot:directory,windows:layout.primaryWindows,unixName:layout.unixName,
+  const vulkan=await require("../temporal/vulkan/selection").prepareSelection({...selection,prefixPath,dllRoot:directory,windows:layout.primaryWindows,unixName:layout.unixName,
     native:{...selection.native,dependencies},signal});
+  if(!selection.opengl)return vulkan;
+  let opengl;
+  try { opengl=await require("../temporal/opengl/selection").prepare(selection.opengl,{prefixPath,dllRoot:directory,layout,signal}); }
+  catch(error){await vulkan.restore();throw error;}
+  return {native:vulkan.native,env:{WINEDLLPATH:[opengl.env.WINEDLLPATH,vulkan.env.WINEDLLPATH].join(path.delimiter),WINEDLLOVERRIDES:"winevulkan=b;opengl32=b"},
+    async applyPrefix(){try{await vulkan.applyPrefix();await opengl.applyPrefix();}catch(error){await opengl.restore();await vulkan.restore();throw error;}},
+    async restore(){await opengl.restore();await vulkan.restore();}};
 }
 async function wineVulkanRequirements(entry,context,{install,translatorPlan=context.translatorPlan,root,graphicsRoot,manager=require("../temporal/vulkan/manager")}={}){
   if(!translatorPlan?.components?.["vulkan-driver"]?.used)return [];
