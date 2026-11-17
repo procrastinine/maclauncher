@@ -22,15 +22,28 @@ function routes(repository, releases, files) {
 const temporary = t => { const directory = fs.mkdtempSync(path.join(os.tmpdir(), "future-upstream-store-")); t.after(() => fs.rmSync(directory, { recursive: true, force: true })); return directory; };
 
 const GOGDL = "Heroic-Games-Launcher/heroic-gogdl", arch = process.arch === "x64" ? "x64" : "arm64";
+// Mac builds are Mach-O executables for their CPUs (both in a universal build);
+// the name and tag follow the headers so each download is recognizable.
+const CPU = { arm64: 0x0100000c, x86_64: 0x01000007 };
+function machO(cpus, text) {
+  const thin = cpu => { const header = Buffer.alloc(32); header.writeUInt32LE(0xfeedfacf); header.writeUInt32LE(CPU[cpu], 4); header.writeUInt32LE(2, 12); return header; };
+  if (cpus.length === 1) return Buffer.concat([thin(cpus[0]), Buffer.from(text)]);
+  const table = Buffer.alloc(8 + 20 * cpus.length); table.writeUInt32BE(0xcafebabe); table.writeUInt32BE(cpus.length, 4);
+  cpus.forEach((cpu, index) => { table.writeUInt32BE(CPU[cpu], 8 + index * 20); table.writeUInt32BE(table.length + index * 32, 16 + index * 20); table.writeUInt32BE(32, 20 + index * 20); });
+  return Buffer.concat([table, ...cpus.map(thin), Buffer.from(text)]);
+}
+const macCpus = name => !/macos/.test(name) ? null : /universal/.test(name) ? ["arm64", "x86_64"] : /x86_64/.test(name) ? ["x86_64"] : ["arm64"];
 const gogdlFiles = (version, names = ["gogdl_macos_arm64", "gogdl_macos_x86_64", "gogdl_linux_x86_64", "gogdl_windows_x86_64.exe"]) =>
-  Object.fromEntries(names.map(name => [name, Buffer.from(`${name} ${version}`)]));
+  Object.fromEntries(names.map(name => [name, macCpus(name) ? machO(macCpus(name), `${name} ${version}`) : Buffer.from(`${name} ${version}`)]));
+const gogdlText = file => { const bytes = fs.readFileSync(file); return bytes.subarray(bytes.indexOf("gogdl")).toString(); };
 function gogdlState(entries) {
   const files = Object.fromEntries(entries.map(([tag, names]) => [tag, gogdlFiles(tag, names)]));
   return routes(GOGDL, entries.map(([tag]) => release(GOGDL, tag, files[tag])), files);
 }
 async function gogdl(t, Harness, userDataDir, network) {
   Harness.network.routes = network;
-  try { return await Gogdl.ensureGogdl({ userDataDir, arch, platform: "darwin" }); } finally { Harness.network.routes = null; }
+  // The store action's one download question is answered yes.
+  try { return await Gogdl.ensureGogdl({ userDataDir, arch, platform: "darwin", confirmRuntimeInstall: async () => true }); } finally { Harness.network.routes = null; }
 }
 
 const GMSCORE = "microg/GmsCore";
@@ -100,24 +113,26 @@ module.exports = {
       assert.equal((await microg(Harness, temporary(t), replaced)).packages[1].sha256, sha256(replaced[url]));
     },
     "GOGdl follows new, renamed, replaced and removed releases and keeps working offline": async (t, Harness) => {
-      const userDataDir = temporary(t), current = gogdlState([["v1.3.1"], ["v1.2.0"]]);
+      const userDataDir = temporary(t), current = gogdlState([["v1.3.1"], ["v1.2.0"]]), name = `gogdl_macos_${arch === "x64" ? "x86_64" : "arm64"}`;
       const first = await gogdl(t, Harness, userDataDir, current);
       assert.equal(first.version, "1.3.1");
-      assert.equal(fs.readFileSync(first.executablePath, "utf8"), `gogdl_macos_${arch === "x64" ? "x86_64" : "arm64"} v1.3.1`);
+      assert.equal(gogdlText(first.executablePath), `${name} v1.3.1`);
       assert.equal((await gogdl(t, Harness, temporary(t), mapRoutes(current, withUnknownFields))).version, "1.3.1", "unknown release fields");
-      assert.equal((await gogdl(t, Harness, userDataDir, gogdlState([["v1.4.0"], ["v1.3.1"]]))).version, "1.4.0", "a new release");
+      assert.equal((await gogdl(t, Harness, temporary(t), gogdlState([["v1.4.0"], ["v1.3.1"]]))).version, "1.4.0", "a new release");
+      // An installed helper is used offline; a newer release is never downloaded in the background.
+      assert.equal((await gogdl(t, Harness, userDataDir, gogdlState([["v1.4.0"], ["v1.3.1"]]))).version, "1.3.1", "the installed helper stays");
       const renamed = await gogdl(t, Harness, temporary(t), gogdlState([["v2.0.0", ["gogdl-2.0.0-macos-universal", "gogdl-2.0.0-linux-x86_64"]], ["v1.3.1"]]));
       assert.equal(renamed.version, "2.0.0", "a renamed universal build");
       // The same release with a rebuilt file: GitHub's new digest verifies it.
-      const replaced = gogdlState([["v1.4.0"], ["v1.3.1"]]), name = `gogdl_macos_${arch === "x64" ? "x86_64" : "arm64"}`, url = Object.keys(replaced).find(key => key.endsWith(`/v1.4.0/${name}`));
-      replaced[url] = Buffer.from(`${name} v1.4.0 rebuilt`);
+      const replaced = gogdlState([["v1.4.0"], ["v1.3.1"]]), url = Object.keys(replaced).find(key => key.endsWith(`/v1.4.0/${name}`));
+      replaced[url] = machO([arch === "x64" ? "x86_64" : "arm64"], `${name} v1.4.0 rebuilt`);
       const list = replaced[`https://api.github.com/repos/${GOGDL}/releases`];
       list[0].assets = list[0].assets.map(asset => asset.name === name ? { ...asset, size: replaced[url].length, digest: "sha256:" + sha256(replaced[url]) } : asset);
-      const rebuilt = await gogdl(t, Harness, userDataDir, replaced);
-      assert.equal(fs.readFileSync(rebuilt.executablePath, "utf8"), `${name} v1.4.0 rebuilt`);
+      const rebuiltDir = temporary(t), rebuilt = await gogdl(t, Harness, rebuiltDir, replaced);
+      assert.equal(gogdlText(rebuilt.executablePath), `${name} v1.4.0 rebuilt`);
       // Releases without a Mac build, or no answer at all, keep the installed helper.
-      assert.equal((await gogdl(t, Harness, userDataDir, gogdlState([["v3.0.0", ["gogdl_linux_x86_64"]]]))).version, "1.4.0");
-      assert.equal((await gogdl(t, Harness, userDataDir, {})).version, "1.4.0");
+      assert.equal((await gogdl(t, Harness, rebuiltDir, gogdlState([["v3.0.0", ["gogdl_linux_x86_64"]]]))).version, "1.4.0");
+      assert.equal((await gogdl(t, Harness, rebuiltDir, {})).version, "1.4.0");
     }
   }
 };
