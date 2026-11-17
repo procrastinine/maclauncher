@@ -77,8 +77,12 @@ test('a game type section shows the shown runtime form\'s explanations behind it
   } finally { harness.close(); }
 });
 
-test('the Settings label column fits the longest label, so no label wraps', () => {
+test('the Settings label column fits the longest label, and a heading\'s help popover reads as body text', () => {
   const css = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
   assert.match(css, /\.settingsRow \{[^}]*grid-template-columns: minmax\(var\(--field-label\), 18rem\) minmax\(0, 26rem\);/);
   assert.match(css, /\.helpList dt \{ font-weight: 600; \}/);
+  // A help button inside a heading keeps its popover in body text: the explanations are not bold, uppercase or spaced like the heading.
+  const popover = /\n\.helpPopover \{([^}]*)\}/.exec(css)[1];
+  for (const rule of ['font-weight: 400', 'letter-spacing: normal', 'text-transform: none', 'white-space: normal'])
+    assert.ok(popover.includes(rule), rule);
 });

@@ -2439,7 +2439,7 @@ select.input:not([multiple]) {
 .helpList dt:not(:first-child) { margin-top: 8px; }
 .helpList dd { margin: 2px 0 0; }
 .helpPopover > :not(.helpList) + .helpList { margin-top: 10px; }
-.helpPopover { position: fixed; inset: auto; margin: 0; max-width: min(30rem, calc(100vw - 32px)); max-height: calc(100vh - 16px); overflow: auto; padding: 12px; background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; font-size: var(--font-sm); line-height: 1.5; box-shadow: var(--shadow-drop); }
+.helpPopover { position: fixed; inset: auto; margin: 0; max-width: min(30rem, calc(100vw - 32px)); max-height: calc(100vh - 16px); overflow: auto; padding: 12px; background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; font-size: var(--font-sm); font-weight: 400; line-height: 1.5; letter-spacing: normal; text-transform: none; text-align: left; white-space: normal; box-shadow: var(--shadow-drop); }
 
 .settingsTabs, .runtimeTabs { scrollbar-width: none; }
 .settingsTabs::-webkit-scrollbar, .runtimeTabs::-webkit-scrollbar { display: none; }
