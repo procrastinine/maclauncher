@@ -2,6 +2,7 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
 const { node, activity, manifest, binaryXml, zip } = require("./helpers/android-packages");
 const Package = require("../src/modules/android/package-set");
+const { withApk } = require("../src/modules/android/apk");
 
 function manifests() {
   const base = manifest([node("activity", { name: ".Base", exported: false })],
@@ -143,4 +144,63 @@ test("signed feature APK cluster retains original Android component and split se
   assert.match(run("java", ["-Xverify:all", "-cp", cp, "maclauncher.android.framework.FeatureSplitProbe", runtime, root, ...signed]),
     /PASS original signed feature split components and base inheritance/);
   assert.throws(() => Package.plan(records.map((record, index) => index ? { ...record, signers: ["b".repeat(64)] } : record), { verified: true }), /different signing certificates/);
+});
+
+// A resource table holding only its global string pool, in UTF-8.
+function resourceTable(strings) {
+  const data = Buffer.concat(strings.map(text => { const bytes = Buffer.from(text); return Buffer.concat([Buffer.from([text.length, bytes.length]), bytes, Buffer.from([0])]); }));
+  const offsets = Buffer.alloc(strings.length * 4); let at = 0;
+  strings.forEach((text, index) => { offsets.writeUInt32LE(at, index * 4); at += Buffer.byteLength(text) + 3; });
+  const pool = Buffer.alloc(28); pool.writeUInt16LE(1, 0); pool.writeUInt16LE(28, 2); pool.writeUInt32LE(28 + offsets.length + data.length, 4);
+  pool.writeUInt32LE(strings.length, 8); pool.writeUInt32LE(0x100, 16); pool.writeUInt32LE(28 + offsets.length, 20);
+  const table = Buffer.alloc(12); table.writeUInt16LE(2, 0); table.writeUInt16LE(12, 2); table.writeUInt32LE(12 + pool.readUInt32LE(4), 4);
+  return Buffer.concat([table, pool, offsets, data]);
+}
+
+test("archive inspection writes only what it reads from stored APKs and still rejects damaged entries", async t => {
+  const root = folder(t), asset = Buffer.alloc(4 * 1024 * 1024);
+  for (let at = 0; at < asset.length; at += 4096) asset[at] = (at >>> 12) & 0xff;
+  const apk = zip([["AndroidManifest.xml", binaryXml(manifest())], ["assets/large.bin", asset]], { method: 0 });
+  const direct = path.join(root, "base.apk"), archive = path.join(root, "game.xapk");
+  fs.writeFileSync(direct, apk); fs.writeFileSync(archive, zip([["base.apk", apk]], { method: 0 }));
+  const expected = Package.inspectFiles([direct]), inspected = await Package.inspectInput(archive);
+  assert.deepEqual(inspected.metadata, expected.metadata);
+  assert.deepEqual(inspected.selected.map(item => item.metadata), expected.selected.map(item => item.metadata));
+
+  const sparseRoot = path.join(root, "sparse"), plainRoot = path.join(root, "plain");
+  fs.mkdirSync(sparseRoot); fs.mkdirSync(plainRoot);
+  const [sparse] = await Package.unpack(archive, sparseRoot, undefined, { method: "sparse" });
+  assert.equal(fs.statSync(sparse.file).size, apk.length);
+  assert.equal(fs.readFileSync(sparse.file).includes(asset.subarray(4096, 4096 * 4)), false, "the stored asset bytes are not written");
+  assert.deepEqual(Package.inspectFiles([sparse.file]).metadata, expected.metadata);
+  const [plain] = await Package.unpack(archive, plainRoot, undefined, { method: "plain" });
+  assert.deepEqual(fs.readFileSync(plain.file), apk);
+
+  const icon = Buffer.alloc(70000, 0x5a), table = resourceTable(["Example", "res/mipmap/icon.png"]);
+  const resourceApk = zip([["AndroidManifest.xml", binaryXml(manifest())], ["assets/large.bin", asset],
+    ["res/mipmap/icon.png", icon], ["resources.arsc", table]], { method: 0 });
+  const resourceArchive = path.join(root, "resources.xapk"), resourceRoot = path.join(root, "resources");
+  fs.writeFileSync(resourceArchive, zip([["base.apk", resourceApk]], { method: 0 })); fs.mkdirSync(resourceRoot);
+  const [resources] = await Package.unpack(resourceArchive, resourceRoot, undefined, { method: "resources" });
+  const written = fs.readFileSync(resources.file);
+  assert.equal(written.length, resourceApk.length);
+  assert.ok(written.includes(icon) && written.includes(table), "the resource table and the files it names are written");
+  assert.equal(written.includes(asset.subarray(4096, 4096 * 4)), false, "other entries are not written");
+  assert.equal(withApk(resources.file, apk => apk.read("res/mipmap/icon.png")).equals(icon), true);
+
+  // An unchanged archive's APKs are verified once per process.
+  Package.clearVerified();
+  const reads = t.mock.method(fs, "read"), onceRoot = path.join(root, "once"), againRoot = path.join(root, "again");
+  fs.mkdirSync(onceRoot); fs.mkdirSync(againRoot);
+  await Package.unpack(archive, onceRoot, undefined, { method: "sparse" });
+  const verifiedReads = reads.mock.callCount();
+  await Package.unpack(archive, againRoot, undefined, { method: "resources" });
+  assert.ok(verifiedReads > 0); assert.equal(reads.mock.callCount(), verifiedReads, "the second read does not stream the APK again");
+  reads.mock.restore();
+
+  const damaged = fs.readFileSync(archive); damaged[damaged.length >>> 1] ^= 0xff; fs.writeFileSync(archive, damaged);
+  await assert.rejects(Package.inspectInput(archive), /checksum/);
+  const damagedRoot = path.join(root, "damaged"); fs.mkdirSync(damagedRoot);
+  await assert.rejects(Package.unpack(archive, damagedRoot, undefined, { method: "sparse" }), /checksum/);
+  assert.deepEqual(fs.readdirSync(damagedRoot), [], "a rejected entry leaves no partial APK");
 });

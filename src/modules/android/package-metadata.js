@@ -78,19 +78,30 @@ async function read(entry, context) {
     const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), "maclauncher-android-metadata-"));
     try {
       await fs.promises.chmod(temporary, 0o700);
-      let sources = context.sourceApks;
-      if (!sources) {
-        if (Package.ARCHIVES.test(entry.gamePath)) {
-          const inputs = path.join(temporary, "inputs"); await fs.promises.mkdir(inputs, { mode: 0o700 });
-          sources = (await Package.unpack(entry.gamePath, inputs, controller.signal)).map(item => item.file);
-        } else sources = Package.directFiles(entry.gamePath);
+      const inspect = async method => {
+        let sources = context.sourceApks;
+        if (!sources) {
+          if (method) {
+            const inputs = path.join(temporary, "inputs-" + method); await fs.promises.mkdir(inputs, { mode: 0o700 });
+            sources = (await Package.unpack(entry.gamePath, inputs, controller.signal, { method })).map(item => item.file);
+          } else sources = Package.directFiles(entry.gamePath);
+        }
+        // Resource inspection retains every split, independent of the runtime's
+        // native ABI. Manifest identities also establish base/dependency order.
+        sources = Package.inspectFiles(sources, { inspection: true, requireLauncher: false }).selected.map(item => item.file);
+        const output = path.join(temporary, "output-" + (method || "direct")); await fs.promises.mkdir(output, { mode: 0o700 });
+        return Reader.inspect({ sourceApks: sources, locale: languageTag, outputDirectory: output,
+          context: { ...context, signal: controller.signal } });
+      };
+      // An archive's APKs are first written with only the entries the reader
+      // reads. Any failure there repeats the read on complete copies.
+      let result;
+      if (context.sourceApks || !Package.ARCHIVES.test(entry.gamePath)) result = await inspect(null);
+      else {
+        try { result = await inspect("resources"); }
+        catch { controller.signal.throwIfAborted(); }
+        result ||= await inspect("plain");
       }
-      // Resource inspection retains every split, independent of the runtime's
-      // native ABI. Manifest identities also establish base/dependency order.
-      sources = Package.inspectFiles(sources, { inspection: true, requireLauncher: false }).selected.map(item => item.file);
-      const output = path.join(temporary, "output"); await fs.promises.mkdir(output, { mode: 0o700 });
-      const result = await Reader.inspect({ sourceApks: sources, locale: languageTag, outputDirectory: output,
-        context: { ...context, signal: controller.signal } });
       if (!record.waiters) return null;
       if (!context.metadataSourceIdentity && hash(sourceIdentity(entry)) !== hash(input))
         throw new Error("The Android package changed while reading its metadata.");

@@ -24,7 +24,12 @@ kept there as well, even when the runtime changes.
 
 A package set can hold up to 64 APKs and 4 GiB of extracted data. During import,
 archive paths, ranges and checksums are validated, and Android's case-sensitive
-compiled resources are kept inside their APKs.
+compiled resources are kept inside their APKs. Detection and the reading of an
+app's name and icon take the uncompressed APKs of a package archive from where
+they are stored. After their checksums are verified, each APK's temporary file
+receives only the parts that are read: its archive directory and manifest, and
+for the name and icon also its resource table and the files the table names. A
+compressed APK, or one whose checks do not hold, is copied in full instead.
 
 To inspect a package, MacLauncher reads the original binary manifest, resources
 and archive directory without starting Java or running application code.
