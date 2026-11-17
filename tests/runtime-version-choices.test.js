@@ -167,3 +167,45 @@ test("a selection reads the manager's state for a custom default only while a re
   assert.ok(reads > 0);
   assert.equal(manager.getState({ userDataDir: root }).defaultVersion, folder, "Runtimes shows the same default");
 });
+
+test("a registered package's status inspection is reused until its folder or manifest changes, it is registered or removed, or a runtime is installed or removed", async t => {
+  const Custom = require("../src/modules/shared/runtime/custom-runtime");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "custom-status-")), folder = path.join(root, "Package");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(folder, { recursive: true });
+  const manifest = path.join(folder, "manifest.json");
+  fs.writeFileSync(manifest, JSON.stringify({ version: "1" }));
+  const inspected = [];
+  const manager = { id: "status-fixture", getState: () => ({ installed: [], catalog: { versions: [] } }),
+    installRuntime: async () => ({ version: "2.0" }), uninstallRuntime: async () => true,
+    customRuntime: { inspect: (runtimePath, { verification }) => {
+      inspected.push(verification);
+      return { installDir: runtimePath, versionLabel: JSON.parse(fs.readFileSync(path.join(runtimePath, "manifest.json"), "utf8")).version };
+    } } };
+  Custom.instrumentManagers([manager]);
+  const userDataDir = path.join(root, "data"), list = () => Custom.list({ managerId: manager.id, userDataDir });
+  await manager.registerCustomRuntime({ runtimePath: folder, userDataDir });
+  assert.deepEqual(inspected, ["full"], "registration reads the package in full");
+  assert.equal(list()[0].versionLabel, "1");
+  assert.equal(list()[0].versionLabel, "1");
+  manager.getState({ userDataDir });
+  assert.deepEqual(inspected, ["full", "status"], "an unchanged package is inspected once for every later listing and state read");
+  fs.writeFileSync(manifest, JSON.stringify({ version: "1.1" }));
+  assert.equal(list()[0].versionLabel, "1.1", "a changed manifest is read again");
+  fs.writeFileSync(path.join(folder, "added"), "");
+  list();
+  assert.equal(inspected.length, 4, "a changed folder is read again");
+  await manager.installRuntime({ version: "2.0", userDataDir });
+  list();
+  assert.equal(inspected.length, 5, "installing a runtime can change what a package depends on");
+  await manager.uninstallRuntime({ version: "2.0", userDataDir });
+  list(); list();
+  assert.equal(inspected.length, 6, "removing a runtime too, once");
+  await manager.uninstallRuntime({ version: folder, sectionId: "default", userDataDir });
+  assert.deepEqual(list(), []);
+  await manager.registerCustomRuntime({ runtimePath: folder, userDataDir });
+  list();
+  assert.deepEqual(inspected.slice(6), ["full", "status"], "a new registration of the same path is inspected again");
+  assert.equal(Custom.resolve({ managerId: manager.id, userDataDir, version: folder }).versionLabel, "1.1");
+  assert.equal(inspected.at(-1), "full", "a full inspection always reads the files");
+});

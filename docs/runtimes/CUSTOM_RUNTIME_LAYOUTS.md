@@ -42,6 +42,6 @@ MacLauncher never moves a custom runtime, and removing the registration leaves t
 
 ## Inspection of registered runtimes
 
-Neither registration nor the runtime status display runs the selected program. Instead, MacLauncher inspects it locally by reading executable headers, SDK layouts and application metadata. A standalone Godot executable that lacks application version metadata is the exception: its version is read when Play starts it.
+Neither registration nor the runtime status display runs the selected program. Instead, MacLauncher inspects it locally by reading executable headers, SDK layouts and application metadata. A standalone Godot executable that lacks application version metadata is the exception: its version is read when Play starts it. The status display reuses an inspection that found a registration ready until the registered path, its folder, that folder's parent or a package manifest in them changes, the path is registered again, or a runtime is installed or removed. Registration and every full check read the files again.
 
 For the native engines, a registered executable has to pass the shared checks in `local-native.js`. Its path must be absolute and executable, and the file must be a thin or universal 64-bit Mach-O executable whose slices fit within fixed limits, with at least one slice that the host CPU supports. Shell scripts, ELF and PE files and Mach-O libraries are rejected as executables. On Apple silicon, an x86_64-only build runs through Rosetta. Arguments are passed directly to the process launcher without a shell.

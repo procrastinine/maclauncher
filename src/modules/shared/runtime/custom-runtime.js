@@ -99,11 +99,58 @@ function metadata(row, install = {}) {
     registeredAt: row.registeredAt, registrationName: pathName(row.path), versionLabel: install.versionLabel || pathName(row.path),
     removalLabel: "Remove registration", removalConfirm: "Remove this runtime from the list? The selected files remain in their original location." };
 }
+// A status inspection that found a registration ready is reused while the registered path,
+// its folder, the folder's parent and the package manifests in them keep their
+// device, inode, size, mode, modification and change times, and while no
+// runtime is installed or removed (a package can depend on another installed
+// package). Registering or removing the path drops it; a full inspection always
+// reads the files again.
+const statusResults = new WeakMap(), MAX_STATUS_RESULTS = 512;
+const MANIFEST_NAMES = ["manifest.json", "bundle-manifest.json", "runtime-package.json", "project-package.json", "runtime.json"];
+let statusGeneration = 0;
+function statusIdentity(target) {
+  const read = file => { try { return fs.lstatSync(file, { bigint: true }); } catch (error) { if (error.code === "ENOENT" || error.code === "ENOTDIR") return null; throw error; } };
+  const stamp = stat => stat && [stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeNs, stat.ctimeNs].join(":");
+  const own = read(target), folder = own && !own.isDirectory() ? path.dirname(target) : target, parent = path.dirname(folder);
+  const files = [...new Set([folder, parent, path.join(folder, "project-payload", "manifest.json"),
+    ...MANIFEST_NAMES.flatMap(name => [path.join(folder, name), path.join(parent, name)])])].filter(file => file !== target);
+  return JSON.stringify([statusGeneration, stamp(own), ...files.map(file => stamp(read(file)))]);
+}
+// Installing or removing any runtime starts a new status generation, when it
+// starts and again when it ends.
+function changing(run) {
+  statusGeneration += 1;
+  let result;
+  try { result = run(); } catch (error) { statusGeneration += 1; throw error; }
+  if (result && typeof result.then === "function") return Promise.resolve(result).finally(() => { statusGeneration += 1; });
+  statusGeneration += 1;
+  return result;
+}
+function forgetStatus(manager, runtimePath) {
+  const results = manager && statusResults.get(manager);
+  if (results) for (const key of [...results.keys()]) if (JSON.parse(key)[0] === runtimePath) results.delete(key);
+}
 function inspect(manager, row, userDataDir, verification = "status") {
   const inspector = manager.customRuntime?.inspect || inspectNative;
-  const install = inspector(row.path, { managerId: manager.id, sectionId: row.sectionId, userDataDir, verification, data: row.data });
-  if (!install || install.then) throw new Error("Custom runtime inspection must return a local runtime synchronously.");
-  return metadata(row, { ...install, ready: install.ready !== false, status: install.ready === false ? "unavailable" : "ready" });
+  const read = () => {
+    const install = inspector(row.path, { managerId: manager.id, sectionId: row.sectionId, userDataDir, verification, data: row.data });
+    if (!install || install.then) throw new Error("Custom runtime inspection must return a local runtime synchronously.");
+    return metadata(row, { ...install, ready: install.ready !== false, status: install.ready === false ? "unavailable" : "ready" });
+  };
+  if (verification !== "status") return read();
+  let results = statusResults.get(manager);
+  if (!results) statusResults.set(manager, results = new Map());
+  const key = JSON.stringify([row.path, row.sectionId, row.registeredAt || null, row.data ?? null, userDataDir || null]);
+  const identity = statusIdentity(row.path), known = results.get(key);
+  if (known?.identity === identity && known.inspector === inspector) return { ...known.result };
+  // A missing, unavailable or still-preparing registration is read every time.
+  const result = read();
+  results.delete(key);
+  if (result.ready) {
+    results.set(key, { identity, inspector, result });
+    if (results.size > MAX_STATUS_RESULTS) results.delete(results.keys().next().value);
+  }
+  return { ...result };
 }
 function listFor(manager, { sectionId, userDataDir } = {}) {
   if (!manager) return [];
@@ -201,12 +248,14 @@ async function register(manager, { runtimePath, sectionId = "default", userDataD
   const current = records(userDataDir, manager.id).filter(item => item.path !== runtimePath || item.sectionId !== sectionId);
   if (current.length >= MAX_REGISTRATIONS) throw new Error("The custom runtime list is full.");
   write(userDataDir, manager.id, [...current, row]);
+  forgetStatus(manager, runtimePath);
   return installed;
 }
 function remove(manager, { version, sectionId = "default", userDataDir } = {}) {
   const current = records(userDataDir, manager.id), next = current.filter(row => row.path !== version || row.sectionId !== sectionId);
   if (next.length === current.length) throw new Error("The runtime registration was not found.");
   write(userDataDir, manager.id, next);
+  forgetStatus(manager, version);
   return true;
 }
 function legacyPath(manager, configured, sectionId) {
@@ -424,10 +473,10 @@ function instrumentManagers(values) {
     const select = manager.resolveSelection;
     manager.resolveSelection = createSelector(manager, select);
     const uninstall = manager.uninstallRuntime;
-    manager.uninstallRuntime = function(options) { return isPath(options.version) ? remove(manager, options) : uninstall?.call(this, options); };
+    manager.uninstallRuntime = function(options) { return changing(() => isPath(options.version) ? remove(manager, options) : uninstall?.call(this, options)); };
     const install = manager.installRuntime;
     if (install) manager.installRuntime = function(options = {}, ...args) {
-      if (!isPath(options.version)) return install.call(this, options, ...args);
+      if (!isPath(options.version)) return changing(() => install.call(this, options, ...args));
       const selected = resolveFor(manager, { sectionId: options.sectionId, userDataDir: options.userDataDir, version: options.version,
         allowInstallable: Boolean(manager.customRuntime?.prepareInstall) });
       if (!selected) throw new Error("The selected custom runtime is unavailable. Check its path in Runtimes.");
