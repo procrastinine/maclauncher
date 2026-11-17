@@ -6,6 +6,7 @@ const { execFileSync } = require("node:child_process");
 const Vulkan = require("../src/modules/shared/vulkan");
 const { hashFile } = require("../src/modules/shared/runtime/pinned-native-manager");
 const noAdapted = { installed: () => [] };
+const MachO = require("./fixtures/macho-image");
 // LWJGL's release listing and the KosmicKrisp library of one release.
 const LWJGL_LIST = "https://www.lwjgl.org/list?path=release/";
 const kosmickrispUrl = version => `https://build.lwjgl.org/release/${version}/macosx/arm64/libvulkan_kosmickrisp.dylib`;
@@ -20,8 +21,8 @@ test("Vulkan required drivers reuse manager defaults without seeding downloads o
   const dependencies = {managers:[manager],adapted:noAdapted,required:true};
   assert.deepEqual(manager.getState({userDataDir}).catalog.versions, []);
   assert.deepEqual(Vulkan.requirements(context,dependencies),
-    [{managerId:"vulkan-moltenvk",version:null,discoveryRequired:true,requiresDownload:true,installOptions:{}}],
-    "with nothing listed, consented preparation discovers the newest release instead of a fixed version");
+    [{managerId:"vulkan-moltenvk",version:null,discoveryRequired:true,requiresDownload:true,automatic:true,installOptions:{}}],
+    "with nothing listed, consented preparation discovers the newest release instead of a fixed version, recorded as installed by Play");
   context.settings = {runtimes:{[manager.id]:{defaultVersion:"1.4.3"}}};
   assert.equal(Vulkan.requirements(context,dependencies)[0].version,"1.4.3");
   context.runtimeSettings.translatorVulkan = "moltenvk:1.4.4";
@@ -106,13 +107,15 @@ test("managed MacLauncher KosmicKrisp starts with empty download choices and no 
   assert.equal(fs.existsSync(path.join(root, "runtimes")), false);
 });
 
-test("managed MacLauncher KosmicKrisp selections retain the complete closure and full launch verification", () => {
+test("managed MacLauncher KosmicKrisp selections retain the complete closure and full launch verification", t => {
   const Managed = require("../src/modules/shared/vulkan/managed"), calls = [];
-  const payloadRoot = path.join(os.tmpdir(), "managed-vulkan-payload");
+  const payloadRoot = fs.mkdtempSync(path.join(os.tmpdir(), "managed-vulkan-payload-"));
+  t.after(() => fs.rmSync(payloadRoot, {recursive: true, force: true}));
   const manifest = { minimumMacOS: "27.0", runtimeFiles: { loader: "libvulkan.1.dylib" }, files: [
     {path: "libvulkan_kosmickrisp.dylib", architectures: ["arm64"]},
     {path: "libvulkan.1.dylib", architectures: ["arm64"]},
     {path: "libCompiler.dylib", architectures: ["arm64"]}, {path: "LICENSE"}] };
+  for (const file of manifest.files.filter(file => file.architectures)) fs.writeFileSync(path.join(payloadRoot, file.path), MachO.image({cpu: MachO.ARM64}));
   let ready = true;
   const provider = Managed.createProvider({
     label: "MacLauncher KosmicKrisp",
@@ -136,7 +139,9 @@ test("managed MacLauncher KosmicKrisp selections retain the complete closure and
   assert.throws(() => provider.resolve(installed, context), /Install this version in Runtimes/);
 });
 
-test("saved MacLauncher KosmicKrisp choices request exact consented installation and reuse installed packages", () => {
+test("saved MacLauncher KosmicKrisp choices request exact consented installation and reuse installed packages", t => {
+  const loaderData = fs.mkdtempSync(path.join(os.tmpdir(), "vulkan-loader-empty-"));
+  t.after(() => fs.rmSync(loaderData, {recursive: true, force: true}));
   const uses = [], versions = [], context = {userDataDir: os.tmpdir(), settings:{}, runtimeSettings:{translatorVulkan:"kosmickrisp:maclauncher"}, recordRuntimeUse: row => uses.push(row)};
   let ready = false;
   const manager = {id:"maclauncher-kosmickrisp",resolveSelection: (_entry,_settings,_data,options) => {
@@ -153,9 +158,12 @@ test("saved MacLauncher KosmicKrisp choices request exact consented installation
     context.runtimeSettings.translatorVulkan = request;
     assert.deepEqual(Vulkan.requirements(context, dependencies), []);
   }
-  for (const [request, managerId, version] of [["moltenvk:1.0", "vulkan-moltenvk", "1.0"], ["kosmickrisp:stock", "vulkan-kosmickrisp", "stock"]]) {
+  // LWJGL's KosmicKrisp loads the managed Vulkan loader, which consented preparation acquires first.
+  const architecture = require("../src/modules/shared/runtime/architecture").selectedArchitecture();
+  const loader = {managerId:"vulkan-loader",version:null,discoveryRequired:true,requiresDownload:true,automatic:true,installOptions:{architecture,automatic:true}};
+  for (const [request, managerId, version, before] of [["moltenvk:1.0", "vulkan-moltenvk", "1.0", []], ["kosmickrisp:stock", "vulkan-kosmickrisp", "stock", [loader]]]) {
     context.runtimeSettings.translatorVulkan = request;
-    assert.deepEqual(Vulkan.requirements(context, dependencies), [{managerId, version, requiresDownload:true, installOptions:{}}]);
+    assert.deepEqual(Vulkan.requirements({...context, userDataDir: loaderData}, dependencies), [...before, {managerId, version, requiresDownload:true, installOptions:{}}]);
   }
   assert.deepEqual(versions,[undefined,"older","older"]);
 });
@@ -184,11 +192,16 @@ test("KosmicKrisp per-game version and CPU saved under the former manager ID rem
 test("MacLauncher KosmicKrisp retains earlier selections, installations and catalog downloads", {skip: process.platform !== "darwin" || process.arch !== "arm64"}, async t => {
   const Managed = require("../src/modules/shared/vulkan/managed"), Rename = require("../src/core/backcompat/kosmickrisp-rename"), Bundled = require("../src/modules/shared/runtime/bundled-native");
   const { createProjectBuildManager } = require("../src/modules/shared/runtime/project-build-manager");
-  const { nativeTool, packageFor } = require("./helpers/managed-tool-fixture.cjs");
+  const { packageFor } = require("./helpers/managed-tool-fixture.cjs");
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "kosmickrisp-rename-"));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const legacyId = "vulkan-kosmickrisp-gles32", older = "27.0.0-devel-MCLv8", newer = "27.0.0-devel-MCLv9";
-  const binary = nativeTool(path.join(root, "native"), "", {architecture: "arm64"}).binary;
+  // Installed packages are verified as signed native libraries.
+  const source = path.join(root, "driver.c"), library = path.join(root, "libfixture.dylib");
+  fs.writeFileSync(source, "int kosmickrisp_fixture(void){return 1;}\n");
+  execFileSync("/usr/bin/clang", ["-dynamiclib", "-arch", "arm64", "-mmacosx-version-min=13.0", "-Wl,-install_name,@rpath/libfixture.dylib", source, "-o", library]);
+  execFileSync("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", library], {stdio: "pipe"});
+  const binary = fs.readFileSync(library);
   const fixtures = [older, newer, "27.0.0-devel-MCLv12"].map((version, index) => packageFor(path.join(root, version), {
     id: index < 2 ? legacyId : Managed.projectId, version, architecture: "arm64", filesPrefix: "files/",
     manifest: {managerId: index < 2 ? legacyId : Managed.projectId, platform: "darwin", executableRelative: "libvulkan_kosmickrisp.dylib",
