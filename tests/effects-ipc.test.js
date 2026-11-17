@@ -389,8 +389,12 @@ test("getGameEffects and templates quietly ignore stale requests after Forget re
  f.context.backendService.request=()=>assert.fail('a removed entry must not enter backend discovery');
  deliver();assert.equal(await issued,null);
  assert.equal(JSON.stringify(await f.invoke('getGameEffectTemplates',f.entry.gamePath)),'[]');
+ const other={gameId:'failed-removal',gamePath:'/Games/Failed-removal'};
+ const failed=await remover.acquireGameRemoval(other);await remover.release(failed);
+ assert.equal(coordinator.wasGameRemoved(other.gamePath),false,'failed or abandoned removal is not a completed tombstone');
  for(const method of ['getGameEffects','getGameEffectTemplates']){
   await assert.rejects(f.invoke(method,'/Games/Unrelated-invalid'),/Game not found in library/,'unrelated missing paths retain their meaningful error');
+  await assert.rejects(f.invoke(method,other.gamePath),/Game not found in library/,'unsuccessful removal must not quiet invalid reads');
  }
  await assert.rejects(Promise.resolve().then(()=>f.invoke('setGameEffects',f.entry.gamePath,shaderPlan())),/Game not found in library/,'mutating actions retain their missing-game refusal');
 });
