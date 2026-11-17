@@ -9,6 +9,7 @@ const Native = require("../../../shared/runtime/local-native");
 const GameData = require("../../../shared/game-data");
 const Consumer = require("./consumer");
 const Host = require("../../../shared/runtime/host-capabilities");
+const Manager = require("./manager");
 const Catalog = require("../../../shared/runtime/included-package-metadata").resolve(require("./versions.json"));
 
 const failure = (code, message) => Object.assign(new Error(message), { code });
@@ -25,13 +26,15 @@ function nativeHostDependencies() {
 }
 
 /** The wrapper selects its matching JNI; a newer JNI is never substituted. */
-function requiredVariant(entry, { hostArch = process.arch, explicitVariant, preferredVariant, resourcesRoot } = {}) {
+function requiredVariant(entry, { hostArch = process.arch, explicitVariant, preferredVariant, resourcesRoot, userDataDir, settings } = {}) {
   // The launcher CPU is the default JVM preference; hardware decides which JVMs can run.
   const required = Consumer.requirement(entry);
   if (!required) return null;
   const hardwareArch = Host.getHostCapabilities().hardwareArch;
-  const bridge = resolveBundle(required.pin, { resourcesRoot, verification: "status" });
-  const available = bridge.architectures.map(arch => arch === "x86_64" ? "x64" : arch);
+  let bridge;
+  try { bridge = resolveBridge(required.pin, { resourcesRoot, userDataDir, settings, architecture: explicitVariant || preferredVariant || hostArch, verification: "status" }); }
+  catch (error) { if (!missingBridge(error)) throw error; }
+  const available = bridge?.architectures.length ? bridge.architectures.map(arch => arch === "x86_64" ? "x64" : arch) : ["arm64", "x64"];
   if (explicitVariant && !available.includes(explicitVariant))
     throw failure("JAVA_STEAM_CPU_MISMATCH", "This game's exact Java Steam bridge requires a different JVM CPU.");
   if (explicitVariant) {
@@ -65,6 +68,53 @@ function resolveBundle(pin, { resourcesRoot, verification = "full", native = Nat
     return { ...pin, architectures, jniSha256: record.librarySha256, ready: true, directory, libraryPath, agentPath, source: "bundled", bundledExecution: "direct" };
   }
   throw failure("JAVA_STEAM_BRIDGE_UNAVAILABLE", "This app build does not include this game's exact Java Steam bridge.");
+}
+
+function missingBridge(error) {
+  return error?.code === "JAVA_STEAM_BRIDGE_UNAVAILABLE" || error?.code === "ENOENT" || error?.cause?.code === "ENOENT" ||
+    error?.cause?.message === "Bundled runtime directory is missing.";
+}
+function recordBridgeUse(bridge, context) {
+  if (bridge?.managerId) context.recordRuntimeUse?.({ managerId: bridge.managerId, version: bridge.bridgeVersion,
+    sourcePath: bridge.installDir, ...(bridge.variant ? { variant: bridge.variant } : {}) });
+}
+/** A managed override keeps the game's wrapper ABI and the original agent. */
+function resolveBridge(pin, { userDataDir, settings = {}, resourcesRoot, architecture, verification = "full" } = {}) {
+  const selected = userDataDir && Manager.selectForWrapper(pin, { userDataDir, settings, architecture, verification });
+  if (selected?.ready && selected.install) {
+    const installed = selected.install, libraryPath = installed.executablePath || installed.runtimePath;
+    const cpus = Manager.architectures(libraryPath), requested = architecture === "x64" ? "x86_64" : architecture;
+    if (requested && cpus.length && !cpus.includes(requested)) return resolveBundle(pin, { resourcesRoot, verification });
+    const measured = Manager.inspectRuntime({ runtimePath: libraryPath, runtimeVersion: installed.version,
+      upstreamRevision: installed.upstreamRevision || "custom", ...(architecture ? { arch: architecture } : {}) });
+    if (Manager.compatibleWith(pin, { ...installed, ...measured })) {
+      const directory = path.dirname(libraryPath), manifest = path.join(directory, "helper.json");
+      let agentPath;
+      if (fs.existsSync(manifest)) {
+        const record = JSON.parse(Bundle.readRegular(manifest, Bundle.LIMITS.manifestBytes).bytes);
+        if (record.wrapperVersion === pin.version && record.abiProfile === pin.abiProfile && record.agentClassMajor === 52 && fs.existsSync(path.join(directory, "steam-agent.jar"))) {
+          agentPath = path.join(directory, "steam-agent.jar");
+          if (Bundle.readRegular(agentPath, Bundle.LIMITS.fileBytes).sha256 !== record.agentSha256)
+            throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The installed Java Steam agent changed.");
+        }
+      }
+      agentPath ||= resolveBundle(pin, { resourcesRoot, verification }).agentPath;
+      return { ...pin, bridgeVersion: installed.version, ready: true, directory, libraryPath, agentPath,
+        architectures: measured.architectures, jniSha256: measured.sha256, source: installed.custom ? "custom" : "managed",
+        managerId: Manager.id, installDir: installed.installDir, variant: installed.variant };
+    }
+  }
+  return resolveBundle(pin, { resourcesRoot, verification });
+}
+function requirementPlan(pin, context, { architecture } = {}) {
+  try {
+    recordBridgeUse(resolveBridge(pin, { ...context, architecture, verification: "status" }), context);
+    return null;
+  } catch (error) { if (!missingBridge(error)) throw error; }
+  const selected = Manager.selectForWrapper(pin, { ...context, architecture, verification: "status" });
+  return { managerId: Manager.id, version: selected.version || null,
+    ...(!selected.version ? { discoveryRequired: true } : {}), ...(selected.automatic === true ? { automatic: true } : {}),
+    installOptions: { wrapperVersion: pin.version, ...(architecture ? { architecture } : {}) } };
 }
 
 function ownedDirectory(userDataDir, directory) {
@@ -148,8 +198,9 @@ async function prepareLaunch(entry, context, install, baseEnvironment = process.
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(entry.gameId || ""))
     throw failure("JAVA_STEAM_STATE_INVALID", "Java Steam setup requires this game's library identity.");
   const arch = install.variant === "x64" ? "x86_64" : install.variant;
-  const bridge = resolveBundle(required.pin, { resourcesRoot: context.resourcesRoot });
-  if (!bridge.architectures.includes(arch)) throw failure("JAVA_STEAM_CPU_MISMATCH", "The selected JVM CPU does not match this game's Java Steam bridge.");
+  const bridge = resolveBridge(required.pin, { ...context, architecture: install.variant });
+  recordBridgeUse(bridge, context);
+  if (bridge.architectures.length && !bridge.architectures.includes(arch)) throw failure("JAVA_STEAM_CPU_MISMATCH", "The selected JVM CPU does not match this game's Java Steam bridge.");
   if (typeof context.prepareSteamApi !== "function") throw failure("JAVA_STEAM_SERVICE_UNAVAILABLE", "The native Steam API launch service is unavailable.");
   const directory = ownedDirectory(context.userDataDir, GameData.resolveGameRuntimeDir(context.userDataDir, entry.gameId, "java"));
   const steam = await context.prepareSteamApi({ required: true, appId: required.evidence.appId.value, arch,
@@ -163,4 +214,4 @@ async function prepareLaunch(entry, context, install, baseEnvironment = process.
   return { bridge, steam, jni, configuration, environment: steam.environment, vmArgs: ["-javaagent:" + bridge.agentPath + "=" + configuration] };
 }
 
-module.exports = { Catalog, nativeHostDependencies, requiredVariant, resolveBundle, ownedDirectory, prepareNativeLayout, writeConfiguration, prepareLaunch, property };
+module.exports = { Catalog, nativeHostDependencies, requiredVariant, resolveBundle, resolveBridge, requirementPlan, ownedDirectory, prepareNativeLayout, writeConfiguration, prepareLaunch, property };

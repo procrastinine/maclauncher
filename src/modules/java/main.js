@@ -277,7 +277,7 @@ function resolveLineConfig(cfg, line, userDataDir) {
   };
 }
 
-function resolveInstalledRuntime({ userDataDir, line, runtimeData, lineConfig, entry }) {
+function resolveInstalledRuntime({ userDataDir, line, runtimeData, lineConfig, entry, settings }) {
   // Game data recommends a Java line, not a patch; the line's default supplies it.
   const selection = selectRuntimeVersion({ manual: normalizeVersionOrNull(runtimeData.version),
     defaultVersion: lineConfig.defaultVersion });
@@ -285,7 +285,7 @@ function resolveInstalledRuntime({ userDataDir, line, runtimeData, lineConfig, e
     normalizeVariantOrNull(runtimeData.variant) ||
     normalizeVariantOrNull(lineConfig.defaultVariant) ||
     JavaCore.defaultVariantForHost();
-  const requiredVariant = entry && JavaSteam.requiredVariant(entry, {
+  const requiredVariant = entry && JavaSteam.requiredVariant(entry, { userDataDir, settings,
     explicitVariant: normalizeVariantOrNull(runtimeData.variant), preferredVariant
   });
   if (requiredVariant) preferredVariant = requiredVariant;
@@ -451,7 +451,7 @@ async function ensureDecompilerJavaRuntime(context, requiredJava = 17) {
   for (const rawLine of orderedLines) {
     const line = Number(rawLine);
     const lineConfig = resolveLineConfig(cfg, line, context.userDataDir);
-    const install = resolveInstalledRuntime({
+    const install = resolveInstalledRuntime({ settings: context.settings,
       userDataDir: context.userDataDir,
       line,
       runtimeData: {},
@@ -506,7 +506,7 @@ function resolveGraphicsInputs(entry, context = {}) {
   if ((context.runtimeId || entry.runtimeId || manifest.runtime.default) !== "java") return null;
   const { line, cfg, runtimeData } = resolveRequestedLine(entry, context.settings);
   if (!isManagedLine(line)) return null;
-  const install = resolveInstalledRuntime({ userDataDir: context.userDataDir, line, runtimeData,
+  const install = resolveInstalledRuntime({ settings: context.settings, userDataDir: context.userDataDir, line, runtimeData,
     lineConfig: resolveLineConfig(cfg, line, context.userDataDir), entry });
   if (!install?.javaPath) return null;
   return GraphicsInputs.withInputs({ moduleData: { executablePath: install.javaPath } }, {
@@ -529,7 +529,7 @@ async function launchRuntime(runtimeId, entry, context) {
   if (!isManagedLine(line)) throw new Error(`Unsupported Java line ${line}.`);
 
   const lineConfig = resolveLineConfig(cfg, line, context.userDataDir);
-  const install = resolveInstalledRuntime({
+  const install = resolveInstalledRuntime({ settings: context.settings,
     userDataDir: context.userDataDir,
     line,
     runtimeData,
@@ -564,7 +564,7 @@ function playSelection(entry, context) {
   if (!Number.isFinite(line)) throw new Error("Java runtime line is unknown for this game.");
   if (!isManagedLine(line)) throw new Error(`Unsupported Java line ${line}.`);
   const lineConfig = resolveLineConfig(cfg, line, context.userDataDir);
-  const installed = resolveInstalledRuntime({ userDataDir: context.userDataDir, line, runtimeData, lineConfig, entry });
+  const installed = resolveInstalledRuntime({ settings: context.settings, userDataDir: context.userDataDir, line, runtimeData, lineConfig, entry });
   const manual = normalizeVersionOrNull(runtimeData.version);
   const version = selectRuntimeVersion({ manual, defaultVersion: lineConfig.defaultVersion }).version;
   return { line, runtimeData, lineConfig, installed, manual, version };
@@ -577,7 +577,7 @@ async function ensureRuntime(entry, context) {
     await ensureInstalledRosetta(installed, context);
     return null;
   }
-  const requiredVariant = JavaSteam.requiredVariant(entry, { explicitVariant: normalizeVariantOrNull(runtimeData.variant), preferredVariant: lineConfig.defaultVariant });
+  const requiredVariant = JavaSteam.requiredVariant(entry, { userDataDir: context.userDataDir, settings: context.settings, explicitVariant: normalizeVariantOrNull(runtimeData.variant), preferredVariant: lineConfig.defaultVariant });
   const variant = requiredVariant || normalizeVariantOrNull(runtimeData.variant) || lineConfig.defaultVariant;
   // A default that is not installed is chosen from a list read this session,
   // so a saved default that Adoptium removed gives way on the first Play.
@@ -595,14 +595,18 @@ module.exports = {
   mergeEntry,
   resolveGameIcon,
   normalizeRuntimeId,
-  runtimeManagers: [JavaRuntimeManager],
+  runtimeManagers: [JavaRuntimeManager, require("./runtime/steamworks/manager")],
   distributionSupplementals: require("../shared/runtime/included-package-metadata").declarations(require("./runtime/steamworks/distribution-supplementals.json")),
   nativeHostDependencies: JavaSteam.nativeHostDependencies,
   onImport: entry => { JavaSteamConsumer.inspect(entry); },
   getRuntimeRequirements: (entry, context) => {
     const required = JavaSteamConsumer.requirement(entry);
-    if (required) JavaSteam.resolveBundle(required.pin, { resourcesRoot: context.resourcesRoot });
-    return [];
+    if (!required) return [];
+    const { installed, runtimeData, lineConfig } = playSelection(entry, context);
+    const plan = JavaSteam.requirementPlan(required.pin, context, {
+      architecture: installed?.variant || normalizeVariantOrNull(runtimeData.variant) || lineConfig.defaultVariant
+    });
+    return plan ? [plan] : [];
   },
   launchRuntime,
   resolveGraphicsInputs,
@@ -642,7 +646,7 @@ module.exports = {
       }
 
       const lineConfig = resolveLineConfig(cfg, line, context.userDataDir);
-      const install = resolveInstalledRuntime({
+      const install = resolveInstalledRuntime({ settings: context.settings,
         userDataDir: context.userDataDir,
         line,
         runtimeData,
@@ -688,7 +692,7 @@ module.exports = {
       let requestedVariant =
         normalizeVariantOrNull(runtimeData.variant) ||
         lineConfig.defaultVariant;
-      const requiredVariant = JavaSteam.requiredVariant(entry, {
+      const requiredVariant = JavaSteam.requiredVariant(entry, { userDataDir: context.userDataDir, settings: context.settings,
         explicitVariant: normalizeVariantOrNull(runtimeData.variant),
         preferredVariant: requestedVariant
       });
@@ -696,7 +700,7 @@ module.exports = {
 
       let requestedVersion = runtimeData.version || null;
 
-      const existing = resolveInstalledRuntime({
+      const existing = resolveInstalledRuntime({ settings: context.settings,
         userDataDir: context.userDataDir,
         line: requestedLine,
         runtimeData,
