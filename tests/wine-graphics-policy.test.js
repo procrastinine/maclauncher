@@ -31,7 +31,8 @@ function metalSharp(root) {
   const wined3d = component(root, 'wine', 'wined3d', ['d3d8', 'd3d9', 'd3d10core', 'd3d11', 'dxgi'], { builtin: true });
   const vkd3d = component(root, 'wine-d3d12', 'vkd3d', ['d3d12', 'd3d12core'], { builtin: true, component: 'd3d12' });
   const managed = component(root, 'dxvk-3.1.1', 'dxvk', ['d3d9', 'd3d10core', 'd3d11', 'dxgi'], { included: false });
-  const included = [mullion, dxvk, proton, wined3d, vkd3d], choices = [managed];
+  const dxmt = component(root, 'dxmt-0.80', 'dxmt', ['d3d10core', 'd3d11', 'dxgi', 'winemetal'], { builtin: true, included: false });
+  const included = [mullion, dxvk, proton, wined3d, vkd3d], choices = [managed, dxmt];
   const compatibility = Object.fromEntries([...included, ...choices].map(item => [item.id, { compatible: true, reason: null, warnings: [], files: item.files }]));
   // The Wine's own automatic composition: WineD3D for Direct3D 8 to 11.
   const plan = (selections) => {
@@ -40,7 +41,7 @@ function metalSharp(root) {
     return Plan.resolveApiRoles(value, { selections, included, choices, compatibility,
       automatic: { d3d8: wined3d, d3d9: wined3d, d3d10: wined3d, d3d11: wined3d, d3d12: null } });
   };
-  return { mullion, dxvk, proton, wined3d, vkd3d, managed, plan };
+  return { mullion, dxvk, proton, wined3d, vkd3d, managed, dxmt, plan };
 }
 const layout = { architecture: 'arm64', unixName: 'aarch64-unix' };
 const prepare = (root, plan) => Files.prepareTranslatorFiles(plan, { userDataDir: path.join(root, 'profile'), layout });
@@ -103,6 +104,9 @@ test('explicit MetalSharp vkd3d-proton, Mullion and Wine builtin choices select 
   assert.equal(ms.plan({ d3d12: ms.vkd3d.id }).graphicsPolicy.value, 'wine');
   // Wine's own Direct3D 9 is not a Mullion library, so the default stays.
   assert.equal(ms.plan({ d3d9: ms.wined3d.id }).graphicsPolicy ?? null, null);
+  // Another builtin set is not in MetalSharp's own builtin folder, which Wine searches first, so the
+  // builtins value would load Wine's WineD3D in its place; such a choice sets no value.
+  assert.equal(ms.plan({ d3d11: ms.dxmt.id }).graphicsPolicy ?? null, null);
 });
 
 test('a placed native translator keeps its route and sets no MetalSharp value', async t => {

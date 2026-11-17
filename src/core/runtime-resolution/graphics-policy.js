@@ -7,9 +7,12 @@
 // programs, with Mullion for the rest. "wine" leaves every library to Wine's
 // own builtin search.
 //
-// Choosing a value's own included component sets that value. Choosing a builtin
-// library for a Direct3D API that the default value replaces sets the builtin
-// value, so that the chosen library is what loads. Automatic and inherited
+// Choosing a value's own included component sets that value. Choosing the
+// Wine's own builtin library for a Direct3D API that the default value replaces
+// sets the builtin value, so that library is what loads. Another builtin set
+// sets nothing: a loader that runs from its publisher's bundle searches the
+// Wine's own builtin folder before the game's view, so under the builtin value
+// the Wine's own library of that name would load instead. Automatic and inherited
 // choices set nothing, and the Wine keeps its own default. While a value is
 // set, its components serve each Direct3D API they cover, in order. A native
 // library placed in the prefix still loads first.
@@ -57,7 +60,7 @@ function applyPolicy(plan, { selections = {}, included = [], filesForRole }) {
     if (!chosen(role)) return null;
     const row = plan.components[role.id], own = ownValue(policy, row.used);
     if (own) return own.value;
-    return !row.fallback && !isLane(policy, row.used) && replacedByDefault(role) && builtin(row.used, role) ? policy.builtins : null;
+    return !row.fallback && row.used.included && !isLane(policy, row.used) && replacedByDefault(role) && builtin(row.used, role) ? policy.builtins : null;
   };
   const first = PRECEDENCE.find(demand);
   if (!first) return false;
