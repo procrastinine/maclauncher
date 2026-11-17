@@ -66,3 +66,17 @@ test('FSR4 rejects unlisted source changes and failed Refresh leaves installed d
   await assert.rejects(Manager.installRuntime({...ctx, version: 'not-listed'}), /Refresh/);
   await assert.rejects(Library.importRuntime({...ctx, runtimePath: '/unused.zip', sourceSpec: {...Legacy, url: 'https://elsewhere.invalid/release.zip'}}), /available FSR/);
 });
+test('FSR4 measures the declared decoder library as a dylib while keeping dxc executable and hash checks', t => {
+  const ctx = context(t);installed(ctx, '3.2', Legacy);
+  const root = Library.directory(ctx.userDataDir, '3.2'), receipt = path.join(root, 'runtime.json');
+  const binary = type => {const bytes=Buffer.alloc(32);bytes.writeUInt32LE(0xfeedfacf);bytes.writeUInt32LE(0x0100000c,4);bytes.writeUInt32LE(type,12);return bytes;};
+  const write = (relative, bytes) => {const file=path.join(root,'tools',relative);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes,{mode:0o755});return{path:relative,bytes:bytes.length,sha256:require('node:crypto').createHash('sha256').update(bytes).digest('hex')};};
+  const record = JSON.parse(fs.readFileSync(receipt,'utf8'));
+  record.helpers=[write('bin/dxc',binary(2)),write('lib/libdxcompiler.dylib',binary(6))];fs.writeFileSync(receipt,JSON.stringify(record));
+  assert.deepEqual(Library.read(ctx.userDataDir,'3.2').helperArchitectures,['arm64']);
+  record.helpers[0]=write('bin/dxc',binary(6));fs.writeFileSync(receipt,JSON.stringify(record));
+  assert.equal(Library.read(ctx.userDataDir,'3.2'),null,'a dylib cannot stand in for the executable');
+  record.helpers[0]=write('bin/dxc',binary(2));fs.writeFileSync(receipt,JSON.stringify(record));
+  write('lib/libdxcompiler.dylib',binary(2));
+  assert.equal(Library.read(ctx.userDataDir,'3.2'),null,'a changed declared library checksum remains rejected');
+});
