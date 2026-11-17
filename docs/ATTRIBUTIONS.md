@@ -50,6 +50,8 @@ Offline installer imports use [innoextract](https://github.com/dscharrer/innoext
 
 FreeArc payload extraction uses [FreeArc 0.67](https://github.com/M-Gonzalo/FreeArc) (GPL-2.0), including GRZip (LGPL-2.1-or-later), TTA (GPL-2.0-or-later), LZ4 (BSD-2-Clause), and the public-domain LZMA and PPMd components. The native decoder wrapper and CLS host derive from [mac-game-porter](https://github.com/KarmSakha/mac-game-porter) (MIT, KarmSakha). The container reader follows the [Cellar FreeArc reader](https://github.com/joemunene-by/cellar), retained in that project's helper source (MIT, Joe Munene). The complete [MIT notices](../src/modules/shared/installers/freearc-notices.txt) accompany the adapted reader; decoder packages keep the component notices and exact source references.
 
+[SREP 3.93](https://github.com/KarmSakha/mac-game-porter/releases) is by Bulat Ziganshin, all rights reserved. Its native executable is provided separately by mac-game-porter releases. It is not part of the FreeArc decoder package produced by MacLauncher Builds. Each installed download records its publisher release and archive digest. The MIT terms of mac-game-porter's own helper code do not replace SREP's terms.
+
 ## Backends and module tools
 
 Most runtimes and tools in this section are downloaded separately through **Runtimes**, and the components included in the app are listed in [Runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md).

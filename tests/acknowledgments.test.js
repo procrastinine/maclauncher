@@ -31,6 +31,7 @@ test('every registered runtime manager has a linked upstream project in Credits'
     ffdec: 'https://github.com/jindrapetrik/jpexs-decompiler',
     fna: 'https://github.com/FNA-XNA/FNA',
     freearc: 'https://github.com/M-Gonzalo/FreeArc',
+    srep: 'https://github.com/KarmSakha/mac-game-porter',
     'flash-projector': 'https://www.adobe.com/products/flashplayer/end-of-life.html',
     'gamemaker-official': 'https://gamemaker.io/',
     'gamemaker-opengl-helper': 'https://github.com/procrastinine/maclauncher-builds',
