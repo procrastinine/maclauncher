@@ -1,6 +1,7 @@
 // One version order for automatic choices among usable installations. Digit
 // runs compare as numbers. Build hashes identify builds but do not order them.
 const HASH = /[-_][a-f0-9]{7,}(?=$|[-_.])/gi;
+const DIGEST = /^(?:sha(?:1|256)[-_])?(?:[a-f0-9]{40}|[a-f0-9]{64})$/i;
 
 // Shared collators order exactly like localeCompare with the same options,
 // without building a collator for every comparison.
@@ -12,6 +13,7 @@ function orderKey(value) {
 }
 
 export function compareVersions(left, right) {
+  if ([left, right].some(value => DIGEST.test(String(value ?? '').trim()))) return 0;
   const a = orderKey(left), b = orderKey(right), release = /^(\d+(?:\.\d+)+)(.*)$/;
   const aa = release.exec(a), bb = release.exec(b);
   if (aa && bb) {
