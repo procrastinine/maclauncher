@@ -106,6 +106,20 @@ test('missing and empty import/export directories return complete empty optional
   assert.equal(parsed.importDetailsComplete,true);assert.deepEqual(parsed.peImportDetails,[]);assert.equal(parsed.exportOrdinals.size,0);
 });
 
+test('sparse high-ordinal EAT slots have a separate bound from the named export count',t=>{
+  const f=image({metadataBytes:0x24000}),count=28243,base=16,addresses=0x400,names=addresses+count*4,ordinals=names+8,strings=ordinals+4;
+  f.bytes.writeUInt32LE(f.rva(0x100),f.directories);f.bytes.writeUInt32LE(strings+64-0x100,f.directories+4);
+  for(const[offset,value]of [[16,base],[20,count],[24,2],[28,f.rva(addresses)],[32,f.rva(names)],[36,f.rva(ordinals)]])f.bytes.writeUInt32LE(value,f.raw+0x100+offset);
+  for(const[index,name,stringOffset,n]of [[0,'D3DPERF_BeginEvent',strings,0],[count-1,'D3DPERF_EndEvent',strings+24,1]]){
+    f.bytes.writeUInt32LE(0x1010,f.raw+addresses+index*4);f.bytes.writeUInt32LE(f.rva(stringOffset),f.raw+names+n*4);f.bytes.writeUInt16LE(index,f.raw+ordinals+n*2);f.bytes.write(name+'\0',f.raw+stringOffset);
+  }
+  const file=fixture(t,f.bytes),parsed=PE.readPeExports(file,{exportOrdinals:true});
+  assert.equal(parsed.exports.get('D3DPERF_BeginEvent').executable,true);assert.equal(parsed.exportOrdinals.size,2);
+  assert.deepEqual(parsed.exportOrdinals.get(base+count-1).names,['D3DPERF_EndEvent']);assert.equal(parsed.exportOrdinals.has(base+1),false);
+  f.bytes.writeUInt32LE(PE.LIMITS.exportFunctions+1,f.raw+0x114);fs.writeFileSync(file,f.bytes);
+  assert.equal(PE.readPeExports(file,{exportOrdinals:true}),null,'oversized EAT remains refused before reading its table');
+});
+
 test('malformed import detail refuses symbol closure while preserving legacy DLL facts',t=>{
   for(const [label,change] of [
     ['unbacked thunk',f=>f.bytes.writeUInt32LE(0xffffffff,f.normalRows[0].descriptor)],

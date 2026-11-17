@@ -2,7 +2,7 @@ const BinaryArch = require('../../../core/binary-arch');
 const fs = require("node:fs"), path = require("node:path");
 const Guards = require("./guards");
 
-const LIMITS = Guards.limits({ sections: 96, exportNames: 8192, exportBytes: 1024 * 1024,
+const LIMITS = Guards.limits({ sections: 96, exportNames: 8192, exportFunctions: 65536, exportBytes: 1024 * 1024,
   readBytes: 2 * 1024 * 1024, nameBytes: 512, importDescriptors: 1024, importThunks: 16384 });
 
 // IMAGE_EXPORT_DIRECTORY and file-backed RVAs, as defined by Microsoft's PE format.
@@ -181,7 +181,7 @@ function readPeExports(file, { detection, headersOnly = false, imports = false, 
       if (!exportRva || exportBytes < 40 || exportBytes > LIMITS.exportBytes) return null;
       const blobOffset = fileOffset(exportRva, exportBytes), blob = read(blobOffset, exportBytes);
       const functions = blob.readUInt32LE(20), names = blob.readUInt32LE(24);
-      if (functions > LIMITS.exportNames || names > LIMITS.exportNames || names && !functions) return null;
+      if (functions > LIMITS.exportFunctions || names > LIMITS.exportNames || names && !functions) return null;
       const addresses = functions ? read(fileOffset(blob.readUInt32LE(28), functions * 4), functions * 4) : Buffer.alloc(0);
       const nameAddresses = names ? read(fileOffset(blob.readUInt32LE(32), names * 4), names * 4) : Buffer.alloc(0);
       const ordinals = names ? read(fileOffset(blob.readUInt32LE(36), names * 2), names * 2) : Buffer.alloc(0);
