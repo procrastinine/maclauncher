@@ -138,8 +138,12 @@ async function resolve(install, runtime, context, { executableArchitecture, host
   if (!sourceFor(runtime).graphicsSelector) {
     const automatic = row => row.value === Plan.AUTOMATIC || (row.fallback || row.inherited) && !row.used;
     // Preserve the Template's existing automatic composition in this one plan.
-    const choose = (component, engine, templateComponent) => input.included.find(item => item.component === component && item.engine === engine &&
-      (!templateComponent || item.templateComponent === templateComponent) && compatibility[item.id]?.compatible !== false);
+    const choose = (component, engine, templateComponent) => {
+      const matches = item => item.component === component && item.engine === engine &&
+        (!templateComponent || item.templateComponent === templateComponent) && compatibility[item.id]?.compatible !== false;
+      const included = input.included.find(matches);
+      return included && (input.choices.find(item => item.preferred && matches(item)) || included);
+    };
     let hardware = host;
     if (automatic(plan.components['vulkan-driver']) && host.physicalAppleGPU == null && choose('vulkan-driver', 'kosmickrisp'))
       hardware = await require('../../modules/shared/runtime/graphics-hardware').graphicsHardware(host, { signal: context.signal });

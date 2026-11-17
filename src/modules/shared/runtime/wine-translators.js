@@ -121,6 +121,7 @@ function managedTranslators(context, runtime, managers = runtimeManagers(), arch
       // the driver, the DXGI it presents through, and the source's order.
       const catalogSource = typeof description.source === 'object' ? description.source?.id : null;
       const declared = require('./translator-managers').sourceDeclaration(value.settingsEngine, catalogSource) || declaration;
+      if (declared?.id) value.sourceId = declared.id;
       const vulkanRequires = require('./vulkan-features').required(declared, description.version);
       if (vulkanRequires.length) value.vulkanRequires = vulkanRequires;
       if (declared?.dxgi) value.dxgiRequires = { ...declared.dxgi };
@@ -142,6 +143,17 @@ function inventory(install, runtime, context, dependencies = {}) {
   const managers = dependencies.managers || runtimeManagers();
   const consumerArchitecture = result.layout?.architecture || dependencies.consumerArchitecture;
   const choices = (dependencies.choices || managedTranslators(context, runtime, managers, consumerArchitecture)).map(remembered);
+  for (const manager of managers.filter(manager => choices.some(item => item.managerId === manager.id))) {
+    const entry = { ...dependencies.entry, runtimeId: manager.id };
+    if (!entry.runtimeData?.[manager.id]?.version && !require('./custom-runtime').defaultVersion(context.settings, manager.id)) continue;
+    const preferred = manager.resolveSelection?.(entry, context.settings, context.userDataDir, {
+      ...(Architecture.targetArchitecture(consumerArchitecture) ? { architecture: Architecture.targetArchitecture(consumerArchitecture) } : {}), verification: 'status' });
+    if (!preferred?.ready || !preferred.install) continue;
+    const install = preferred.install, root = install.translatorRoot || install.payloadRoot ||
+      (install.installDir && path.join(install.installDir, install.installationMetadata?.translatorRelative || '')) || install.root;
+    for (const item of choices) if (item.managerId === manager.id && item.runtimeVersion === install.version && item.root === root &&
+        (!item.architecture || !Architecture.recordArchitecture(install) || item.architecture === Architecture.recordArchitecture(install))) item.preferred = true;
+  }
   const current = context.wineEnvironment;
   const environment = current ? { label: sourceFor(runtime).labels.environment, selections: {} } : null;
   if (current) for (const [component, key] of [['d3d-renderer', 'graphicsBackend'], ['vulkan-driver', 'vulkanBackend']]) {

@@ -56,12 +56,13 @@ function selectorBackend(plan, selections, included) {
   return Roles.DIRECT3D_ROLES.every(role => role.id === 'd3d12' || [undefined, '', AUTOMATIC, INHERIT].includes(selections[role.id])) ? backend : null;
 }
 const serves = (description, role) => !description?.apis?.length || description.apis.some(api => role.apis.includes(api));
-// A source choice is the newest usable version of that source.
+// A source choice uses its compatible saved preference, then its newest version.
 const findChoice = (choices, value, usable = () => true) => {
   const id=String(value||'').replace(/^build:/,'');
   if(String(value||'').startsWith('source:')){const source=value.slice(7);
     const builds=choices.filter(item=>item.sourceId===source||item.embedId===source||item.managerId===source||item.engine===source||item.source===source||item.source?.id===source||item.source?.kind===source)
-      .sort((a,b)=>usable(b)-usable(a)||compareRuntimeVersions(a.version||'',b.version||''));
+      .sort((a,b)=>usable(b)-usable(a)||(a.sourceOrder??Number.MAX_SAFE_INTEGER)-(b.sourceOrder??Number.MAX_SAFE_INTEGER)||
+        Number(b.preferred===true)-Number(a.preferred===true)||compareRuntimeVersions(a.version||'',b.version||''));
     return builds[0]||null;}
   return choices.find(item => item.id === id) || choices.find(item => item.aliases?.includes(id)) || null;
 };
