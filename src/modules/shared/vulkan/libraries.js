@@ -164,7 +164,8 @@ function createManager(backend, dependencies = {}) {
       let minimumMacOS = "1.0";
       for (const file of files) {
         fs.chmodSync(path.join(unpacked, file), 0o755);
-        const native = inspect(path.join(unpacked, file), { signal, macOSVersion: (dependencies.systemVersionSync || systemVersionSync)() });
+        const native = inspect(path.join(unpacked, file), { signal, ...(backend === "moltenvk" ? { architecture: null } : {}),
+          macOSVersion: (dependencies.systemVersionSync || systemVersionSync)() });
         for (const slice of native.slices) if (versionAtLeast(slice.minimumMacOS, minimumMacOS)) minimumMacOS = slice.minimumMacOS;
       }
       const translator = require("../runtime/component-runtime").description(unpacked, { engine: backend, apis: ["Vulkan"] }, { source: "upstream" });
