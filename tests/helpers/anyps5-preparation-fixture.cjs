@@ -8,7 +8,9 @@ function fixture(t,{prepared=true,override=false}={}){
  const executable=path.join(programs,'eboot.bin');fs.writeFileSync(executable,guest());fs.mkdirSync(path.join(programs,'sce_module'));fs.writeFileSync(path.join(programs,'sce_module','helper.prx'),guest(0xfe18));fs.writeFileSync(path.join(assets,'assets','data.bin'),'original game data');
  const entry={name:'Fixture Game',gameId:'fixture',gamePath:game,contentRootDir:game,moduleData:{executablePath:executable,inputLayout:prepared?'anyps5-prepared':'unpacked'},...(override?{saveDirOverride:path.join(root,'custom-saves')}:{})},context={userDataDir:profile},install={version:'fixture-runtime',executablePath:path.join(runtime,'relinker'),payloadRoot:runtime,manifestSha256:'a'.repeat(64)};let calls=0;
  const runCommand=async(_command,args)=>{calls++;assert.ok(args.includes('--macos')&&args.includes('--to-rosetta'));const output=path.dirname(args.at(-1));fs.mkdirSync(path.join(output,'sce_module'),{recursive:true});fs.writeFileSync(path.join(output,'eboot'),image({cpu:0x01000007,fileType:2,installName:null}));fs.writeFileSync(path.join(output,'sce_module','helper.guest.prx'),image({cpu:0x01000007,fileType:6}));fs.writeFileSync(path.join(output,'eboot.registry.json'),'[]');};
- return{root,game,profile,programs,assets,runtime,entry,context,install,runCommand,calls:()=>calls};
+ // The Dock icon drawer's stub: preparation takes renderIcon as a dependency, so the tests never start osascript.
+ const renderIcon=async()=>require('../../src/core/icon-utils').encodePngBitmap({width:256,height:256,buffer:Buffer.alloc(256*256*4,255)});
+ return{root,game,profile,programs,assets,runtime,entry,context,install,runCommand,renderIcon,calls:()=>calls};
 }
 
 module.exports={fixture};

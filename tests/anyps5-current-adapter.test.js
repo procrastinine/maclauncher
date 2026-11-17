@@ -1,23 +1,17 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
 const Prepare=require('../src/modules/anyps5/prepare');
-const {fixture:preparationFixture}=require('./helpers/anyps5-preparation-fixture.cjs');
-function fixture(t,options){
- const f=preparationFixture(t,options);
- const icon=require('../src/core/icon-utils').encodePngBitmap({width:256,height:256,buffer:Buffer.alloc(256*256*4,255)});
- t.mock.method(require('../src/modules/shared/dock-icon'),'render',async()=>icon);
- return f;
-}
+const {fixture}=require('./helpers/anyps5-preparation-fixture.cjs');
 test('AnyPS5 current container preserves flat, prepared and custom-save operation',async t=>{
  for(const options of [{prepared:false},{prepared:true},{prepared:true,override:true}])await t.test(JSON.stringify(options),async t=>{
-  const f=fixture(t,options),launch=await Prepare.prepareGame(f.entry,f.context,f.install,{runCommand:f.runCommand}),saves=f.entry.saveDirOverride||path.join(Prepare.gameDirectory(f.entry,f.context),'saves');
+  const f=fixture(t,options),launch=await Prepare.prepareGame(f.entry,f.context,f.install,{runCommand:f.runCommand,renderIcon:f.renderIcon}),saves=f.entry.saveDirOverride||path.join(Prepare.gameDirectory(f.entry,f.context),'saves');
   assert.equal(f.calls(),1);assert.equal(fs.existsSync(launch.executable),true);assert.equal(fs.readFileSync(path.join(launch.directory,'app0/assets/data.bin'),'utf8'),'original game data');assert.equal(fs.readlinkSync(path.join(launch.directory,'data')),saves);assert.equal(fs.readlinkSync(path.join(launch.directory,'_sd')),path.join(saves,'_sd'));assert.equal(f.entry.defaultSaveDir,saves);assert.equal(fs.readFileSync(path.join(f.assets,'assets/data.bin'),'utf8'),'original game data');
-  const privateAsset=path.join(launch.directory,'app0/assets/data.bin');fs.writeFileSync(privateAsset,'private edited asset');const replacement={...f.install,version:'updated-runtime'};await Prepare.prepareGame(f.entry,f.context,replacement,{runCommand:f.runCommand});assert.equal(fs.readFileSync(privateAsset,'utf8'),'private edited asset');assert.equal(fs.readFileSync(path.join(f.assets,'assets/data.bin'),'utf8'),'original game data');
+  const privateAsset=path.join(launch.directory,'app0/assets/data.bin');fs.writeFileSync(privateAsset,'private edited asset');const replacement={...f.install,version:'updated-runtime'};await Prepare.prepareGame(f.entry,f.context,replacement,{runCommand:f.runCommand,renderIcon:f.renderIcon});assert.equal(fs.readFileSync(privateAsset,'utf8'),'private edited asset');assert.equal(fs.readFileSync(path.join(f.assets,'assets/data.bin'),'utf8'),'original game data');
   for(const name of ['statSync','lstatSync','readdirSync','mkdirSync'])t.mock.method(fs,name,()=>{throw Error('Save metadata must not probe directories.');});const locations=Prepare.resolveSaveLocations(f.entry,f.context);assert.equal(locations.primaryDirectory,saves);assert.deepEqual(locations.directories.map(item=>item.directory),[saves,path.join(saves,'_sd'),path.join(Prepare.gameDirectory(f.entry,f.context),'fex','_sd_mem'),path.join(launch.directory,'_sd_mem'),path.join(Prepare.gameDirectory(f.entry,f.context),'launch/_sd_mem')]);assert.ok(!locations.directories.some(item=>item.directory.endsWith('download0')));
  });
 });
 test('AnyPS5 conversion follows converter bytes across runtime installs and verifies registry outputs',async t=>{
- const f=fixture(t),prepare=install=>Prepare.prepareGame(f.entry,f.context,install,{runCommand:f.runCommand});
+ const f=fixture(t),prepare=install=>Prepare.prepareGame(f.entry,f.context,install,{runCommand:f.runCommand,renderIcon:f.renderIcon});
  assert.equal((await prepare(f.install)).cached,false);assert.equal(f.calls(),1);
  const runtime=path.join(f.root,'updated-runtime');fs.cpSync(f.runtime,runtime,{recursive:true});
  fs.writeFileSync(path.join(runtime,'libs','libkernel.prx'),'updated runtime library');
@@ -43,7 +37,7 @@ test('AnyPS5 Play preparation reports copied files and converted modules from th
   'Instruction scan       | helper.prx |  40%\rInstruction scan       | helper.prx | 100%\nPRX conversion         | helper.prx | 100% (1/1)\n',
   'Write output           | eboot      | 100%\nConversion complete\n'];
  const runCommand=async(command,args,options)=>{for(const chunk of output) options.onOutput(chunk,'stdout');return f.runCommand(command,args,options);};
- await Prepare.prepareGame(f.entry,f.context,f.install,{runCommand});
+ await Prepare.prepareGame(f.entry,f.context,f.install,{runCommand,renderIcon:f.renderIcon});
  const files=reports.filter(state=>state.label==='Preparing game…');
  assert.ok(files.length>=2&&files.every(state=>state.unit==='files'&&state.total===files[0].total&&state.total>0));
  assert.equal(files.at(-1).completed,files.at(-1).total,'the copy finishes at its full file count');
