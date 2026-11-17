@@ -71,3 +71,5 @@ Sikarugir, WineCX and the usual CrossOver releases run WINE as an Intel program,
 Further reading: the [Wine runtimes](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/WINE.md), [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md), [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md) and [WineCX](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/WINECX.md) reference pages, and CodeWeavers' [CrossOver Mac user guide](https://www.codeweavers.com/support/docs/crossover-mac/index).
 
 WineMetalGL games load effects and screenshot support through an OpenGL builtin that forwards rendering to WineMetalGL. Play offers the matching helper with other required downloads.
+
+An explicit Wine OpenGL backend in the game environment keeps Wine's own library and omits the WineMetalGL attachment helper.

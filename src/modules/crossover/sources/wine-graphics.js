@@ -558,10 +558,20 @@ function wineVulkanSelection(root, install, { layout = wineLayout(install), sign
   if (matches.length > 1) fail("The WineVulkan graphics package has more than one matching pair.");
   return matches[0] || null;
 }
+// Match the source and user environment values that ordinary Play applies.
+function openGLAttachmentEnvironment(entry, context, install, plan) {
+  const source=require(".").get(plan.runtime||context.runtimeId||entry.runtimeId);
+  // buildEnvironment removes inherited WINE* variables, including WINEMETALGL.
+  const inherited={OPENGL_BACKEND:process.env.OPENGL_BACKEND};
+  if(!source)return {...inherited,...plan.graphicsPolicy?.env};
+  const translators=require("../../shared/runtime/wine-translators");
+  const user=require("../../shared/runtime/translator-environment-launch").forLaunch(entry,context,translators.environmentIds(plan,source.id)).values;
+  return {...inherited,...source.launchEnvironment(install),...plan.graphicsPolicy?.env,...user};
+}
 function wineVulkanRuntimeSelection(entry, context, install, {translatorPlan=context.translatorPlan, root, manager=require("../temporal/vulkan/manager")}={}) {
   if (!translatorPlan) return {selection:null};
   const layout=translatorPlan.layout||wineLayout(install), Architecture=require("../../shared/runtime/architecture");
-  if (!translatorPlan.components?.["vulkan-driver"]?.used&&!require("../temporal/opengl/selection").available(layout,translatorPlan.graphicsPolicy?.env)) return {selection:null};
+  if (!translatorPlan.components?.["vulkan-driver"]?.used&&!require("../temporal/opengl/selection").available(layout,openGLAttachmentEnvironment(entry,context,install,translatorPlan))) return {selection:null};
   if(!Architecture.targetArchitecture(layout.architecture))return {selection:null};
   const selected=Architecture.withArchitecture(Architecture.normalizeArchitecture(layout.architecture),()=>manager.resolveSelection({...entry,runtimeId:manager.id},context.settings,context.userDataDir,{verification:"status"}));
   if(selected.ready&&selected.install){
@@ -570,7 +580,7 @@ function wineVulkanRuntimeSelection(entry, context, install, {translatorPlan=con
     if(selection){
       const ReShade=require("../../shared/reshade");
       if(loadsUnsignedLibraries(install)&&ReShade.layerLoads(entry,{root:ReShade.runtimeRoot(context.app),graphicsHost:"window"})) {
-        selection.opengl=require("../temporal/opengl/selection").select(module.root,module.manifest,layout,translatorPlan.graphicsPolicy?.env);
+        selection.opengl=require("../temporal/opengl/selection").select(module.root,module.manifest,layout,openGLAttachmentEnvironment(entry,context,install,translatorPlan));
         if(selection.opengl) selection.inputs.push(...[selection.opengl.native,...selection.opengl.clients.map(pair=>pair.client)].map(row=>({path:row.file,sha256:row.sha256})));
       }
       return {selection,manager,selected,managed:true};
@@ -613,14 +623,14 @@ async function wineVulkanRequirements(entry,context,{install,translatorPlan=cont
     install=context.wineEnvironment?.install||source.manager().resolveSelection(entry,context.settings,context.userDataDir,context.runtimeSettings).install;
   }
   if(!install)return [];
-  if(!translatorPlan.components?.["vulkan-driver"]?.used&&!require("../temporal/opengl/selection").available(translatorPlan.layout||wineLayout(install),translatorPlan.graphicsPolicy?.env))return [];
+  if(!translatorPlan.components?.["vulkan-driver"]?.used&&!require("../temporal/opengl/selection").available(translatorPlan.layout||wineLayout(install),openGLAttachmentEnvironment(entry,context,install,translatorPlan)))return [];
   // On a loader that ignores DYLD variables, a graphics value that renders
   // through Vulkan loads no Metal shim, so whenever the launch loads the
   // graphics layer (effects, live controls or screenshots) it needs a client
   // that applies the graphics libraries.
   const ReShade=require("../../shared/reshade");
   const layerLoads=ReShade.layerLoads(entry,{root:graphicsRoot||ReShade.runtimeRoot(context.app),graphicsHost:"window"})&&loadsUnsignedLibraries(install);
-  const openglAttaches=layerLoads&&require("../temporal/opengl/selection").available(translatorPlan.layout||wineLayout(install),translatorPlan.graphicsPolicy?.env);
+  const openglAttaches=layerLoads&&require("../temporal/opengl/selection").available(translatorPlan.layout||wineLayout(install),openGLAttachmentEnvironment(entry,context,install,translatorPlan));
   const attaches=layerLoads&&(openglAttaches||require("../../../core/runtime-resolution/graphics-policy").rendersThroughVulkan(translatorPlan));
   const resolved=wineVulkanRuntimeSelection(entry,context,install,{translatorPlan,root,manager});
   if(resolved.selection&&(!attaches||resolved.selection.graphicsLibraries)&&(!openglAttaches||resolved.selection.opengl)){

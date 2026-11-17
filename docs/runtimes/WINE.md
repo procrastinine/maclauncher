@@ -93,3 +93,5 @@ A Direct3D choice places files only for APIs whose entry points the selected com
 The OpenGL attachment helper declares `openglLibraryAPI: 1` in its catalog capabilities. For a WineMetalGL installation that loads the graphics layer, Play includes a compatible helper in the ordinary download consent even when Direct3D uses Wine's own libraries. The Wine OpenGL exclusions above suppress that requirement.
 
 The OpenGL attach view holds both Windows architectures beside one Unix library. OpenGL attachment does not require a selected Vulkan driver.
+
+OpenGL attachment follows the effective game environment, including inherited source values and per-game translator environment values. An explicit Wine OpenGL selection disables the WineMetalGL helper. The arm64 attach library targets macOS 15.0.

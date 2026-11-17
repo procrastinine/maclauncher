@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 const here=import.meta.dirname;
-export function buildOpenGL({winebuild,output,compilers,clang='/usr/bin/clang'}) {
+export function buildOpenGL({winebuild,output,compilers,clang='/usr/bin/clang',minimumMacOS='15.0'}) {
   const run=(tool,args,options={})=>execFileSync(tool,args,{stdio:'inherit',...options});
   const build=path.resolve(path.dirname(winebuild),'../..'),source=path.resolve(build,'../source');
   const objects={};
@@ -20,5 +20,5 @@ export function buildOpenGL({winebuild,output,compilers,clang='/usr/bin/clang'})
   }
   for(const object of Object.values(objects))fs.unlinkSync(object);
   const folder=path.join(output,'aarch64-unix');fs.mkdirSync(folder,{recursive:true});
-  run(clang,['-arch','arm64','-dynamiclib','-O2','-Wl,-install_name,@rpath/maclauncher-opengl32.so','-I',path.resolve(here,'../../../shared/reshade/native'),path.join(here,'attach.c'),'-o',path.join(folder,'maclauncher-opengl32.so')]);
+  run(clang,['-arch','arm64','-mmacosx-version-min='+minimumMacOS,'-dynamiclib','-O2','-Wl,-install_name,@rpath/maclauncher-opengl32.so','-I',path.resolve(here,'../../../shared/reshade/native'),path.join(here,'attach.c'),'-o',path.join(folder,'maclauncher-opengl32.so')]);
 }
