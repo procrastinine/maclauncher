@@ -28,7 +28,7 @@ function verifyDriverFiles(selected) {
   };
   const driverArchitectures = architectures(selected.executablePath);
   const loaderArchitectures = architectures(path.join(selected.payloadRoot, Bundled.relativeFile(loader)));
-  const unknown = values => values.some(value => !["x86_64", "arm64"].includes(value));
+  const unknown = values => values.some(value => /^cpu-[0-9a-f]+$/.test(value));
   const contains = (values, cpu) => values.includes(cpu) || unknown(values);
   const declared = selected.arch || selected.manifest.arch;
   const cpu = declared === "x64" ? "x86_64" : declared === "arm64" ? "arm64" : null;
