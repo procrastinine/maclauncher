@@ -112,3 +112,28 @@ test('automatic Vulkan keeps the Wine own KosmicKrisp when MacLauncher KosmicKri
     { managers: [manager], executableArchitecture: 'x86_64', host: { macOSVersion: '26.0', physicalAppleGPU: true } });
   assert.equal(chosen.components['vulkan-driver'].used.root, files, 'an explicit pick uses MacLauncher KosmicKrisp');
 });
+
+test('automatic Vulkan of a Wine with no Vulkan driver of its own stays the Wine own when MacLauncher KosmicKrisp has a default version', async t => {
+  // The automatic Vulkan order (src/modules/shared/vulkan/automatic-order.json) belongs to the consumers that
+  // declare a preferred backend (AnyPS5, Prosper). A Wine's automatic choice is its own, so with the Wine's own
+  // translators a Wine that includes no Vulkan driver gets none from a managed build's default. (Choosing
+  // MacLauncher's DXVK or vkd3d-proton is explicit and pairs MacLauncher KosmicKrisp; see wine-plan.js.)
+  const root = scratch(t), Managed = require('../src/modules/shared/vulkan/managed');
+  const wine = path.join(root, 'wine'), executablePath = put(path.join(wine, 'bin/wine'), image({ cpu: X64, fileType: 2 }));
+  put(path.join(wine, 'lib/wine/x86_64-unix/ntdll.so'), image({ cpu: X64 }));
+  const templateRoot = path.join(root, 'support'); fs.mkdirSync(templateRoot, { recursive: true });
+  const install = { engineRoot: wine, crossoverRoot: wine, templateRoot, executablePath, architecture: 'x64', version: 'authored-wine' };
+  const version = '27.0.0-devel-MCLv13', manager = Managed.createManager();
+  const files = path.join(root, 'profile/runtimes', manager.id, 'x64', version, 'payload/files'), driver = put(path.join(files, 'libvulkan_kosmickrisp.dylib'), image({ cpu: X64 }));
+  put(path.join(files, 'libvulkan.1.dylib'), image({ cpu: X64 }));
+  const ours = { version, architecture: 'x64', translatorRoot: files, installDir: files, executablePath: driver,
+    translator: Description.describeTranslator(files, { engine: 'kosmickrisp', source: manager.id, version }) };
+  t.mock.method(manager, 'getState', () => ({ installed: [ours] }));
+  t.mock.method(manager, 'resolveSelection', () => ({ ready: true, install: ours, architecture: 'x64' }));
+  const ctx = { runtimeId: 'sikarugir', userDataDir: path.join(root, 'profile'), settings: { runtimes: { [manager.id]: { defaultVersion: version } } }, runtimeSettings: {}, logger: { warn() {} } };
+  const plan = await Translators.resolve(install, 'sikarugir', ctx, { managers: [manager], executableArchitecture: 'x86_64', host: { macOSVersion: '26.0', physicalAppleGPU: true } });
+  const vulkan = plan.components['vulkan-driver'];
+  assert.equal(vulkan.value, 'automatic'); assert.equal(vulkan.used ?? null, null, 'no managed driver replaces the Wine own (absent) driver');
+  assert.equal(plan.vulkanPending, null, 'and Play offers no driver download for it');
+  assert.equal(plan.components['d3d-renderer'].used.included, true);
+});
