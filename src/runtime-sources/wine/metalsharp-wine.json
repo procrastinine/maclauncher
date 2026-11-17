@@ -64,20 +64,17 @@
           "variable": "DXMT_RUNTIME_DIR",
           "engines": ["dxmt"],
           "files": ["aarch64-windows/dxgi.dll", "aarch64-windows/d3d11.dll", "aarch64-unix/winemetal.so"]
-        },
-        "graphicsModule": "winemetal"
+        }
       },
       {
         "value": "dxvk",
         "lanes": ["metalsharp-wine-dxvk", "metalsharp-wine-mullion"],
-        "architectures": ["x64"],
-        "graphicsModule": "winevulkan"
+        "architectures": ["x64"]
       },
       {
         "value": "vkd3d",
         "lanes": ["metalsharp-wine-vkd3d-proton", "metalsharp-wine-dxvk", "metalsharp-wine-mullion"],
-        "architectures": ["x64"],
-        "graphicsModule": "winevulkan"
+        "architectures": ["x64"]
       }
     ]
   }

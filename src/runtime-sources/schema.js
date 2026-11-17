@@ -14,16 +14,14 @@ function validateSource(source){
  // Vulkan device features that a translator's versions from `from` on require of the driver.
  if(source.vulkanFeatures!==undefined&&(!Array.isArray(source.vulkanFeatures)||!source.vulkanFeatures.every(rule=>rule&&typeof rule.from==='string'&&Array.isArray(rule.features)&&rule.features.every(feature=>typeof feature==='string'&&feature))))throw new TypeError('Vulkan features must be a list of { from, features } rules.');
  // A Wine whose loader picks its Direct3D libraries by one environment value: the variable, its default and
- // builtin values, and each other value with the included components it loads, in order, and the Wine Unix
- // module its first component renders through.
+ // builtin values, and each other value with the included components it loads, in order.
  if(source.graphicsPolicy!==undefined){const policy=source.graphicsPolicy,ids=new Set((source.included||[]).filter(embed=>embed.kind==='d3d-translator').map(embed=>embed.id));
   object(policy,'graphicsPolicy');
   for(const key of ['variable','default','builtins'])if(typeof policy[key]!=='string'||!policy[key])throw new TypeError('A graphics policy requires '+key+'.');
   if(!/^[A-Z_][A-Z0-9_]*$/.test(policy.variable))throw new TypeError('A graphics policy variable is an environment variable name.');
   if(!Array.isArray(policy.values)||!policy.values.every(entry=>entry&&typeof entry.value==='string'&&entry.value&&Array.isArray(entry.lanes)&&entry.lanes.length&&entry.lanes.every(lane=>ids.has(lane))&&
-    (entry.architectures===undefined||Array.isArray(entry.architectures)&&entry.architectures.every(cpu=>['x64','x86','arm64'].includes(cpu)))&&
-    (entry.graphicsModule===undefined||['winemetal','winevulkan'].includes(entry.graphicsModule))))
-   throw new TypeError('Graphics policy values name included Direct3D components, optional x64, x86 or arm64 programs and an optional winemetal or winevulkan graphics module.');
+    (entry.architectures===undefined||Array.isArray(entry.architectures)&&entry.architectures.every(cpu=>['x64','x86','arm64'].includes(cpu)))))
+   throw new TypeError('Graphics policy values name included Direct3D components and optional x64, x86 or arm64 programs.');
   // A value whose loader also takes a separately installed build of a component engine from a folder named by another
   // variable: that variable, the engines, and the files the loader requires in the folder.
   for(const entry of policy.values)if(entry.directory!==undefined){const directory=entry.directory;object(directory,'A graphics policy directory');

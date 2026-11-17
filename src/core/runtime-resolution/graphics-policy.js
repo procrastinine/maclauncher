@@ -112,13 +112,14 @@ function applyPolicy(plan, { selections = {}, included = [], filesForRole }) {
 // Whether the Wine loads this component itself, so no file of it is placed.
 const loadedByWine = (plan, item) => Boolean(item?.included && plan?.graphicsPolicy?.lanes.includes(item.embedId) ||
   item && !item.included && plan?.graphicsPolicy?.items?.includes(item.id));
-// The Wine Unix module that the plan's value renders through: "winemetal" for
-// MetalSharp's Mullion, "winevulkan" for its DXVK and vkd3d-proton. Unset, the
-// Wine's default value applies. null for the builtin value and a Wine without
-// a graphics policy.
-function graphicsModule(plan) {
+// Whether the plan's value renders through the Wine's Vulkan library: its own
+// included component renders through Vulkan (`vulkan`), as MetalSharp's DXVK
+// and vkd3d-proton do. Unset, the Wine's default value applies; the builtin
+// value and a Wine without a graphics policy name none.
+function rendersThroughVulkan(plan) {
   const policy = policyOf(plan?.runtime), value = plan?.graphicsPolicy?.value || policy?.default;
-  return policy?.values.find(entry => entry.value === value)?.graphicsModule || null;
+  const own = policy?.values.find(entry => entry.value === value)?.lanes[0];
+  return Boolean(own && sourceOf(plan.runtime)?.source?.included?.find(embed => embed.id === own)?.vulkan === true);
 }
 
-module.exports = { policyOf, laneCompatibility, applyPolicy, loadedByWine, graphicsModule };
+module.exports = { policyOf, laneCompatibility, applyPolicy, loadedByWine, rendersThroughVulkan };

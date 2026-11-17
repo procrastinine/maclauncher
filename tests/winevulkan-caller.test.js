@@ -255,10 +255,10 @@ function hardenedLoader(f,signature=metalsharpSignature){
 }
 test('a hardened Wine loader on a Vulkan graphics value asks for a WineVulkan client that applies the graphics libraries',async t=>{
   const Policy=require('../src/core/runtime-resolution/graphics-policy');
-  assert.equal(Policy.graphicsModule({runtime:'metalsharp-wine'}),'winemetal','unset, Mullion renders through winemetal');
-  for(const value of ['dxvk','vkd3d'])assert.equal(Policy.graphicsModule({runtime:'metalsharp-wine',graphicsPolicy:{value}}),'winevulkan',value);
-  assert.equal(Policy.graphicsModule({runtime:'metalsharp-wine',graphicsPolicy:{value:'wine'}}),null,'Wine\'s own libraries name no module');
-  assert.equal(Policy.graphicsModule({runtime:'sikarugir'}),null);
+  assert.equal(Policy.rendersThroughVulkan({runtime:'metalsharp-wine'}),false,'unset, Mullion renders through Metal');
+  for(const value of ['dxvk','vkd3d'])assert.equal(Policy.rendersThroughVulkan({runtime:'metalsharp-wine',graphicsPolicy:{value}}),true,value);
+  assert.equal(Policy.rendersThroughVulkan({runtime:'metalsharp-wine',graphicsPolicy:{value:'wine'}}),false,'Wine\'s own libraries');
+  assert.equal(Policy.rendersThroughVulkan({runtime:'sikarugir'}),false);
   const f=moduleFixture(t);hardenedLoader(f);
   const pin={version:'2.0.0',capabilities:{runtimeProfile:f.profile,graphicsLibraryAPI:1},asset:{bytes:42}};
   const manager={id:'winevulkan-scene',label:'WineVulkan helper',core:{catalog:[pin]},resolveSelection:()=>({ready:false,version:pin.version}),getState:()=>({installed:[]})};

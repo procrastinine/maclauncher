@@ -577,10 +577,10 @@ async function wineVulkanRequirements(entry,context,{install,translatorPlan=cont
   }
   if(!install)return [];
   // On a loader that ignores DYLD variables, a graphics value that renders
-  // through winevulkan loads no Metal shim, so processing needs a client that
+  // through Vulkan loads no Metal shim, so processing needs a client that
   // applies the graphics libraries.
   const attaches=require("../../shared/effects/execution-requirements").analyze(entry).needed.processor&&
-    require("../../../core/runtime-resolution/graphics-policy").graphicsModule(translatorPlan)==="winevulkan"&&loadsUnsignedLibraries(install);
+    require("../../../core/runtime-resolution/graphics-policy").rendersThroughVulkan(translatorPlan)&&loadsUnsignedLibraries(install);
   const resolved=wineVulkanRuntimeSelection(entry,context,install,{translatorPlan,root,manager});
   if(resolved.selection&&(!attaches||resolved.selection.graphicsLibraries)){
     if(resolved.managed)context.recordRuntimeUse?.({managerId:manager.id,version:resolved.selected.version,sourcePath:resolved.selected.install.installDir||resolved.selected.install.modulePayloadRoot||resolved.selected.install.executablePath});
