@@ -10,7 +10,7 @@ const FSR4Source = require("../temporal/fsr4/source.json");
 const ANR = require("../generation/anr");
 
 function getComponents({ root = require("../index").runtimeRoot(), platform = process.platform, macOSVersion, hardwareArch,
-  installed = [], userDataDir } = {}) {
+  installed = [], userDataDir, settings } = {}) {
   const host = Host.getHostCapabilities();
   const systemVersion = macOSVersion === undefined ? (platform === "darwin" ? Native.systemVersionSync() : null) : macOSVersion;
   const actual = { platform, macOSVersion: systemVersion, hardwareArch: hardwareArch === undefined ? host.hardwareArch : hardwareArch };
@@ -79,10 +79,12 @@ function getComponents({ root = require("../index").runtimeRoot(), platform = pr
   // the runtime that runs them.
   const anrIncluded = hasProcessor && graphics.anrGenerationAPI === 1 && Boolean(ANR.resolve(root, {platform: "darwin", hardwareArch: "arm64"}));
   const anrFloor = ANR.Source.minimumMacOS, anrHost = {hardwareArchitectures: ["arm64"]};
-  const anrModels = anrIncluded && userDataDir ? require("../generation/anr/library").read(userDataDir) : null;
+  // The version Play would use: a saved default, otherwise a ready installed one.
+  const anrSelected = anrIncluded && userDataDir ? require("./anr-manager").selection({ userDataDir, settings }).current : null;
+  const anrModels = anrSelected?.ready ? anrSelected : null;
   const anrStatus = status(anrIncluded, anrFloor, anrHost);
   rows.push({
-    id: "anr", label: "Apex Neural Rendering", version: anrModels ? ANR.Source.version : null,
+    id: "anr", label: "Apex Neural Rendering", version: anrModels ? anrModels.version : null,
     status: anrStatus === "Included" ? anrModels ? "Models installed" : "Models required" : anrStatus,
     available: nativeAvailable(anrIncluded) && hostSupports(anrFloor, anrHost) && Boolean(anrModels),
     description: "Neural scene frame generation from 2× to 5× at 1920×1080, 2560×1440 or 3840×2160 output. The models come from Apex's macOS kit, which is downloaded or imported separately.",

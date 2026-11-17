@@ -32,7 +32,7 @@ function fileDetail(item) {
 function normalizeSettings(value) {
   return { defaultVersion: /^sha256-[a-f0-9]{64}$/.test(value?.defaultVersion || "") ? value.defaultVersion : null };
 }
-function getState({ userDataDir, settings, root, platform, macOSVersion } = {}) {
+function getState({ userDataDir, settings, runtimeSettings, root, platform, macOSVersion } = {}) {
   const steamClient = process.platform === "darwin" && SteamClient.findClient();
   const installed = Models.listManaged(userDataDir).map(item => ({ ...item, detail: fileDetail(item), removalLabel: "Remove",
     removalConfirm: "Remove this imported model copy? The original Lossless Scaling files will remain unchanged." }));
@@ -47,7 +47,7 @@ function getState({ userDataDir, settings, root, platform, macOSVersion } = {}) 
     latestInstalledVersion: versions[0] || null, latestAvailableVersion: null, updateAvailable: false };
   const section = { id: "default", label: "Lossless Scaling", supportsDefault: true, installed, installing: null,
     managementTitle: "Lossless Scaling models", capabilities: modelFamilies(installed),
-    components: require("./components").getComponents({ root, platform, macOSVersion, userDataDir, installed: installed.filter(item => item.ready !== false) }),
+    components: require("./components").getComponents({ root, platform, macOSVersion, userDataDir, settings: runtimeSettings ? { runtimes: runtimeSettings } : undefined, installed: installed.filter(item => item.ready !== false) }),
     componentsTitle: "Upscaling and frame generation",
     componentsDescription: "Included components follow MacLauncher updates; MetalFX follows macOS updates. Available game options depend on the renderer and the inputs it provides.",
     description: "Lossless Scaling provides LS1 spatial upscaling and LSFG frame generation models. They can be downloaded through Steam, found in an existing installation or imported from a DLL. An account that owns Lossless Scaling is required.",

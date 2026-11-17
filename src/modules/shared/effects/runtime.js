@@ -665,9 +665,10 @@ async function prepare(entry, options = {}) {
         ...(!["frame-generation","temporal"].includes(node.kind) ? {intrinsicScale: prepared.intrinsicScale||Providers.descriptor(node.method).scale} : {}),
         modelPath: prepared.settings.modelPath, requirements });
     } else if(node.kind==="frame-generation"&&node.method==="anr") {
-      const Anr=require("../reshade/generation/anr"),Library=require("../reshade/generation/anr/library");
+      const Anr=require("../reshade/generation/anr");
       const provider=Anr.resolve(ctx.root,ctx);if(!provider)throw Error("A compatible ANR graphics provider is required.");
-      const installed=await Library.install(ctx);if(!installed)throw Error("Apex Neural Rendering installation was cancelled.");
+      // The selected version: the saved default, a ready installed one, then the newest listed release.
+      const installed=await require("../reshade/runtime/anr-manager").installRuntime({...ctx,version:undefined});if(!installed)throw Error("Apex Neural Rendering installation was cancelled.");
       environment.RESHADE_ANR_GENERATION_LIBRARY=provider.library;
       nodes.push({id:node.id,kind:node.kind,enabled:true,method:"anr",settings:stageSettings(node),modelPath:installed.runtimePath,requirements});
     } else if(["temporal","frame-generation"].includes(node.kind)&&node.method==="xess") {

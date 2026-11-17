@@ -16,13 +16,28 @@ function uniformBytes(reflection,values){
  for(const f of fields){const b=f.binding,type=f.type.scalarType;if(!['uint32','int32','float32'].includes(type))throw Error('Unsupported ANR uniform type.');if(!Object.hasOwn(values,f.name))continue;const v=values[f.name];if(typeof v!=='number'||!Number.isFinite(v)||type!=='float32'&&(!Number.isInteger(v)||v<(type==='uint32'?0:-2147483648)||v>(type==='uint32'?4294967295:2147483647)))throw Error('Invalid ANR uniform value.');bytes[type==='float32'?'writeFloatLE':type==='uint32'?'writeUInt32LE':'writeInt32LE'](v,b.offset);}
  return bytes;
 }
-async function prepare({kit,output,size='1080p',converterTool,signal}){
- const spec=Source.sizes.find(s=>s.id===size);if(!spec||!path.isAbsolute(kit)||!path.isAbsolute(output)||!path.isAbsolute(converterTool))throw Error('ANR preparation requires explicit absolute inputs.');
+// The identities a kit's preparation checks. The kit declared in source.json
+// keeps its declared digests. Another listed release is identified by its
+// digest-verified archive, so its inner identities are read from the kit: one
+// checkpoint shared by every graph size, and the digests of its program packs,
+// kernel pack and converter library.
+function declaredKit(){return {version:Source.version,declared:true,checkpoint:Source.checkpoint,kernelPack:Source.kernelPack,converter:Source.converter,sizes:Source.sizes,verificationFiles:Source.verificationFiles};}
+function describeKit(kit,version){
+ if(version===Source.version)return declaredKit();
+ try{
+  const sizes=Source.sizes.map(({id,width,height})=>{const data=file(kit,'programs/metal-'+id+'/pack.nrx'),program=JSON.parse(decode(data).get('program.json'));return {id,width,height,sha256:digest(data),checkpoint:program?.checkpoint_id};});
+  const checkpoints=[...new Set(sizes.map(s=>s.checkpoint))];
+  if(checkpoints.length!==1||!/^[A-Za-z0-9._-]{1,128}$/.test(String(checkpoints[0]||'')))throw Error('its graph sizes do not share one checkpoint');
+  return {version,declared:false,checkpoint:checkpoints[0],kernelPack:digest(file(kit,'kernels-metal/pack.nrx')),converter:digest(file(kit,'bin/libmetalirconverter.dylib')),sizes:sizes.map(({checkpoint,...size})=>size),verificationFiles:null};
+ }catch(error){throw Error('The ANR kit '+version+' is incomplete or unsupported: '+(error.code==='ENOENT'?'a required file is missing':error.message)+'.');}
+}
+async function prepare({kit,output,size='1080p',converterTool,signal,spec:kitSpec=declaredKit()}){
+ const spec=kitSpec.sizes.find(s=>s.id===size);if(!spec||!path.isAbsolute(kit)||!path.isAbsolute(output)||!path.isAbsolute(converterTool))throw Error('ANR preparation requires explicit absolute inputs.');
  if(fs.existsSync(output))throw Error('ANR preparation output already exists.');
- const programs=decode(file(kit,'programs/metal-'+size+'/pack.nrx',spec.sha256)),kernels=decode(file(kit,'kernels-metal/pack.nrx',Source.kernelPack));
+ const programs=decode(file(kit,'programs/metal-'+size+'/pack.nrx',spec.sha256)),kernels=decode(file(kit,'kernels-metal/pack.nrx',kitSpec.kernelPack));
  const program=JSON.parse(programs.get('program.json'));
- if(program.version!==2||program.checkpoint_id!==Source.checkpoint||program.path!=='metal'||program.width!==spec.width||program.height!==spec.height)throw Error('Unsupported ANR graph geometry or checkpoint.');
- file(kit,'bin/libmetalirconverter.dylib',Source.converter);
+ if(program.version!==2||program.checkpoint_id!==kitSpec.checkpoint||program.path!=='metal'||program.width!==spec.width||program.height!==spec.height)throw Error('Unsupported ANR graph geometry or checkpoint.');
+ file(kit,'bin/libmetalirconverter.dylib',kitSpec.converter);
  fs.mkdirSync(path.dirname(output),{recursive:true});const temporary=fs.mkdtempSync(path.join(path.dirname(output),'.anr-prepare-'));
  const build=path.join(temporary,'runtime');fs.mkdirSync(build);
  const write=(name,data)=>{const target=path.join(build,name);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,data);};
@@ -45,10 +60,10 @@ async function prepare({kit,output,size='1080p',converterTool,signal}){
    const uniform='uniforms/'+Object.keys(stages).length+'-'+i+'.bin';write(uniform,uniformBytes(JSON.parse(kernels.get(prefix+'.json')),s.uniforms));
    return {kernel:s.kernel,groups:s.groups,threads:s.threads,buffers:s.buffers,images:s.images||{},optional:s.optional||[],label:s.label,uniforms:uniform};
   });}
-  const manifest={schema:'fsr4_anr_runtime_v1',release:Source.version,checkpoint_id:Source.checkpoint,backend:'native',width:spec.width,height:spec.height,family:program.family,source_program_sha256:digest(programs.get('program.json')),weights_sha256:digest(programs.get('weights.bin')),source_kernel_pack_sha256:Source.kernelPack,converter_sha256:Source.converter,kernels:compiled,stages,files:{}};
+  const manifest={schema:'fsr4_anr_runtime_v1',release:kitSpec.version,checkpoint_id:kitSpec.checkpoint,backend:'native',width:spec.width,height:spec.height,family:program.family,source_program_sha256:digest(programs.get('program.json')),weights_sha256:digest(programs.get('weights.bin')),source_kernel_pack_sha256:kitSpec.kernelPack,converter_sha256:kitSpec.converter,kernels:compiled,stages,files:{}};
   for(const key of ['buffers','inputs','output','formats','images','swaps'])manifest[key]=program[key];
   for(const name of fs.readdirSync(build,{recursive:true})){const target=path.join(build,name);if(fs.statSync(target).isFile()){const data=fs.readFileSync(target);manifest.files[name]={bytes:data.length,sha256:digest(data)};}}
   write('manifest.json',JSON.stringify(manifest,null,2)+'\n');fs.renameSync(build,output);return manifest;
  }finally{fs.rmSync(temporary,{recursive:true,force:true});}
 }
-module.exports={prepare,uniformBytes,file,digest};
+module.exports={prepare,describeKit,declaredKit,uniformBytes,file,digest};
