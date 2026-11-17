@@ -80,3 +80,63 @@ test('MacLauncher DXMT is an ordinary managed translator source', () => {
   for (const method of ['refreshCatalog', 'installRuntime', 'uninstallRuntime', 'resolveSelection']) assert.equal(typeof manager[method], 'function');
   assert.equal(typeof manager.customRuntime.inspect, 'function');
 });
+
+// Versions, install, set default, delete and a custom path through the ordinary manager actions, with
+// published-package fixtures in the Builds release layout. Status and selection never fetch.
+test('MacLauncher DXMT lists, installs, defaults, removes and registers packages like any managed download', { skip: process.platform !== 'darwin' || process.arch !== 'arm64' }, async t => {
+  const { execFileSync } = require('node:child_process');
+  const { packageFor } = require('./helpers/managed-tool-fixture.cjs');
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dxmt-managed-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const unix = path.join(root, 'winemetal.so');
+  fs.writeFileSync(path.join(root, 'winemetal.c'), 'const void *__wine_unix_call_funcs[1], *__wine_unix_call_wow64_funcs[1];\n');
+  execFileSync('/usr/bin/clang', ['-arch', 'arm64', '-mmacosx-version-min=13.0', '-dynamiclib', '-install_name', '@rpath/winemetal.so', path.join(root, 'winemetal.c'), '-o', unix]);
+  const entries = [
+    { path: 'wine/aarch64-unix/winemetal.so', bytes: fs.readFileSync(unix), mode: 0o755, architectures: ['arm64'] },
+    { path: 'wine/aarch64-windows/d3d11.dll', bytes: library('D3D11CreateDevice'), mode: 0o644 },
+    { path: 'wine/aarch64-windows/dxgi.dll', bytes: library('CreateDXGIFactory1'), mode: 0o644 },
+    { path: 'wine/aarch64-windows/winemetal.dll', bytes: library('DllMain'), mode: 0o644 }];
+  const versions = ['0.80-244-g7c8dee1-MCLv1', '0.80-250-gabcdef0-MCLv1'];
+  const fixtures = versions.map(version => packageFor(path.join(root, version), { id: 'dxmt', version, architecture: 'arm64', entries,
+    manifest: { id: 'dxmt', engine: 'dxmt', platform: 'darwin', executableRelative: 'wine/aarch64-unix/winemetal.so', nativeArchitecture: 'arm64',
+      windowsArchitecture: 'arm64ec', upstreamRevision: 'a'.repeat(40), dependencies: [] } }));
+  let offline = false; const requests = [];
+  const dependencies = { systemVersionSync: () => '27.0',
+    fetchUrlBuffer: async url => { assert.equal(offline, false, 'status and selection never fetch'); requests.push(url);
+      return { status: 200, body: Buffer.from(JSON.stringify({ schemaVersion: 2, projectId: 'dxmt', updatePolicy: 'manual', packages: fixtures.map(item => item.record) })) }; },
+    downloadToFile: async (url, destination) => { assert.equal(offline, false); requests.push(url);
+      const fixture = fixtures.find(item => item.record.asset.url === url); assert.ok(fixture, 'downloads keep the published asset identity');
+      fs.copyFileSync(fixture.archive, destination); } };
+  const manager = DXMT.create({ dependencies }), userDataDir = path.join(root, 'profile');
+  // Versions: every published version is offered after Refresh.
+  await manager.refreshCatalog({ userDataDir, force: true });
+  offline = true;
+  const listed = manager.getState({ userDataDir, settings: {} });
+  for (const version of versions) assert.ok(JSON.stringify(listed).includes(version), version);
+  // Install: both versions, each admitted by the DXMT inspection.
+  offline = false;
+  const installed = [];
+  for (const version of versions) installed.push(await manager.installRuntime({ userDataDir, version, architecture: 'arm64' }));
+  offline = true;
+  for (const [index, item] of installed.entries()) {
+    assert.equal(item.version, versions[index]);
+    assert.equal(fs.realpathSync(item.executablePath), fs.realpathSync(path.join(item.root, 'wine/aarch64-unix/winemetal.so')));
+    assert.equal(item.baseRoot, path.join(item.root, 'wine'));
+  }
+  // Set default: the older version becomes the section default and is what an unset game selects.
+  const settings = manager.applySettingsUpdate('setDefault', { version: versions[0] }, {}, { userDataDir });
+  assert.equal(settings.defaultVersion, versions[0]);
+  const chosen = manager.resolveSelection(null, { runtimes: { [manager.id]: settings } }, userDataDir, { verification: 'status' });
+  assert.equal(chosen.version, versions[0]); assert.equal(chosen.ready, true);
+  // Delete: the newer version's files go, the default stays.
+  await manager.uninstallRuntime({ userDataDir, version: versions[1], settings });
+  assert.equal(fs.existsSync(installed[1].installDir), false);
+  assert.deepEqual(manager.getState({ userDataDir, settings }).installed.filter(row => !row.custom).map(row => row.version), [versions[0]]);
+  // Custom path: an unpacked package elsewhere registers as its own copy and can be the default.
+  const custom = path.join(root, versions[1], 'archive-input', 'files');
+  await manager.registerCustomRuntime({ userDataDir, runtimePath: custom, settings });
+  const rows = manager.getState({ userDataDir, settings }).installed;
+  assert.ok(rows.some(row => row.custom && row.version === custom && row.ready), JSON.stringify(rows.map(row => [row.version, row.custom, row.ready])));
+  assert.equal(manager.applySettingsUpdate('setDefault', { version: custom }, settings, { userDataDir }).customDefaults?.default, custom);
+  assert.ok(requests.every(url => url.startsWith('https://')), 'only published catalog and asset URLs are requested');
+});
