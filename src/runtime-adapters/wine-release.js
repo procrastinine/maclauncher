@@ -13,6 +13,13 @@ const {normalizeArchitecture} = require('../modules/shared/runtime/architecture'
 
 const UNIX = {arm64: 'aarch64-unix', x64: 'x86_64-unix'};
 const missingApplication = (source, version) => `${source.label} ${version} runs through ${String(Object.values(source.upstream.app).find(Boolean)).split('/')[0].replace(/\.app$/i, '')}, which is not installed.`;
+// A CPU whose downloads a source declares incomplete on their own (`upstream.unavailable`, CPU to the wording that
+// follows the build's name): its builds are listed with that reason and never download.
+const declaredUnavailable = (source, architecture, version) => {
+  const phrase = Object.entries(source.upstream?.unavailable && typeof source.upstream.unavailable === 'object' ? source.upstream.unavailable : {})
+    .find(([cpu]) => normalizeArchitecture(cpu) === architecture)?.[1];
+  return phrase ? `${source.label} ${version} ${phrase}.` : null;
+};
 // A release's version starts at the first dotted number of its tag.
 const tagVersion = tag => /\d+\.\d+.*$/.exec(String(tag || ''))?.[0] || null;
 // An application whose executable a CPU's build runs through, in the system or
@@ -76,12 +83,13 @@ function createCatalog(source, dependencies = {}) {
   }
   discover.allArchitectures = true;
   // A build that runs through an application's executable is installable only
-  // while that application is installed.
+  // while that application is installed; a build of a CPU the source declares
+  // unavailable never is.
   function describeRequirements(pins, requirements) {
     for (const pin of pins) {
-      const loader = applicationLoader(source, architectureOf(pin.asset?.filename), dependencies);
-      requirements[pin.version] = {...requirements[pin.version], downloadBytes: pin.downloadBytes,
-        ...(loader === null ? {installReason: missingApplication(source, pin.version)} : {})};
+      const architecture = architectureOf(pin.asset?.filename), loader = applicationLoader(source, architecture, dependencies);
+      const reason = declaredUnavailable(source, architecture, pin.version) || (loader === null ? missingApplication(source, pin.version) : null);
+      requirements[pin.version] = {...requirements[pin.version], downloadBytes: pin.downloadBytes, ...(reason ? {installReason: reason} : {})};
     }
   }
   async function verify({archiveSha256, pin, signal}) {
@@ -126,6 +134,8 @@ function createPayload(source, dependencies = {}) {
     // A build that runs through an application's signed loader reaches it
     // through the Wine tree's own Unix loader path, where Wine looks for it.
     const architecture = require('./wine').assetArchitecture(source, pin?.asset?.filename);
+    const unavailable = declaredUnavailable(source, architecture, pin?.version || '');
+    if (unavailable) throw new Error(unavailable);
     const loader = applicationLoader(source, architecture, dependencies);
     if (loader === null) throw new Error(missingApplication(source, pin?.version || ''));
     const external = loader ? [loader, fs.realpathSync(loader)] : [];

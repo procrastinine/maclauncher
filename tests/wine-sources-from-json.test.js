@@ -52,19 +52,32 @@ test("a Wine declared only by JSON lists the releases its asset patterns match, 
   assert.deepEqual([...catalog().versions].sort(), [intel, arm].sort(), "only assets matching a CPU pattern are releases");
   assert.equal(catalog().versionRequirements[intel].architecture, "x64");
   assert.equal(catalog().versionRequirements[arm].architecture, "arm64");
-  assert.deepEqual(catalog().installableVersions, [intel], "the arm64 build needs the application's loader");
+  const intelReason = `Highball Wine ${intel} needs the GStreamer and FFmpeg libraries Highball installs beside it, which its download does not include.`;
+  assert.deepEqual(catalog().installableVersions, [], "the arm64 build needs the application's loader, and the Intel build is incomplete on its own");
   assert.match(catalog().versionRequirements[arm].installReason, /runs through Highball, which is not installed/);
-  // Play: the arm64 build is never the automatic choice or a planned download
-  // while the loader is missing; choosing it states the reason.
+  assert.equal(catalog().versionRequirements[intel].installReason, intelReason);
+  // Play: neither build is the automatic choice or a planned download; choosing
+  // one states its reason.
   const select = options => manager.resolveSelection({}, {}, userDataDir, options);
-  assert.notEqual(select({}).version, arm, "the automatic choice is not the build that cannot install");
-  const chosen = select({ version: arm });
-  assert.equal(chosen.ready, false);assert.equal(chosen.version, null, "no download is planned for the arm64 build");
-  assert.match(chosen.reason, /runs through Highball, which is not installed/);
+  assert.equal(select({}).version, null, "no build that cannot install is the automatic choice");
+  for (const version of [intel, arm]) {
+    const chosen = select({ version });
+    assert.equal(chosen.ready, false); assert.equal(chosen.version, null, `no download is planned for ${version}`);
+    assert.equal(chosen.reason, catalog().versionRequirements[version].installReason);
+  }
+  // Neither installs, and neither downloads: the reason stops the install before the archive is requested.
+  for (const version of [intel, arm]) {
+    Harness.network.requests.length = 0;
+    await assert.rejects(manager.installRuntime({ userDataDir, version, exactVersion: true }), { message: catalog().versionRequirements[version].installReason });
+    assert.deepEqual(Harness.network.requests.filter(url => url.includes("/releases/download/")), [], `${version} downloads nothing`);
+    assert.equal(manager.getState({ userDataDir, componentSummaries: false }).installed.length, 0);
+  }
   const loader = path.join(applications, "Highball.app/Contents/Helpers/WineLoader.app/Contents/MacOS/wine");
   fs.mkdirSync(path.dirname(loader), { recursive: true }); fs.writeFileSync(loader, "");
-  assert.deepEqual([...catalog().installableVersions].sort(), [intel, arm].sort(), "with the application installed, the arm64 build is offered");
+  assert.deepEqual(catalog().installableVersions, [arm], "with the application installed, the arm64 build is offered");
   assert.equal(select({ version: arm }).version, arm, "with the application installed, choosing the arm64 build plans its download");
+  assert.equal(catalog().versionRequirements[intel].installReason, intelReason, "the application holds only the arm64 loader, so the Intel build stays incomplete");
+  assert.equal(select({ version: intel }).version, null, "the Intel build stays out of Play");
 });
 
 test("the Wine tree of a download is found by its files, in an archive folder or inside an application", t => {

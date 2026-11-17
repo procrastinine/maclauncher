@@ -11,6 +11,9 @@
     },
     "app": {
       "arm64": "Highball.app/Contents/Helpers/WineLoader.app/Contents/MacOS/wine"
+    },
+    "unavailable": {
+      "x86_64": "needs the GStreamer and FFmpeg libraries Highball installs beside it, which its download does not include"
     }
   },
   "included": [

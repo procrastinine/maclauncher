@@ -4,14 +4,17 @@ const { githubRoutes, githubRelease, githubScenarios } = require("../helpers/fut
 // Engine releases hold one archive and its checksum file. Intel builds are
 // tagged engine-wine-<version>-<build>, arm64 builds engine-arm64-wine-...;
 // the repository's other releases are not Wine. An arm64 build waits for the
-// Highball application, which the offline fixture does not have.
+// Highball application, which the offline fixture does not have, and an Intel
+// build is listed with the reason its source declares, so every scenario's
+// version is listed with a reason rather than installable.
 const repository = "gauthierpiarrette/highball-engine";
 const release = tag => githubRelease(repository, tag, [`${tag}.tar.gz`, `${tag}.tar.gz.sha256`]);
 const releases = [release("engine-wine-11.0-20261112T101620Z-gst-rpath-0030"), release("engine-arm64-wine-11.18-20261108T132317Z-spatial-0056-0057"),
   release("engine-wine-10.18-20261020T080000Z-0020"), githubRelease(repository, "renderer-dxmt-0.7", ["renderer-dxmt-0.7.tar.gz"])];
 const version = tag => /\d+\.\d+.*$/.exec(tag)?.[0] || tag;
 module.exports = { managers: ["highball-wine"], current: githubRoutes(repository, releases),
-  scenarios: githubScenarios(repository, releases, { version, bump: value => value.replace(/^(\d+)\.(\d+)/, (_, major, minor) => `${major}.${Number(minor) + 1}`) }),
+  scenarios: Object.fromEntries(Object.entries(githubScenarios(repository, releases, { version, bump: value => value.replace(/^(\d+)\.(\d+)/, (_, major, minor) => `${major}.${Number(minor) + 1}`) }))
+    .map(([name, scenario]) => [name, scenario && { ...scenario, usable: scenario.usable === true ? false : scenario.usable }])),
   layout: {
     write(root) {
       const engine = path.join(root, "engine");
