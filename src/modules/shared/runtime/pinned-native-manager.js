@@ -1139,7 +1139,23 @@ function upstreamPins(rows) {
   });
 }
 function createPinnedNativeManager(options) {
-  return require("./architecture-manager").createArchitectureManager(options, createSingleArchitectureManager);
+  const manager = require("./architecture-manager").createArchitectureManager(options, createSingleArchitectureManager);
+  const install = manager.installRuntime;
+  // Tools can install directly after consent. Record their automatic copies
+  // at the facade so the identity includes its measured architecture variant.
+  manager.installRuntime = async function (payload = {}, ...args) {
+    const automatic = payload.automatic === true;
+    const state = automatic ? manager.getState({ userDataDir: payload.userDataDir,
+      settings: payload.settings?.runtimes?.[manager.id] || payload.settings, runtimeSettings: payload.settings?.runtimes }) : null;
+    const installedBefore = state ? (state.sections || [{ ...state, id: "default" }]).flatMap(section =>
+      (section.installed || []).map(row => ({ ...row, sectionId: section.id || "default" }))) : [];
+    const result = await install.call(this, payload, ...args);
+    if (automatic && result) require("../../../core/runtime-install-origins").recordPlayInstall({ userDataDir: payload.userDataDir, manager,
+      plan: { version: payload.version, automatic: true, installOptions: payload }, result, entry: payload.entry,
+      settings: payload.settings?.runtimes ? payload.settings : { runtimes: { [manager.id]: payload.settings } }, installedBefore, logger: payload.logger });
+    return result;
+  };
+  return manager;
 }
 // A plain description of what a manager's downloads do, shown with each of
 // its Runtimes sections.

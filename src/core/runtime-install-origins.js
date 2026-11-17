@@ -37,7 +37,9 @@ function identity({ managerId, version, sectionId, variant }) {
 function recordPlayInstall({ userDataDir, manager, plan = {}, result, entry, settings, installedBefore = [], logger } = {}) {
   try {
     const version = text(String(result?.version ?? plan.version ?? ""));
-    if (!userDataDir || !manager?.id || plan.automatic !== true || !version || installedBefore.includes(version)) return false;
+    if (!userDataDir || !manager?.id || plan.automatic !== true || !version) return false;
+    if (result?.custom || result?.external || result?.included || result?.readOnly ||
+      require("../modules/shared/runtime/custom-runtime").isPath(version)) return false;
     if (names(entry?.runtimeData, version) || names(settings, version)) return false;
     const sectionId = result?.sectionId || plan.installOptions?.sectionId || "default";
     let variant = result?.variant || plan.installOptions?.variant;
@@ -52,7 +54,10 @@ function recordPlayInstall({ userDataDir, manager, plan = {}, result, entry, set
     }
     const row = identity({ managerId: manager.id, version, sectionId: result?.sectionId || plan.installOptions?.sectionId,
       variant });
-    const installs = read(userDataDir).filter(item => !same(item, row));
+    if (installedBefore.some(item => typeof item === "string" ? item === version : item && typeof item === "object" &&
+      item.version != null && same(identity({ ...item, managerId: manager.id }), row))) return false;
+    const installs = read(userDataDir);
+    if (installs.some(item => same(item, row))) return true;
     write(userDataDir, [...installs, { ...row, ...(text(entry?.gameId) ? { gameId: entry.gameId } : {}), installedAt: new Date().toISOString() }]);
     return true;
   } catch (error) {
