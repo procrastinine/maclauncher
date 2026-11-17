@@ -51,6 +51,8 @@ test('every registered runtime manager has a linked upstream project in Credits'
     'winevulkan-scene': 'https://github.com/metalsharp/MetalSharp-Wine',
     'vulkan-loader': 'https://github.com/KhronosGroup/Vulkan-Loader',
     steamcmd: 'https://developer.valvesoftware.com/wiki/SteamCMD',
+    gogdl: 'https://github.com/Heroic-Games-Launcher/heroic-gogdl',
+    legendary: 'https://github.com/derrod/legendary',
     krkrsdl2: 'https://github.com/krkrsdl2/krkrsdl2',
     love: 'https://github.com/love2d/love',
     mkxpz: 'https://github.com/mkxp-z/mkxp-z',
