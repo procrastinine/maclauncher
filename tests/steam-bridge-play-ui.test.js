@@ -161,7 +161,7 @@ test('with another Play download, the bridge is one line of that dialog', async 
 test('Runtimes lists the bridge beside its Valve client files, and removing its last version removes the files it brought in', async t => {
   const root = scratch(t), userDataDir = path.join(root, 'data'), { bridge, install, received, item, valve } = offlineBridge(root);
   const ClientFiles = require('../src/modules/crossover/runtime/steam-client-files');
-  assert.deepEqual({ ...bridge.ui }, { groupId: 'steam-bridge', tabLabel: 'Steam client bridge', sectionLabel: 'Steam client bridge',
+  assert.deepEqual({ ...bridge.ui }, { cpuBuildLabels: false, groupId: 'steam-bridge', tabLabel: 'Steam client bridge', sectionLabel: 'Steam client bridge',
     management: 'managed', order: 204, category: 'compatibility' });
   assert.deepEqual([ClientFiles.ui.groupId, ClientFiles.ui.tabLabel, ClientFiles.ui.sectionLabel], ['steam-bridge', 'Steam client bridge', 'Windows Steam client files']);
   const empty = bridge.getState({ userDataDir }).sections[0];
