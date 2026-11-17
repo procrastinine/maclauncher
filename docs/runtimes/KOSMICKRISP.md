@@ -28,7 +28,7 @@ MacLauncher can install two KosmicKrisp builds, and Sikarugir comes with a third
 | MacLauncher KosmicKrisp | The `maclauncher-kosmickrisp` package from [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds) | arm64 and x64 packages |
 | Sikarugir Template KosmicKrisp | The Vulkan libraries of a [Sikarugir Template](SIKARUGIR.md) | x64 |
 
-Each build uses the Khronos Vulkan loader. LWJGL's builds use Homebrew's published Vulkan-Loader bottle, managed as **Vulkan loader** in the **Tools** tab of Runtimes. Refresh reads Homebrew's current versions; Install, Delete, Set default and Register custom manage the loader independently. A custom loader can be a native library or a folder containing `libvulkan.1.dylib` at its root or under `lib`. Its Mach-O headers determine its CPU architecture. The selected default or custom loader is used by LWJGL's driver; an earlier complete driver installation keeps its included loader when no managed loader is selected. A missing loader is acquired during consented preparation, and an installed usable loader needs no refresh or download. Each MacLauncher KosmicKrisp package instead contains a loader built from source together with the driver.
+Each build uses the Khronos Vulkan loader. LWJGL's builds use Homebrew's published Vulkan-Loader bottle, managed as **Vulkan loader** in the **Tools** tab of Runtimes. Refresh reads Homebrew's current versions; Install, Delete, Set default and Register custom manage the loader independently. Install asks GitHub Packages for a current anonymous download token for the bottle, since one listed by an earlier Refresh can have expired. A custom loader can be a native library or a folder containing `libvulkan.1.dylib` at its root or under `lib`. Its Mach-O headers determine its CPU architecture. The selected default or custom loader is used by LWJGL's driver; an earlier complete driver installation keeps its included loader when no managed loader is selected. A missing loader is acquired during consented preparation, and an installed usable loader needs no refresh or download. Each MacLauncher KosmicKrisp package instead contains a loader built from source together with the driver.
 
 A local MacLauncher KosmicKrisp package can be registered from its complete folder or a library inside it. Registration reads the driver and loader's Mach-O headers and requires both libraries to contain the package's CPU architecture. The files stay in their original location; removing the registration leaves those files intact.
 
@@ -257,7 +257,7 @@ ANGLE's Vulkan renderer enables geometry and tessellation shaders, which OpenGL 
 
 ### Vulkan games, AnyPS5 and Prosper
 
-Games and runtimes that use Vulkan directly get the selected driver's features with no translator in between. AnyPS5 and Prosper run as x64 programs, so they load an x64 driver build, and their automatic choice prefers KosmicKrisp.
+Games and runtimes that use Vulkan directly get the selected driver's features with no translator in between. AnyPS5 and Prosper run as x64 programs, so they load an x64 driver build. Their automatic choice follows one order for Intel and Apple Silicon programs alike: an installed MacLauncher KosmicKrisp, then an installed LWJGL KosmicKrisp, then MoltenVK. With none of them installed, Play offers MacLauncher KosmicKrisp for the program's CPU; skipping it, or a Mac without Metal 4, uses MoltenVK.
 
 ### D3DMetal and DXMT
 

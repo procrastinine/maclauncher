@@ -785,8 +785,18 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     try {
       const archivePath = path.join(staging, pin.asset.filename);
       onProgress?.({ downloaded: 0, total: pin.asset.bytes || null, detail: "Downloading…" });
-      const download = destination => dependencies.downloadToFile ? dependencies.downloadToFile(pin.asset.url, destination, { signal, onProgress })
-        : Upstream.download(Upstream.listedFile(pin.projectPackage ? {...pin.asset,bytes:undefined} : pin.asset), destination, { signal, onProgress });
+      // A source that lists request headers with a file, such as an anonymous
+      // registry pull token, may have listed ones that have since expired, so the
+      // consented download asks the source for current ones.
+      const requestHeaders = async () => {
+        if (!pin.headers || !upstream) return pin.headers;
+        const fresh = upstreamPins(await upstream.discover({ signal })).filter(row => row.headers && row.asset);
+        const origin = url => new URL(url).origin;
+        return (fresh.find(row => row.asset.url === pin.asset.url) || fresh.find(row => origin(row.asset.url) === origin(pin.asset.url)))?.headers || pin.headers;
+      };
+      const download = async destination => dependencies.downloadToFile ? dependencies.downloadToFile(pin.asset.url, destination, { signal, onProgress })
+        : Upstream.download(Upstream.listedFile(pin.projectPackage ? {...pin.asset,bytes:undefined} : pin.asset), destination,
+          { signal, onProgress, ...(pin.headers ? { headers: await requestHeaders() } : {}) });
       const fetched = archiveFile ? await require("../copy-file").cloneOrCopy(archiveFile, archivePath, { signal }).then(() => null) : await download(archivePath);
       const archiveBytes = fs.statSync(archivePath).size;
       const progressBytes = { downloaded: archiveBytes, total: archiveBytes };
