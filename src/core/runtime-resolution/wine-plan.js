@@ -228,6 +228,13 @@ async function resolve(install, runtime, context, { executableArchitecture, host
   } else if (vulkan.selected && !vulkan.inherited && !vulkan.fallback && require('../../modules/crossover/temporal/vulkan-dlss').routeForwards(plan, executableArchitecture) &&
       !require('../../modules/crossover/temporal/vulkan-dlss').carrierDriver(plan))
     Object.assign(vulkan, { reasonCode: 'dlss-forwarding', reason: 'This Vulkan driver does not forward DLSS frames.' });
+  // A Direct3D translator that renders through Vulkan needs a driver. When the
+  // Wine includes none and the Vulkan driver is on its automatic choice, Play
+  // stops with the reason instead of launching without one.
+  const throughVulkan = !vulkan.used && !vulkan.inherited && !plan.vulkanPending &&
+    Roles.usedRenderers(plan).find(item => ['dxvk', 'vkd3d-proton'].includes(item.engine));
+  if (throughVulkan && !plan.pairingError) plan.pairingError = `${throughVulkan.engine === 'vkd3d-proton' ? 'vkd3d-proton' : 'DXVK'} renders through Vulkan, and ${
+    sourceFor(runtime).label || 'this Wine'} includes no Vulkan driver. Choose a Vulkan driver in the game's settings.`;
   const vulkanRequirements = [...new Set(Roles.usedRenderers(plan).flatMap(item => item.vulkanRequires || []))];
   if (vulkan.used && vulkanRequirements.length)
     vulkan.used = await Description.prepareVulkanFeatures(vulkan.used, vulkanRequirements, context);

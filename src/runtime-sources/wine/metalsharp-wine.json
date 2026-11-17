@@ -23,6 +23,16 @@
       ]
     },
     {
+      "id": "metalsharp-wine-moltenvk",
+      "kind": "vulkan-driver",
+      "label": "MetalSharp MoltenVK",
+      "engine": "moltenvk",
+      "parts": [
+        { "path": "lib/libMoltenVK.dylib", "name": "library" },
+        { "path": "share/vulkan/icd.d/MoltenVK_icd.json", "name": "icd" }
+      ]
+    },
+    {
       "id": "metalsharp-wine-mullion",
       "kind": "d3d-translator",
       "label": "MetalSharp Mullion",

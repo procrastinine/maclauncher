@@ -137,3 +137,42 @@ test('automatic Vulkan of a Wine with no Vulkan driver of its own stays the Wine
   assert.equal(plan.vulkanPending, null, 'and Play offers no driver download for it');
   assert.equal(plan.components['d3d-renderer'].used.included, true);
 });
+
+// A MetalSharp Wine tree as its loader reads it: arm64 Unix side, its own DXVK
+// for x86_64 programs, and optionally its own MoltenVK with the ICD beside it.
+function metalSharpWine(root, { moltenVK }) {
+  const { ARM64 } = require('./fixtures/macho-image'), contents = path.join(root, 'MetalSharp-Wine.app/Contents');
+  const executablePath = put(path.join(contents, 'MacOS/wine'), image({ cpu: ARM64, fileType: 2 }));
+  put(path.join(contents, 'lib/wine/aarch64-unix/ntdll.so'), image({ cpu: ARM64 }));
+  const pe = peFixture({ is64: true }); pe.bytes.writeUInt16LE(0x2002, pe.peOffset + 22);
+  for (const name of ['d3d9', 'd3d10core', 'd3d11', 'dxgi']) put(path.join(contents, 'lib/dxvk/x86_64-windows', name + '.dll'), pe.bytes);
+  if (moltenVK) {
+    put(path.join(contents, 'lib/libMoltenVK.dylib'), image({ cpu: ARM64 }));
+    put(path.join(contents, 'share/vulkan/icd.d/MoltenVK_icd.json'), JSON.stringify({ file_format_version: '1.0.0',
+      ICD: { library_path: '../../../lib/libMoltenVK.dylib', api_version: '1.4.0', is_portability_driver: true } }));
+  }
+  return { installDir: root, wineRoot: contents, engineRoot: contents, executablePath, libraryRoot: path.join(contents, 'lib'),
+    architecture: 'arm64', architectures: ['arm64'], version: '7.0', capabilities: {} };
+}
+const metalSharpDXVK = async (t, options) => {
+  const root = scratch(t), install = metalSharpWine(root, options);
+  const ctx = { runtimeId: 'metalsharp-wine', userDataDir: path.join(root, 'profile'), settings: { runtimes: {} },
+    runtimeSettings: { translatorD3D11: 'included:d3d-renderer:dxvk' }, logger: { warn() {} } };
+  return Translators.resolve(install, 'metalsharp-wine', ctx, { managers: [], executableArchitecture: 'x86_64', host: { macOSVersion: '26.0', physicalAppleGPU: true } });
+};
+
+test('an explicit Wine DXVK with the Vulkan driver on automatic runs on the Wine own MoltenVK', async t => {
+  const plan = await metalSharpDXVK(t, { moltenVK: true });
+  assert.equal(plan.components.d3d11.used?.id, 'included:d3d-renderer:dxvk');
+  assert.equal(plan.components['vulkan-driver'].value, 'automatic');
+  assert.equal(plan.components['vulkan-driver'].used?.id, 'included:vulkan-driver:moltenvk', 'the Wine own driver serves its own DXVK');
+  assert.equal(plan.pairingError ?? null, null);
+});
+
+test('an explicit Vulkan translator on a Wine with no Vulkan driver of its own stops Play with the reason', async t => {
+  const plan = await metalSharpDXVK(t, { moltenVK: false });
+  assert.equal(plan.components.d3d11.used?.id, 'included:d3d-renderer:dxvk');
+  assert.equal(plan.components['vulkan-driver'].used ?? null, null);
+  assert.equal(plan.pairingError, 'DXVK renders through Vulkan, and MetalSharp Wine includes no Vulkan driver. Choose a Vulkan driver in the game\'s settings.');
+  assert.throws(() => Translators.requirement(plan, {}), { message: plan.pairingError }, 'Play stops before the launch');
+});

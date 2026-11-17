@@ -920,6 +920,10 @@ test("MV selects legacy ANGLE D3D9 with WineD3D for missing Win32 sharing, prese
   const unix = path.join(install.wineRoot, "lib/wine/x86_64-unix");
   fs.mkdirSync(unix, { recursive: true }); install.architecture = "x86_64";
   const native = image({ cpu: X64 });
+  // The Template's MoltenVK, which DXVK renders through.
+  install.templateRoot = path.join(directory, "template");
+  fs.mkdirSync(path.join(install.templateRoot, "Frameworks"), { recursive: true });
+  fs.writeFileSync(path.join(install.templateRoot, "Frameworks/libMoltenVK.dylib"), native);
   fs.writeFileSync(path.join(unix, "ntdll.so"), native);
   for (const name of ["winevulkan.so", "win32u.so"]) fs.writeFileSync(path.join(unix, name), Buffer.concat([native, Buffer.from("vkCreateInstance\0")]));
   library(path.join(install.wineRoot, "lib/wine/i386-windows/winevulkan.dll"), ["vkGetDeviceProcAddr", "vkGetInstanceProcAddr"], { builtin: true });
