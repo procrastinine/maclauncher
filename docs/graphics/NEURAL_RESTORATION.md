@@ -14,6 +14,8 @@ A model's input size is set by the ordered downsample or upscale row before it, 
 
 Downloading or importing a model keeps automatic selection automatic. Only an explicit default action saves a model preference; existing saved defaults are preserved.
 
+Automatic model replacements are kept separate by the model's actual operation. A package usable for both image and scene reconstruction keeps one installation identity. Shared runtime upkeep removes superseded automatic copies only after they are unused; explicit installs, saved defaults and custom originals are retained.
+
 The image models below need no depth or motion from the game engine. RIFE reads a chronological pair of images, and the shared presenter sets the timestamps of the images it generates and schedules their display.
 
 ## Restoration and interpolation models
@@ -71,7 +73,9 @@ DLSS SR uses a prepared preset-K LDR 2× package that contains its reconstructio
 
 Refresh discovers DLSSMac release archives and immutable Git checkpoint revisions for the declared Real-ESRGAN, RIFE and NVIDIA source paths. Depth-model versions come from their Hugging Face branch and tag commits and file metadata. It reads release and repository metadata, including small Git LFS pointers, without downloading model weights. Install checks release SHA-256 digests, committed Git blob identities or the SHA-256 and size in LFS metadata before the existing tensor and operation checks run. Installed models, saved operation defaults and custom packages remain available offline.
 
-The separate Real-CUGAN archive profiles, NAFNet Google Drive files and NVIDIA VFX package entries retain their declared version and checksums. Their download records do not advertise an inferred publisher history or claim compatibility with a different checkpoint format. Compatible additional local packages use Import or Use existing package.
+Real-CUGAN variants are also listed from the publisher's release archives, and NVIDIA VFX package versions come from NVIDIA's package index. Installation verifies the selected archive's published SHA-256 before taking the matching checkpoint or VSR library and notices. The surrounding SDK is not installed or executed, and a different unsupported library or tensor format is refused by the importer.
+
+The NAFNet Google Drive files retain their declared profiles and checksums. These public file links do not expose a historical-version listing, so the catalog does not infer one. Compatible additional local packages use Import or Use existing package.
 
 MacLauncher's model downloads include the standard Real-CUGAN scale and noise variants and NAFNet SIDD and GoPro width64. Variants that share an author archive reuse one verified download. An archive published as a GitHub release asset is checked against the size and SHA-256 digest that GitHub currently lists for it, so an archive that the author replaces is still accepted. When the release list cannot be read or no longer lists the archive, the archive is downloaded from its address and its SHA-256 is recorded. Only the declared checkpoint is taken from the archive, and it must match its own recorded size and checksum before import. Files addressed by an exact repository commit, and entries read in parts from a published package, are checked against their recorded size and checksum. A file that differs installs nothing, and the error names the file.
 

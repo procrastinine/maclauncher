@@ -29,8 +29,8 @@ async function prepare(plan,options={},dependencies={}){
       // The shared manager task has its own cancellation control. A superseded
       // graph stops waiting immediately without cancelling another user's copy.
       const result=await current(async()=>{
-        const automatic=options.launchPreparation===true&&Setup.automaticSelection(options,method);
-        const installed=await(options.ensureNeuralModel?(await require('../../runtime/tool-install').downloadApproved(options,Setup.downloadPlan(source))?options.ensureNeuralModel({method,automatic,sourceVersion:source.version,setupActionId:source.files?'downloadModel:'+source.version:'downloadDlssMac'}):null):Setup.ensureNeuralModel({...options,signal:undefined,method,automatic}));
+        const automatic=Setup.automaticSelection(options,method),variant=require('./models').variantFor({operation:source.method||'mlx-dlss'});
+        const installed=await(options.ensureNeuralModel?(await require('../../runtime/tool-install').downloadApproved(options,Setup.downloadPlan(source))?options.ensureNeuralModel({method,automatic,variant,sourceVersion:source.version,setupActionId:source.files?'downloadModel:'+source.version:'downloadDlssMac'}):null):Setup.ensureNeuralModel({...options,signal:undefined,method,automatic}));
         if(installed)try{await options.onRuntimeStateChange?.({managerId:'graphics-neural-models'});}catch(error){require('../../graphics-warning')(options.logger,'The model library could not be refreshed.',error.message);}
         return installed;
       },options.signal);
@@ -42,7 +42,7 @@ async function prepare(plan,options={},dependencies={}){
   const acquisition=method=>{
     if(acquire)return null;
     const source=Setup.sourcesFor(method,options.userDataDir).find(row=>row.defaultForOperation)||Setup.sourcesFor(method,options.userDataDir)[0];
-    return source?{operation:method,source:{version:source.version,label:source.files?source.label:'Neural rendering model',bytes:source.bytes,setupActionId:source.files?'downloadModel:'+source.version:'downloadDlssMac'}}:null;
+    return source?{operation:method,source:{version:source.version,label:source.files?source.label:'Neural rendering model',bytes:source.bytes,automatic:Setup.automaticSelection(options,method),variant:require('./models').variantFor({operation:source.method||'mlx-dlss'}),setupActionId:source.files?'downloadModel:'+source.version:'downloadDlssMac'}}:null;
   };
   return {models,modelOperations,pending:wanted.filter(node=>!models.some(row=>compatible(row,modelOperations[node.id]))).map(node=>{
     const operation=modelOperations[node.id],source=acquisition(operation);
@@ -66,7 +66,7 @@ function downloads(plan,options={},dependencies={}){
     if(!(provider?.supportedMethods||provider?.descriptor?.operations||[]).includes(method))continue;
     const plan=Setup.downloadPlan(source);
     result.push({managerId:plan.managerId,version:plan.version,label:plan.label,automatic:Setup.automaticSelection(options,method),...(source.bytes?{bytes:source.bytes}:{}),
-      installOptions:{sectionId:'default',setupActionId:source.files?'downloadModel:'+source.version:'downloadDlssMac'}});
+      installOptions:{sectionId:'default',variant:require('./models').variantFor({operation:source.method||'mlx-dlss'}),setupActionId:source.files?'downloadModel:'+source.version:'downloadDlssMac'}});
   }
   return result;
 }

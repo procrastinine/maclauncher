@@ -35,7 +35,7 @@ test('declined or unavailable sources retain a pending request while selection h
 test('a live edit names the curated source of a missing model for the status owner instead of downloading it',async()=>{
  const Setup=require('../src/modules/shared/reshade/neural/setup'),source=Setup.sourcesFor('realesrgan').find(row=>row.defaultForOperation)||Setup.sourcesFor('realesrgan')[0];
  const live=await Preparation.prepare(plan,{ensureNeuralModel:()=>assert.fail('a live edit never downloads during preparation')},{neural:{listModels:()=>[]}});
- assert.deepEqual(live.pending.map(row=>row.acquisition),[{operation:'realesrgan',source:{version:source.version,label:source.label,bytes:source.bytes,setupActionId:'downloadModel:'+source.version}}]);
+ assert.deepEqual(live.pending.map(row=>row.acquisition),[{operation:'realesrgan',source:{version:source.version,label:source.label,bytes:source.bytes,automatic:true,variant:'operation:realesrgan',setupActionId:'downloadModel:'+source.version}}]);
  const launch=await Preparation.prepare(plan,{launchPreparation:true},{neural:{listModels:()=>[]}});
  assert.equal(launch.pending[0].acquisition,undefined,'launch preparation acquires its own models after consent');
 });

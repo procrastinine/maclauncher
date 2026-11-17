@@ -65,7 +65,8 @@ async function downloadModel(context={},dependencies={}){
           if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==row.bytes||!(row.sha256?await checksum(target,combined)===row.sha256:row.gitBlobSha1&&await gitBlobChecksum(target,combined)===row.gitBlobSha1))throw new Error(`The downloaded ${row.file} is not the selected model file: its size or checksum differs.`);
           completed+=downloadBytes;
         }
-        const imported=await Models.importModel({...operation,runtimePath:source.kind==='ncnn-rife'?temporary:path.join(temporary,source.entry),modelIdentifier:source.label,onProgress:progress=>task.onProgress?.({...progress,downloaded:completed,total:source.bytes,detail:progress.label})});
+        const runtimePath=source.kind==='archive-model'?await require('./archive-source').extract(path.join(temporary,source.archiveFile),temporary,source,{signal}):source.kind==='ncnn-rife'?temporary:path.join(temporary,source.entry);
+        const imported=await Models.importModel({...operation,runtimePath,modelIdentifier:source.label,onProgress:progress=>task.onProgress?.({...progress,downloaded:completed,total:source.bytes,detail:progress.label})});
         if(imported.operation!==source.method)throw new Error('The downloaded checkpoint does not match the selected model operation.');
         const receipt=path.join(imported.installDir,'download-source.json');
         if(!fs.existsSync(receipt))fs.writeFileSync(receipt,JSON.stringify({schema:1,version:source.version,inputIdentity:sourceIdentity(source),repository:source.repository,commit:source.revision,sourceLicense:source.sourceLicense,weightTerms:source.weightTerms,files:source.files},null,2)+'\n',{flag:'wx',mode:0o444});
@@ -145,7 +146,7 @@ async function ensureNeuralModel(context = {}, dependencies = {}) {
     const installedBefore=Models.listInstalled(context.userDataDir).map(row=>row.version);
     const result = await downloadModel({...context,sourceVersion:source.version},{...dependencies,source});
     if(result&&context.automatic===true)require('../../../../core/runtime-install-origins').recordPlayInstall({userDataDir:context.userDataDir,manager:require('../runtime/neural-models-manager'),
-      plan:{automatic:true,version:source.version,installOptions:{sectionId:'default'}},result,settings:context.settings,entry:context.entry,installedBefore,logger:context.logger});
+      plan:{automatic:true,version:source.version,installOptions:{sectionId:'default',variant:Models.variantFor(result)}},result,settings:context.settings,entry:context.entry,installedBefore,logger:context.logger});
     return result ? { modelPath: result.modelPath, version: result.version } : null;
   } catch (error) { if (Downloads.isAbortError(error)) return null; throw error; }
 }

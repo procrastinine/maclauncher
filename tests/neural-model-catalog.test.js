@@ -32,6 +32,7 @@ function fixture(t) {
 test('neural Refresh discovers immutable checkpoint commits without reading weights', async t => {
   const f = fixture(t), state = await Manager.refreshCatalog(f);
   assert.ok(state.versions.some(version => version.endsWith('git-' + 'a'.repeat(40))));assert.equal(state.installable, true);
+  assert.ok(Manager.getState(f).setupActions.some(row => row.id.endsWith('git-' + 'a'.repeat(40))), 'existing model table exposes each discovered version through its normal install action');
   assert.ok(state.versions.includes(Static.sources.find(row => row.method === 'nafnet').version), 'a source without public history keeps its declared profile');
   const count = f.requests();Manager.getState(f);assert.equal(f.requests(), count);
   f.setRevision('b'.repeat(40));await Manager.refreshCatalog(f);

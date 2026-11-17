@@ -38,6 +38,10 @@ const FG_SHAPES=(()=>{
 function operationForArchitecture(architecture) {
   return architecture===Depth.ARCHITECTURE?Depth.METHOD:Restoration.ARCHITECTURES[architecture]?.method|| (architectures.has(architecture)?"mlx-dlss":architecture===VSR_ARCHITECTURE?"mlx-vsr":architecture===SR_ARCHITECTURE?"mlx-sr-image":architecture===FG_ARCHITECTURE?"mlx-interpolation":null);
 }
+function variantFor(model) {
+  const operation = operationForArchitecture(model?.architecture) || model?.operation || model?.method;
+  return Object.hasOwn(require('../../effects/operation-contracts.mjs').MODEL_OPERATIONS, operation) ? 'operation:' + operation : null;
+}
 function operationTensors(architecture, values) {
   if (!tensors(values,false)) return false;
   if(architecture===Depth.ARCHITECTURE)return Depth.matches(architecture,values);
@@ -211,7 +215,7 @@ function readInstall(userDataDir, selected) {
     if (digest(package_.bytes) !== record.manifestHash || package_.value.weights.sha256 && package_.value.weights.sha256 !== record.weightsHash ||
         package_.weightsStat.size !== record.weightsBytes) return null;
     return { version: selected, versionLabel: `${package_.value.identifier} · ${selected.slice(7, 15)}`,...sourceMetadata(installDir,package_.value,userDataDir),
-      identifier: package_.value.identifier, architecture: package_.value.architecture,operation:package_.operation,method:package_.operation,
+      identifier: package_.value.identifier, architecture: package_.value.architecture,operation:package_.operation,method:package_.operation,variant:variantFor({operation:package_.operation}),
       intrinsicScale:Restoration.ARCHITECTURES[package_.value.architecture]?.scale||(["mlx-vsr","mlx-sr-image"].includes(package_.operation)?2:1),
       pairedDenoiser:Boolean(package_.value.denoiseWeights),
       compatibleMethods:package_.operation==="mlx-sr-image"?["mlx-sr-image","mlx-sr-scene"]:[package_.operation],
@@ -261,7 +265,7 @@ function inspectCustom(runtimePath, { verification = "full" } = {}) {
   }
   return { installDir: source.canonical, modelPath: source.canonical, weightsPath: source.weightsPath, weightsBytes: stat.size,
     manifestHash: digest(source.bytes), weightsHash, identifier: source.value.identifier, versionLabel: source.value.identifier,
-    architecture: source.value.architecture, operation: source.operation, method: source.operation,
+    architecture: source.value.architecture, operation: source.operation, method: source.operation, variant:variantFor({operation:source.operation}),
     intrinsicScale: Restoration.ARCHITECTURES[source.value.architecture]?.scale||(["mlx-vsr", "mlx-sr-image"].includes(source.operation)?2:1),
     pairedDenoiser:Boolean(source.value.denoiseWeights),
     compatibleMethods: source.operation === "mlx-sr-image" ? ["mlx-sr-image", "mlx-sr-scene"] : [source.operation], ready: true };
@@ -269,7 +273,7 @@ function inspectCustom(runtimePath, { verification = "full" } = {}) {
 function identityForPath(userDataDir, modelPath) {
   if (typeof modelPath !== "string" || !path.isAbsolute(modelPath)) return null;
   const selected = module.exports.listInstalled(userDataDir).find(item => item.modelPath === modelPath);
-  return selected ? { managerId: ID, sectionId: "default", version: selected.version, sourcePath: selected.installDir } : null;
+  return selected ? { managerId: ID, sectionId: "default", version: selected.version, ...(variantFor(selected)?{variant:variantFor(selected)}:{}), sourcePath: selected.installDir } : null;
 }
 async function importModel(context = {}) {
   const {userDataDir, runtimePath, signal} = context, Sources = require("./model-sources");
@@ -366,6 +370,6 @@ async function removeModel({ userDataDir, version, installDir } = {}) {
     fs.rmSync(target, { recursive: true }); return true;
   }, { userDataDir });
 }
-module.exports = { ID, MAX_MANIFEST, MAX_WEIGHTS, validVersion, inspectManifest: manifest, inspectPackage, inspectWeights,
+module.exports = { ID, MAX_MANIFEST, MAX_WEIGHTS, validVersion, variantFor, inspectManifest: manifest, inspectPackage, inspectWeights,
   packagePattern,PACKAGE_EXTENSIONS,operationForArchitecture,VSR_ARCHITECTURE,FG_ARCHITECTURE,SR_ARCHITECTURE,
   listInstalled, listManaged, importModel, resolveModel, removeModel, identityForPath, inspectCustom };
