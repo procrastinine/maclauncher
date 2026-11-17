@@ -49,7 +49,7 @@ A game can also carry PlayGo metadata, which describes which game chunks are ins
 
 #### Vulkan
 
-ARM-only Vulkan libraries cannot load into AnyPS5's x86-64 game process, so its **Vulkan** setting selects an installed Vulkan implementation with Intel support. The list shows the installed implementations, and Automatic prefers a compatible KosmicKrisp, which it offers to download when needed. **Settings → PlayStation 5 → PS5 (AnyPS5)** sets the default for all games, and each game's runtime settings can override it.
+ARM-only Vulkan libraries cannot load into AnyPS5's x86-64 game process, so its **Vulkan** setting selects an installed Vulkan implementation with Intel support. The list shows the installed implementations. Automatic prefers MacLauncher KosmicKrisp, then LWJGL's KosmicKrisp, then MoltenVK, and offers MacLauncher KosmicKrisp's download when none of them is installed. **Settings → PlayStation 5 → PS5 (AnyPS5)** sets the default for all games, and each game's runtime settings can override it.
 
 With KosmicKrisp, AnyPS5 uses `KK_EMULATION=performance,-denorm_preserve,-denorm_flush` to turn off the software denormal controls, which the emulator requests when they are offered. A game-set environment value overrides this default.
 

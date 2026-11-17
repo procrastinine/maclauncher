@@ -101,8 +101,13 @@ test("a game's FidelityFX library offers the FidelityFX API adapter on a carrier
 });
 
 test("preferred Vulkan and explicit MacLauncher KosmicKrisp are downloadable from an empty profile", t => {
-  const context = { userDataDir: profile(t), settings: {}, runtimeSettings: {} }, dependencies = { required: true, preferredBackend: "kosmickrisp" };
-  assert.equal(Vulkan.requirements(context, dependencies)[0].managerId, "vulkan-kosmickrisp");
+  const context = { userDataDir: profile(t), settings: {}, runtimeSettings: {} };
+  const dependencies = { required: true, preferredBackend: "kosmickrisp", hostCapabilities: { platform: "darwin", hardwareArch: "arm64", macOSVersion: "26.0" } };
+  // The automatic order offers MacLauncher KosmicKrisp first on every CPU, with MoltenVK when declined.
+  for (const architecture of ["arm64", "x64"]) {
+    const [offer] = Vulkan.requirements(context, { ...dependencies, architecture });
+    assert.deepEqual([offer.managerId, offer.discoveryRequired, offer.optional, offer.fallback.managerId], ["maclauncher-kosmickrisp", true, true, "vulkan-moltenvk"], architecture);
+  }
   // Settings list installed drivers only; Play downloads what a choice needs.
   assert.deepEqual(Vulkan.choices(context).vulkanRuntimes.map(row => row.value), ["auto"]);
   for (const choice of ["kosmickrisp:auto", "kosmickrisp:maclauncher"]) {

@@ -8,6 +8,16 @@ const Architecture = require("../runtime/architecture");
 const Requirements = require("../runtime/feature-requirements");
 const Host = require("../runtime/host-capabilities");
 const Loader = require("./loader-manager");
+// Automatic Vulkan order of a consumer that prefers a driver, by manager or
+// project id, on every CPU: the earliest installed driver is used; with none
+// installed, Play offers the first one's download, and declining it or a Mac
+// it does not serve uses the last one.
+const AUTOMATIC_ORDER = require("./automatic-order.json");
+const automaticOrder = dependencies => AUTOMATIC_ORDER[dependencies.preferredBackend] || null;
+function automaticRank(order, item) {
+  const index = order.indexOf(item.projectId || "vulkan-" + item.backend);
+  return index < 0 ? order.length : index;
+}
 
 function unavailableReason(backend, dependencies) {
   if (backend !== "kosmickrisp" && backend !== managed.projectId) return null;
@@ -119,6 +129,8 @@ function installed(context, dependencies = {}) {
       result.push(item);
     } catch (error) { if (dependencies.signal?.aborted) throw error; }
   }
+  const order = automaticOrder(dependencies);
+  if (order) return result.sort((a, b) => automaticRank(order, a) - automaticRank(order, b));
   return dependencies.preferredBackend ? result.sort((a, b) => Number(b.backend === dependencies.preferredBackend) - Number(a.backend === dependencies.preferredBackend)) : result;
 }
 function choices(context, dependencies = {}) {
@@ -170,10 +182,12 @@ function requirements(context, dependencies = {}) {
     }
     const architecture = dependencies.architecture || Architecture.selectedArchitecture();
     const installOptions = dependencies.architecture ? { architecture } : {};
-    // An installed driver keeps Play offline. Only a first Intel-program launch
-    // offers the managed Intel KosmicKrisp build before MoltenVK.
-    if (request === "auto" && architecture === "x64" && dependencies.preferredBackend === "kosmickrisp") {
-      const fallback = () => requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, translatorVulkan: "moltenvk:auto" } }, dependencies);
+    // An installed driver keeps Play offline. A first launch offers the first
+    // driver of the consumer's automatic order, with the last one as its fallback.
+    const order = request === "auto" ? automaticOrder(dependencies) : null;
+    if (order?.[0] === managed.projectId) {
+      const last = (dependencies.managers || managers).find(manager => manager.id === order.at(-1));
+      const fallback = () => requirements({ ...context, runtimeSettings: { ...context.runtimeSettings, translatorVulkan: last.backend + ":auto" } }, dependencies);
       const offer = kosmicKrispOffer(context, dependencies);
       return offer ? [{ ...offer, fallback: fallback()[0] }] : fallback();
     }
@@ -229,7 +243,8 @@ function requirements(context, dependencies = {}) {
   return [{ managerId: manager.id, version: selection.version, requiresDownload: true, installOptions }];
 }
 // The download of the managed KosmicKrisp build for a consumer CPU, offered
-// before MoltenVK on an Apple Silicon Mac with Metal 4. An installed build,
+// before MoltenVK on an Apple Silicon Mac with Metal 4, for Intel and Apple
+// Silicon programs alike. An installed build,
 // another Mac, or a refreshed catalog that lists no build for that CPU offers
 // nothing.
 function kosmicKrispOffer(context, dependencies = {}) {
@@ -243,7 +258,8 @@ function kosmicKrispOffer(context, dependencies = {}) {
   const listedNone = preferred?.discoveryRequired && catalogListsNoBuild(dependencies.adaptedManager ||
     managed.providers.find(item => item.selectionId === managed.selectionId).manager, context, dependencies.architecture || Architecture.selectedArchitecture());
   return preferred && !listedNone ? { ...preferred, optional: true, cancelLabel: "Use MoltenVK",
-    label: offerLabel("KosmicKrisp", dependencies), detail: "Intel programs on Apple Silicon. Skipping uses MoltenVK." } : null;
+    label: offerLabel("KosmicKrisp", dependencies),
+    detail: ((dependencies.architecture || Architecture.selectedArchitecture()) === "x64" ? "Intel programs on Apple Silicon. " : "") + "Skipping uses MoltenVK." } : null;
 }
 function environment(selection, directory) {
   if (!selection) return {};

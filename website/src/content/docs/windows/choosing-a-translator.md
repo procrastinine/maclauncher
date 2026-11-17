@@ -65,7 +65,7 @@ Android apps that render with Vulkan themselves use the same **Vulkan implementa
 
 ### PlayStation 5 games
 
-AnyPS5 and Prosper, the PlayStation 5 runtimes, run as Intel programs and need an Intel driver build. Their automatic choice prefers KosmicKrisp, and on a Mac that can run it, Play offers the Intel build of MacLauncher KosmicKrisp the first time one is needed.
+AnyPS5 and Prosper, the PlayStation 5 runtimes, run as Intel programs and need an Intel driver build. Their automatic choice prefers MacLauncher KosmicKrisp, then LWJGL's KosmicKrisp, then MoltenVK. On a Mac that can run it, Play offers MacLauncher KosmicKrisp the first time a driver is needed, built for whichever CPU the runtime runs as.
 
 ## Changing a translator
 

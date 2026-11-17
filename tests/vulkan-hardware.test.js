@@ -118,7 +118,7 @@ test("saved KosmicKrisp selections retain their identity and reject only known i
 
 test("KosmicKrisp choices use compact CPU labels and retain their order", t => {
   for (const architecture of ["x64", "arm64"]) {
-    const { context, dependencies } = fixture(t, architecture);
+    const { context, dependencies, adapted } = fixture(t, architecture);
     const selected = { ...dependencies, hostCapabilities: apple };
     const choices = Vulkan.choices(context, selected).vulkanRuntimes;
     assert.ok(choices.some(row => row.value === "moltenvk:fixture"));
@@ -130,10 +130,19 @@ test("KosmicKrisp choices use compact CPU labels and retain their order", t => {
     assert.ok(kosmic.every(row => !row.label.includes("Intel build for Intel programs")));
     if (architecture === "arm64") {
       assert.equal(Vulkan.resolve(context, { ...selected, preferredBackend: undefined }).backend, "moltenvk");
+      // The automatic order prefers MacLauncher KosmicKrisp for Apple Silicon programs too.
+      const withManaged = { ...selected, adapted: { installed: () => [adapted], resolve: item => item } };
+      assert.equal(Vulkan.resolve(context, withManaged).projectId, Managed.projectId);
+      assert.deepEqual(Vulkan.installed(context, withManaged).map(row => row.projectId || row.backend), [Managed.projectId, "kosmickrisp", "moltenvk"]);
       for (const manager of dependencies.managers) manager.present = false;
       const plan = Vulkan.requirements(context, selected)[0];
-      assert.equal(plan.managerId, "vulkan-kosmickrisp");
-      assert.equal(plan.optional, undefined);
+      assert.equal(plan.managerId, Managed.projectId);
+      assert.equal(plan.optional, true);
+      assert.equal(plan.fallback.managerId, "vulkan-moltenvk");
+      assert.equal(plan.label, "KosmicKrisp (Apple Silicon)");
+      assert.equal(plan.detail, "Skipping uses MoltenVK.");
+      assert.equal(Vulkan.requirements(context, { ...selected, hostCapabilities: { ...apple, macOSVersion: "15.7" } })[0].managerId, "vulkan-moltenvk",
+        "a Mac the offer does not serve uses the order's last driver");
     }
   }
 });
