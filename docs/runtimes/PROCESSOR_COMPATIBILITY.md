@@ -33,7 +33,8 @@ A translator that consists of Windows libraries contains no Mac code. It loads i
 | --- | --- | --- | --- |
 | DXVK: upstream releases, DXVK-macOS, MacLauncher DXVK and the Sikarugir Template folders `dxvk`, `dxvk3` and `d9vk` | None; Windows x64 and x86 | With the Wine process | FEX in an ARM64 Wine |
 | vkd3d-proton: upstream releases and MacLauncher vkd3d-proton | None; Windows x64 and x86 | With the Wine process | FEX in an ARM64 Wine |
-| DXMT: upstream releases and Sikarugir Templates | Intel `winemetal.so`; Windows x64 and x86 libraries | Rosetta, inside an Intel Wine | None |
+| DXMT: upstream releases and Sikarugir Templates | Intel `winemetal.so`; Windows x64 and x86 libraries | Rosetta, inside an Intel Wine | MacLauncher DXMT, inside an ARM64 Wine |
+| MacLauncher DXMT | Apple Silicon `winemetal.so`; Windows ARM64X libraries | Native, inside an ARM64 Wine, for ARM64 and x86-64 games | Not needed |
 | D3DMetal: Apple's Game Porting Toolkit, Sikarugir Templates and CrossOver | Intel `D3DMetal.framework` and `libd3dshared.dylib`; Windows x64 libraries | Rosetta, inside an Intel Wine | None |
 | WineD3D and Wine vkd3d | Part of the Wine | With the Wine process | Part of the Wine |
 | cnc-ddraw, from Sikarugir Templates | None; Windows x86 | With the Wine process | FEX in an ARM64 Wine |
