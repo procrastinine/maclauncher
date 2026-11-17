@@ -16,14 +16,16 @@ function used(commands, directory, root) {
     return at >= 0 && (at + option.length === line.length || /\s/.test(line[at + option.length]));
   }));
 }
-function reclaim() {
+// `listProcesses` returns the process inventory as "pid command" lines, or null
+// when it is unavailable; tests pass their own children's inventory.
+function reclaim({ listProcesses = processes } = {}) {
   const root = os.tmpdir();
   let names;
   try { names = fs.readdirSync(root).filter(name => /^maclauncher-mpv-(?:[1-9]\d*-)?[A-Za-z0-9]{6}$/.test(name)); }
   catch { return; }
   if (!names.length) return;
-  const commands = processes();
-  if (commands === null) return;
+  const commands = listProcesses();
+  if (typeof commands !== "string") return;
   for (const name of names) {
     const directory = path.join(root, name);
     try {

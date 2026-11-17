@@ -12,6 +12,10 @@ async function child(t, args) {
   t.after(async () => { if (value.exitCode == null && value.signalCode == null) { value.kill("SIGKILL");await once(value, "close"); } });
   await once(value, "spawn");return value;
 }
+// The process inventory reclaim reads: these children while they run. A
+// sandboxed test cannot list other processes with ps, so the inventory is passed in.
+const inventory = (...children) => ({ listProcesses: () => children.filter(value => value.exitCode == null && value.signalCode == null)
+  .map(value => `${value.pid} ${value.spawnargs.join(" ")}`).join("\n") });
 function old(directory) { const time = new Date(Date.now() - 120000);fs.utimesSync(directory, time, time); }
 test("session cleanup is idempotent, retries a failed removal and never follows resource links", t => {
   const root = fixture(t), session = Sessions.create(), original = path.join(root, "original");
@@ -34,7 +38,7 @@ test("a preparation whose caller forgot cleanup is removed when its process exit
 });
 test("a crashed player removes its session and a live player cannot be reclaimed", async t => {
   fixture(t);const session = Sessions.create(), value = await child(t, ["-e", "setInterval(()=>{},1000)", "--", "--config-dir=" + session.directory]);
-  assert.equal(session.bind(value), true);session.cleanup();Sessions.reclaim();assert.ok(fs.existsSync(session.directory));
+  assert.equal(session.bind(value), true);session.cleanup();Sessions.reclaim(inventory(value));assert.ok(fs.existsSync(session.directory));
   value.kill("SIGKILL");await once(value, "close");assert.equal(fs.existsSync(session.directory), false);
 });
 test("the next playback reclaims a killed preparer after the handoff grace period", async t => {
@@ -44,28 +48,28 @@ test("the next playback reclaims a killed preparer after the handoff grace perio
   // The child used this fixture's temporary root, never the user's temp sessions.
   assert.equal(path.dirname(directory), root);
   value.kill("SIGKILL");await once(value, "close");assert.ok(fs.existsSync(directory));
-  Sessions.reclaim();assert.ok(fs.existsSync(directory), "an unbound recent handoff is retained");old(directory);
-  Sessions.reclaim();assert.equal(fs.existsSync(directory), false);
+  Sessions.reclaim(inventory(value));assert.ok(fs.existsSync(directory), "an unbound recent handoff is retained");old(directory);
+  Sessions.reclaim(inventory(value));assert.equal(fs.existsSync(directory), false);
 });
 test("legacy reclaim preserves live command-line owners, unrelated names and symlink targets", async t => {
   const root = fixture(t), legacy = path.join(root, "maclauncher-mpv-AbCd12"), unrelated = path.join(root, "maclauncher-mpv-not-a-session");
   fs.mkdirSync(legacy);fs.mkdirSync(path.join(legacy,"fonts"));fs.mkdirSync(path.join(legacy,"script-opts"));old(legacy);fs.mkdirSync(unrelated);
   const linked = path.join(root, "maclauncher-mpv-ZyXw98");fs.symlinkSync(unrelated, linked);
   const value = await child(t, ["-e", "setInterval(()=>{},1000)", "--", "--config-dir=" + legacy]);
-  Sessions.reclaim();assert.ok(fs.existsSync(legacy));assert.ok(fs.existsSync(linked));
-  value.kill("SIGKILL");await once(value, "close");Sessions.reclaim();assert.equal(fs.existsSync(legacy), false);assert.ok(fs.existsSync(unrelated));
+  Sessions.reclaim(inventory(value));assert.ok(fs.existsSync(legacy));assert.ok(fs.existsSync(linked));
+  value.kill("SIGKILL");await once(value, "close");Sessions.reclaim(inventory(value));assert.equal(fs.existsSync(legacy), false);assert.ok(fs.existsSync(unrelated));
 });
 test("an unbound live preparer is kept and permission-denied PID checks fail closed", t => {
   fixture(t);const session = Sessions.create();old(session.directory);
-  Sessions.reclaim();assert.ok(fs.existsSync(session.directory));
+  Sessions.reclaim(inventory());assert.ok(fs.existsSync(session.directory));
   const marker = path.join(session.directory,Sessions.marker);fs.writeFileSync(marker,JSON.stringify({schema:1,pid:2147483647,player:true}));
   const mocked=t.mock.method(process,"kill",()=>{throw Object.assign(Error("denied"),{code:"EPERM"});});
-  Sessions.reclaim();assert.ok(fs.existsSync(session.directory));mocked.mock.restore();session.cleanup();
+  Sessions.reclaim(inventory());assert.ok(fs.existsSync(session.directory));mocked.mock.restore();session.cleanup();
 });
 
 test("legacy partial allocation without generated contents is reclaimed after its grace period", t => {
   const root=fixture(t), directory=path.join(root,"maclauncher-mpv-EfGh34");fs.mkdirSync(directory);old(directory);
-  Sessions.reclaim();assert.equal(fs.existsSync(directory),false);
+  Sessions.reclaim(inventory());assert.equal(fs.existsSync(directory),false);
 });
 
 test("worker shutdown removes preparation that never reached a player", async t => {
@@ -79,10 +83,10 @@ test("a live player remains protected after its launcher has been killed", async
   const value=await new Promise((resolve,reject)=>{let data='';producer.stdout.on('data',b=>{data+=b;if(data.includes('\n'))resolve(JSON.parse(data.trim()));});producer.once('error',reject);});
   t.after(()=>{try{process.kill(value.pid,'SIGKILL');}catch{}});
   assert.equal(path.dirname(value.directory),root);producer.kill('SIGKILL');await once(producer,'close');
-  Sessions.reclaim();assert.ok(fs.existsSync(value.directory),'the recorded player owns the folder after its preparer dies');
+  Sessions.reclaim(inventory(producer));assert.ok(fs.existsSync(value.directory),'the recorded player owns the folder after its preparer dies');
   process.kill(value.pid,'SIGKILL');
   for(let i=0;i<100;i++){try{process.kill(value.pid,0);}catch(error){if(error.code==='ESRCH')break;}await new Promise(resolve=>setTimeout(resolve,10));}
-  Sessions.reclaim();assert.equal(fs.existsSync(value.directory),false);
+  Sessions.reclaim(inventory(producer));assert.equal(fs.existsSync(value.directory),false);
 });
 test("owner marker creation failure removes the allocation and preserves its error", t => {
   const root=fixture(t), write=fs.writeFileSync, reason=Error("owner write failed");
