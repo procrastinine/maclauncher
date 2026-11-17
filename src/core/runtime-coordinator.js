@@ -166,7 +166,11 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
     const identity = gameIdentity(value);
     if (closedOwners.has(owner)) throw coordinationError("RUNTIME_OWNER_CLOSED", "The backend operation was closed.");
     const leases = gameLeases(identity.gameId), removing = pendingRemovals.some(request => request.identity.gameId === identity.gameId);
-    if (kind === "use" && removedGames.has(identity.gameId)) throw coordinationError("GAME_REMOVED", "This game was removed from the library. Add it again before using it.");
+    if (kind === "use" && removedGames.has(identity.gameId)) {
+      const error = coordinationError("GAME_REMOVED", "This game was removed from the library. Add it again before using it.");
+      if (value.read === true && value.launch !== true) error.name = "AbortError";
+      throw error;
+    }
     if (kind === "use" && value.read === true && value.launch !== true && removalOf(identity.gameId))
       return new Promise((resolve, reject) => waitingUses.push({ owner, identity, resolve, reject }));
     if (removing || (kind === "remove" ? leases.some(runningGame) : leases.some(lease => lease.kind === "remove"))) {

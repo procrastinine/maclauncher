@@ -478,3 +478,5 @@ Each part of the launcher reports its own errors:
 - Displayed errors drop repeated `Error:` and Electron IPC prefixes and keep the reason, paths and diagnostic details. Stored errors and backend logs keep the original message.
 
 Installed versions remain in the version menu even when the catalog no longer lists them. Windows Steam client files select a usable local copy before offering a download. Their labels use Valve’s recorded version, or the DLL build for legacy copies; these version schemes are not compared. The source card uses the Versions heading and names Valve CDN once. Windows PE components carry no Mac CPU badge. Opening Runtimes at a manager reveals its sidebar entry. The Apex Neural Rendering provider lists installed model releases when the installed graphics package includes its generation runtime; otherwise its description states that the runtime is absent.
+
+Graphics editor input discovery waits for an overlapping Forget operation. If Forget removes the game, pending discovery and template reads return no result.

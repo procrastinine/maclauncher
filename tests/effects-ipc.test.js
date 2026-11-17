@@ -65,7 +65,8 @@ function fixture(t, {live = false} = {}) {
           assert.equal(lane, "inspector");
           return structuredClone(await context.EffectsRuntime.describe(structuredClone(requested), action, structuredClone(rest[0]), structuredClone(rest[1])));
         }
-        assert.deepEqual([lane, method, action], [`game:${entry.gameId}`, "moduleAction", "graphicsInputs"]);return structuredClone(context.graphicsInputsResult);
+        assert.ok(["inspector", `game:${entry.gameId}`].includes(lane));
+        assert.deepEqual([method, action], ["moduleAction", "graphicsInputs"]);return structuredClone(context.graphicsInputsResult);
       }},
     refreshRuntimeSnapshots: async ids => calls.push(["refresh", ids])
   };
@@ -356,4 +357,23 @@ test("the graphics menu reads a stopped game's chain templates in the inspector 
   const running = fixture(t, {live: true});
   assert.deepEqual(await running.invoke("getGameEffectTemplates", running.entry.gamePath), [{ id: "template" }]);
   assert.equal(running.calls.find(row => row[0] === "templates")[1].running, true);
+});
+
+test("getGameEffects graphicsInputs ingress waits for Forget and cancels quietly before inspector discovery", async t => {
+ const f=fixture(t), coordinator=require('../src/core/runtime-coordinator').createRuntimeCoordinator();
+ const action=coordinator.client(),identity={gameId:f.entry.gameId,gamePath:f.entry.gamePath};
+ const held=await action.acquireGameUse(identity);
+ const removal=action.acquireGameRemoval(identity).then(token=>action.completeGameRemoval(token));
+ const lanes=[];f.context.backendService.request=async(lane,method)=>{
+  assert.equal(method,'moduleAction','removed game must not reach graphics discovery');lanes.push(lane);
+  const client=coordinator.client(undefined,{reads:lane==='inspector'});
+  await client.acquireGameUse(identity);assert.fail('removed game lookup must cancel');
+ };
+ const pending=f.invoke('getGameEffects',f.entry.gamePath);const observed=pending.catch(error=>error);
+ await new Promise(resolve=>setImmediate(resolve));
+ await action.release(held);await removal;
+ assert.equal(await observed,null,'graphicsInputs waiting on Forget is quiet at the real IPC ingress');
+ assert.deepEqual(lanes,['inspector']);
+ assert.equal(await f.invoke('getGameEffects',f.entry.gamePath),null,'a read starting after removal completion also cancels quietly');
+ assert.equal(JSON.stringify(await f.invoke('getGameEffectTemplates',f.entry.gamePath)),'[]','template inputs use the same quiet read boundary');
 });

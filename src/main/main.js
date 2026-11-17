@@ -4057,7 +4057,7 @@ async function installNeuralModel({ method, sourceVersion, setupActionId, automa
     install: () => backendService.request("runtime:graphics-neural-models", "runtimeAction", "graphics-neural-models", "setup",
       { sectionId: "default", setupActionId: action }) });
 }
-async function gameEffectsOptions(entry, settings = loadSettings()) {
+async function gameEffectsOptions(entry, settings = loadSettings(), { readOnly = false } = {}) {
   const info = Modules.getModuleInfo(resolveModuleId(entry));
   const Binding = require("../modules/shared/reshade/launch-binding");
   const sessions = [...(runningGameSessions.get(entry.gamePath)?.values() || [])];
@@ -4079,7 +4079,7 @@ async function gameEffectsOptions(entry, settings = loadSettings()) {
   // lane resolves them, so game files and translator plans stay off this thread.
   const effective = launch?.runtimeId ? {...entry, runtimeId: launch.runtimeId} : entry;
   const recorded = launch && Object.hasOwn(launch, "graphicsInputs");
-  const result = recorded ? null : await backendService.request(`game:${entry.gameId || entry.gamePath}`, "moduleAction", effective, "graphicsInputs", {}, settings);
+  const result = recorded ? null : await backendService.request(readOnly ? "inspector" : `game:${entry.gameId || entry.gamePath}`, "moduleAction", effective, "graphicsInputs", {}, settings);
   // Module graphics callbacks prepare game content, so they wait for the game's files.
   const callbacks = result?.filesUnavailable ? {} : launcherService.graphicsCallbacks(effective, settings);
   const graphicsHardware = Hardware.snapshot(hardwareRoot);
@@ -4460,7 +4460,8 @@ const cancelledRead = (read, value) => read.catch(error => { if (isAbortError(er
 ipcMain.handle("launcher:getGameEffects", async (_event, gamePath) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
   if (!entry) throw new Error("Game not found in library.");
-  const options = await gameEffectsOptions(entry);
+  const options = await cancelledRead(gameEffectsOptions(entry, undefined, { readOnly: true }), null);
+  if (!options) return null;
   const info = options.running ? EffectsRuntime.info(entry, options) : await cancelledRead(backendService.request("inspector", "gameEffectsInfo", entry,
     Object.fromEntries(EFFECTS_INFO_OPTIONS.filter(key => options[key] !== undefined).map(key => [key, options[key]]))), null);
   if (!info) return null;
@@ -4473,7 +4474,8 @@ ipcMain.handle("launcher:graphicsCatalog", (event, request) => graphicsCatalog.r
 ipcMain.handle("launcher:getGameEffectTemplates", async (_event, gamePath) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
   if (!entry) throw new Error("Game not found in library.");
-  const options = await gameEffectsOptions(entry);
+  const options = await cancelledRead(gameEffectsOptions(entry, undefined, { readOnly: true }), null);
+  if (!options) return [];
   // As with discovery, a game that is not running reads them in the inspector's worker.
   return options.running ? EffectsRuntime.templates(entry, options) : cancelledRead(backendService.request("inspector", "gameEffectTemplates", entry,
     Object.fromEntries(EFFECTS_INFO_OPTIONS.filter(key => options[key] !== undefined).map(key => [key, options[key]]))), []);
