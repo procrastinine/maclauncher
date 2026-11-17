@@ -148,6 +148,8 @@ export type RuntimeSettingsSchema = {
 export type RuntimeEntry = {
   label?: string;
   statusAction?: string;
+  // The status lists translator rows, so the inspector holds their place until it arrives.
+  statusTranslators?: boolean;
   description?: string;
   requirements?: string;
   preparation?: string;

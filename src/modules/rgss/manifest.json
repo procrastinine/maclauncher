@@ -633,7 +633,7 @@
               "advanced": true,
               "type": "list",
               "label": "Font substitutions",
-              "description": "One mapping per line (commas also work). Use `From>To`."
+              "description": "One `From>To` mapping per line (commas also work)."
             },
             {
               "key": "fontScale",

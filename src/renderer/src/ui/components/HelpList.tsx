@@ -26,9 +26,14 @@ export function helpItems(rows: Array<{ label?: unknown; text?: unknown } | null
   return groups.map(group => ({ label: joinHelpLabels(group.labels), text: group.text }));
 }
 
+/** Help text in which a hyphen before a digit, as in UTF-8 or Direct3D 10-12, does not end a line. */
+export function keepNumberedTerms(text: string) {
+  return text.replace(/(?<=\w)-(?=\d)/g, "\u2011");
+}
+
 export function HelpList({ items }: { items: HelpItem[] }) {
   return <dl className="helpList">
-    {items.map(item => <React.Fragment key={item.label}><dt>{item.label}</dt><dd>{item.text}</dd></React.Fragment>)}
+    {items.map(item => <React.Fragment key={item.label}><dt>{item.label}</dt><dd>{keepNumberedTerms(item.text)}</dd></React.Fragment>)}
   </dl>;
 }
 

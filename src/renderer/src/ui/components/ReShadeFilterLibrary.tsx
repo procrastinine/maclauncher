@@ -93,7 +93,7 @@ export function ReShadeFilterLibrary({ filters, filtersError, api, family, showD
       });
     }}>
     <div className="filterLibraryToolbar">
-      {!compact&&<div className="settingsTitle">{family ? "Filters" : "Shaders and filters"} <HelpTip label="About the filter library">Shader files, color LUTs and compiled-effect descriptors share this library. Availability follows the selected graphics provider. Drop shader files to register their existing paths. Registrations preserve the original files.</HelpTip></div>}
+      {!compact&&<div className="settingsTitle">{family ? "Filters" : "Shaders and filters"} <HelpTip label="About the filter library">Shader files, color LUTs and compiled-effect descriptors share this library. Availability follows the selected graphics provider. Dropped shader files are registered at their existing paths, and the original files stay in place.</HelpTip></div>}
       {toolbar}
       <div className="detailActions">{showDownloads && <button type="button" className="btn" disabled={!api?.openUtilityWindow}
         onClick={() => void operate("download", async () => { await api!.openUtilityWindow!({ view: "runtimes", managerId: "graphics-shader-library" }); })}>Download shaders…</button>}

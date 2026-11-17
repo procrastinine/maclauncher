@@ -23,7 +23,7 @@
         "settings": {
           "defaults": { "textEncoding": "sjis", "textHiDpi": true },
           "fields": [
-            { "key": "textEncoding", "type": "select", "label": "Text encoding", "description": "Japanese game data uses Shift-JIS. Select the encoding supplied by a translation patch.", "options": [
+            { "key": "textEncoding", "type": "select", "label": "Text encoding", "description": "Japanese game data uses Shift-JIS; a translation patch can supply another encoding.", "options": [
               { "value": "sjis", "label": "Japanese (Shift-JIS)" },
               { "value": "gbk", "label": "Chinese (GBK)" },
               { "value": "utf8", "label": "Unicode (UTF-8)" }

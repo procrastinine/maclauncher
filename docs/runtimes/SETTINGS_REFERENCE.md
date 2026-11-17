@@ -174,8 +174,8 @@ Runtimes tabs: Tools → Apktool; Tools → JADX; MacLauncher Android → JVM; M
 | Joystick center Y (%) *(per game)* | Number 0–100 | `75` | Vertical center, measured from the top of the Android display. |
 | Joystick radius (%) *(per game)* | Number 0.01–50 | `12` | Drag distance as a percentage of the shorter Android display dimension. Diagonal movement keeps the same distance. |
 | Allow ads | On/Off | Off | Allows connections to known advertising hosts, including rewarded ads. Off by default. Applies on the next launch; game settings can override the Android default. External web links always require confirmation. |
-| Use microG *(per game)* | On/Off | Off | Enables installed Google services for this game without signing in. Restart to apply. |
-| microG account *(per game)* | Text |  | Uses microG anonymously or with a shared account from Settings → Android. Restart to apply. |
+| Use microG *(per game)* | On/Off | Off | Enables installed Google services for this game without signing in. Changes apply on the next launch. |
+| microG account *(per game)* | Text |  | Uses microG anonymously or with a shared account from Settings → Android. Changes apply on the next launch. |
 | Audio input *(per game)* | Text |  |  |
 | OBS camera *(per game)* | Text |  |  |
 
@@ -186,8 +186,8 @@ Runtimes tabs: Tools → Apktool; Tools → JADX; MacLauncher Android → JVM; M
 | Initial width | Number 64–8192 | `1280` |  |
 | Initial height | Number 64–8192 | `800` |  |
 | Graphics backend | Automatic; Metal; Vulkan (MoltenVK) | Automatic |  |
-| Google integration *(per game)* | On/Off | Off | Enables Google account access for this application. Restart to apply. |
-| Google account *(per game)* | Text |  | Uses Google services anonymously or with an account from Settings → Android. Restart to apply. |
+| Google integration *(per game)* | On/Off | Off | Enables Google account access for this application. Changes apply on the next launch. |
+| Google account *(per game)* | Text |  | Uses Google services anonymously or with an account from Settings → Android. Changes apply on the next launch. |
 
 | Action group | Actions |
 | --- | --- |
@@ -312,7 +312,7 @@ Runtimes tabs: RFVP; Tools → msg-tool.
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Text encoding | Japanese (Shift-JIS); Chinese (GBK); Unicode (UTF-8) | Japanese (Shift-JIS) | Japanese game data uses Shift-JIS. Select the encoding supplied by a translation patch. |
+| Text encoding | Japanese (Shift-JIS); Chinese (GBK); Unicode (UTF-8) | Japanese (Shift-JIS) | Japanese game data uses Shift-JIS; a translation patch can supply another encoding. |
 | High-resolution text | On/Off | On | Renders text at the display scale. |
 
 Inspector details: Script, Game resolution, Resource archives.
@@ -347,7 +347,7 @@ Runtimes tabs: FNA.
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Use selected FNA framework | On/Off | On | Automatic framework compatibility. Disable for a compatible game framework. |
+| Use selected FNA framework | On/Off | On | Automatic framework compatibility. Off keeps the game's own framework when it is already compatible. |
 | Convert portable x64 assemblies | On/Off | On | Converts compatible portable x64 assemblies automatically. |
 | Allow software OpenGL | On/Off | Off | Software OpenGL for Macs without graphics acceleration; rendering can be slower. |
 | Graphics driver | Automatic; OpenGL | Automatic |  |
@@ -508,7 +508,7 @@ Runtimes tabs: PlayCover.
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Keyboard and mouse mapping | On/Off | On | Uses PlayTools touch controls. Press Cmd-K in the game to open or close its keymap editor. Keymaps are saved automatically for this game. Changes to this setting apply on the next launch. |
+| Keyboard and mouse mapping | On/Off | On | Uses PlayTools touch controls. Cmd-K in the game opens or closes its keymap editor. Keymaps are saved automatically for this game. Changes to this setting apply on the next launch. |
 | Mouse sensitivity | Number | `50` | 1–1000; default 50. |
 | Pause keymapping during text input | On/Off | On |  |
 | Scroll wheel gestures | On/Off | On |  |
@@ -704,7 +704,7 @@ Runtimes tabs: NScripter → ONScripter-Yuri; NScripter → ONScripter-EN.
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Script encoding | Shift-JIS (Japanese); GBK (Chinese); UTF-8; Runtime default | Shift-JIS (Japanese) | Original Japanese scripts usually use Shift-JIS. Choose GBK for Chinese releases or UTF-8 for converted scripts. A .utf script alias always uses UTF-8. |
+| Script encoding | Shift-JIS (Japanese); GBK (Chinese); UTF-8; Runtime default | Shift-JIS (Japanese) | Original Japanese scripts usually use Shift-JIS, Chinese releases GBK and converted scripts UTF-8. A .utf script alias always uses UTF-8. |
 
 ### ONScripter-EN settings
 
@@ -718,7 +718,7 @@ Runtimes tabs: NScripter → ONScripter-Yuri; NScripter → ONScripter-EN.
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Script encoding | Shift-JIS (Japanese); GBK (Chinese); UTF-8; Runtime default | Shift-JIS (Japanese) | Original Japanese scripts usually use Shift-JIS. Choose GBK for Chinese releases or UTF-8 for converted scripts. A .utf script alias always uses UTF-8. Web runs through NW.js; Play prepares missing runtime downloads after consent. |
+| Script encoding | Shift-JIS (Japanese); GBK (Chinese); UTF-8; Runtime default | Shift-JIS (Japanese) | Original Japanese scripts usually use Shift-JIS, Chinese releases GBK and converted scripts UTF-8. A .utf script alias always uses UTF-8. Web runs through NW.js; Play prepares missing runtime downloads after consent. |
 
 | Action group | Actions |
 | --- | --- |
@@ -831,8 +831,8 @@ Runtimes tabs: EasyRPG Player.
 | --- | --- | --- | --- |
 | Fullscreen | On/Off | Off |  |
 | Scaling | Integer; Nearest; Bilinear | Integer |  |
-| Engine mode | Automatic; RPG Maker 2000 (1.00–1.10); RPG Maker 2000 (1.50–1.51); RPG Maker 2000 English (1.61); RPG Maker 2003 (1.00–1.04); RPG Maker 2003 (1.05–1.09a); RPG Maker 2003 English (1.12) | Automatic | Automatic detection is recommended. Select an original RPG Maker edition for games with incorrect version detection. |
-| Text encoding | Text |  | Leave empty for automatic detection. Examples: 932 for Japanese, 1252 for Western European text. |
+| Engine mode | Automatic; RPG Maker 2000 (1.00–1.10); RPG Maker 2000 (1.50–1.51); RPG Maker 2000 English (1.61); RPG Maker 2003 (1.00–1.04); RPG Maker 2003 (1.05–1.09a); RPG Maker 2003 English (1.12) | Automatic | Automatic detection is recommended. An original RPG Maker edition can be chosen for games whose version is detected incorrectly. |
+| Text encoding | Text |  | Empty uses automatic detection. Examples: 932 for Japanese, 1252 for Western European text. |
 | Translation language | Text |  | Optional language folder supplied with the game. |
 | RTP folders | List |  | Optional absolute paths to RPG Maker 2000/2003 Runtime Package assets. |
 | MIDI soundfont | Text |  | Optional absolute path to an SF2 soundfont. Without a soundfont, the built-in FM MIDI driver remains available. |
@@ -978,7 +978,7 @@ Runtimes tabs: MKXP-Z.
 | Data path app *(Advanced)* | Text |  |  |
 | Window icon path *(Advanced)* | Text |  | Linux only. |
 | Solid fonts *(Advanced)* | List |  | One font family per line (commas also work). |
-| Font substitutions *(Advanced)* | List |  | One mapping per line (commas also work). Use `From>To`. |
+| Font substitutions *(Advanced)* | List |  | One `From>To` mapping per line (commas also work). |
 | Font scale *(Advanced)* | Number | `1` |  |
 | Enable font kerning *(Advanced)* | On/Off | On |  |
 | Font hinting *(Advanced)* | Normal; Light; Mono; None | None |  |
@@ -1214,7 +1214,7 @@ Runtimes tabs: CrossOver; Sikarugir; WineCX; Graphics → DirectX → Vulkan, Di
 | Video codecs | Runtime default or installed codec component | Runtime default | Only the selected plugin folders join the plugin search path, with their dependencies taken from a shared prepared folder, and the runtime keeps its own GStreamer core. Optional plugins that cannot be used are reported separately. |
 | Game temporal integration | On/Off | Off | Exposes the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver that accepts forwarded DLSS frames (MacLauncher KosmicKrisp or MoltenVK scene support), a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, whatever this setting says; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
 | DirectDraw compatibility | On/Off | Off | Uses CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate. |
-| Synchronization | Automatic; MSync; Off | Automatic | Availability depends on the selected Wine version. |
+| Synchronization | Automatic; MSync; Off | Automatic | Selects how Wine implements Windows synchronization objects. MSync (Mach semaphores) and ESync (file descriptors) wait without a wineserver round trip, which helps games with many threads; Off always uses the wineserver. Automatic keeps CrossOver's own choice and uses MSync with a downloaded Wine that supports it. The menu lists the modes the selected Wine version offers. |
 | Language locale | Text |  | Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. Empty uses the language of macOS. |
 | Windows version | Windows 10; Windows 11; Windows 7; Windows XP | Windows 10 |  |
 | Windows executable (optional) | Text |  | Relative path inside the game folder. Automatic selects the game's executable. |
@@ -1252,7 +1252,7 @@ Runtimes tabs: CrossOver; Sikarugir; WineCX; Graphics → DirectX → Vulkan, Di
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
 | Video codecs | Runtime default or installed codec component | Runtime default | Only the selected plugin folders join the plugin search path, with their dependencies taken from a shared prepared folder, and the runtime keeps its own GStreamer core. Optional plugins that cannot be used are reported separately. |
 | Game temporal integration | On/Off | Off | Exposes the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later with a Wine version that supports its game integration, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver that accepts forwarded DLSS frames (MacLauncher KosmicKrisp or MoltenVK scene support), a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, whatever this setting says; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
-| Synchronization | Automatic; MSync; Off | Automatic | Availability depends on the selected Wine version. |
+| Synchronization | Automatic; MSync; Off | Automatic | Selects how Wine implements Windows synchronization objects. MSync (Mach semaphores) and ESync (file descriptors) wait without a wineserver round trip, which helps games with many threads; Off always uses the wineserver. Automatic keeps CrossOver's own choice and uses MSync with a downloaded Wine that supports it. The menu lists the modes the selected Wine version offers. |
 | Language locale | Text |  | Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. Empty uses the language of macOS. |
 | Windows version | Windows 10; Windows 11; Windows 7; Windows XP | Windows 10 |  |
 | Windows executable (optional) | Text |  | Relative path inside the game folder. Automatic selects the game's executable. |

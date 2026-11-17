@@ -118,7 +118,7 @@ export function EffectsControls({footer, visible = true, warnings = [], children
       <span className="graphicsHeaderControls">
         <input type="checkbox" aria-label="Enable graphics chain" checked={!planError && plan.enabled !== false} disabled={Boolean(planError)}
           onChange={event => void editor.setMaster(event.target.checked)} />
-        <HelpTip label="About graphics effects"><p>Effects run from top to bottom. Turning Graphics off bypasses the chain and preserves its settings. Drop shader files to add effects, or onto a method to replace it.
+        <HelpTip label="About graphics effects"><p>Effects run from top to bottom. Turning Graphics off bypasses the chain and preserves its settings. Shader files dropped on the list add effects; dropped onto a method, they replace it.
           {running && (live ? " Changes update during play when the loaded graphics adapter supports them." : " The current runtime applies graphics changes on its next launch.")}
           {device && ` The launcher's default graphics device is ${device}; a running game may select another.`}</p>
           <p>{GRAPHICS_VIEWS_HELP}</p>

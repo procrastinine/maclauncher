@@ -106,7 +106,12 @@ test('before status arrives a recorded game shows a pending line, never recorded
     props.runtimeStatusEntry = { runtimeId: runtime === 'crossover' ? 'sikarugir' : 'crossover', status: { translatorRows: [{ label: 'Wrong runtime', selected: 'Wrong', used: 'Wrong' }] } };
     const other = renderRows(t, props).markup;
     assert.equal(other.includes('Wrong runtime'), false); assert.ok(other.includes('Checking…'));
-    assert.equal(renderRows(t, propsFor(runtime)).markup.includes('Checking…'), false, 'a game without a recorded Play shows no pending line');
+    // A never-played game holds the line too when its runtime declares translator rows, so the rows
+    // do not arrive later and push the sections below them down (GUI 0935 I3).
+    assert.equal(manifest.runtime.entries[runtime].statusTranslators, true);
+    assert.match(renderRows(t, propsFor(runtime)).markup, /aria-busy="true".*Translators.*Checking…/s);
+    const undeclared = () => { const plain = propsFor(runtime); plain.moduleInfo = structuredClone(manifest); delete plain.moduleInfo.runtime.entries[runtime].statusTranslators; return plain; };
+    assert.equal(renderRows(t, undeclared()).markup.includes('Checking…'), false, 'a never-played game of a runtime without translator rows shows no pending line');
     props.runtimeStatusEntry = { runtimeId: runtime, status: { translatorRows: [{ id: 'fresh', label: 'Fresh status', selected: 'New selection', used: 'New used', reason: 'Actual new reason.' }] } };
     const current = renderRows(t, props).markup;
     assert.ok(current.includes('New selection → New used')); assert.equal(current.includes('Actual new reason.'), false);
@@ -117,8 +122,10 @@ test('before status arrives a recorded game shows a pending line, never recorded
     const failed = renderRows(t, props).markup;
     assert.equal(failed.includes('Checking…'), false, 'a failed status request ends the pending line');
     assert.match(failed, /Translators<\/div><div class="detailValue dim">Unavailable</, 'and says the translators are unavailable');
-    assert.equal(renderRows(t, { ...propsFor(runtime), runtimeStatusEntry: { runtimeId: runtime, status: null } }).markup.includes('Unavailable'), false,
-      'a game without a recorded Play shows no translator line');
+    assert.match(renderRows(t, { ...propsFor(runtime), runtimeStatusEntry: { runtimeId: runtime, status: null } }).markup,
+      /Translators<\/div><div class="detailValue dim">Unavailable</, 'a never-played game of a declaring runtime says so too');
+    assert.equal(renderRows(t, { ...undeclared(), runtimeStatusEntry: { runtimeId: runtime, status: null } }).markup.includes('Unavailable'), false,
+      'a never-played game of a runtime without translator rows shows no translator line');
   }
 });
 

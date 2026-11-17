@@ -27,7 +27,7 @@
             { "key": "scaling", "type": "select", "label": "Scaling", "options": [
               { "value": "integer", "label": "Integer" }, { "value": "nearest", "label": "Nearest" }, { "value": "bilinear", "label": "Bilinear" }
             ] },
-            { "key": "engine", "type": "select", "label": "Engine mode", "description": "Automatic detection is recommended. Select an original RPG Maker edition for games with incorrect version detection.", "options": [
+            { "key": "engine", "type": "select", "label": "Engine mode", "description": "Automatic detection is recommended. An original RPG Maker edition can be chosen for games whose version is detected incorrectly.", "options": [
               { "value": "auto", "label": "Automatic" },
               { "value": "rpg2k", "label": "RPG Maker 2000 (1.00–1.10)" },
               { "value": "rpg2kv150", "label": "RPG Maker 2000 (1.50–1.51)" },
@@ -36,7 +36,7 @@
               { "value": "rpg2k3v105", "label": "RPG Maker 2003 (1.05–1.09a)" },
               { "value": "rpg2k3e", "label": "RPG Maker 2003 English (1.12)" }
             ] },
-            { "key": "encoding", "type": "string", "label": "Text encoding", "description": "Leave empty for automatic detection. Examples: 932 for Japanese, 1252 for Western European text." },
+            { "key": "encoding", "type": "string", "label": "Text encoding", "description": "Empty uses automatic detection. Examples: 932 for Japanese, 1252 for Western European text." },
             { "key": "language", "type": "string", "label": "Translation language", "description": "Optional language folder supplied with the game." },
             { "key": "rtpPaths", "type": "list", "label": "RTP folders", "description": "Optional absolute paths to RPG Maker 2000/2003 Runtime Package assets." },
             { "key": "soundfont", "type": "string", "label": "MIDI soundfont", "hiddenWhen": [{ "key": "noAudio", "equals": true }], "description": "Optional absolute path to an SF2 soundfont. Without a soundfont, the built-in FM MIDI driver remains available." },

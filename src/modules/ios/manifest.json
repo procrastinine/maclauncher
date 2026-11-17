@@ -62,7 +62,7 @@
               "key": "keymapping",
               "type": "boolean",
               "label": "Keyboard and mouse mapping",
-              "description": "Uses PlayTools touch controls. Press Cmd-K in the game to open or close its keymap editor. Keymaps are saved automatically for this game. Changes to this setting apply on the next launch."
+              "description": "Uses PlayTools touch controls. Cmd-K in the game opens or closes its keymap editor. Keymaps are saved automatically for this game. Changes to this setting apply on the next launch."
             },
             {
               "key": "mouseSensitivity",

@@ -432,7 +432,7 @@ export function SteamView({ api }: { api: SteamApi }) {
       </div>
       {showLogin && <div className="steamLogin">
         <div className="steamLoginIntro"><SteamMark size={42} /><h2 className="externalControlHelp">Connect Steam<HelpTip label="About Steam downloads">
-          <p>Download Mac, Windows and Linux game files, including older Mac builds. Choose a branch, language and depot before downloading.</p><p>Connect to load owned and shared games. Library and version results are cached.</p></HelpTip></h2>
+          <p>Downloads Mac, Windows and Linux game files, including older Mac builds, from the chosen branch, language and depot.</p><p>Connecting loads owned and shared games. Library and version results are cached.</p></HelpTip></h2>
         </div>
         <form className="steamLoginForm" onSubmit={connect}>
           <fieldset className="steamSignInModes" disabled={connecting || guarding || authBusy}><legend>Connection<HelpTip label="About Steam sign-in"><p>Reuse the account signed in to the Steam app for Mac. Keep Steam open while loading the library and downloading game files.</p><p>Manual sign-in supports Steam Guard email, authenticator and mobile approval. Passwords are used for sign-in and are not saved.</p></HelpTip></legend>

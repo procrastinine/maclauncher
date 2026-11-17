@@ -62,7 +62,7 @@
               "key": "useRuntimeFramework",
               "type": "boolean",
               "label": "Use selected FNA framework",
-              "description": "Automatic framework compatibility. Disable for a compatible game framework."
+              "description": "Automatic framework compatibility. Off keeps the game's own framework when it is already compatible."
             },
             {
               "key": "retargetIlArchitecture",

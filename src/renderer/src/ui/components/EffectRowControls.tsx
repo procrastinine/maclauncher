@@ -163,7 +163,7 @@ function NeuralSettingsControls({nodeId, method, value, models = [], defaultVers
     <ModelSelectionControls nodeId={nodeId} method={method} modelPath={value.modelPath || null} models={models} defaultVersion={defaultVersion} defaultVersions={defaultVersions}
       onChange={modelPath => onChange({modelPath})} onImport={onImport} onManage={onManage} />
     {intrinsicScale && intrinsicScale !== 1 ? <div className="detailRow"><span className="detailLabel">Output size</span><span className="detailValue">{intrinsicScale}× input
-      <HelpTip label="About model output size">The model determines this scale. Add a separate Downsample or Upscale effect to change the resulting image size.</HelpTip></span></div> : null}
+      <HelpTip label="About model output size">The model determines this scale. A separate Downsample or Upscale effect changes the resulting image size.</HelpTip></span></div> : null}
     {NEURAL[method]?.history === "optional-image" && <>
       <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor={`effect-${nodeId}-intensity`}>Intensity
         <HelpTip label="About neural intensity">Blends the reconstructed image with the input. 1 uses the full model output.</HelpTip></label>
@@ -283,7 +283,7 @@ function EffectGraphicsSettings({node, choice, status, staticContent = false, on
           {[2, 3, 4, 5].filter(factor => multiplierSupported(choice, factor) || factor === value.frameMultiplier).map(factor => <option key={factor} value={factor} disabled={!multiplierSupported(choice, factor)}>{factor}× frame rate{!multiplierSupported(choice, factor) ? " · Unsupported" : ""}</option>)}</select>}</div>
       {node.method === "anr" && <>
         {choice?.sizes?.length ? <div className="detailRow"><span className="detailLabel">Output size</span><span className="detailValue">{sizeList(choice.sizes)}
-          <HelpTip label="About ANR output sizes">The prepared models run only at these exact output sizes. At any other size this row stays inactive and the game's frames are shown unchanged. Set the game's resolution, or an earlier resize row, to one of these sizes.</HelpTip></span></div> : null}
+          <HelpTip label="About ANR output sizes">The prepared models run only at these exact output sizes. At any other size this row stays inactive and the game's frames are shown unchanged. The row runs once the game's resolution, or an earlier resize row, produces one of these sizes.</HelpTip></span></div> : null}
         {choice?.runtimeManagerId && <div className="detailRow"><span className="detailLabel">Models</span>
           <span className="detailValue">{choice.runtimeInstalled ? availabilityLabel("installed") : `${availabilityLabel("notInstalled")}${choice.downloadBytes ? ` · ${formatBytes(choice.downloadBytes)} download` : ""}`}
             <HelpTip label="About ANR models">{choice.runtimeInstalled ? "The models are prepared in the launcher profile and checked against Apex's reference frames."

@@ -46,6 +46,7 @@
       },
       "statusAction": "runtimeStatus",
       "statusFromRecord": true,
+      "statusTranslators": true,
       "graphicsHost": "window",
       "settings": {
         "defaults": {
@@ -202,7 +203,7 @@
                 "label": "Off"
               }
             ],
-            "description": "Availability depends on the selected Wine version.",
+            "description": "Selects how Wine implements Windows synchronization objects. MSync (Mach semaphores) and ESync (file descriptors) wait without a wineserver round trip, which helps games with many threads; Off always uses the wineserver. Automatic keeps CrossOver's own choice and uses MSync with a downloaded Wine that supports it. The menu lists the modes the selected Wine version offers.",
             "optionsAction": "listWineSynchronizations",
             "optionsKey": "synchronizations"
           },

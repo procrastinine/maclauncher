@@ -1606,15 +1606,16 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 /* Versions and Installed share one header: the same height (a small menu's),
-   the same rule under it, and rows inset 12 px below it. */
+   the same rule under it, and rows inset 12 px from its left below it. Row
+   actions end at the header's right edge, under its menu and refresh button. */
 .runtimePanel .runtimeSectionCard { border-bottom: 0; overflow: visible; }
 .runtimePanel .runtimeInstalledHeader { min-height: 28px; padding: 0 0 6px; box-sizing: content-box; }
-.runtimePanel .runtimeSectionBody { padding: 10px 12px 0; gap: 8px; }
+.runtimePanel .runtimeSectionBody { padding: 10px 0 0 12px; gap: 8px; }
 .runtimePanel .saveSection.runtimeSection { border-top: 0; }
-.runtimePanel .runtimeSection .saveRow { padding: 10px 12px; gap: 16px; }
+.runtimePanel .runtimeSection .saveRow { padding: 10px 0 10px 12px; gap: 16px; }
 .runtimePanel .runtimeSection .saveRowMain { gap: 3px; }
 .runtimePanel .runtimeSection .saveRowActions { gap: 8px; }
-.runtimeInstalledFooter { display: flex; gap: 8px; align-items: center; padding: 10px 12px 0; border-top: 1px solid var(--border); }
+.runtimeInstalledFooter { display: flex; gap: 8px; align-items: center; padding: 10px 0 0 12px; border-top: 1px solid var(--border); }
 .runtimePanel .runtimeImport { padding: 0; }
 .runtimePanel .runtimeSection > .empty { padding: 10px 12px; }
 .runtimeDefaultControl { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-weight: 400; font-size: var(--font-sm); color: var(--muted); }
@@ -2147,8 +2148,9 @@ select.input:not([multiple]) {
   font-size: var(--font-sm);
 }
 
-/* The last section of Credits ends with its table, without a rule below it. */
-.creditsResources {
+/* The last section of Credits ends with its table, without a rule below it;
+   the view's class outranks the shared section rule later in this file. */
+.creditsView .creditsResources {
   margin-top: 20px;
   border-bottom: 0;
 }

@@ -68,6 +68,10 @@ test('a runtime form reports its rows\' explanations to the Settings heading and
   const window = renderToStaticMarkup(react.createElement(ui.RuntimeSettingsWindow, { ...props, inline: false, onHelpChange: undefined }));
   assert.equal((window.match(/class="helpTipButton"/g) || []).length, 1);
   assert.match(window, /<dt>Direct3D 8, 9, 10 \/ 10\.1, 11 and 12<\/dt>/);
+  // GUI 0935 T1: a hyphen before a digit does not end a line ("en_US.UTF-" / "8").
+  assert.match(window, /<dd>Optional locale identifier, such as ja_JP\.UTF\u20118 or en_US\.UTF\u20118\./);
+  // GUI 0935 H5: Synchronization says what it does, not only where its choices come from.
+  assert.match(window, /<dt>Synchronization<\/dt><dd>Selects how Wine implements Windows synchronization objects\. MSync[^<]*Automatic keeps CrossOver&#x27;s own choice[^<]*The menu lists the modes the selected Wine version offers\.<\/dd>/);
 });
 
 test('a game type section shows the shown runtime form\'s explanations behind its heading\'s one help button', () => {
@@ -149,13 +153,26 @@ test('graphics rows list their explanations in the Graphics heading\'s help inst
 
 test('setting explanations describe what a setting does instead of instructing (GUI 0925 V1)', () => {
   const registry = require('../src/modules/registry'), found = new Set();
-  const instruction = /^(Use|Generate|Expose|Allow|Enable|Disable|Select|Choose|Show|Hide|Render|Load|Set|Turn|Keep|Make|Add|Remove|Run|Start|Skip|Force|Prefer|Apply|Pick|Override|Limit|Pass|Store|Save|Install|Ignore|Treat|Draw|Scale|Map|Send|Replace|Include|Exclude|Emulate|Patch|Restore|Mute|Display|Capture|Reduce|Increase|Clamp|Stretch|Block|Configure|Bypass)\b/;
+  const instruction = /^(Use|Generate|Expose|Allow|Enable|Disable|Select|Choose|Show|Hide|Render|Load|Set|Turn|Keep|Make|Add|Remove|Run|Start|Skip|Force|Prefer|Apply|Pick|Override|Limit|Pass|Store|Save|Install|Ignore|Treat|Draw|Scale|Map|Send|Replace|Include|Exclude|Emulate|Patch|Restore|Mute|Display|Capture|Reduce|Increase|Clamp|Stretch|Block|Configure|Bypass|Restart|Leave|Press|Drop|Click|Connect|Assign|Open)\b/;
   const walk = (value, where) => {
-    if (typeof value === 'string') { if (/\.(description|help)$/.test(where) && instruction.test(value)) found.add(value.slice(0, 60)); }
+    // Every sentence, not only the first: "Install it in Runtimes…" and "Restart to apply." instruct too (GUI 0935 V2).
+    if (typeof value === 'string') { if (/\.(description|help)$/.test(where)) for (const sentence of value.split(/(?<=[.!?])\s+/)) if (instruction.test(sentence)) found.add(sentence.slice(0, 60)); }
     else if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) walk(item, `${where}.${key}`);
   };
   for (const info of registry.listModules()) walk(info, info.id);
   assert.deepEqual([...found], []);
   const details = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/components/GameDetails.tsx'), 'utf8');
   assert.match(details, /"Allows Internet and local-network connections for this game\./);
+  // Help popovers in the launcher describe as well (GUI 0935 V2).
+  const ui = name => fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/components', name), 'utf8');
+  for (const [file, before, after] of [
+    ['EffectsControls.tsx', 'Drop shader files to add effects', 'Shader files dropped on the list add effects; dropped onto a method, they replace it.'],
+    ['ReShadeFilterLibrary.tsx', 'Drop shader files to register', 'Dropped shader files are registered at their existing paths'],
+    ['EffectRowControls.tsx', 'Add a separate Downsample or Upscale effect', 'A separate Downsample or Upscale effect changes the resulting image size.'],
+    ['EffectRowControls.tsx', "Set the game's resolution", "The row runs once the game's resolution, or an earlier resize row, produces one of these sizes."],
+    ['GameDetails.tsx', 'Remove the download quarantine', 'Removing the download quarantine attribute lets macOS open an app it reports as damaged.'],
+    ['SteamView.tsx', 'Choose a branch, language and depot', 'Downloads Mac, Windows and Linux game files, including older Mac builds, from the chosen branch, language and depot.']]) {
+    assert.equal(ui(file).includes(before), false, file + ': ' + before);
+    assert.ok(ui(file).includes(after), file + ': ' + after);
+  }
 });

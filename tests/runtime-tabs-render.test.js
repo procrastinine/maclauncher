@@ -307,8 +307,12 @@ test('Settings and Credits use plain native-window content without HTML close or
   assert.match(ackCss, /\.ackRow \{[^}]*grid-template-columns: minmax\(180px, 1fr\) minmax\(0, 1fr\);/);
   assert.match(ackCss, /\.ackNote \{\s*color: var\(--muted\);\s*font-size: var\(--font-sm\);\s*\}/);
   assert.doesNotMatch(/\.ackTitle \{[^}]*\}/.exec(ackCss)[0], /font-weight/);
-  // The last section ends with its table, without a stray rule below it (GUI 0925 C3).
-  assert.match(ackCss, /\.creditsResources \{[^}]*border-bottom: 0;/);
+  // The last section ends with its table, without a stray rule below it (GUI 0925 C3), after the
+  // cascade: the shared section rule later in the file must not draw it again (GUI 0935).
+  const { computedValue } = require('./helpers/css-cascade.cjs');
+  const resources = [{ tag: 'main', classes: ['launcherView', 'creditsView'] }, { tag: 'div', classes: ['launcherViewBody'] },
+    { tag: 'section', classes: ['settingsSection', 'creditsResources'] }];
+  for (const width of [860, 1280]) assert.equal(computedValue(ackCss, resources, 'border-bottom', { width })?.value, '0', `Credits at ${width} px`);
   for (const markup of [settings, credits]) assert.doesNotMatch(markup, /modalBackdrop|aria-modal|role="dialog"|aria-label="Close"|Back to Library/);
 });
 // Rows show name, format, input → output and origin; each file's full path and
@@ -385,6 +389,25 @@ test('empty catalogs expose a labeled Load versions action without a render-time
   assert.ok(markup.indexOf('>Installed</span>') < markup.indexOf('>Register custom…</button>'));
   assert.equal((markup.match(/class="saveSectionTitle runtimeInstalledHeader"/g) || []).length, 2);
 });
+// Rows sit 12 px in from the header's left edge; their actions end at its right edge, under the
+// header's Default menu and refresh button (GUI 0935 R30: trash and refresh 12 px short of it).
+test('Runtimes rows keep a left inset and end at the header\'s right edge (GUI 0935 R30)', () => {
+  const { computedValue } = require('./helpers/css-cascade.cjs');
+  const css = require('node:fs').readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  const panel = { tag: 'div', classes: ['runtimePanel'] };
+  const chains = {
+    header: [panel, { tag: 'div', classes: ['saveSection', 'runtimeSection'] }, { tag: 'div', classes: ['saveSectionTitle', 'runtimeInstalledHeader'] }],
+    versions: [panel, { tag: 'div', classes: ['runtimeSectionCard'] }, { tag: 'div', classes: ['runtimeSectionBody'] }],
+    installed: [panel, { tag: 'div', classes: ['saveSection', 'runtimeSection'] }, { tag: 'div', classes: ['saveRow'] }],
+    footer: [panel, { tag: 'div', classes: ['saveSection', 'runtimeSection'] }, { tag: 'div', classes: ['runtimeInstalledFooter'] }]
+  };
+  assert.equal(computedValue(css, chains.header, 'padding-right')?.value, '0');
+  for (const name of ['versions', 'installed', 'footer']) {
+    assert.equal(computedValue(css, chains[name], 'padding-right')?.value, '0', name + ' ends at the header edge');
+    assert.equal(computedValue(css, chains[name], 'padding-left')?.value, '12px', name + ' keeps its inset');
+  }
+});
+
 test('each source row ends with its own refresh control and no remote refresh is shared', () => {
   const runtime = manager('split', {}, { versions: ['mac-v1', 'stock-v1'], supportsLatestOnly: true,
     sources: [{ id: 'builds', label: 'MacLauncher Builds', source: 'https://example.org/builds', versions: ['mac-v1'], supportsLatestOnly: false },

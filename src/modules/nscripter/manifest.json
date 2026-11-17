@@ -112,7 +112,7 @@
               "key": "scriptEncoding",
               "type": "select",
               "label": "Script encoding",
-              "description": "Original Japanese scripts usually use Shift-JIS. Choose GBK for Chinese releases or UTF-8 for converted scripts. A .utf script alias always uses UTF-8.",
+              "description": "Original Japanese scripts usually use Shift-JIS, Chinese releases GBK and converted scripts UTF-8. A .utf script alias always uses UTF-8.",
               "options": [
                 {
                   "value": "sjis",
@@ -147,7 +147,7 @@
               "key": "scriptEncoding",
               "type": "select",
               "label": "Script encoding",
-              "description": "Original Japanese scripts usually use Shift-JIS. Choose GBK for Chinese releases or UTF-8 for converted scripts. A .utf script alias always uses UTF-8. Web runs through NW.js; Play prepares missing runtime downloads after consent.",
+              "description": "Original Japanese scripts usually use Shift-JIS, Chinese releases GBK and converted scripts UTF-8. A .utf script alias always uses UTF-8. Web runs through NW.js; Play prepares missing runtime downloads after consent.",
               "options": [
                 {
                   "value": "sjis",

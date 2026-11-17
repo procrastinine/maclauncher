@@ -136,7 +136,7 @@ function SessionTargets({ gamePath, targets, onRemove }: {
 }
 
 // Row explanations: each inspector section's heading help lists them, and each row's label shows its own on hover.
-const APP_QUARANTINE_HELP = "Remove the download quarantine attribute if macOS reports this app as damaged.";
+const APP_QUARANTINE_HELP = "Removing the download quarantine attribute lets macOS open an app it reports as damaged.";
 const STEAM_CLIENT_HELP = "Starting Steam connects to the Internet. Ask requests permission at Play when Steam is not running. Don't start launches the game without starting or waiting for Steam. Default follows Settings.";
 
 // An app action's shortcut also ends the front app's session. The row names
@@ -334,14 +334,17 @@ export const GameDetails = memo(function GameDetails({
       ? runtimeStatusEntry.status
       : null;
   // Translator rows come only from this runtime's current status. Until it
-  // arrives, a game whose last Play recorded translators shows a pending line
-  // rather than recorded rows that may describe other settings.
+  // arrives, a game whose last Play recorded translators, or whose runtime
+  // declares translator rows, shows a pending line in their place: never
+  // recorded rows that may describe other settings, and no late row that
+  // pushes the sections below it down.
   const translatorRows: { id?: string; label: string; selected: string; used: string; reason?: string | null; reasonCode?: string | null; fallback?: boolean }[] =
     Array.isArray(runtimeStatus?.translatorRows) ? runtimeStatus.translatorRows : [];
   const recordedTranslators = Array.isArray(g.runtimeData?.[g.runtimeId]?.translatorRows) && g.runtimeData[g.runtimeId].translatorRows.length > 0;
-  const translatorsPending = runtimeStatusEntry?.runtimeId !== g.runtimeId && recordedTranslators;
+  const declaresTranslators = moduleInfo?.runtime?.entries?.[g.runtimeId]?.statusTranslators === true;
+  const translatorsPending = runtimeStatusEntry?.runtimeId !== g.runtimeId && (recordedTranslators || declaresTranslators);
   // A check that returned no status says so instead of leaving the section out.
-  const translatorsUnavailable = runtimeStatusEntry?.runtimeId === g.runtimeId && !runtimeStatus && recordedTranslators;
+  const translatorsUnavailable = runtimeStatusEntry?.runtimeId === g.runtimeId && !runtimeStatus && (recordedTranslators || declaresTranslators);
   const translatorLabels = new Set(translatorRows.map(row => row.label));
   const runtimeVersionChoices = runtimeInspectorVersions(runtimeSection, runtimeVersionSelected);
   const runtimeDefaultVersion = runtimeSection?.defaultVersion || "";

@@ -248,7 +248,7 @@
               "type": "boolean",
               "label": "Use microG",
               "gameOnly": true,
-              "description": "Enables installed Google services for this game without signing in. Restart to apply."
+              "description": "Enables installed Google services for this game without signing in. Changes apply on the next launch."
             },
             {
               "key": "googleAccount",
@@ -263,7 +263,7 @@
                   "label": "microG without an account"
                 }
               ],
-              "description": "Uses microG anonymously or with a shared account from Settings → Android. Restart to apply.",
+              "description": "Uses microG anonymously or with a shared account from Settings → Android. Changes apply on the next launch.",
               "visibleWhen": [
                 {
                   "key": "googleIntegration",
@@ -290,7 +290,7 @@
             {
               "key": "networkIsolation",
               "type": "boolean",
-              "description": "Allows Internet and local-network connections. Restart to apply.",
+              "description": "Allows Internet and local-network connections. Changes apply on the next launch.",
               "label": "Network access"
             }
           ]
@@ -353,7 +353,7 @@
               "type": "boolean",
               "label": "Google integration",
               "gameOnly": true,
-              "description": "Enables Google account access for this application. Restart to apply."
+              "description": "Enables Google account access for this application. Changes apply on the next launch."
             },
             {
               "key": "googleAccount",
@@ -368,7 +368,7 @@
                   "label": "Without an account"
                 }
               ],
-              "description": "Uses Google services anonymously or with an account from Settings → Android. Restart to apply.",
+              "description": "Uses Google services anonymously or with an account from Settings → Android. Changes apply on the next launch.",
               "visibleWhen": [
                 {
                   "key": "googleIntegration",
@@ -379,7 +379,7 @@
             {
               "key": "networkIsolation",
               "type": "boolean",
-              "description": "Allows Internet and local-network connections. Restart to apply.",
+              "description": "Allows Internet and local-network connections. Changes apply on the next launch.",
               "label": "Network access"
             }
           ]

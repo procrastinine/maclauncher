@@ -18,7 +18,8 @@ function withSources(manifest) {
       delete defaults.windowsVersion; defaults.bottleTemplate = "win10_64";
     }
     result.runtime.entries[source.id] = { input: structuredClone(shared.input), label: source.runtimeLabel,
-      statusAction: shared.statusAction, statusFromRecord: shared.statusFromRecord, graphicsHost: shared.graphicsHost,
+      statusAction: shared.statusAction, statusFromRecord: shared.statusFromRecord, statusTranslators: shared.statusTranslators,
+      graphicsHost: shared.graphicsHost,
       ...(source.graphicsArchitecture ? { graphicsArchitecture: source.graphicsArchitecture } : {}),
       ...(source.invocation === "wine" ? { supports: { cheats: false, cheatsPatcher: false, saveEditing: false, saveLocation: true } } : {}),
       settings: { defaults, fields } };
