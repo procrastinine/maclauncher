@@ -16,6 +16,15 @@
 // choices set nothing, and the Wine keeps its own default. While a value is
 // set, its components serve each Direct3D API they cover, in order. A native
 // library placed in the prefix still loads first.
+//
+// A value can also declare `directory`: a second variable naming a folder from
+// which the Wine's loader takes a separately installed build of a component
+// engine, ahead of its included one. MetalSharp Wine's ntdll reads
+// DXMT_RUNTIME_DIR and loads DXMT's Windows libraries and winemetal.so from it.
+// Choosing such a build, one whose files include every file the loader
+// requires there, sets that value and the folder, and none of its files are
+// placed.
+const path = require('node:path');
 const Roles = require('../../modules/shared/runtime/translator-roles');
 const { requiredMachine } = require('../../modules/shared/runtime/binary-compatibility');
 const AUTOMATIC = 'automatic', INHERIT = 'inherit';
@@ -30,6 +39,21 @@ const isLane = (policy, item) => Boolean(item?.included && policy?.values.some(e
 const ownValue = (policy, item) => item?.included && policy?.values.find(entry => entry.lanes[0] === item.embedId) || null;
 const covers = (item, role) => Boolean(item?.apis?.some(api => role.apis.includes(api)));
 const identity = item => item && `${item.id}:${item.root || ''}`;
+// The folder of a separately installed build that holds every file a value's
+// loader requires, such as a DXMT package's wine folder; null when none does.
+function directoryFolder(entry, item) {
+  const directory = entry.directory;
+  if (item?.included || !path.isAbsolute(item?.root || '') || !directory?.engines.includes(item.engine)) return null;
+  const relatives = new Set((item.files || []).map(file => file.relative).filter(Boolean)), [first, ...rest] = directory.files;
+  for (const relative of relatives) {
+    if (relative !== first && !relative.endsWith('/' + first)) continue;
+    const prefix = relative.slice(0, relative.length - first.length);
+    if (rest.every(file => relatives.has(prefix + file))) return path.resolve(item.root, prefix || '.');
+  }
+  return null;
+}
+// The value that loads this separately installed build from its own folder.
+const directoryValue = (policy, item) => policy?.values.find(entry => directoryFolder(entry, item)) || null;
 const laneLabel = (runtime, item) => sourceOf(runtime)?.source?.included?.find(embed => embed.id === item.embedId)?.label || item.engine;
 
 // The compatibility of an included component that the Wine loads itself: the
@@ -58,28 +82,35 @@ function applyPolicy(plan, { selections = {}, included = [], filesForRole }) {
   const replacedByDefault = role => lanesOf(policy.default).some(item => covers(item, role));
   const demand = role => {
     if (!chosen(role)) return null;
-    const row = plan.components[role.id], own = ownValue(policy, row.used);
+    const row = plan.components[role.id], own = ownValue(policy, row.used) || !row.fallback && directoryValue(policy, row.used);
     if (own) return own.value;
     return !row.fallback && row.used.included && !isLane(policy, row.used) && replacedByDefault(role) && builtin(row.used, role) ? policy.builtins : null;
   };
   const first = PRECEDENCE.find(demand);
   if (!first) return false;
-  const value = demand(first), lanes = value === policy.builtins ? [] : lanesOf(value);
+  const value = demand(first);
+  // The first chosen build this value loads from its folder serves every API it covers.
+  const directed = PRECEDENCE.filter(role => demand(role) === value).map(role => plan.components[role.id].used)
+    .find(item => directoryValue(policy, item)) || null;
+  const lanes = value === policy.builtins ? [] : [directed, ...lanesOf(value)].filter(Boolean);
   const wineOwn = role => included.find(item => !isLane(policy, item) && ['wined3d', 'vkd3d'].includes(item.engine) && covers(item, role)) || null;
   for (const role of Roles.DIRECT3D_ROLES) {
     const row = plan.components[role.id], served = lanes.find(item => covers(item, role)) || null;
     if (!chosen(role)) { if (served && identity(row.used) !== identity(served)) row.used = served; continue; }
     const asked = demand(role);
-    if (asked === value) continue;
+    if (asked === value && (!served || identity(served) === identity(row.used))) continue;
     // A placed native library, or a builtin no component of this value replaces, still loads.
     if (!asked && !isLane(policy, row.used) && (!builtin(row.used, role) || !served)) continue;
     Object.assign(row, { used: served || wineOwn(role), fallback: true, reasonCode: 'graphics-policy',
       reason: `${sourceOf(plan.runtime)?.label || 'This Wine'} loads one Direct3D route per game, and the ${first.label} choice sets it.` });
   }
-  plan.graphicsPolicy = { variable: policy.variable, value, lanes: [...new Set(policy.values.flatMap(entry => entry.lanes))] };
+  const entry = directed && directoryValue(policy, directed);
+  plan.graphicsPolicy = { variable: policy.variable, value, lanes: [...new Set(policy.values.flatMap(entry => entry.lanes))],
+    ...(entry ? { env: { [entry.directory.variable]: directoryFolder(entry, directed) }, items: [directed.id] } : {}) };
   return true;
 }
 // Whether the Wine loads this component itself, so no file of it is placed.
-const loadedByWine = (plan, item) => Boolean(item?.included && plan?.graphicsPolicy?.lanes.includes(item.embedId));
+const loadedByWine = (plan, item) => Boolean(item?.included && plan?.graphicsPolicy?.lanes.includes(item.embedId) ||
+  item && !item.included && plan?.graphicsPolicy?.items?.includes(item.id));
 
 module.exports = { policyOf, laneCompatibility, applyPolicy, loadedByWine };

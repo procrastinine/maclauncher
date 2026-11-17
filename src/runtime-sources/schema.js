@@ -21,7 +21,13 @@ function validateSource(source){
   if(!/^[A-Z_][A-Z0-9_]*$/.test(policy.variable))throw new TypeError('A graphics policy variable is an environment variable name.');
   if(!Array.isArray(policy.values)||!policy.values.every(entry=>entry&&typeof entry.value==='string'&&entry.value&&Array.isArray(entry.lanes)&&entry.lanes.length&&entry.lanes.every(lane=>ids.has(lane))&&
     (entry.architectures===undefined||Array.isArray(entry.architectures)&&entry.architectures.every(cpu=>['x64','x86','arm64'].includes(cpu)))))
-   throw new TypeError('Graphics policy values name included Direct3D components and optional x64, x86 or arm64 programs.');}
+   throw new TypeError('Graphics policy values name included Direct3D components and optional x64, x86 or arm64 programs.');
+  // A value whose loader also takes a separately installed build of a component engine from a folder named by another
+  // variable: that variable, the engines, and the files the loader requires in the folder.
+  for(const entry of policy.values)if(entry.directory!==undefined){const directory=entry.directory;object(directory,'A graphics policy directory');
+   if(!/^[A-Z_][A-Z0-9_]*$/.test(directory.variable||'')||directory.variable===policy.variable||!Array.isArray(directory.engines)||!directory.engines.length||!directory.engines.every(engine=>typeof engine==='string'&&/^[a-z0-9-]+$/.test(engine))||
+     !Array.isArray(directory.files)||!directory.files.length||!directory.files.every(file=>typeof file==='string'&&file&&!file.startsWith('/')&&!file.split('/').includes('..')))
+    throw new TypeError('A graphics policy directory names its variable, component engines and required root-relative files.');}}
  return source;
 }
 function validateBuild(build){object(build,'Runtime build');for(const key of ['id','kind','version'])if(typeof build[key]!=='string')throw new TypeError('Build requires '+key+'.');if(!getKind(build.kind))throw new TypeError('Unknown runtime kind.');if(!Array.isArray(build.binaries))throw new TypeError('Build binaries must be an array.');return build;}

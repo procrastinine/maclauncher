@@ -105,7 +105,8 @@ test('explicit MetalSharp vkd3d-proton, Mullion and Wine builtin choices select 
   // Wine's own Direct3D 9 is not a Mullion library, so the default stays.
   assert.equal(ms.plan({ d3d9: ms.wined3d.id }).graphicsPolicy ?? null, null);
   // Another builtin set is not in MetalSharp's own builtin folder, which Wine searches first, so the
-  // builtins value would load Wine's WineD3D in its place; such a choice sets no value.
+  // builtins value would load Wine's WineD3D in its place; a set without the DXMT folder the loader
+  // reads (aarch64-windows beside aarch64-unix/winemetal.so) sets no value.
   assert.equal(ms.plan({ d3d11: ms.dxmt.id }).graphicsPolicy ?? null, null);
 });
 
@@ -171,5 +172,70 @@ test('a Wine source policy cannot admit a component refused by actual binary or 
     assert.equal(plan.compatibility[selected.id].compatible, false, kind);
     assert.equal(plan.compatibility[selected.id].reason, measured.reason, kind);
     assert.notEqual(plan.components.d3d11.used?.id, selected.id, kind);
+  }
+});
+
+// A separately installed DXMT build in the layout MetalSharp's loader reads
+// from DXMT_RUNTIME_DIR: aarch64-windows libraries beside aarch64-unix/winemetal.so.
+function dxmtBuild(root, name, { unix = true, packageRoot = false } = {}) {
+  const base = path.join(root, name, 'wine');
+  for (const module of ['d3d10core', 'd3d11', 'd3d12', 'dxgi', 'winemetal']) {
+    const file = path.join(base, 'aarch64-windows', module + '.dll'); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, dll({ builtin: true }));
+  }
+  if (unix) { fs.mkdirSync(path.join(base, 'aarch64-unix'), { recursive: true }); fs.writeFileSync(path.join(base, 'aarch64-unix', 'winemetal.so'), require('./fixtures/macho-image').image({ installName: '@rpath/winemetal.so' })); }
+  // A managed package describes its whole root, with the loader's folder inside it.
+  if (packageRoot) fs.writeFileSync(path.join(root, name, 'manifest.json'), '{}');
+  return { ...Description.describeTranslator(packageRoot ? path.join(root, name) : base, { engine: 'dxmt', component: 'd3d-renderer', source: 'custom' }), id: 'dxmt:' + name, folder: base };
+}
+function withChoices(ms, choices) {
+  return selections => {
+    const included = [ms.mullion, ms.dxvk, ms.proton, ms.wined3d, ms.vkd3d];
+    const compatibility = Object.fromEntries([...included, ...choices].map(item => [item.id, { compatible: true, reason: null, warnings: [], files: item.files }]));
+    const value = Plan.resolvePlan({ runtime: 'metalsharp-wine', included, choices, compatibility });
+    value.components['d3d-renderer'].used = ms.wined3d;
+    return Plan.resolveApiRoles(value, { selections, included, choices, compatibility,
+      automatic: { d3d8: ms.wined3d, d3d9: ms.wined3d, d3d10: ms.wined3d, d3d11: ms.wined3d, d3d12: null } });
+  };
+}
+
+test('a chosen MacLauncher DXMT build sets GRAPHICS_BACKEND=dxmt and DXMT_RUNTIME_DIR to its folder, placing none of its files', async t => {
+  const root = fixture(t), ms = metalSharp(root), build = dxmtBuild(root, 'dxmt-0.80'), plan = withChoices(ms, [build])({ d3d11: build.id });
+  assert.deepEqual(plan.graphicsPolicy, { variable: 'GRAPHICS_BACKEND', value: 'dxmt', lanes: ['metalsharp-wine-mullion', 'metalsharp-wine-dxvk', 'metalsharp-wine-vkd3d-proton'],
+    env: { DXMT_RUNTIME_DIR: build.folder }, items: [build.id] });
+  // The build serves every Direct3D API it covers ahead of the included Mullion.
+  for (const role of ['d3d10', 'd3d11', 'd3d12']) assert.equal(plan.components[role].used.id, build.id, role);
+  assert.equal(plan.components.d3d11.fallback, false); assert.equal(plan.components.d3d9.used.id, ms.wined3d.id);
+  assert.deepEqual(placedFrom(plan, build), []);
+  const view = await prepare(root, plan);
+  assert.equal(view.env.GRAPHICS_BACKEND, 'dxmt'); assert.equal(view.env.DXMT_RUNTIME_DIR, build.folder);
+  assert.equal(Object.keys(view.links).some(name => /\/(?:d3d10core|d3d11|d3d12|dxgi|winemetal)\.(?:dll|so)$/i.test(name)), false, Object.keys(view.links).join(' '));
+  assert.equal(view.dllOverrides.some(line => /^(?:d3d10core|d3d11|d3d12|dxgi)=/.test(line)), false, view.dllOverrides.join(' '));
+  // A Mullion choice beside it falls back to the build, because the loader takes that folder's libraries.
+  const mixed = withChoices(ms, [build])({ d3d11: build.id, d3d12: ms.mullion.id });
+  assert.equal(mixed.graphicsPolicy.env.DXMT_RUNTIME_DIR, build.folder);
+  // A package root holding the loader's folder below it loads that folder.
+  const packaged = dxmtBuild(root, 'dxmt-package', { packageRoot: true }), whole = withChoices(ms, [packaged])({ d3d11: packaged.id });
+  assert.notEqual(packaged.root, packaged.folder);
+  assert.deepEqual([whole.graphicsPolicy.env, whole.graphicsPolicy.items], [{ DXMT_RUNTIME_DIR: packaged.folder }, [packaged.id]]);
+  assert.deepEqual(placedFrom(whole, packaged), []);
+  assert.equal((await prepare(root, whole)).env.DXMT_RUNTIME_DIR, packaged.folder);
+  assert.equal(mixed.components.d3d12.used.id, build.id); assert.equal(mixed.components.d3d12.fallback, true);
+  assert.equal(mixed.components.d3d12.reasonCode, 'graphics-policy');
+});
+
+test('a DXMT build without the files the loader requires sets no MetalSharp value', async t => {
+  const root = fixture(t), ms = metalSharp(root), build = dxmtBuild(root, 'windows-only', { unix: false });
+  const plan = withChoices(ms, [build])({ d3d11: build.id });
+  assert.equal(plan.graphicsPolicy ?? null, null);
+  assert.equal(Object.hasOwn((await prepare(root, plan)).env, 'DXMT_RUNTIME_DIR'), false);
+});
+
+test('the runtime source schema checks a graphics policy runtime directory', () => {
+  const { validateSource } = require('../src/runtime-sources/schema');
+  const source = JSON.parse(fs.readFileSync(path.join(__dirname, '../src/runtime-sources/wine/metalsharp-wine.json'), 'utf8'));
+  assert.doesNotThrow(() => validateSource(source));
+  for (const change of [directory => { directory.variable = 'GRAPHICS_BACKEND'; }, directory => { directory.engines = []; }, directory => { directory.files = ['../winemetal.so']; }]) {
+    const copy = structuredClone(source); change(copy.graphicsPolicy.values[0].directory);
+    assert.throws(() => validateSource(copy), /graphics policy directory/);
   }
 });

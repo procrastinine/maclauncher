@@ -309,9 +309,11 @@ function graphicsLayerAttachable(install, options = {}) {
 }
 // A Wine whose ntdll reads DXMT_RUNTIME_DIR loads <dir>/aarch64-unix/winemetal.so
 // as the Unix side of its Metal library, and its Windows libraries from the
-// folders beside it. The runtime's own folder is lib/mullion. The graphics
-// payload's maclauncher-winemetal.so takes winemetal.so's place in a folder of
-// the view and re-exports the runtime's own.
+// folders beside it. The runtime's own folder is lib/mullion; a separately
+// installed DXMT build that the plan's graphics policy loads from its own
+// folder takes its place. The graphics payload's maclauncher-winemetal.so
+// takes winemetal.so's place in a folder of the view and re-exports the
+// runtime's own.
 const RUNTIME_LIBRARY = "maclauncher-winemetal.so";
 const runtimeDirectoryReaders = new Map();
 function readsRuntimeDirectory(ntdll) {
@@ -323,10 +325,10 @@ function readsRuntimeDirectory(ntdll) {
   runtimeDirectoryReaders.set(ntdll, { identity, reads });
   return reads;
 }
-function runtimeLibraryRoute(install) {
+function runtimeLibraryRoute(install, directory = null) {
   try {
     const engine = engineRoot(install), unixName = wineLayout(install).unixName;
-    const runtime = path.join(engine, "lib", "mullion"), base = path.join(runtime, "aarch64-unix", "winemetal.so");
+    const runtime = directory || path.join(engine, "lib", "mullion"), base = path.join(runtime, "aarch64-unix", "winemetal.so");
     const library = path.join(require("../../shared/reshade").runtimeRoot(), RUNTIME_LIBRARY);
     if (!unixName || !fs.statSync(base).isFile() || !fs.statSync(library).isFile()) return null;
     return readsRuntimeDirectory(path.join(engine, "lib", "wine", unixName, "ntdll.so")) ? { runtime, base, library } : null;
@@ -342,16 +344,23 @@ async function linkRuntimeFile(source, destination, signal) {
 // The view's DXMT runtime folder: links to every file of the runtime's own
 // Windows folders, the runtime's winemetal.so as winemetal-runtime.so, and a
 // copy of maclauncher-winemetal.so as winemetal.so, which finds the runtime's
-// library beside itself.
+// library beside itself. Links a previous runtime left that this one lacks are
+// removed, because the loader takes every DXMT library it finds there.
 async function prepareRuntimeLibraryView(route, viewRoot, signal) {
   const root = path.join(viewRoot, "graphics-runtime");
   ownDirectory(root);
+  const folders = new Set();
   for (const folder of fs.readdirSync(route.runtime, { withFileTypes: true })) {
     if (!folder.isDirectory() || folder.name === "aarch64-unix") continue;
-    const from = path.join(route.runtime, folder.name), to = path.join(root, folder.name);
-    ownDirectory(to);
+    const from = path.join(route.runtime, folder.name), to = path.join(root, folder.name), names = new Set();
+    ownDirectory(to); folders.add(folder.name);
     for (const file of fs.readdirSync(from, { withFileTypes: true }))
-      if (file.isFile() || file.isSymbolicLink()) await linkRuntimeFile(path.join(from, file.name), path.join(to, file.name), signal);
+      if (file.isFile() || file.isSymbolicLink()) { names.add(file.name); await linkRuntimeFile(path.join(from, file.name), path.join(to, file.name), signal); }
+    for (const name of fs.readdirSync(to)) if (!names.has(name) && fs.lstatSync(path.join(to, name)).isSymbolicLink()) fs.rmSync(path.join(to, name));
+  }
+  for (const folder of fs.readdirSync(root, { withFileTypes: true })) {
+    if (!folder.isDirectory() || folder.name === "aarch64-unix" || folders.has(folder.name)) continue;
+    for (const name of fs.readdirSync(path.join(root, folder.name))) if (fs.lstatSync(path.join(root, folder.name, name)).isSymbolicLink()) fs.rmSync(path.join(root, folder.name, name));
   }
   const unix = path.join(root, "aarch64-unix");
   ownDirectory(unix);
@@ -640,7 +649,7 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
   }
   // Every game runs from the private loader view and its Game Mode bundle.
   const loader = await prepareLoaderView(engine, viewRoot, install, signal, source);
-  const runtimeLibrary = !environment && graphicsLayerRoute(install) === "runtime-library" ? runtimeLibraryRoute(install) : null;
+  const runtimeLibrary = !environment && graphicsLayerRoute(install) === "runtime-library" ? runtimeLibraryRoute(install, translatorPlan.graphicsPolicy?.env?.DXMT_RUNTIME_DIR) : null;
   const runtimeLibraryRoot = runtimeLibrary ? await prepareRuntimeLibraryView(runtimeLibrary, viewRoot, signal) : null;
   const dllRoot = loader.dllRoot, dllOverrides = [];
   ownDirectory(dllRoot);
@@ -706,6 +715,8 @@ async function prepareGraphicsView({ source = require(".").get("sikarugir"), ins
 
   if (translatorView) {
     Object.assign(env, translatorView.env);
+    // The graphics layer's runtime folder stands in for the plan's DXMT folder.
+    if (runtimeLibraryRoot) env.DXMT_RUNTIME_DIR = runtimeLibraryRoot;
     env.DYLD_FALLBACK_LIBRARY_PATH = [...translatorView.libraryPaths, env.DYLD_FALLBACK_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
     env.DYLD_FALLBACK_FRAMEWORK_PATH = [...translatorView.frameworkPaths, env.DYLD_FALLBACK_FRAMEWORK_PATH].filter(Boolean).join(path.delimiter);
     if (Object.keys(translatorView.links).some(name => name.endsWith(".dll"))) env.WINEDLLPATH = [...layout.windows.map(name => path.join(dllRoot, name)), dllRoot, layout.dllRoot].join(path.delimiter);

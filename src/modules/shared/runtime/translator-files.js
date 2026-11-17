@@ -106,6 +106,8 @@ async function prepareTranslatorFiles(plan, { userDataDir, layout, signal, logge
   if (placed) env.CX_GRAPHICS_BACKEND = placedGraphicsBackend(plan, selected);
   // A Wine that loads its own Direct3D components reads the plan's value.
   if (plan.graphicsPolicy) env[plan.graphicsPolicy.variable] = plan.graphicsPolicy.value;
+  // and the folder of a build that the value loads from there.
+  if (plan.graphicsPolicy?.env) Object.assign(env, plan.graphicsPolicy.env);
   // A separately selected Direct3D 12 library replaces the renderer's own.
   const separateD3D12 = !plan.apiMode && plan.components?.d3d12?.used;
   for (const item of selected) {

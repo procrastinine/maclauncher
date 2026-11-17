@@ -153,6 +153,28 @@ test("the view's DXMT runtime folder links the runtime's files and holds the lay
   assert.match(read("src/modules/shared/reshade/native/winemetal-runtime.tbd"), /install-name:\s+'@loader_path\/winemetal-runtime\.so'/);
 });
 
+test("a DXMT build the plan loads from its own folder replaces lib/mullion in the view's runtime folder", async t => {
+  const Graphics = require("../src/modules/crossover/sources/wine-graphics");
+  const fixture = runtimeLibraryFixture(t), view = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "graphics-view-")));
+  const build = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "dxmt-build-")));
+  t.after(() => { fs.rmSync(view, { recursive: true, force: true }); fs.rmSync(build, { recursive: true, force: true }); });
+  for (const file of ["aarch64-unix/winemetal.so", "aarch64-windows/d3d11.dll", "aarch64-windows/dxgi.dll"]) {
+    fs.mkdirSync(path.dirname(path.join(build, file)), { recursive: true }); fs.writeFileSync(path.join(build, file), "build");
+  }
+  await Graphics.prepareRuntimeLibraryView(Graphics.runtimeLibraryRoute(fixture.install), view);
+  const route = Graphics.runtimeLibraryRoute(fixture.install, build);
+  assert.equal(route.runtime, build); assert.equal(route.base, path.join(build, "aarch64-unix", "winemetal.so"));
+  const root = await Graphics.prepareRuntimeLibraryView(route, view);
+  for (const file of ["aarch64-windows/d3d11.dll", "aarch64-windows/dxgi.dll"]) assert.equal(fs.readlinkSync(path.join(root, file)), path.join(build, file), file);
+  assert.equal(fs.readlinkSync(path.join(root, "aarch64-unix", "winemetal-runtime.so")), route.base);
+  // Mullion's libraries that the build lacks no longer sit where the loader looks.
+  assert.equal(fs.existsSync(path.join(root, "aarch64-windows", "winemetal.dll")), false);
+  assert.equal(fs.existsSync(path.join(root, "i386-windows", "d3d11.dll")), false);
+  assert.equal(Graphics.runtimeLibraryRoute(fixture.install, path.join(build, "missing")), null);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/modules/crossover/sources/wine-graphics.js"), "utf8"),
+    /Object\.assign\(env, translatorView\.env\);\n.*\n\s+if \(runtimeLibraryRoot\) env\.DXMT_RUNTIME_DIR = runtimeLibraryRoot;/);
+});
+
 test("a Wine launch whose game process loads the layer itself starts without the DYLD route", async () => {
   const { launch } = require("../src/runtime-adapters/wine");
   const spawned = [], plan = { directory: "/tmp", winePath: "/view/bin/wine", serverPath: "/view/bin/wineserver", args: [], environment: {}, executablePath: "/game/Game.exe" };
