@@ -376,6 +376,33 @@ test("metadata uses asynchronous icon extraction and cancellation does not cache
   assert.equal(fs.readFileSync(executable, "utf8"), "original");
 });
 
+test("an empty or truncated metadata cache or icon receipt, as a power loss leaves it, is a miss that is rebuilt", async t => {
+  const f = fixture(t), GameData = require("../src/modules/shared/game-data");
+  fs.writeFileSync(path.join(f.gamePath, "Game.exe"), "original");
+  const png = require("../src/core/icon-utils").encodePngBitmap({ width: 1, height: 1, buffer: Buffer.from([1, 2, 3, 255]) });
+  let extractions = 0;
+  const service = createGameMetadataService({ userDataDir: f.userDataDir, registry: f.registry,
+    extractIcon: async () => { extractions++; return { png }; } });
+  const first = await service.refreshEntry(f.entry, f.settings);
+  const cache = path.join(GameData.resolveGameDir(f.userDataDir, f.entry.gameId), "metadata.json");
+  const receipt = path.join(GameData.resolveGameIconsDir(f.userDataDir, f.entry.gameId), "icon-exe.png.source.json");
+  const complete = { cache: fs.readFileSync(cache, "utf8"), receipt: fs.readFileSync(receipt, "utf8") };
+  assert.equal(first.iconSource, "exe"); assert.deepEqual([f.counts.detection, extractions], [1, 1]);
+  for (const [label, damage] of [["empty", () => ""], ["truncated", text => text.slice(0, text.length >>> 1)]]) {
+    fs.writeFileSync(cache, damage(complete.cache)); fs.writeFileSync(receipt, damage(complete.receipt));
+    const before = [f.counts.detection, extractions];
+    const restarted = createGameMetadataService({ userDataDir: f.userDataDir, registry: f.registry,
+      extractIcon: async () => { extractions++; return { png }; } });
+    const rebuilt = await restarted.refreshEntry(first, f.settings);
+    assert.deepEqual([f.counts.detection, extractions], [before[0] + 1, before[1] + 1], `${label} files are analyzed again`);
+    for (const key of ["name", "iconPath", "iconSource", "defaultSaveDir"]) assert.deepEqual(rebuilt[key], first[key], `${label}: ${key}`);
+    assert.doesNotThrow(() => JSON.parse(fs.readFileSync(cache, "utf8")), `${label} cache is written again`);
+    assert.deepEqual(JSON.parse(fs.readFileSync(receipt, "utf8")), JSON.parse(complete.receipt), `${label} receipt is written again`);
+    await restarted.refreshEntry(rebuilt, f.settings);
+    assert.deepEqual([f.counts.detection, extractions], [before[0] + 1, before[1] + 1], `the rebuilt ${label} files are reused`);
+  }
+});
+
 test("metadata waits for asynchronous module icon discovery", async t => {
   const f = fixture(t), icon = path.join(f.gamePath, "artwork.png");
   const png = require("../src/core/icon-utils").encodePngBitmap({ width: 1, height: 1, buffer: Buffer.from([1, 2, 3, 255]) });
