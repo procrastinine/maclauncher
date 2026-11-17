@@ -457,7 +457,27 @@ async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal, la
 }
 // The graphics component declares complete WineVulkan client/native pairs.
 // CPU selection comes from their headers and the selected Wine's native loader.
+// The Wine release in the Wine's own ntdll.so build string, such as
+// "wine-11.20 (MetalSharp Wine 7.0)" or "wine-11.0-8726-g2e2f5fca349".
+const wineReleases=new Map();
+function wineRelease(layout){
+  const file=layout?.unixRoot&&path.join(layout.unixRoot,"ntdll.so");
+  try{
+    const stat=fs.statSync(file,{bigint:true}),identity=[stat.dev,stat.ino,stat.size,stat.mtimeNs].join(":"),known=wineReleases.get(file);
+    if(known?.identity===identity)return known.release;
+    const release=/wine-(\d+\.\d+(?:\.\d+)?)(?=[ (\-\0])/.exec(fs.readFileSync(file).toString("latin1"))?.[1]||null;
+    if(wineReleases.size>=16)wineReleases.delete(wineReleases.keys().next().value);
+    wineReleases.set(file,{identity,release});
+    return release;
+  }catch{return null;}
+}
+// A WineVulkan module's Wine binding. A module that names its Wine release
+// (`wineVersion`) applies to a Wine whose ntdll.so reports that release; its
+// Unix side's imports are then checked against the Wine's own libraries.
+// An older module lists its Wine files by digest instead.
 function wineVulkanProfile(profile,layout){
+  if(typeof profile?.wineVersion==="string")
+    return wineRelease(layout)===profile.wineVersion?{measured:true,has:file=>fs.existsSync(file),get:()=>null}:null;
   const Native=require("../../shared/runtime/bundled-native"),Identity=require("../../shared/runtime/verified-identity"),files=new Map();
   if(!Array.isArray(profile?.files)||!profile.files.length)return null;
   for(const row of profile.files){
@@ -470,7 +490,7 @@ function wineVulkanProfile(profile,layout){
   }
   return files;
 }
-function wineVulkanSelection(root, install, { layout = wineLayout(install), signal, module: supplied } = {}) {
+function wineVulkanSelection(root, install, { layout = wineLayout(install), signal, module: supplied, record } = {}) {
   const relative = supplied ? "manifest.json" : "temporal/vulkan/selection.json", descriptor = path.join(root, relative);
   if (!fs.existsSync(descriptor)) return null;
   const Native = require("../../shared/runtime/bundled-native");
@@ -504,12 +524,13 @@ function wineVulkanSelection(root, install, { layout = wineLayout(install), sign
     const client = read(pair.client.file, pair.client.sha256, 64 * 1024 * 1024);
     const native = read(pair.native.file, pair.native.sha256, 64 * 1024 * 1024);
     const pe = require("../../shared/runtime/pe-exports").readPeExports(client.file, { headersOnly: true });
-    const images = require("../../shared/runtime/macho-load-commands").readMachOLoadCommands(native.file, { signal });
+    const images = require("../../shared/runtime/macho-load-commands").readMachOLoadCommands(native.file, { signal, imports: true });
     const image = images.slices.find(row => row.architecture === layout.architecture && row.platform === 1);
     if (!pe?.isDll || pe.form !== "builtin") fail("The WineVulkan client is not a Wine builtin DLL.");
     if (!machine || pe.machine !== machine || !image) continue;
     const profile = wineVulkanProfile(pair.runtimeProfile,layout);
-    if(!profile)continue;
+    // A release binding needs the Wine's measured library exports.
+    if(!profile||profile.measured&&!record?.modules)continue;
     let compatible = true;
     const dependencies = [];
     for (const dependency of image.dependencies) {
@@ -522,11 +543,15 @@ function wineVulkanSelection(root, install, { layout = wineLayout(install), sign
       const header = require("../../shared/runtime/macho-load-commands").readMachOLoadCommands(file, { signal });
       if (!header.slices.some(row => row.architecture === layout.architecture && row.platform === 1)) { compatible = false;break; }
       const sha256 = Identity.fileDigest(file).sha256;
-      if (profile.get(fs.realpathSync(file)) !== sha256) { compatible = false;break; }
+      if (!profile.measured && profile.get(fs.realpathSync(file)) !== sha256) { compatible = false;break; }
       dependencies.push({ name, file, sha256 });
     }
+    // Every symbol the Unix side imports from a Wine library is one that library exports.
+    const BinaryCompatibility = require("../../shared/runtime/binary-compatibility");
+    if (compatible && profile.measured) compatible = image.importsComplete === true && image.imports.every(item => item.weak ||
+      /^\/(?:usr\/lib|System\/Library)\//.test(item.library || "") || BinaryCompatibility.moduleExport(record, path.basename(item.library || ""), item.symbol) === true);
     const original = path.join(layout.primaryWindowsRoot, "winevulkan.dll");
-    if (!compatible || !fs.existsSync(original) || profile.get(fs.realpathSync(original)) !== Identity.fileDigest(original).sha256) continue;
+    if (!compatible || !fs.existsSync(original) || !profile.measured && profile.get(fs.realpathSync(original)) !== Identity.fileDigest(original).sha256) continue;
     try { require("../temporal/vulkan/selection").inspectClientName({file:client.file,sha256:client.sha256}); }
     catch(error){if(error.message==="WineVulkan client needs a distinct builtin export name.")continue;throw error;}
     matches.push({ client: { file: client.file, sha256: client.sha256, original: { file: original, sha256: Identity.fileDigest(original).sha256 } },
@@ -543,11 +568,11 @@ function wineVulkanRuntimeSelection(entry, context, install, {translatorPlan=con
   const selected=Architecture.withArchitecture(Architecture.normalizeArchitecture(layout.architecture),()=>manager.resolveSelection({...entry,runtimeId:manager.id},context.settings,context.userDataDir,{verification:"status"}));
   if(selected.ready&&selected.install){
     const module=manager.inspectPayload(selected.install.modulePayloadRoot||selected.install.payloadRoot||selected.install.executablePath);
-    const selection=wineVulkanSelection(module.root,install,{layout,signal:context.signal,module});
+    const selection=wineVulkanSelection(module.root,install,{layout,signal:context.signal,module,record:translatorPlan.record});
     if(selection)return {selection,manager,selected,managed:true};
   }
   root ||= require("../../shared/reshade").runtimeRoot(context.app);
-  return {selection:wineVulkanSelection(root,install,{layout,signal:context.signal}),manager,selected};
+  return {selection:wineVulkanSelection(root,install,{layout,signal:context.signal,record:translatorPlan.record}),manager,selected};
 }
 async function prepareWineVulkan(entry, context, install, options) {
   const resolved=wineVulkanRuntimeSelection(entry,context,install,options);

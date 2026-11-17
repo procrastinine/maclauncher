@@ -12,7 +12,8 @@ function descriptor(manifest) {
   if (manifest?.managerId !== id || provider?.schema !== 1 || provider.provider !== id ||
       !Array.isArray(manifest.files) || !manifest.files.length || manifest.files.length > Files.LIMITS.files ||
       !provider.libraries || typeof provider.libraries !== "object" || Array.isArray(provider.libraries) ||
-      !Array.isArray(provider.runtimeProfile?.files) || !provider.runtimeProfile.files.length)
+      !(/^\d+\.\d+(?:\.\d+)?$/.test(provider.runtimeProfile?.wineVersion || "") ||
+        Array.isArray(provider.runtimeProfile?.files) && provider.runtimeProfile.files.length))
     throw Error("The WineVulkan module has no complete library and Wine interface declaration.");
   const names = new Set();
   for (const file of manifest.files) {
@@ -22,7 +23,8 @@ function descriptor(manifest) {
       throw Error("The WineVulkan module file inventory is invalid.");
     names.add(file.path.toLowerCase());
   }
-  for (const file of provider.runtimeProfile.files) {
+  // A Wine release binding; an older module lists its Wine files by digest.
+  for (const file of provider.runtimeProfile.files || []) {
     Files.relativeFile(file.relative);
     if (!/^[a-f0-9]{64}$/.test(file.sha256 || "")) throw Error("The WineVulkan Wine interface binding is invalid.");
   }
