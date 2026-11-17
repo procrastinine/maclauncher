@@ -2,7 +2,7 @@ const path = require("node:path");
 const execute = require("node:util").promisify(require("node:child_process").execFile);
 const Bundled = require("../runtime/bundled-native");
 const Custom = require("../runtime/custom-runtime");
-const Native = require("../runtime/local-native");
+const { readMachOLoadCommands } = require("../runtime/macho-load-commands");
 const { createProjectBuildManager } = require("../runtime/project-build-manager");
 const { withDescription } = require("../runtime/pinned-native-manager");
 const {createSourceBackedManager}=require("../../../runtime-sources/manager");
@@ -21,12 +21,19 @@ const prefix = projectId + ":";
 function verifyDriverFiles(selected) {
   const loader = selected.manifest.runtimeFiles?.loader;
   if (!loader || !selected.executablePath) throw new Error("The MacLauncher KosmicKrisp package has no Vulkan driver or loader.");
-  const driverArchitectures = Native.readMachOArchitectures(selected.executablePath, { allowLibrary: true });
-  const loaderArchitectures = Native.readMachOArchitectures(path.join(selected.payloadRoot, Bundled.relativeFile(loader)), { allowLibrary: true });
+  const architectures = file => {
+    const image = readMachOLoadCommands(file);
+    if (image.slices.some(slice => ![6, 8].includes(slice.fileType))) throw new Error("The Vulkan package needs native libraries.");
+    return image.architectures;
+  };
+  const driverArchitectures = architectures(selected.executablePath);
+  const loaderArchitectures = architectures(path.join(selected.payloadRoot, Bundled.relativeFile(loader)));
+  const unknown = values => values.some(value => !["x86_64", "arm64"].includes(value));
+  const contains = (values, cpu) => values.includes(cpu) || unknown(values);
   const declared = selected.arch || selected.manifest.arch;
   const cpu = declared === "x64" ? "x86_64" : declared === "arm64" ? "arm64" : null;
-  if (cpu && (!driverArchitectures.includes(cpu) || !loaderArchitectures.includes(cpu)) ||
-      !driverArchitectures.some(architecture => loaderArchitectures.includes(architecture)))
+  if (cpu && (!contains(driverArchitectures, cpu) || !contains(loaderArchitectures, cpu)) ||
+      !unknown(driverArchitectures) && !unknown(loaderArchitectures) && !driverArchitectures.some(architecture => loaderArchitectures.includes(architecture)))
     throw new Error("The KosmicKrisp driver and Vulkan loader must contain the package's CPU architecture.");
   return { architectures: driverArchitectures,
     architecture: cpu === "x86_64" ? "x64" : cpu || (driverArchitectures.length === 1 ? driverArchitectures[0] === "x86_64" ? "x64" : driverArchitectures[0] : "universal") };
