@@ -76,7 +76,10 @@ export function runtimeInspectorVersionOptions(section: Record<string, any> | nu
   tag = runtimeVersionTagger(section, runtimeInspectorVersions(section, selectedVersion)), choicePending = false) {
   return runtimeInspectorVersions(section, selectedVersion).flatMap<{ value: string; version: string; architecture?: string; label: string }>(version => {
     const present = (Array.isArray(section?.installed) ? section.installed : []).some((row: any) => row?.version === version);
-    const label = tag(version) + (present || choicePending && version === selectedVersion ? "" : " (not installed)");
+    // A saved choice this Mac cannot install now (its source states why) is
+    // unavailable rather than merely not installed.
+    const blocked = Boolean(section?.catalog?.versionRequirements?.[version]?.installReason);
+    const label = tag(version) + (present || choicePending && version === selectedVersion ? "" : blocked ? " (unavailable)" : " (not installed)");
     const cpus = [...new Set<string>((Array.isArray(section?.installed) ? section.installed : [])
       .filter((row: any) => row?.version === version && installedRuntimeAvailability(row) !== "unavailable")
       .map((row: any) => installedArchitecture(row)).filter((cpu: string) => cpu === "arm64" || cpu === "x64"))];

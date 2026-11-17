@@ -30,6 +30,10 @@ test("the inspector lists damaged installations for repair and hides builds this
   const missing = model.runtimeInspectorVersionOptions({ ...section, catalog: { versions: ["9.0-rc1"] } }, "9.0-rc1");
   assert.equal(missing.filter(option => option.version === "9.0-rc1").length, 1);
   assert.ok(missing.find(option => option.version === "9.0-rc1").label.endsWith(" (not installed)"));
+  const blocked = model.runtimeInspectorVersionOptions({ ...section, catalog: { versions: ["9.0-rc1"],
+    versionRequirements: { "9.0-rc1": { installReason: "Runtime 9.0-rc1 runs through Loader, which is not installed." } } } }, "9.0-rc1");
+  assert.ok(blocked.find(option => option.version === "9.0-rc1").label.endsWith(" (unavailable)"),
+    "A saved choice this Mac cannot install is unavailable, not merely missing");
   assert.ok(!model.runtimeInspectorVersions({ ...section, catalog: { versions: ["9.0-rc1"] } }).includes("9.0-rc1"),
     "A catalog-only candidate is not offered without a saved choice");
   assert.equal(model.runtimeInspectorInstall(section, "2.0").availability, "needsRepair");
