@@ -4,18 +4,24 @@ const Downloads = require("../../runtime/download-utils"), Writable = require(".
 const { runDownloadTask } = require("../../runtime/download-manager");
 const { downloadApproved } = require("../../runtime/tool-install");
 
-function sourceFor(version = Catalog.defaultVersion) {
-  const source = Catalog.sources.find(row => row.version === version);
+function sourceFor(version = Catalog.defaultVersion, userDataDir) {
+  const source = require('./catalog').sources(userDataDir).find(row => row.version === version);
   if (!source) throw new Error("Choose an available neural model download.");
   return source;
 }
-function sourcesFor(method){return Catalog.sources.filter(row=>!method||(row.method||'mlx-dlss')===method);}
+function sourcesFor(method,userDataDir){return require('./catalog').sources(userDataDir).filter(row=>!method||(row.method||'mlx-dlss')===method);}
 function downloadPlan(source){return {managerId:Models.ID,version:source.version,label:source.files?source.label:'Neural rendering model',kind:'tool',requiresDownload:true,confirmLabel:'Download and Continue',downloadBytes:source.bytes,sourceUrl:source.releaseUrl,detail:source.description+' '+source.weightTerms};}
+function automaticSelection(context,method){const preferences=context.settings?.runtimes?.[Models.ID]||context.settings||{};return !preferences.defaultVersion&&!preferences.defaultVersions?.[method]&&!preferences.customDefaults?.default;}
 function sourceIdentity(source){return crypto.createHash('sha256').update(JSON.stringify(source.files||[])).digest('hex');}
 async function checksum(file, signal) {
   const hash = crypto.createHash("sha256");
   for await (const bytes of fs.createReadStream(file, { flags: fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW, signal })) hash.update(bytes);
   return hash.digest("hex");
+}
+async function gitBlobChecksum(file, signal) {
+  const hash = crypto.createHash('sha1'), bytes = fs.statSync(file).size;hash.update('blob ' + bytes + '\0');
+  for await (const part of fs.createReadStream(file, {flags: fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW, signal})) hash.update(part);
+  return hash.digest('hex');
 }
 function sourceInstalled(rows,source){return rows.find(row => {
     if(row.ready===false)return false;
@@ -33,7 +39,7 @@ async function existingSource(context, source) {
   }
 }
 async function downloadModel(context={},dependencies={}){
-  const source=dependencies.source||sourceFor(context.sourceVersion);if(!source.files)return downloadDlssMac(context,{...dependencies,source});
+  const source=dependencies.source||sourceFor(context.sourceVersion,context.userDataDir);if(!source.files)return downloadDlssMac(context,{...dependencies,source});
   Downloads.throwIfAborted(context.signal);const existing=await existingSource(context,source);if(existing)return existing;
   if(!await downloadApproved(context,downloadPlan(source)))return null;
   return runDownloadTask(context.downloads,{managerId:Models.ID,sectionId:'default',version:source.version,label:source.label,detail:'Downloading model…',kind:'download',dedupeKey:`neural-model:${context.userDataDir}:${source.version}`},async task=>{
@@ -44,7 +50,7 @@ async function downloadModel(context={},dependencies={}){
       const temporary=fs.mkdtempSync(path.join(root,'.download-'));let completed=0;
       try{
         for(const row of source.files){
-          if(typeof row.file!=='string'||path.basename(row.file)!==row.file||!Number.isSafeInteger(row.bytes)||row.bytes<1||!/^[a-f0-9]{64}$/.test(row.sha256))throw new Error('The model source declaration is invalid.');
+          if(typeof row.file!=='string'||path.basename(row.file)!==row.file||!Number.isSafeInteger(row.bytes)||row.bytes<1||!(/^[a-f0-9]{64}$/.test(row.sha256||'')||!row.transport&&/^[a-f0-9]{40}$/.test(row.gitBlobSha1||'')))throw new Error('The model source declaration is invalid.');
           const target=path.join(temporary,row.file),limit=new AbortController(),combined=signal?AbortSignal.any([signal,limit.signal]):limit.signal,downloadBytes=row.downloadBytes||row.bytes;let oversized=false;
           // Archive and range transports bound their own transfer. A plain file
           // at an exact revision downloads through the upstream layer. Every
@@ -56,7 +62,7 @@ async function downloadModel(context={},dependencies={}){
             task.onProgress?.({...progress,downloaded:completed+Math.min(progress.downloaded,downloadBytes),total:source.bytes,label:'Downloading model…'});
           }});}catch(error){if(oversized&&!signal?.aborted)throw new Error('The model asset exceeds its declared size.');throw error;}
           Downloads.throwIfAborted(combined);const stat=fs.lstatSync(target);
-          if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==row.bytes||await checksum(target,combined)!==row.sha256)throw new Error(`The downloaded ${row.file} is not the selected model file: its size or checksum differs.`);
+          if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==row.bytes||!(row.sha256?await checksum(target,combined)===row.sha256:row.gitBlobSha1&&await gitBlobChecksum(target,combined)===row.gitBlobSha1))throw new Error(`The downloaded ${row.file} is not the selected model file: its size or checksum differs.`);
           completed+=downloadBytes;
         }
         const imported=await Models.importModel({...operation,runtimePath:source.kind==='ncnn-rife'?temporary:path.join(temporary,source.entry),modelIdentifier:source.label,onProgress:progress=>task.onProgress?.({...progress,downloaded:completed,total:source.bytes,detail:progress.label})});
@@ -69,7 +75,7 @@ async function downloadModel(context={},dependencies={}){
   },{onProgress:context.onProgress});
 }
 async function downloadDlssMac(context = {}, dependencies = {}) {
-  const source = dependencies.source || sourceFor(context.sourceVersion);
+  const source = dependencies.source || sourceFor(context.sourceVersion,context.userDataDir);
   Downloads.throwIfAborted(context.signal);
   const existing = await existingSource(context, source);
   if (existing) return existing;
@@ -134,10 +140,13 @@ async function ensureNeuralModel(context = {}, dependencies = {}) {
       try { const model = await Models.resolveModel(context.userDataDir, row.version, {signal: context.signal});return {modelPath: model.modelPath, version: model.version}; }
       catch (error) { Downloads.throwIfAborted(context.signal);if (Downloads.isAbortError(error)) throw error; }
     }
-    const source=dependencies.source||sourcesFor(method).find(row=>row.defaultForOperation)||sourcesFor(method)[0];
+    const source=dependencies.source||sourcesFor(method,context.userDataDir).find(row=>row.defaultForOperation)||sourcesFor(method,context.userDataDir)[0];
     if(!source)throw new Error('Import a compatible model for this operation in Neural models.');
+    const installedBefore=Models.listInstalled(context.userDataDir).map(row=>row.version);
     const result = await downloadModel({...context,sourceVersion:source.version},{...dependencies,source});
+    if(result&&context.automatic===true)require('../../../../core/runtime-install-origins').recordPlayInstall({userDataDir:context.userDataDir,manager:require('../runtime/neural-models-manager'),
+      plan:{automatic:true,version:source.version,installOptions:{sectionId:'default'}},result,settings:context.settings,entry:context.entry,installedBefore,logger:context.logger});
     return result ? { modelPath: result.modelPath, version: result.version } : null;
   } catch (error) { if (Downloads.isAbortError(error)) return null; throw error; }
 }
-module.exports = { sourceFor, sourcesFor, sourceInstalled, downloadPlan, downloadModel, downloadDlssMac, ensureNeuralModel };
+module.exports = { sourceFor, sourcesFor, sourceInstalled, downloadPlan, automaticSelection, downloadModel, downloadDlssMac, ensureNeuralModel };

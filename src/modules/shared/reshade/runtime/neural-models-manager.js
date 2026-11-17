@@ -1,5 +1,6 @@
 const Models = require("../neural/models");
 const Setup = require("../neural/setup");
+const Releases = require('../neural/catalog');
 const {runDownloadTask} = require("../../runtime/download-manager");
 const MODEL_GROUPS = [{id:"rendering",label:"Neural rendering"},{id:"upscaling",label:"Upscaling"},
   {id:"restoration",label:"Restoration"},{id:"generation",label:"Frame generation"},{id:"scene",label:"Scene reconstruction"},{id:"depth",label:"Depth estimation"}];
@@ -43,13 +44,14 @@ function getState(context = {}) {
   const {selectNeuralModel,compatibleNeuralModel}=require('../../effects/neural-selection.mjs'),{MODEL_OPERATIONS}=require('../../effects/operation-contracts.mjs');
   const defaultSelections=Object.entries(MODEL_OPERATIONS).flatMap(([id,operation])=>{const model=selectNeuralModel(id,choices,preferences);return model?[{id,label:operation.label,version:model.version,
     compatibleVersions:choices.filter(row=>row.ready!==false&&compatibleNeuralModel(row,id)).map(row=>row.version)}]:[];});
-  const versions = installed.map(item => item.version), versionLabels = Object.fromEntries(installed.map(item => [item.version, item.versionLabel]));
-  const catalog = { status: "success", delivery: "local-files", versions, versionLabels, installable: false, importable: supported, ...(reason ? { importReason: reason } : {}),
+  const sources = Releases.sources(userDataDir), versions = [...new Set([...installed.map(item => item.version), ...sources.map(row => row.version)])], versionLabels = Object.fromEntries([...sources.map(item => [item.version, item.label]), ...installed.map(item => [item.version, item.versionLabel])]);
+  const catalog = { status: "success", delivery: "download", versions, versionLabels, installable: supported, installableVersions: supported ? sources.map(row => row.version) : [], importable: supported, ...(reason ? { importReason: reason } : {}),
+    versionRequirements: Object.fromEntries(sources.map(row => {const current=Setup.sourceInstalled(choices,row);return [row.version,{requiresDownload:!current,requiresBuild:false,available:Boolean(current),downloadBytes:row.bytes}];})),
     importLabel: "Import compatible model…", importBusyLabel: "Importing neural model…", importInputKinds: ["file", "directory"], importExtensions:require('../neural/model-sources').PICKER_EXTENSIONS,
     importDescription: "Imports rendering, super-resolution, restoration, interpolation and relative-depth models with their checksums and original notices. Compatible raw weights are packaged automatically. Model terms apply separately.",
     sourceUrl: source.releaseUrl, source: source.releaseUrl,
-    refreshLabel: "Reload imported models", supportsLatestOnly: false, fetchedAt: null, error: null,
-    latestInstalledVersion: versions[0] || null, latestAvailableVersion: null, updateAvailable: false };
+    refreshLabel: "Refresh upstream checkpoints", supportsLatestOnly: false, fetchedAt: Releases.read(userDataDir)?.fetchedAt || null, error: null,
+    latestInstalledVersion: installed[0]?.version || null, latestAvailableVersion: sources[0]?.version || null, updateAvailable: false };
   const section = { id: "default", label: "Neural models", supportsDefault: true, managementTitle: "Neural model library",
     description: "Models can be selected in Graphics and video processing. Compatible models install from local packages or downloads. Original local sources remain unchanged.",
     itemGroups:MODEL_GROUPS.map(group=>({...group,operations:Object.keys(MODEL_OPERATIONS).filter(method=>modelGroup(method)===group.id)})),
@@ -65,6 +67,11 @@ module.exports = {
   delivery: { included: "none", catalog: "remote", sourceBuild: false },
   ui: { groupId: "graphics", tabLabel: "Neural models", sectionLabel: "Neural models", order: 0, memberOrder: 5, management: "managed" },
   normalizeSettings, getState, importRuntime, coordinateImportRuntime: importRuntime, uninstallRuntime: Models.removeModel,
+  installRuntime: context => {
+    if(Models.validVersion(context.version))return Models.resolveModel(context.userDataDir,context.version,{signal:context.signal});
+    const {supported,reason}=modelSupport(context);if(!supported)throw Error(reason);
+    return Setup.downloadModel({...context,sourceVersion:context.version});
+  },
   performSetupAction: context => {
     const { supported, reason } = modelSupport(context);
     if (!supported) throw new Error(reason);
@@ -72,7 +79,7 @@ module.exports = {
     if(context.setupActionId?.startsWith('downloadModel:'))return Setup.downloadModel({...context,sourceVersion:context.setupActionId.slice('downloadModel:'.length)});
     throw new Error("Choose an available neural model action.");
   },
-  refreshCatalog: async context => getState(context).catalog,
+  refreshCatalog: async context => {await Releases.refresh(context);return getState(context).catalog;},
   applySettingsUpdate: (action, payload, settings, {userDataDir}={}) => {
     if(action!=="setDefault")return normalizeSettings(settings);
     if(payload?.selectionId===undefined)return normalizeSettings({...settings,defaultVersion:payload?.version});

@@ -18,7 +18,7 @@ async function prepare(plan,options={},dependencies={}){
   const acquire=options.acquireModels??options.launchPreparation===true;
   for(const method of new Set(wanted.map(node=>modelOperations[node.id]))){
     throwIfAborted(options.signal);if(models.some(row=>compatible(row,method)))continue;
-    const source=Setup.sourcesFor(method).find(row=>row.defaultForOperation)||Setup.sourcesFor(method)[0];
+    const source=Setup.sourcesFor(method,options.userDataDir).find(row=>row.defaultForOperation)||Setup.sourcesFor(method,options.userDataDir)[0];
     const fallback=source?'A compatible model is needed. Download the recommended model or import one.':'A compatible model is needed. Import a model for this operation.';
     // A missing model downloads only after consent. The manager's setup action
     // approves itself, so its route asks first; Setup asks inside.
@@ -29,7 +29,8 @@ async function prepare(plan,options={},dependencies={}){
       // The shared manager task has its own cancellation control. A superseded
       // graph stops waiting immediately without cancelling another user's copy.
       const result=await current(async()=>{
-        const installed=await(options.ensureNeuralModel?(await require('../../runtime/tool-install').downloadApproved(options,Setup.downloadPlan(source))?options.ensureNeuralModel({method,sourceVersion:source.version,setupActionId:source.files?'downloadModel:'+source.version:'downloadDlssMac'}):null):Setup.ensureNeuralModel({...options,signal:undefined,method}));
+        const automatic=options.launchPreparation===true&&Setup.automaticSelection(options,method);
+        const installed=await(options.ensureNeuralModel?(await require('../../runtime/tool-install').downloadApproved(options,Setup.downloadPlan(source))?options.ensureNeuralModel({method,automatic,sourceVersion:source.version,setupActionId:source.files?'downloadModel:'+source.version:'downloadDlssMac'}):null):Setup.ensureNeuralModel({...options,signal:undefined,method,automatic}));
         if(installed)try{await options.onRuntimeStateChange?.({managerId:'graphics-neural-models'});}catch(error){require('../../graphics-warning')(options.logger,'The model library could not be refreshed.',error.message);}
         return installed;
       },options.signal);
@@ -40,7 +41,7 @@ async function prepare(plan,options={},dependencies={}){
   // source; the graphics status owner asks consent and downloads it (S13).
   const acquisition=method=>{
     if(acquire)return null;
-    const source=Setup.sourcesFor(method).find(row=>row.defaultForOperation)||Setup.sourcesFor(method)[0];
+    const source=Setup.sourcesFor(method,options.userDataDir).find(row=>row.defaultForOperation)||Setup.sourcesFor(method,options.userDataDir)[0];
     return source?{operation:method,source:{version:source.version,label:source.files?source.label:'Neural rendering model',bytes:source.bytes,setupActionId:source.files?'downloadModel:'+source.version:'downloadDlssMac'}}:null;
   };
   return {models,modelOperations,pending:wanted.filter(node=>!models.some(row=>compatible(row,modelOperations[node.id]))).map(node=>{
@@ -59,12 +60,12 @@ function downloads(plan,options={},dependencies={}){
   let provider;
   for(const method of methods){
     if(models.some(row=>compatible(row,method)))continue;
-    const source=Setup.sourcesFor(method).find(row=>row.defaultForOperation)||Setup.sourcesFor(method)[0];
+    const source=Setup.sourcesFor(method,options.userDataDir).find(row=>row.defaultForOperation)||Setup.sourcesFor(method,options.userDataDir)[0];
     if(!source)continue;
     provider??=dependencies.provider||Neural.resolve(options.root||require('../index').runtimeRoot(options.app),options)||null;
     if(!(provider?.supportedMethods||provider?.descriptor?.operations||[]).includes(method))continue;
     const plan=Setup.downloadPlan(source);
-    result.push({managerId:plan.managerId,version:plan.version,label:plan.label,...(source.bytes?{bytes:source.bytes}:{}),
+    result.push({managerId:plan.managerId,version:plan.version,label:plan.label,automatic:Setup.automaticSelection(options,method),...(source.bytes?{bytes:source.bytes}:{}),
       installOptions:{sectionId:'default',setupActionId:source.files?'downloadModel:'+source.version:'downloadDlssMac'}});
   }
   return result;

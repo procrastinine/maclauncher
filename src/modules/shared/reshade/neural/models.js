@@ -183,8 +183,8 @@ async function stampedHash(file, signal) {
   return hash;
 }
 const sameFile = (a, b) => a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs;
-function sourceMetadata(directory,manifest){
-  const sources=require('./model-source.json').sources;let source;
+function sourceMetadata(directory,manifest,userDataDir){
+  const sources=require('./catalog').sources(userDataDir);let source;
   try{const file=path.join(directory,'download-source.json');regular(file,65536);const receipt=JSON.parse(fs.readFileSync(file,'utf8')),row=sources.find(row=>row.version===receipt.version);
     if(row&&(row.files?receipt.inputIdentity===digest(JSON.stringify(row.files)):receipt.sha256===row.sha256))source=row;
   }catch{}
@@ -210,7 +210,7 @@ function readInstall(userDataDir, selected) {
     const package_ = inspectPackage(modelPath);
     if (digest(package_.bytes) !== record.manifestHash || package_.value.weights.sha256 && package_.value.weights.sha256 !== record.weightsHash ||
         package_.weightsStat.size !== record.weightsBytes) return null;
-    return { version: selected, versionLabel: `${package_.value.identifier} · ${selected.slice(7, 15)}`,...sourceMetadata(installDir,package_.value),
+    return { version: selected, versionLabel: `${package_.value.identifier} · ${selected.slice(7, 15)}`,...sourceMetadata(installDir,package_.value,userDataDir),
       identifier: package_.value.identifier, architecture: package_.value.architecture,operation:package_.operation,method:package_.operation,
       intrinsicScale:Restoration.ARCHITECTURES[package_.value.architecture]?.scale||(["mlx-vsr","mlx-sr-image"].includes(package_.operation)?2:1),
       pairedDenoiser:Boolean(package_.value.denoiseWeights),
