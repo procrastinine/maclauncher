@@ -161,6 +161,38 @@ function fexPackage(directory, {version, hostArchitecture = 'arm64', managerId =
   return {container,archive,record,manifest,catalog:{schemaVersion:2,projectId:'anyps5-fex',updatePolicy:'manual',packages:[record]}};
 }
 
+// A converter package as the anyps5 catalog lists it: only its record is read
+// before installation.
+function converterRecord(version) {
+  const tag='anyps5/v'+version+'/arm64',filename='anyps5-'+version+'-arm64.tar.gz';
+  return {schemaVersion:2,id:'anyps5',version,arch:'arm64',launcherArchitectures:['arm64','x86_64'],minimumMacOS:'26.0',
+    manifestRelative:'runtime.json',manifestSha256:'b'.repeat(64),sourceSha256:'c'.repeat(64),updatePolicy:'manual',tag,
+    asset:{filename,bytes:1,sha256:'d'.repeat(64),url:'https://github.com/procrastinine/maclauncher-builds/releases/download/'+encodeURIComponent(tag)+'/'+filename}};
+}
+
+test('a listed version that is not installed keeps its own CPU route', {skip: process.platform !== 'darwin'}, async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anyps5-listed-route-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const host=Buffer.alloc(32);host.writeUInt32LE(0xfeedfacf);host.writeUInt32LE(0x0100000c,4);host.writeUInt32LE(2,12);
+  const fex=fexPackage(path.join(root,'fex'),{version:'fixture-MCLv1',host});
+  const manager = require('../src/modules/anyps5/runtime/manager').createManager({systemVersionSync: () => '26.0',
+    fetchUrlBuffer: async url => ({status:200,body:Buffer.from(JSON.stringify(String(url).includes('anyps5-fex') ? fex.catalog
+      : {schemaVersion:2,projectId:'anyps5',updatePolicy:'manual',packages:[converterRecord('fixture-1.0')]}))})});
+  const original = Architecture.requiresRosetta;
+  t.mock.method(Architecture, 'requiresRosetta', architecture => original(architecture, {platform: 'darwin', hardwareArch: 'arm64'}));
+  await Architecture.withArchitecture('arm64', async () => {
+    const userDataDir = path.join(root, 'profile');
+    await manager.refreshCatalog({userDataDir, force: true});
+    const selected = version => manager.resolveSelection({runtimeData:{anyps5:{version}}}, {}, userDataDir);
+    assert.equal(selected('fixture-1.0').ready, false);
+    assert.equal(selected('fixture-1.0').route, 'rosetta', 'a converter version runs its converted game through Rosetta');
+    assert.equal(selected('fixture-MCLv1').ready, false);
+    assert.equal(selected('fixture-MCLv1').route, 'fex');
+    const saved = {runtimes:{anyps5:{defaultVersion:'fixture-1.0'}}};
+    assert.equal(manager.resolveSelection({}, saved, userDataDir).route, 'rosetta', 'a saved default keeps its own route too');
+  });
+});
+
 test('the FEX package installs, becomes ready, is removable and refuses other layouts', {skip: process.platform !== 'darwin'}, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anyps5-fex-package-'));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
@@ -183,12 +215,16 @@ test('the FEX package installs, becomes ready, is removable and refuses other la
     const ready = manager.resolveSelection({}, {}, userDataDir);
     assert.equal(ready.ready, true, ready.reason); assert.equal(ready.version, 'fixture-MCLv1');
     assert.equal(ready.install.executablePath.endsWith(HOST), true);
+    require('../src/modules/shared/runtime/bundled-native').verifyPayload(ready.install.root,ready.install.declaration);
     const saved=manager.applySettingsUpdate('setDefault',{version:ready.version},{},{userDataDir});
     assert.equal(manager.resolveSelection({}, {runtimes:{anyps5:saved}}, userDataDir).version,ready.version);
     const external=path.join(packages[0].container,'files'),before=fs.readFileSync(path.join(external,HOST));
     await manager.registerCustomRuntime({userDataDir,runtimePath:external});
     const custom=manager.resolveSelection({runtimeData:{anyps5:{version:external}}},{},userDataDir);
     assert.equal(custom.ready,true,custom.reason);assert.equal(custom.route,'fex');
+    // Play verifies the selected install's own declaration, as for a downloaded package.
+    assert.ok(custom.install.declaration,'a custom registration carries its declaration');
+    require('../src/modules/shared/runtime/bundled-native').verifyPayload(custom.install.root,custom.install.declaration);
     await manager.uninstallRuntime({userDataDir,version:external});
     assert.deepEqual(fs.readFileSync(path.join(external,HOST)),before,'removing a custom registration preserves external bytes');
     for (const version of ['fixture-MCLv2', 'fixture-MCLv3'])

@@ -67,6 +67,13 @@ function createManager(dependencies = {}) {
     try {return {...selected, ...execution(selected.install)};}
     catch(error) {return {...selected,ready:false,reason:error.message};}
   }
+  // A listed version that is not installed has no host or library to measure
+  // yet. Its catalog project names the route: FEX packages run the start host,
+  // converter packages run the converted Intel game.
+  function listedRoute(version,userDataDir) {
+    const pin = manager.core.listDiscoveredCatalog({userDataDir}).find(pin => pin.version === version && pin.projectPackage);
+    return pin ? {route: fexPackage(pin) ? "fex" : Architecture.requiresRosetta("x64") ? "rosetta" : "native"} : {};
+  }
   manager.resolveSelection = (entry, settings, userDataDir, options = {}) => {
     const explicit = explicitVersion(entry,settings,options);
     const installed = state({userDataDir}).installed || [];
@@ -74,8 +81,9 @@ function createManager(dependencies = {}) {
       const row=installed.find(row=>row.version===explicit&&row.ready!==false);
       // Resolve the selected package in its stored converter/host slot. The
       // version row's execution CPU can differ from that package's primary.
-      return measured(resolve(entry,settings,userDataDir,{...options,version:explicit,
+      const selected=measured(resolve(entry,settings,userDataDir,{...options,version:explicit,
         ...(row?{architecture:Architecture.recordArchitecture(row)}:{})}));
+      return selected.ready || selected.route ? selected : {...selected,...listedRoute(selected.version || explicit,userDataDir)};
     }
     if (!explicit && Architecture.requiresRosetta("x64")) {
       const fex = installed.filter(row => row.ready !== false).map(row => measured(resolve(null,settings,userDataDir,{...options,version:row.version,
