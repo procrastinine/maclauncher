@@ -181,7 +181,8 @@ export function TranslatorEnvironmentSettings({ declarations, store, onSave }: {
     <div className="settingsTitle">Environment variables
       <HelpTip label="About environment variables"><p>Each translator passes these values to every game that uses it, and a game's Runtime Settings can change, add or remove them for that game.
         Values are passed exactly as written, without shell expansion, and changes apply on the next launch.</p></HelpTip></div>
-    {blocks.length ? blocks.map(block => {
+    {/* One disclosure list with separators, as wide as the settings rows. */}
+    {blocks.length ? <div className="translatorEnvironmentList">{blocks.map(block => {
       const count = countValues(block.declarations, store);
       return <details key={block.id} className="translatorEnvironmentBlock" aria-label={`${block.label} environment variables`}>
         <summary>{block.label}{count > 0 && <span className="translatorEnvironmentCount"> ({count})</span>}</summary>
@@ -190,7 +191,7 @@ export function TranslatorEnvironmentSettings({ declarations, store, onSave }: {
           <TranslatorEnvironmentTable declarations={block.declarations} companions={block.companions} scope="global" globalStore={store} onSave={onSave} />
         </div>
       </details>;
-    }) : <div className="dim">No translator has environment variables.</div>}
+    })}</div> : <div className="dim">No translator has environment variables.</div>}
   </div>;
 }
 

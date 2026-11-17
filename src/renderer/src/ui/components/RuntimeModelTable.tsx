@@ -26,7 +26,8 @@ export function RuntimeModelTable({actions,installed,section,busy,onInstall,onRe
         const presentation=modelPresentation(model?.operation||model?.method,model?.intrinsicScale);
         const name=action?.label||formatRuntimeVersionTag(model?.version,section),help=action?.description||model?.purpose||presentation.purpose;
         return <tr key={action?.id||model?.version}>
-          <td>{name}{help&&<HelpTip label={`About ${name}`}>{help}</HelpTip>}</td>
+          {/* A model's purpose is its name's tooltip, as an installed row's details are in Runtimes. */}
+          <td><span title={help||undefined}>{name}</span></td>
           <td>{model?.inputOutputLabel||action?.inputOutputLabel||presentation.inputOutputLabel}</td>
           <td>{availabilityLabel(present?(ready?"installed":"unavailable"):"notInstalled")}
             {model?.error&&<HelpTip label={`About ${name} availability`}>{formatUserError(model.error)}</HelpTip>}</td>
@@ -35,7 +36,7 @@ export function RuntimeModelTable({actions,installed,section,busy,onInstall,onRe
               onChange={()=>onDefault(model!,scope.id)}/>{scope.label}
           </label>):<span className="dim">—</span>}</td>
           <td><div className="detailActions">{!present&&action&&<button type="button" className="btn small" disabled={busy||action.available===false} onClick={()=>onInstall(action.id)}>Install</button>}
-            {model&&model.removable!==false&&<button type="button" className="btn small iconOnly" disabled={busy}
+            {model&&model.removable!==false&&<button type="button" className="btn small iconOnly danger" disabled={busy}
               title={runtimeRemovalPresentation(model,section).label} aria-label={runtimeRemovalPresentation(model,section).label} onClick={()=>onRemove(model)}><TrashIcon /></button>}
           </div></td>
         </tr>;

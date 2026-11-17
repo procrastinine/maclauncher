@@ -247,6 +247,17 @@ test('Graphics providers list Lossless Scaling model families beside their compo
   assert.match(markup, /<ul class="runtimeComponentCapabilities" aria-label="Lossless Scaling models"><li><span>LS1 spatial upscaling<\/span><span class="badge badgeAccent">Installed<\/span><\/li><li><span>LSFG frame generation<\/span><span class="badge">Not installed<\/span><\/li><\/ul>/);
   assert.doesNotMatch(markup, /aria-label="Provider"|>Upscaling</);
   assert.doesNotMatch(markup, />Presets<\/button>/, 'presets are settings in Settings → Graphics, not a Runtimes tab');
+  // One help button beside the heading lists each component; each name keeps its explanation as a tooltip (GUI 0877 R25).
+  assert.doesNotMatch(markup, /aria-label="About Apple MetalFX"|aria-label="About Lossless Scaling"/);
+  assert.match(markup, /<span class="runtimeComponentName" title="Apple MetalFX component">Apple MetalFX<\/span>/);
+  assert.match(markup, /aria-label="About runtime components"[\s\S]*<dt>Apple MetalFX<\/dt><dd>Apple MetalFX component<\/dd>/);
+  const css = require('node:fs').readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  const header = /\n\.runtimeSectionHeader \{([^}]*)\}/.exec(css)[1];
+  assert.doesNotMatch(header, /background/, 'a component header has no tinted band');
+  assert.match(header, /padding: 0 0 6px;/);
+  assert.match(css, /\.runtimeComponents \{ margin: 0; padding: 0; \}/);
+  assert.match(css, /\.runtimeComponent \{[^}]*padding: 8px 12px;/);
+  assert.match(css, /\.runtimeComponentStatus \{[^}]*font-weight: 400;/);
 });
 
 test('launcher libraries join only groups that a backend provides', () => {

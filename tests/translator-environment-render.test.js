@@ -61,6 +61,12 @@ test('Settings lists the global values of every translator once, each in a colla
   assert.match(markup, /title="Set by DXVK HUD in Runtime Settings\. This value replaces it\.">Set by MacLauncher</);
   assert.match(markup, /<option value="DXVK_CONFIG">/); assert.doesNotMatch(markup, /<option value="DXVK_HUD">/, 'present names are not suggested again');
   const blocks = (markup.match(/<details class="translatorEnvironmentBlock"/g) || []).length;
+  // The blocks are one disclosure list with separators at the settings rows' width, not full-width cards (GUI 0877 S7).
+  assert.match(markup, /<div class="translatorEnvironmentList"><details class="translatorEnvironmentBlock"/);
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.translatorEnvironmentList \{[^}]*max-width: calc\(44rem \+ 12px\);[^}]*border-bottom: 1px solid var\(--border\);/);
+  assert.match(css, /\.translatorEnvironmentBlock \{ border-top: 1px solid var\(--border\); min-width: 0; \}/);
+  assert.doesNotMatch(/\.translatorEnvironmentBlock \{[^}]*\}/.exec(css)[0], /border-radius/);
   assert.equal(blocks, new Set(declarations().map(item => item.id)).size - 3, 'the Android engines and ANGLE share the MacLauncher Android block');
   assert.equal((markup.match(/>Reset</g) || []).length, blocks, 'one Reset for each block');
   assert.equal((markup.match(/class="translatorEnvironmentGroup"[^>]*>ANGLE</g) || []).length, 1, 'a translator of two runtimes is shown once');

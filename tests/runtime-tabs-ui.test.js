@@ -45,7 +45,8 @@ test('shared settings and runtimes keep static detail in help while preserving c
     runtimeManagerId: 'fixture-manager', runtimeSectionId: section.id, runtimeUi: {}, downloadTasks: [], downloadsOpen: false,
     setDownloadsOpen() {}, setRuntimeManagerId() {}, setRuntimeSectionId() {}, updateRuntimeUiSection() {},
     onRuntimeRefresh() {}, onRuntimeInstall() {}, onRuntimeSetDefault() {}, onRuntimeUninstall() {}, onCancelDownload() {} });
-  assert.match(runtimes, /popover="auto" class="helpPopover">Component explanation\./);
+  // The components heading's help holds the section's explanation and lists each component's (GUI 0877 R25).
+  assert.match(runtimes, /popover="auto" class="helpPopover"><p>Component explanation\.<\/p><dl class="helpList"><dt>Runtime part<\/dt><dd>Part explanation\.<\/dd><\/dl>/);
   assert.match(runtimes, /class="runtimeCatalogDetails"><p>Catalog explanation\.<\/p>/);
   // A row's static detail is its name's tooltip; its macOS requirement stays visible.
   assert.match(runtimes, /<span title="mac-arm64\nInstallation detail\.\nGraphics library 1\.0\n\/Runtimes\/2\.0">v2\.0<\/span>/);

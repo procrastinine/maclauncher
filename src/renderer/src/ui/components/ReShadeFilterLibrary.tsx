@@ -117,9 +117,9 @@ export function ReShadeFilterLibrary({ filters, filtersError, api, family, showD
           const format=({fx:'ReShade FX',slangp:'Slang preset',slang:'Slang',libplacebo:'mpv',isf:'ISF',magpie:'Magpie',native:'Native filter'})[filter.format??shaderFormat(filter.path)??'fx'];
           return <React.Fragment key={filter.id}><tr>
           <td><div className="filterLibraryNameControl"><FilterInput value={filter.name} label={`Filter name: ${filter.name}`} readOnly={!(filter.presetId && api?.renameReShadeShader || !filter.origin && api?.updateReShadeFilter || filter.origin === "imported" && api?.updateReShadeFilter) || busy}
-            onCommit={value => update(filter, "name", value)} />
-            {implementationHelp(choice)&&<HelpTip label={`About ${filter.name}`}>{implementationHelp(choice)}</HelpTip>}</div>
-            <span className="filterLibraryFormat">{format}</span></td>
+            onCommit={value => update(filter, "name", value)} /></div>
+            {/* The help follows the format line, so every name field keeps the column's width. */}
+            <span className="filterLibraryFormat">{format}{implementationHelp(choice) ? <HelpTip label={`About ${filter.name}`}>{implementationHelp(choice)}</HelpTip> : null}</span></td>
           <td>{typeLabel}{summary!==typeLabel&&!(typeLabel==='Image filter'&&summary==='Same size')&&<span className="filterLibraryFormat">{summary}</span>}</td>
           <td>{filter.origin==='collection'&&filter.collectionLabel?`${filter.collectionLabel}${/collection$/i.test(filter.collectionLabel)?'':' collection'}`:filter.origin?({included:'Included',collection:'Collection',imported:'Imported'})[filter.origin]:'Imported'}
             {!filter.available&&<span className="filterLibraryUnavailable">Unavailable<HelpTip label={`About ${filter.name} availability`}>{filter.reason||'The shader source is unavailable.'}</HelpTip></span>}</td>

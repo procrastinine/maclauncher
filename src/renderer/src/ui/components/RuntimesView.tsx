@@ -19,6 +19,7 @@ import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelect
   translatorInstallBuild, translatorInstallRequirement } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
+import { SectionHelp, helpItems } from "./HelpList";
 import { PathDisplay } from "./PathDisplay";
 import { RuntimeCatalogSources } from "./RuntimeCatalogSources";
 import { LauncherViewHeader } from "./LauncherViewHeader";
@@ -121,6 +122,11 @@ function buildArchitecture(install: Record<string, any>, section: Record<string,
     .map((value: string) => value === "x86_64" ? "x64" : value);
   const declared = requirement?.architecture || (hosts.length > 1 ? "universal" : hosts[0]) || null;
   return declared || install.architecture || null;
+}
+
+// A component's explanation: its description, then its requirements on a line of their own.
+function componentHelpText(component: Record<string, any>) {
+  return [component.description, component.requirements].filter(text => typeof text === "string" && text.trim()).join("\n");
 }
 
 export function RuntimesView({
@@ -444,15 +450,17 @@ export function RuntimesView({
                 {Array.isArray(componentsSection?.components) && componentsSection.components.length > 0 &&
                   <section className="runtimeSectionCard" aria-label={componentsSection.componentsTitle || "Components"}>
                     <div className="runtimeSectionHeader"><div>
+                      {/* One help button, beside the heading, explains each component by name; each name keeps its explanation as a tooltip. */}
                       <div className="runtimeSectionTitle">{componentsSection.componentsTitle || "Components"}
-                        {componentsSection.componentsDescription && <HelpTip label="About runtime components">{componentsSection.componentsDescription}</HelpTip>}
+                        <SectionHelp label="About runtime components" items={helpItems(componentsSection.components.map((component: Record<string, any>) =>
+                          ({ label: component.label, text: componentHelpText(component) })))}>
+                          {componentsSection.componentsDescription && <p>{componentsSection.componentsDescription}</p>}
+                        </SectionHelp>
                       </div>
                     </div></div>
                     <dl className="runtimeComponents">
                       {componentsSection.components.map((component: Record<string, any>) => <div className="runtimeComponent" key={component.id}>
-                        <dt><span className="runtimeComponentName">{component.label}<HelpTip label={`About ${component.label}`}>
-                          <p>{component.description}</p>{component.requirements && <p>{component.requirements}</p>}
-                        </HelpTip></span>
+                        <dt><span className="runtimeComponentName" title={componentHelpText(component) || undefined}>{component.label}</span>
                           {component.version && <span className="runtimeComponentVersion">{component.version}</span>}
                         </dt>
                         <dd><span className={`runtimeComponentStatus${component.available ? " available" : ""}`}>{component.status}</span>
@@ -555,7 +563,7 @@ export function RuntimesView({
 
                   <div className="runtimeSectionBody">
                     {itemGroups.length > 0 && <div className="detailRow detailControlRow"><label htmlFor="runtime-item-group" className="detailLabel">Operation</label>
-                      <select id="runtime-item-group" className="input" value={selectedItemGroup}
+                      <select id="runtime-item-group" className="input runtimeItemGroup" value={selectedItemGroup}
                         onChange={event=>setItemGroup({section:groupKey,id:event.target.value})}>
                         <option value="all">All operations</option>{itemGroups.map((group:Record<string,any>)=><option key={group.id} value={group.id}>{group.label}</option>)}
                       </select></div>}

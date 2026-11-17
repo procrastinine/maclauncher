@@ -79,3 +79,20 @@ test('partial installed dependencies keep the normal completion action instead o
   model.missingComponents=[];tree=h.render();assert.equal(elements(tree).some(n=>n.type==='button'&&n.props.className==='btn small primary'),false,'the version menu tags a complete install; no install button repeats it');assert.match(renderToStaticMarkup(tree),/pinned-sdk · Installed/);assert.doesNotMatch(renderToStaticMarkup(tree),/Download needed/);
  }finally{h.close();}
 });
+test('the model table names a model without a help button, sizes its columns and keeps its trash quiet (GUI 0877 R26)',()=>{
+ const a={version:'a',operation:'mlx-sr-image',compatibleMethods:['mlx-sr-image'],ready:true,purpose:'Upscales images with a fixture model.'},section={id:'default',setupPresentation:{mode:'table'},installed:[a],setupActions:[],catalog:{delivery:'local-files',versions:[],installable:false},defaultSelections:[{id:'mlx-sr-image',label:'DLSS SR image',version:'a',compatibleVersions:['a']}]},manager={id:'models',label:'Models',ui:{groupId:'graphics',tabLabel:'Graphics'},sections:[section]},props={runtimeManagers:[manager],runtimeManagerId:'models',runtimeSectionId:'default',runtimeUi:{},downloadTasks:[],downloadsOpen:false,setDownloadsOpen(){},setRuntimeManagerId(){},setRuntimeSectionId(){},updateRuntimeUiSection(){},onRuntimeRefresh(){},onRuntimeInstall(){},onRuntimeSetDefault(){},onRuntimeUninstall(){},onCancelDownload(){}};
+ const h=componentHarness(RuntimesView,props);try{const table=elements(h.render()).find(n=>n.props.onInstall&&n.props.onDefault&&n.props.installed),rows=componentHarness(table.type,table.props);
+  try{const markup=renderToStaticMarkup(rows.render());
+   assert.doesNotMatch(markup,/helpTipButton/,'a model\'s purpose is its name\'s tooltip, not a help button');
+   assert.match(markup,/<td><span title="Upscales images with a fixture model\.">/);
+   assert.match(markup,/class="btn small iconOnly danger"[^>]*aria-label="[^"]+"/,'the trash uses the muted icon colour of other installed rows');
+  }finally{rows.close();}
+ }finally{h.close();}
+ const css=require('node:fs').readFileSync(path.join(__dirname,'../src/renderer/src/ui/styles.css'),'utf8');
+ for(const [n,w] of [[2,'24%'],[3,'11%'],[4,'22%'],[5,'10%']])assert.ok(css.includes(`.runtimeModelTable th:nth-child(${n}) { width: ${w}; }`),`column ${n}`);
+ assert.match(css,/\.runtimeItemGroup \{ width: auto; max-width: 100%; \}/,'the Operation menu is as wide as its choices');
+ // The library tables keep their header visible and the Actions heading over its buttons (GUI 0877 R26, S8).
+ assert.match(css,/\.filterLibraryTable thead th \{ position: sticky; top: 0;/);
+ assert.match(css,/\.filterLibraryTable th:last-child \{ text-align: right; \}/);
+ assert.match(css,/\.filterLibraryScroll \{ min-width: 0; overflow-x: clip; overflow-y: visible; \}/);
+});

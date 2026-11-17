@@ -37,12 +37,13 @@ The `:root` tokens set typography, corner radii, surfaces, borders and control s
 - Settings runtime tabs: `.settingsTabs`, `.settingsTab` and `.settingsView`. The runtime tabs and the Graphics library tabs start at the section's content edge with one spacing between tabs.
 - Video player plugin cards: `.pluginStatus` uses the Runtimes status colours, with **Installed** in the installed colour and a repair state or `.pluginCardIssue` in the warning colour.
 - Runtime settings forms: `.settingsAdvanced`, with `.settingsAdvancedCount`, for the collapsed Advanced group, and `.settingsRuntimeHeading` for a game type with one runtime.
+- Runtimes section headers: `.runtimeSectionHeader`, used by component lists and Downloaded files, reads like the Versions and Installed headers, without a background band and with a rule below; `.runtimeComponent` rows span the panel with their contents inset 12px.
 - Runtimes subtabs: `.runtimeLineTabs`, inside `.launcherSidebarContent`. An active subtab shares the background of the panel below and keeps its top and side borders. Subtabs scroll horizontally, never vertically, and keep keyboard navigation. While the tabs overflow, `ScrollableTabStrip` adds compact edge controls, and it keeps the scroll position when shared state updates.
 
 ### Editors and libraries
 
 - Editor tabs: `.saveToolsTabs` gives the native save editor and the live-variable editor the same horizontal-only overflow and labels that do not shrink. Scope tabs name their shared panel, keep the selected scope visible after resizing, and stay focusable during an edit while their actions are blocked.
-- Shader library: `.filterLibraryToolbar`, `.filterLibraryTable` and `.filterLibraryInput` make up a semantic table with Name, Input → output, Origin / status and Actions columns, in which **Source** expands a `.filterLibrarySource` row. That row's path control keeps its text compact, clips it horizontally and has a native file chooser, while the full path stays available in the input and its title.
+- Shader library: `.filterLibraryToolbar`, `.filterLibraryTable` and `.filterLibraryInput` make up a semantic table with Name, Input → output, Origin / status and Actions columns, in which **Source** expands a `.filterLibrarySource` row. Its cells align on their first line's baseline, the header row is sticky inside the pane that scrolls (`.filterLibraryScroll` clips horizontally and never scrolls itself), and a name's field is transparent until hovered or focused. The neural model table, `.runtimeModelTable`, shares these rules and sets its own column widths. That row's path control keeps its text compact, clips it horizontally and has a native file chooser, while the full path stays available in the input and its title.
 
 ## Library layout
 

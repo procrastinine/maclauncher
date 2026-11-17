@@ -242,10 +242,15 @@ body {
 .filterLibraryToolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .filterLibraryToolbar .settingsTitle { margin: 0; }
 .filterLibraryError { margin: 0; }
-.filterLibraryScroll { min-width: 0; overflow: auto; }
+/* The library tables (shaders, neural models) scroll with the pane, so their header row stays visible at its top. */
+.filterLibraryScroll { min-width: 0; overflow-x: clip; overflow-y: visible; }
 .filterLibraryTable { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--font-sm); }
 .filterLibraryTable th { text-align: left; color: var(--muted); font-weight: 600; }
-.filterLibraryTable th, .filterLibraryTable td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+/* Every cell's first line shares the name's baseline. */
+.filterLibraryTable th, .filterLibraryTable td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: baseline; }
+.filterLibraryTable thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); border-bottom: 0; box-shadow: inset 0 -1px 0 var(--border); }
+/* The Actions heading sits over its right-aligned buttons. */
+.filterLibraryTable th:last-child { text-align: right; }
 .filterLibraryTable th:first-child, .filterLibraryTable td:first-child { padding-left: 0; }
 .filterLibraryTable th:last-child, .filterLibraryTable td:last-child { padding-right: 0; }
 .filterLibraryNameColumn { width: 46%; }
@@ -259,9 +264,20 @@ body {
 .filterLibraryNameControl > .input { flex: 1; min-width: 0; }
 .filterLibrarySource td { padding: 4px 0 10px; }
 .runtimeModelTable td:first-child { overflow-wrap: anywhere; }
+/* Columns sized to their contents: names and Input → output take the room, so the operation and its default fit one line. */
 .runtimeModelTable th:first-child { width: 33%; }
+.runtimeModelTable th:nth-child(2) { width: 24%; }
+.runtimeModelTable th:nth-child(3) { width: 11%; }
+.runtimeModelTable th:nth-child(4) { width: 22%; }
+.runtimeModelTable th:nth-child(5) { width: 10%; }
+/* The Operation menu is as wide as its choices, as a native pop-up button is. */
+.runtimeItemGroup { width: auto; max-width: 100%; }
 .runtimeModelDefault { display: flex; align-items: flex-start; margin-bottom: 4px; font-size: var(--font-xs); }
 .filterLibraryTable .filterLibraryInput { width: 100%; min-width: 0; font-size: inherit; text-overflow: ellipsis; }
+/* A name reads as text; an editable name shows its field while hovered or edited. */
+.filterLibraryNameControl .filterLibraryInput[readonly], .filterLibraryNameControl .filterLibraryInput:not(:hover):not(:focus) { border-color: transparent; background: transparent; }
+/* The Name heading starts where the names' text starts. */
+.filterLibraryTable:has(.filterLibraryNameControl) thead th:first-child { padding-left: calc(var(--control-padding-x) + 1px); }
 .filterLibraryInput[aria-invalid="true"] { border-color: var(--danger); }
 .filterLibraryPathControl { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .filterLibraryPathControl .filterLibraryInput { flex: 1; }
@@ -1816,7 +1832,9 @@ input[type="checkbox"], input[type="radio"] {
 .shaderCollections > summary { padding: 12px; font-weight: 600; cursor: pointer; }
 .shaderCollections > .detailControlRow { padding: 0 12px 12px; }
 .shaderCollections > .detailControlRow select { min-width: 0; flex: 1; }
-.filterLibraryFormat { display: block; padding: 3px 7px 0; font-size: var(--font-xs); color: var(--muted); }
+/* A name's format line starts where the name's text starts; other cells' second lines start at the cell edge. */
+.filterLibraryFormat { display: block; padding: 3px calc(var(--control-padding-x) + 1px) 0; font-size: var(--font-xs); color: var(--muted); }
+.filterLibraryTable td:not(:first-child) .filterLibraryFormat { padding-left: 0; }
 
 .runtimeSectionCard {
   border-bottom: 1px solid var(--border);
@@ -1826,13 +1844,14 @@ input[type="checkbox"], input[type="radio"] {
 /* The card's bottom rule already separates it from the Installed list. */
 .runtimeSectionCard + .saveSection { border-top: 0; }
 
+/* A section header reads like the Versions and Installed headers: no band, the heading at the panel edge and a rule below. */
 .runtimeSectionHeader {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px;
-  background: var(--surface-1);
+  padding: 0 0 6px;
+  min-height: 28px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1873,8 +1892,9 @@ input[type="checkbox"], input[type="radio"] {
 .runtimeSetupSelector { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
 .runtimeSetupSelector > label { font-size: var(--font-sm); }
 .runtimeSetupSelector > .input { min-width: 0; }
-.runtimeComponents { margin: 0; padding: 0 12px; }
-.runtimeComponent { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 1fr); gap: 16px; padding: 8px 0; align-items: center; }
+/* Component rows span the panel like installed rows, with their contents inset 12 px. */
+.runtimeComponents { margin: 0; padding: 0; }
+.runtimeComponent { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 1fr); gap: 16px; padding: 8px 12px; align-items: center; }
 .runtimeComponent + .runtimeComponent { border-top: 1px solid var(--border); }
 .runtimeComponent dt, .runtimeComponent dd { margin: 0; min-width: 0; }
 .runtimeComponent dd { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
@@ -1883,7 +1903,7 @@ input[type="checkbox"], input[type="radio"] {
 .runtimeComponentCapabilities li { display: flex; align-items: baseline; gap: 6px; }
 .runtimeComponentName { display: inline-flex; align-items: center; font-weight: 600; }
 .runtimeComponentVersion { display: inline-block; margin-left: 8px; color: var(--muted); font-size: var(--font-xs); }
-.runtimeComponentStatus { color: var(--muted); font-size: var(--font-xs); font-weight: 600; }
+.runtimeComponentStatus { color: var(--muted); font-size: var(--font-xs); font-weight: 400; }
 .runtimeComponentStatus.available { color: var(--text); }
 .runtimeComponent p { margin: 4px 0 0; font-size: var(--font-xs); line-height: 1.5; }
 
@@ -1900,7 +1920,8 @@ input[type="checkbox"], input[type="radio"] {
 .runtimeSourceRow > .runtimeSourceName { min-width: 4.5rem; font-size: var(--font-sm); font-weight: 400; color: var(--muted); }
 /* Several named sources line their controls up in one column. */
 .runtimeSourceRow.named > .runtimeSourceName { min-width: 9rem; }
-.runtimeVersionSelect { width: auto; min-width: 10rem; max-width: min(36rem, 100%); }
+/* Long version names, such as a neural model's name, hash and state, fit before the menu truncates. */
+.runtimeVersionSelect { width: auto; min-width: 10rem; max-width: min(48rem, 100%); }
 /* A wrapped "Includes …" line breaks between components, never inside one. */
 .runtimeIncludedPart { white-space: nowrap; }
 .runtimeSourceTrail { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: var(--font-xs); }
@@ -2260,10 +2281,12 @@ select.input:not([multiple]) {
 }
 
 /* Translator environment editors: compact NAME = value rows with their state. */
-.translatorEnvironmentBlock { border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
-.translatorEnvironmentBlock > summary { cursor: default; padding: 6px 10px; font-weight: 500; }
+/* Settings → Environment variables is one disclosure list with separators, as wide as the settings rows. */
+.translatorEnvironmentList { display: flex; flex-direction: column; max-width: calc(44rem + 12px); min-width: 0; border-bottom: 1px solid var(--border); }
+.translatorEnvironmentBlock { border-top: 1px solid var(--border); min-width: 0; }
+.translatorEnvironmentBlock > summary { cursor: default; padding: 8px 0; font-weight: 500; }
 .translatorEnvironmentCount { color: var(--muted); font-weight: 400; }
-.translatorEnvironmentBlockBody { display: flex; flex-direction: column; gap: 8px; padding: 0 10px 10px; min-width: 0; }
+.translatorEnvironmentBlockBody { display: flex; flex-direction: column; gap: 8px; padding: 0 0 12px; min-width: 0; }
 .translatorEnvironmentIntro { margin: 0; font-size: var(--font-xs); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .translatorEnvironmentTable { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .translatorEnvironmentRows { display: flex; flex-direction: column; gap: 2px; }

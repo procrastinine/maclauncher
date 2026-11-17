@@ -325,7 +325,8 @@ test('shared filter table exposes editable full names and paths without loading 
   for (const label of ['Name', 'Input → output', 'Origin / status', 'Actions']) assert.match(markup, new RegExp(`<th scope="col">${label}<`));
   assert.match(markup, /Import filter…/);
   assert.match(markup, /Shaders and filters/);
-  assert.deepEqual([...markup.matchAll(/<\/div><span class="filterLibraryFormat">([^<]*)<\/span><\/td>/g)].map(match => match[1]),
+  // Each name's format line follows its field and holds the row's help (GUI 0877 S8).
+  assert.deepEqual([...markup.matchAll(/<\/div><span class="filterLibraryFormat">([^<]*)/g)].map(match => match[1]),
     ['ReShade FX', 'ReShade FX', 'Slang preset', 'Slang']);
   assert.match(markup, /aria-label="Filter name: Colour tuning\.fx"/);
   assert.match(markup, /aria-label="Remove filter Missing\.fx"/);
@@ -1651,4 +1652,18 @@ test('reopening at the same manager scrolls its sidebar choice into view',t=>{
  const h=componentHarness(SearchableSidebar,props);t.after(()=>{h.close();global.window=previous;});let scrolled=0;
  const visit=node=>{if(!React.isValidElement(node))return;if(node.type==='button'&&node.props.title==='Steam')node.props.ref({scrollIntoView(options){assert.equal(options.block,'center');scrolled++;},getBoundingClientRect:()=>({top:700,bottom:726}),closest:()=>({getBoundingClientRect:()=>({top:60,bottom:700})})});React.Children.forEach(node.props.children,visit);};
  visit(h.render());props.selectionKey='2';h.render();assert.equal(scrolled,1);
+});
+
+test('shader names read as text in line with their columns, and a help button never shortens a name field (GUI 0877 S8)', () => {
+  const offline = () => assert.fail('Rendering the filter library must not call the bridge');
+  const filters = [{ id: 'one', name: 'SSIM downscaler', path: '/Shaders/SSIM.hook', format: 'libplacebo', available: true }];
+  const api = { importReShadeFilters: offline, updateReShadeFilter: offline, removeReShadeFilter: offline, pickReShadeFilterPath: offline };
+  const markup = renderToStaticMarkup(React.createElement(ReShadeFilterLibrary, { filters, api }));
+  // The name cell holds only the field; anything else follows the format line.
+  assert.match(markup, /<div class="filterLibraryNameControl"><input [^>]*><\/div><span class="filterLibraryFormat">mpv/);
+  const css = require('node:fs').readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.filterLibraryTable th, \.filterLibraryTable td \{[^}]*vertical-align: baseline;/);
+  assert.match(css, /\.filterLibraryNameControl \.filterLibraryInput\[readonly\], \.filterLibraryNameControl \.filterLibraryInput:not\(:hover\):not\(:focus\) \{ border-color: transparent; background: transparent; \}/);
+  assert.match(css, /\.filterLibraryFormat \{ display: block; padding: 3px calc\(var\(--control-padding-x\) \+ 1px\) 0;/);
+  assert.match(css, /\.filterLibraryTable:has\(\.filterLibraryNameControl\) thead th:first-child \{ padding-left: calc\(var\(--control-padding-x\) \+ 1px\); \}/);
 });
