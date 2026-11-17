@@ -393,8 +393,9 @@ function inspectFileFacts(original) {
       `PE import inspection is incomplete: ${pe?.importWarning || 'unknown import metadata'}`].filter(Boolean).join(' ');
     // Replacement DLL resources report Windows component versions, not translator releases.
     return { ...result, realPath: original, format: 'pe', form: pe?.form || 'native', machine: binary.machineCode,
-      rawMachine: binary.machineCode, architecture: binary.machine, hybrid: binary.hybrid,
-      codeArchitectures: binary.hybrid?.codeArchitectures, macosFloor: null,
+      rawMachine: binary.machineCode, architecture: binary.machine,
+      // Only ARM64X/ARM64EC images carry hybrid facts; installation metadata stores no undefined values.
+      ...(binary.hybrid ? { hybrid: binary.hybrid, codeArchitectures: binary.hybrid.codeArchitectures } : {}), macosFloor: null,
       peImports: pe?.peImports || [], importsComplete: pe?.importsComplete === true, version: null };
   }
   return { ...result, format: 'unknown', macosFloor: null };
