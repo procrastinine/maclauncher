@@ -116,6 +116,16 @@ async function stageAssets(files,app0,previous,context,root) {
     assets[file.name]={stamp:file.stamp,sha256};
     if(++completed%128===0) { report();await new Promise(resolve=>setImmediate(resolve)); }
   }
+  for(const [name,old] of Object.entries(previous||{})) {
+    if(Object.hasOwn(assets,name)||!old||!/^[a-f0-9]{64}$/.test(old.sha256||""))continue;
+    const output=path.resolve(app0,name);
+    if(!inside(app0,output)||output===path.resolve(app0))throw new Error("The PS5 staging record has an invalid asset path.");
+    try{Writable.assertOwnDirectory(root,path.dirname(output),{create:false});}catch(error){if(error.code==="ENOENT")continue;throw error;}
+    let stat;try{stat=fs.lstatSync(output);}catch(error){if(error.code!=="ENOENT")throw error;}
+    if(stat?.isFile()&&!stat.isSymbolicLink()&&Native.hashFile(output)===old.sha256) {
+      fs.unlinkSync(output);
+    }
+  }
   if(completed%128) report();
   return assets;
 }

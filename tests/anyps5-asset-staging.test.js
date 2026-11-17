@@ -51,3 +51,19 @@ test('a legacy staging receipt cannot promote game-written bytes into source own
   await Prepare.stageFexApp0(program, directory, f.context);
   assert.equal(fs.readFileSync(output, 'utf8'), 'a change made by the game');
 });
+
+test('removed source assets retire only unchanged owned copies', async t => {
+  const f=fixture(t),directory=path.join(Prepare.gameDirectory(f.entry,f.context),'fex');
+  const program=Prepare.resolveProgram(f.entry),asset=path.join(f.assets,'assets');
+  fs.writeFileSync(path.join(asset,'removed.bin'),'unchanged source');
+  fs.writeFileSync(path.join(asset,'edited.bin'),'source before game change');
+  await Prepare.stageFexApp0(program,directory,f.context);
+  const staged=path.join(directory,'app0','assets');
+  fs.writeFileSync(path.join(staged,'edited.bin'),'game change');
+  fs.writeFileSync(path.join(staged,'game-created.bin'),'game-created data');
+  fs.unlinkSync(path.join(asset,'removed.bin'));fs.unlinkSync(path.join(asset,'edited.bin'));
+  await Prepare.stageFexApp0(program,directory,f.context);
+  assert.equal(fs.existsSync(path.join(staged,'removed.bin')),false);
+  assert.equal(fs.readFileSync(path.join(staged,'edited.bin'),'utf8'),'game change');
+  assert.equal(fs.readFileSync(path.join(staged,'game-created.bin'),'utf8'),'game-created data');
+});
