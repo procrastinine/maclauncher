@@ -35,10 +35,10 @@
       "sha256": "bf0b64db424bb912f24d46944d005be650086585217eb66bddf638840c03704e"
     }
   ],
-  "commit": "e9d12070dd9b81dc7ec1725368c71a4d3859a108",
+  "revision": "e9d12070dd9b81dc7ec1725368c71a4d3859a108",
   "converterHeaders": {
     "repository": "https://github.com/MethanePowered/MetalShaderConverterBinary",
-    "commit": "cfed9ebffb64e1d784853edb8cdeea32456a75a0",
+    "revision": "cfed9ebffb64e1d784853edb8cdeea32456a75a0",
     "archive": {
       "url": "https://codeload.github.com/MethanePowered/MetalShaderConverterBinary/tar.gz/cfed9ebffb64e1d784853edb8cdeea32456a75a0",
       "sha256": "6f3e3c9b7e7ebd414a0c9dbb7cf12b4d864f55246375d78ac3aab64ce64d827c",
