@@ -176,3 +176,39 @@ test('an explicit Vulkan translator on a Wine with no Vulkan driver of its own s
   assert.equal(plan.pairingError, 'DXVK renders through Vulkan, and MetalSharp Wine includes no Vulkan driver. Choose a Vulkan driver in the game\'s settings.');
   assert.throws(() => Translators.requirement(plan, {}), { message: plan.pairingError }, 'Play stops before the launch');
 });
+
+// Owner rule (11-07): choosing MacLauncher's own DXVK or vkd3d-proton with the Vulkan driver on automatic uses
+// MacLauncher KosmicKrisp on every Wine, with the reason on the row; automatic stays the Wine's own only while every
+// translator is automatic or the Wine's own.
+test('our explicit DXVK with the Vulkan driver on automatic uses MacLauncher KosmicKrisp, with or without a Wine driver', async t => {
+  const Managed = require('../src/modules/shared/vulkan/managed'), { RELATIVE_PATHS } = require('../src/modules/crossover/sikarugir/runtime/template-closure');
+  for (const wineDriver of [true, false]) {
+    const root = scratch(t), dxvk = Managers.createManager('dxvk'), userDataDir = path.join(root, 'profile');
+    installed(dxvk, userDataDir, '1.10.3');
+    const wine = path.join(root, 'wine'), executablePath = put(path.join(wine, 'bin/wine'), image({ cpu: X64, fileType: 2 }));
+    put(path.join(wine, 'lib/wine/x86_64-unix/ntdll.so'), image({ cpu: X64 }));
+    const templateRoot = path.join(root, 'support'); fs.mkdirSync(templateRoot, { recursive: true });
+    if (wineDriver) {
+      const own = put(path.join(templateRoot, RELATIVE_PATHS.frameworks, 'libvulkan_kosmickrisp.dylib'), image({ cpu: X64 }));
+      put(path.join(templateRoot, RELATIVE_PATHS.frameworks, 'libvulkan.1.dylib'), image({ cpu: X64 }));
+      put(path.join(templateRoot, RELATIVE_PATHS.vulkan, 'kosmickrisp_mesa_icd.json'), JSON.stringify({ ICD: { library_path: path.relative(path.join(templateRoot, RELATIVE_PATHS.vulkan), own), api_version: '1.4.0' } }));
+    }
+    const install = { engineRoot: wine, crossoverRoot: wine, templateRoot, executablePath, architecture: 'x64', version: 'authored-wine' };
+    const version = '27.0.0-devel-MCLv13', kk = Managed.createManager();
+    const files = path.join(userDataDir, 'runtimes', kk.id, 'x64', version, 'payload/files'), driver = put(path.join(files, 'libvulkan_kosmickrisp.dylib'), image({ cpu: X64 }));
+    put(path.join(files, 'libvulkan.1.dylib'), image({ cpu: X64 }));
+    const ours = { version, architecture: 'x64', translatorRoot: files, installDir: files, executablePath: driver,
+      translator: Description.describeTranslator(files, { engine: 'kosmickrisp', source: kk.id, version }) };
+    t.mock.method(kk, 'getState', () => ({ installed: [ours] }));
+    t.mock.method(kk, 'resolveSelection', () => ({ ready: true, install: ours, architecture: 'x64' }));
+    const ctx = { runtimeId: 'sikarugir', userDataDir, settings: { runtimes: { [dxvk.id]: { defaultVersion: '1.10.3' }, [kk.id]: { defaultVersion: version } } },
+      runtimeSettings: { translatorRenderer: `${dxvk.id}:1.10.3` }, logger: { warn() {} } };
+    const plan = await Translators.resolve(install, 'sikarugir', ctx, { managers: [dxvk, kk], executableArchitecture: 'x86_64', host: { macOSVersion: '26.0', physicalAppleGPU: true } });
+    assert.equal(plan.components['d3d-renderer'].used?.managerId, dxvk.id, 'our DXVK is used');
+    const vulkan = plan.components['vulkan-driver'];
+    assert.equal(vulkan.value, 'automatic');
+    assert.equal(vulkan.used?.root, files, `MacLauncher KosmicKrisp (${wineDriver ? 'over the Wine own driver' : 'on a Wine without one'})`);
+    assert.equal(vulkan.reasonCode, 'vulkan-pairing'); assert.match(vulkan.reason, /MacLauncher's DXVK uses MacLauncher KosmicKrisp\./);
+    assert.equal(plan.pairingError ?? null, null);
+  }
+});
