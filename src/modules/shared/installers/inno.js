@@ -315,6 +315,8 @@ async function prepareInstaller(file, options = {}) {
       } else { decoderTools = null; compatibility = readerCompatibility; }
       const freeArc = shell ? await FreeArc.prepare(file, archives, stage, helper, decoderTools, options, shell) : null;
       if (freeArc) {
+        // A preapproved native SREP download may complete after reading tables.
+        compatibility = sha(JSON.stringify([readerCompatibility, FreeArc.ABI, decoderTools.identity]));
         require("./freearc-format").validateFiles([...info.files, ...freeArc.files]);
         const combined = [...info.files, ...freeArc.files.filter(item => !item.dir)];
         info.extractedBytes = require("./freearc-format").validateFiles(combined);

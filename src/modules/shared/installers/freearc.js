@@ -79,8 +79,11 @@ async function prepare(file, archives, stage, helper, tools, context, payload) {
   const mapped = [];
   for (const archive of archives) {
     const blocks = await Format.mapArchive(archive, { signal: context.signal, decode: (method, input, size) => Streams.decodeControl(method, input, size, tools, { ...context, work }) });
-    mapped.push({ path: archive, blocks: blocks.map(block => ({ ...block, stages: Codecs.planChain(block.method, payload.ini, payload.files, tools) })) });
+    mapped.push({ path: archive, blocks });
   }
+  const methods = mapped.flatMap(archive => archive.blocks.map(block => block.method));
+  if (await context.prepareNativeSrep?.(methods)) Object.assign(tools, await toolsFor(context));
+  for (const archive of mapped) archive.blocks = archive.blocks.map(block => ({ ...block, stages: Codecs.planChain(block.method, payload.ini, payload.files, tools) }));
   const files = mapped.flatMap(a => a.blocks.flatMap(b => b.files)); Format.validateFiles(files);
   return { archives: mapped, files, work, helpers: payload.helpers, requiresWine: mapped.some(a => a.blocks.some(b => Codecs.needsWine(b.stages))) };
 }
