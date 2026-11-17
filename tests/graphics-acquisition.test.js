@@ -6,6 +6,8 @@ const Sources = require("../src/modules/shared/reshade/model-sources");
 const Steam = require("../src/modules/shared/reshade/steam-models");
 const Models = require("../src/modules/shared/reshade/models");
 const Manager = require("../src/modules/shared/reshade/runtime/models-manager");
+const SteamCMDSource = require("../src/modules/shared/reshade/steamcmd-source");
+const DeveloperId = require("../src/modules/shared/runtime/developer-id");
 const { runRuntimeManagerAction } = require("../src/core/runtime-manager-service");
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "graphics-acquisition-"));
@@ -44,7 +46,8 @@ test("explicit discovery handles Steam libraries, CrossOver paths, duplicates an
   await runRuntimeManagerAction({ manager: Manager, action: "setup", userDataDir: context.userDataDir, payload: context,
     readSettings: () => settings, saveSettings: value => { settings = value; } });
   const installs = Models.listInstalled(context.userDataDir);
-  assert.equal(installs.length, 5); assert.ok(settings.defaultVersion);
+  // Imported models stay automatic until a default is chosen explicitly.
+  assert.equal(installs.length, 5); assert.ok(!settings.defaultVersion);
   const explicit = installs[2].version; settings.defaultVersion = explicit;
   await runRuntimeManagerAction({ manager: Manager, action: "setup", userDataDir: context.userDataDir, payload: context,
     readSettings: () => settings, saveSettings: value => { settings = value; } });
@@ -55,41 +58,36 @@ test("explicit discovery handles Steam libraries, CrossOver paths, duplicates an
 test("empty discovery is actionable and never downloads or changes defaults", async t => {
   const home = fixture(t); await assert.rejects(Sources.importFound({ home, clientRoots: [] }), /Import.*Download from Steam/);
 });
-// tar materializes a SteamCMD executable; codesign reports the vendor signature check.
-function steamcmdRunner(calls, { signed = true, executable = true } = {}) {
-  return async (command, args) => {
-    calls.push([command, ...args]);
-    if (command === "/usr/bin/tar" && executable) {
-      const bytes = Buffer.alloc(64); bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(0x01000007, 4); bytes.writeUInt32LE(2, 12);
-      fs.writeFileSync(path.join(args[3], "steamcmd"), bytes, { mode: 0o755 }); fs.writeFileSync(path.join(args[3], "steamcmd.sh"), "#!/bin/sh\n");
-    } else if (command === "/usr/bin/codesign" && !signed) throw Object.assign(new Error("test-requirement: code failed to satisfy specified code requirement(s)"), { code: 3 });
-    else if (!["/usr/bin/tar", "/usr/bin/codesign"].includes(command)) assert.fail(`unexpected execution of ${command}`);
-    return { stdout: "", stderr: "" };
-  };
+// A managed SteamCMD package is accepted only with Valve's Developer ID signature on its executable.
+function steamcmdPackage(t, { executable = true } = {}) {
+  const root = fixture(t), unpacked = path.join(root, "unpacked"), bytes = Buffer.from("steamcmd_osx");
+  fs.mkdirSync(unpacked);
+  if (executable) fs.writeFileSync(path.join(unpacked, "steamcmd"), Buffer.alloc(64), { mode: 0o755 });
+  const sha256 = crypto.createHash("sha256").update(bytes).digest("hex"), url = SteamCMDSource.location.replace(/steam_cmd_osx$/, "steamcmd_osx.zip." + "0".repeat(40));
+  const part = { filename: "steamcmd_osx.zip", url, bytes: bytes.length, sha256, bootstrap: true };
+  return { unpacked, pin: { version: "1794537082", parts: [part], asset: { url, sha256 } } };
 }
-test("an updated SteamCMD download is accepted by Valve's Developer ID signature", async t => {
-  const userDataDir = fixture(t), calls = [];
-  Harness.network.routes = { [Steam.BOOTSTRAP.location]: Buffer.from("updated vendor bootstrap") }; t.after(() => { Harness.network.routes = null; });
-  const result = await Steam.acquire({ userDataDir }, {
-    execute: steamcmdRunner(calls), authenticate: async session => {
-      assert.deepEqual(calls.map(call => call[0]), ["/usr/bin/tar", "/usr/bin/codesign"]);
-      assert.deepEqual(calls[1].slice(1, 3), ["--verify", "--strict"]);
-      assert.match(calls[1][3], /^-R=anchor apple generic and .*certificate leaf\[subject\.OU\] = "MXGJJ98X76"$/);
-      assert.equal(calls[1][4], path.join(session, "tools/steamcmd"));
-      dll(path.join(session, "content"));
-    }, importModel: async () => ({ version: "3.2.2.0" }) });
-  assert.equal(result.version, "3.2.2.0"); assert.deepEqual(fs.readdirSync(path.join(userDataDir, "runtimes/lossless-steam")), []);
+test("an updated SteamCMD package is accepted by Valve's Developer ID signature", async t => {
+  const { unpacked, pin } = steamcmdPackage(t), calls = [];
+  t.mock.method(DeveloperId, "verifyDeveloperId", async (file, team) => { calls.push([file, team]); return { teamIdentifier: team }; });
+  assert.deepEqual(await SteamCMDSource.prepare({ unpacked, pin }), { publisherVersion: pin.version });
+  assert.deepEqual(calls, [[path.join(unpacked, "steamcmd"), "MXGJJ98X76"]]);
+  assert.match(DeveloperId.requirement("MXGJJ98X76"), /^anchor apple generic and .*certificate leaf\[subject\.OU\] = "MXGJJ98X76"$/);
 });
-test("a SteamCMD download without Valve's signed executable prevents sign-in and cleans temporary files", async t => {
-  const userDataDir = fixture(t);
-  Harness.network.routes = { [Steam.BOOTSTRAP.location]: Buffer.from("changed") }; t.after(() => { Harness.network.routes = null; });
+test("a SteamCMD package without Valve's signed executable is refused and Steam sign-in never starts", async t => {
   for (const options of [{ signed: false }, { executable: false }]) {
-    const calls = [];
-    await assert.rejects(Steam.acquire({ userDataDir }, {
-      execute: steamcmdRunner(calls, options), authenticate: async () => assert.fail("must not authenticate") }), /not Valve's signed macOS SteamCMD/);
-    assert.deepEqual(calls.map(call => call[0]), options.signed === false ? ["/usr/bin/tar", "/usr/bin/codesign"] : ["/usr/bin/tar"]);
-    assert.deepEqual(fs.readdirSync(path.join(userDataDir, "runtimes/lossless-steam")), []);
+    const { unpacked, pin } = steamcmdPackage(t, options);
+    const signer = t.mock.method(DeveloperId, "verifyDeveloperId", async () => { throw new Error("not signed by Valve"); });
+    await assert.rejects(SteamCMDSource.prepare({ unpacked, pin }), options.executable === false ? /SteamCMD executable|ENOENT/ : /not signed by Valve/);
+    assert.equal(signer.mock.callCount(), options.executable === false ? 0 : 1);
+    signer.mock.restore();
   }
+  const userDataDir = fixture(t);
+  const manager = { id: "steamcmd", resolveSelection: () => ({ ready: false, version: "1794537082" }),
+    installRuntime: async () => { throw new Error("The downloaded code is not validly signed by Developer ID team MXGJJ98X76."); } };
+  await assert.rejects(Steam.acquire({ userDataDir, confirmRuntimeInstall: async () => true }, {
+    manager, authenticate: async () => assert.fail("must not authenticate") }), /Developer ID team MXGJJ98X76/);
+  assert.deepEqual(fs.readdirSync(path.join(userDataDir, "runtimes/lossless-steam")), []);
 });
 test("Terminal script passes only the account name, quotes paths, and uses a foreground SteamCMD job", t => {
   const root = fixture(t), session = path.join(root, "space ' and $(no-command)");
@@ -99,8 +97,9 @@ test("Terminal script passes only the account name, quotes paths, and uses a for
   assert.match(text, /sSteamCmdForcePlatformType windows/); assert.match(text, /fg %2/);
   assert.doesNotMatch(text, /read.*password|\+login anonymous/);
   assert.match(text, /kill -KILL -- "-\$steam_pid"/);
-  // Only the signed executable runs; the archive's unsigned shell launcher does not.
-  assert.match(text, /"\$steamcmd" \+@sSteamCmdForcePlatformType/); assert.match(text, /-eq 42/);
+  // Only the signed executable runs, with Valve's bootstrap options and no updater restart loop.
+  assert.ok(text.includes(`"$steamcmd" ${SteamCMDSource.BOOTSTRAP_ARGUMENTS.join(" ")} +@sSteamCmdForcePlatformType`));
+  assert.doesNotMatch(text, /-eq 42/);
   assert.doesNotMatch(text, /tools\/steamcmd\.sh/);
 });
 test("Terminal authentication completion and cancellation remove the active session marker", async t => {
