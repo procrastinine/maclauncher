@@ -225,6 +225,8 @@ root, or its system linker file, can be registered in its original location.
 Required guest ELF files determine the image's CPU. Android absolute symlinks
 are resolved within the guest image. A runtime uses a default or custom image
 only when its complete content matches that runtime's required original image.
+A registered root's content is measured again only after one of its entries
+changes.
 The Android image reader is managed separately in Tools and is acquired with
 the image when the selected runtime does not already provide it.
 

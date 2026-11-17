@@ -38,9 +38,30 @@ async function hashFile(file,signal) {
   }finally{await handle.close();}
 }
 
+// A tree's entries by inode, mode, size and times, read without file contents.
+async function treeStamp(root,signal){
+  const hash=crypto.createHash('sha256');
+  async function visit(relative){
+    signal?.throwIfAborted();const file=path.join(root,relative),stat=await fs.promises.lstat(file,{bigint:true});
+    hash.update(JSON.stringify([relative,identity(stat)])+'\n');
+    if(stat.isDirectory())for(const child of (await fs.promises.readdir(file)).sort())await visit(path.join(relative,child));
+  }
+  await visit('');return hash.digest('hex');
+}
+// A tree's content identity is measured once and reused while no entry of the
+// tree changes, so a registered image root is not read again on every Play.
+const measured=new Map();
+async function contentIdentity(root,signal){
+  const key=path.resolve(root),stamp=await treeStamp(key,signal),known=measured.get(key);
+  if(known?.stamp===stamp)return {...known.content};
+  const content=await measureContent(key,signal);
+  if(await treeStamp(key,signal)!==stamp)throw Error('Android image changed during verification.');
+  measured.delete(key);measured.set(key,{stamp,content});if(measured.size>8)measured.delete(measured.keys().next().value);
+  return {...content};
+}
 // Matches the producer's complete imageContentIdentity: modes, link text and
 // regular-file bytes, without following original Android symlinks.
-async function contentIdentity(root,signal) {
+async function measureContent(root,signal) {
   const hash=crypto.createHash('sha256');let records=0,bytes=0;
   async function visit(relative){
     signal?.throwIfAborted();const file=path.join(root,relative),stat=await fs.promises.lstat(file),name=relative.split(path.sep).join('/'),mode=stat.mode&0o7777;let row;

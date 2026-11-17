@@ -250,3 +250,18 @@ test('the managed Android image reader supports Refresh, exact install, default,
   let preference;await action({manager,action:'setDefault',payload:{version:'3.0'},userDataDir:context.userDataDir,saveSettings:value=>{preference=value;}});
   assert.equal(preference.defaultVersion,'3.0');assert.equal(Origins.read(context.userDataDir).some(row=>row.version==='3.0'),false);
 });
+
+test('a registered image root is read once and measured again only after one of its entries changes',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-image-identity-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const image=original(path.join(root,'image'),'1');
+  const opened=[],open=fs.promises.open;
+  t.mock.method(fs.promises,'open',function(file,...rest){opened.push(file);return open.call(this,file,...rest);});
+  const first=await Images.contentIdentity(image),reads=opened.length;
+  assert.ok(reads>0,'the first measurement reads the files');
+  assert.deepEqual(await Images.contentIdentity(image),first);
+  assert.equal(opened.length,reads,'an unchanged tree is not read again');
+  fs.appendFileSync(path.join(image,'system/build.prop'),'ro.changed=1\n');
+  const changed=await Images.contentIdentity(image);
+  assert.notEqual(changed.sha256,first.sha256);
+  assert.ok(opened.length>reads,'a changed entry is measured again');
+});
