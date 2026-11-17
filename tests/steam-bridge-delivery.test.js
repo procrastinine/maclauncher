@@ -14,11 +14,9 @@ test('Play chooses and installs a newer catalog bridge with additional manifest 
       steamBridge: { native: {}, windows: {}, clientEnvironment: {}, futureCapability: { enabled: true }, abi: 42, role: 'future-role' } },
     entries: [{ path: 'steam.exe', bytes: Buffer.from('non-executable package inspection input'), mode: 0o644 }]
   }));
-  const oldInstall = Components.install;
-  Components.install = async () => null;
-  t.after(() => { Components.install = oldInstall; });
+  t.mock.method(require('../src/modules/crossover/runtime/steam-client-files'), 'ensure', async () => ({ root: '/client-files' }));
   const downloads = [];
-  const bridge = Bridge.create({ identifyGame: () => ({ appId: '123' }), discoverClient: () => '/client',
+  const bridge = Bridge.create({ identifyGame: () => ({ appId: '123' }), discoverClient: () => '/client', isRunning: () => false,
     dependencies: { systemVersionSync: () => '27.0',
       fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from(JSON.stringify({
         schemaVersion: 2, projectId: id, updatePolicy: 'manual', packages: packages.map(item => item.record) })) }),
@@ -39,7 +37,7 @@ test('Play chooses and installs a newer catalog bridge with additional manifest 
 test('declined optional bridge stays quiet until an installation permits a new offer', async t => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'steam-bridge-consent-'));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
-  const bridge = Bridge.create({ identifyGame: () => ({ appId: '123' }), discoverClient: () => '/discovered/client' });
+  const bridge = Bridge.create({ identifyGame: () => ({ appId: '123' }), discoverClient: () => '/discovered/client', isRunning: () => false });
   const context = { userDataDir }, [plan] = await bridge.requirements({}, context);
   assert.equal(plan.optional, true); assert.equal(plan.silentFallback, undefined);
   bridge.skipOptional(plan, context);
@@ -75,12 +73,12 @@ test('managed preparation retains the selected bottle on both launches and write
   t.mock.method(Components, 'install', async options => { assert.deepEqual(Object.keys(options).sort(), ['onProgress', 'signal', 'userDataDir']); });
   // The client files manager supplies the Valve files the bridge passes.
   t.mock.method(require('../src/modules/crossover/runtime/steam-client-files'), 'resolveSelection', () => ({ ready: true,
-    install: { root: path.join(root, 'components'), clients: { i386: 'steamclient.dll', x86_64: 'steamclient64.dll' } } }));
+    version: '1'.repeat(40), install: { version: '1'.repeat(40), root: path.join(root, 'components'), clients: { i386: 'steamclient.dll', x86_64: 'steamclient64.dll' } } }));
   const bridge = Bridge.create({ identifyGame: () => ({ appId: '123' }), discoverClient: () => '/native-client', isRunning: () => true,
     dependencies: { systemVersionSync: () => '27.0',
       fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from(JSON.stringify(fixture.catalog)) }),
       downloadToFile: async (_url, destination) => fs.copyFileSync(fixture.archive, destination) } });
-  const context = { userDataDir: path.join(root, 'data') };
+  const uses = [], context = { userDataDir: path.join(root, 'data'), useRuntime: identity => uses.push(identity) };
   await bridge.refreshCatalog({ ...context, force: true });
   await bridge.installRuntime({ ...context, version: fixture.record.version });
   for (const architecture of ['x86_64', 'arm64']) {
@@ -96,5 +94,8 @@ test('managed preparation retains the selected bottle on both launches and write
       assert.deepEqual(fs.readdirSync(prefixPath), ['save.dat']);
     }
   }
+  assert.equal(uses.filter(row => row.managerId === 'maclauncher-steam-bridge' && row.sourcePath).length, 4);
+  assert.equal(uses.filter(row => row.managerId === 'steam-client-components' && row.version === '1'.repeat(40) && row.sourcePath === path.join(root, 'components')).length, 4,
+    'the bridge and its selected client root both remain in use through Play');
   assert.equal(fs.existsSync(path.join(root, 'game-runtime')), false);
 });

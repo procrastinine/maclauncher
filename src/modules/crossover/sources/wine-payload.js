@@ -301,11 +301,13 @@ const customResults = new Map(), customStatus = new Map();
 function inspectCustomTree(root, { label = "Wine", wineRoot, quick = [], required = [], external = [], skip, executableRoot,
   verification = "full", systemVersionSync = Host.systemVersionSync } = {}) {
   const marks = JSON.stringify(quick.map(relative => { try { return stamp(fs.statSync(path.join(root, relative))); } catch { return null; } }));
+  const contract = JSON.stringify([wineRoot, required, external, executableRoot]);
   const known = customStatus.get(root);
-  let result = verification === "status" && known?.marks === marks ? known.result : null;
+  let result = verification === "status" && known?.marks === marks && known.contract === contract && known.skip === skip ? known.result : null;
   if (!result) {
     const records = walk(root, undefined, label, external);
-    const key = crypto.createHash("sha256").update(JSON.stringify([root, records.map(row => [row.relative, row.kind, row.stamp || "", row.target || ""])])).digest("hex");
+    const key = crypto.createHash("sha256").update(JSON.stringify([root, contract, records.map(row =>
+      [row.relative, row.kind, row.stamp || "", row.target || "", Boolean(skip?.(row.relative))])])).digest("hex");
     result = customResults.get(key);
     if (!result) {
       const native = inspectClosure(root, records, undefined, { label, required, skip, executableRoot });
@@ -315,7 +317,7 @@ function inspectCustomTree(root, { label = "Wine", wineRoot, quick = [], require
       customResults.set(key, result);
     }
     if (customStatus.size >= 64) customStatus.delete(customStatus.keys().next().value);
-    customStatus.set(root, { marks, result });
+    customStatus.set(root, { marks, contract, skip, result });
   }
   if (!Host.versionAtLeast(systemVersionSync(), result.minimumMacOS)) throw new Error(requiresMacOS(result.minimumMacOS));
   return result;

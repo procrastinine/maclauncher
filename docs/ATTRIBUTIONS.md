@@ -70,7 +70,7 @@ The Android host adapts [Klepton](https://github.com/shinyquagsire23/Klepton) (M
 
 The ART runtime is built from the [Android Runtime](https://android.googlesource.com/platform/art) (Apache-2.0).
 
-The other Android runtimes are [Mac.apk](https://github.com/kksimp/Mac.apk) publisher releases (AGPL-3.0 or a separate commercial license) and an adapted [AIM](https://github.com/hahnlee/aim) host (Apache-2.0), and upstream copyright and component notices ship with the selected runtime. AIM's Android image is acquired separately, keeps its publisher's terms and is not part of MacLauncher distributions.
+The other Android runtimes are [Mac.apk](https://github.com/kksimp/Mac.apk) publisher releases (AGPL-3.0 or a separate commercial license) and an adapted [AIM](https://github.com/hahnlee/aim) host (Apache-2.0), and upstream copyright and component notices ship with the selected runtime. Android original images are acquired separately under the [Android SDK terms](https://developer.android.com/studio/terms) and are not part of MacLauncher distributions.
 
 | Projects | Use and license notes |
 | --- | --- |

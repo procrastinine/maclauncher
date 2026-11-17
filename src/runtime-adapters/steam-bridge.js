@@ -162,6 +162,8 @@ const { readJsonObject, writeJsonAtomic } = require('../core/json-files');
 const ORIGIN = 'https://client-update.akamai.steamstatic.com';
 const MANIFEST = ORIGIN + '/steam_client_ubuntu12';
 const NAMES = ['steamclient64.dll', 'steamclient.dll'];
+const MACHINES = { 'steamclient64.dll': 0x8664, 'steamclient.dll': 0x14c };
+const { readPeExports } = require('../modules/shared/runtime/pe-exports');
 const source = Upstream.service({ hosts: [new URL(ORIGIN).hostname] });
 const verified = new Map();
 const SHA1 = /^[a-f0-9]{40}$/;
@@ -207,11 +209,17 @@ function records(userDataDir) {
 function recordFor(userDataDir, version) {
   return version ? records(userDataDir).find(record => record.archiveSha1 === version) || null : readJsonObject(path.join(store(userDataDir), 'active.json'));
 }
+function completeRecord(record) {
+  return SHA1.test(record?.archiveSha1 || '') && Array.isArray(record.files) && record.files.length === NAMES.length &&
+    record.clients?.x86_64 === 'steamclient64.dll' && record.clients?.i386 === 'steamclient.dll' &&
+    NAMES.every(name => record.files.filter(item => item?.path === name && /^[a-f0-9]{64}$/.test(item.sha256 || '') &&
+      Number.isSafeInteger(item.size) && item.size > 0).length === 1);
+}
 // A verified installed version: the given content address, or the one
 // installed last. Its files are hashed once per change.
 function current(userDataDir, version) {
   const root = store(userDataDir), record = recordFor(userDataDir, version);
-  if (!record || !SHA1.test(record.archiveSha1 || '') || !record.files || !record.clients) return null;
+  if (!completeRecord(record)) return null;
   const directory = path.join(root, record.archiveSha1);
   try {
     for (const item of record.files) {
@@ -220,7 +228,7 @@ function current(userDataDir, version) {
       if (!stat.isFile() || stat.isSymbolicLink()) return null;
       const stamp = JSON.stringify([stat.size, stat.mtimeMs, stat.ctimeMs, stat.ino, item.sha256]);
       if (verified.get(file) !== stamp) {
-        if (hashFile(file) !== item.sha256) { verified.delete(file); return null; }
+        if (hashFile(file) !== item.sha256 || MACHINES[item.path.toLowerCase()] && readPeExports(file, { headersOnly: true })?.machine !== MACHINES[item.path.toLowerCase()]) { verified.delete(file); return null; }
         verified.set(file, stamp);
       }
     }
@@ -232,10 +240,11 @@ function current(userDataDir, version) {
 function status(userDataDir, version) {
   try {
     const record = recordFor(userDataDir, version);
-    if (!record || !SHA1.test(record.archiveSha1 || '') || !Array.isArray(record.files) || !record.files.length) return null;
+    if (!completeRecord(record)) return null;
     const directory = path.join(store(userDataDir), record.archiveSha1);
     for (const item of record.files) {
-      if (!/^[A-Za-z0-9._-]+$/.test(item?.path || '') || fs.lstatSync(path.join(directory, item.path), { throwIfNoEntry: false })?.size !== item.size) return null;
+      const file = fs.lstatSync(path.join(directory, item.path), { throwIfNoEntry: false });
+      if (!file?.isFile() || file.isSymbolicLink() || file.size !== item.size) return null;
     }
     return { archiveSha1: record.archiveSha1, source: record.source, bytes: record.files.reduce((sum, item) => sum + item.size, 0),
       ...(record.manifestVersion ? { manifestVersion: record.manifestVersion } : {}), ...(record.installedAt ? { installedAt: record.installedAt } : {}) };
@@ -338,6 +347,7 @@ async function install({ userDataDir, signal, onProgress, resolved, version } = 
         const candidates = selected[arch === 'i386' ? 1 : 0].map(member => {
           const file = path.join(extracted, member), stat = fs.lstatSync(file);
           if (!stat.isFile()) throw new Error('Valve client archive contains a non-regular client file.');
+          if (readPeExports(file, { headersOnly: true })?.machine !== MACHINES[name]) throw new Error(name + ' has the wrong Windows CPU.');
           return { file, sha256: hashFile(file), size: stat.size };
         });
         if (new Set(candidates.map(item => item.sha256)).size !== 1) throw new Error('Valve client archive has different files with the same client name.');

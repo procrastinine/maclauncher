@@ -97,6 +97,15 @@ test("a custom WineCX folder without its required native files or above this mac
   assert.deepEqual(Custom.forManager(manager).records(userDataDir), [], "nothing was registered");
 });
 
+test("custom Wine inspection caches retain the required native-file contract", t => {
+  const root = temporary(t, "custom-wine-contract"), libraries = winecxTree(root, { missing: "winemac.so" });
+  const Shared = require("../src/modules/crossover/sources/wine-payload");
+  const options = { wineRoot: path.join(libraries, "Wine"), quick: ["Wine/bin/wineserver"], systemVersionSync: () => "26.1" };
+  assert.deepEqual(Shared.inspectCustomTree(libraries, options).architectures, ["x86_64"]);
+  for (const verification of ["full", "status"])
+    assert.throws(() => Shared.inspectCustomTree(libraries, { ...options, required: ["Wine/lib/wine/x86_64-unix/winemac.so"], verification }), /missing its native Wine components/);
+});
+
 // A publisher-signed Wine application: its loaders sit in bundles holding a
 // provisioning profile, and its tools folder links to MacOS.
 function signedApplication(root) {

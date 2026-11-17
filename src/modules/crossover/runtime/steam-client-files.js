@@ -68,27 +68,30 @@ function getState({ userDataDir, settings } = {}) {
 }
 async function installRuntime(context = {}) {
   const { userDataDir, signal, onProgress } = context;
+  const installedBefore = installed(userDataDir).map(row => row.version);
   let version = context.version && context.version !== 'auto' ? context.version : choose(null, context.settings, userDataDir).version;
   if (version && !Components.current(userDataDir, version) && !Components.catalog(userDataDir).some(row => row.version === version)) {
     await Components.discover({ userDataDir, signal });
     if (!Components.catalog(userDataDir).some(row => row.version === version)) throw new Error('Valve no longer lists this client version.');
   }
-  if (!version) version = (await Components.discover({ userDataDir, signal }))[0].version;
-  const files = await Components.install({ userDataDir, signal, onProgress, version });
+  const files = await Components.install({ userDataDir, signal, onProgress, ...(version ? { version } : {}) });
   if (!files) throw new Error('The Windows Steam client files could not be verified.');
-  return { ...files, version: files.archiveSha1, versionLabel: versionLabel(files) };
+  const result = { ...files, version: files.archiveSha1, versionLabel: versionLabel(files) };
+  // A copy Play acquires without a saved or chosen version is automatic, so a
+  // later automatic copy supersedes it.
+  if (context.automatic === true) require('../../../core/runtime-install-origins').recordPlayInstall({ userDataDir, manager: module.exports,
+    plan: { automatic: true, version, installOptions: { sectionId: 'default' } }, result, entry: context.entry, settings: context.settings, installedBefore, logger: context.logger });
+  return result;
 }
-// The client files Play installs with the bridge when none are usable. That
-// copy is an automatic installation, so a later automatic one replaces it.
-async function ensure({ userDataDir, settings, signal, onProgress } = {}) {
-  const selected = resolveSelection(null, settings, userDataDir, { verification: 'status' });
-  if (selected.ready) return selected.install;
-  const before = installed(userDataDir).map(row => row.version);
-  const files = selected.version && SHA1.test(selected.version) && Components.catalog(userDataDir).some(row => row.version === selected.version)
-    ? await Components.install({ userDataDir, signal, onProgress, version: selected.version })
-    : await Components.install({ userDataDir, signal, onProgress });
-  if (selected.automatic && files) require('../../../core/runtime-install-origins').recordPlayInstall({ userDataDir, manager: module.exports,
-    plan: { automatic: true, version: files.archiveSha1 }, result: { version: files.archiveSha1 }, settings, installedBefore: before });
+// The client files Play installs with the bridge when none are usable, checked
+// in full. A game's use of the selected version is recorded.
+async function ensure(context = {}) {
+  const { userDataDir, settings } = context;
+  const selected = module.exports.resolveSelection(context.entry || null, settings, userDataDir, { verification: 'full' });
+  const files = selected.ready ? selected.install : await module.exports.installRuntime({ ...context,
+    version: selected.version || undefined, automatic: selected.automatic === true });
+  context.recordRuntimeUse?.({ managerId: id, version: files.version || files.archiveSha1 || selected.version,
+    sectionId: 'default', sourcePath: files.installDir || files.root });
   return files;
 }
 // Removes the client files the bridge brought in: Play's automatic copies and

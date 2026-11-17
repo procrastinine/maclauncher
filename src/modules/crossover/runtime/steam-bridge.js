@@ -79,7 +79,8 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
     // Valve's client files come with the bridge when none are usable. They
     // take only the install context; a local archive in `options` is the
     // bridge package's own archive.
-    await ClientFiles.ensure({ userDataDir: options.userDataDir, settings: options.settings, signal: options.signal, onProgress: options.onProgress });
+    await ClientFiles.ensure({ userDataDir: options.userDataDir, settings: options.settings, signal: options.signal, onProgress: options.onProgress,
+      entry: options.entry, logger: options.logger, recordRuntimeUse: options.recordRuntimeUse });
     clearSkipped(options.userDataDir);
     return result;
   };
@@ -118,7 +119,7 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
   async function requirements(entry, context) {
     const game = identifyGame(entry);
     if (!game || !discoverClient() || skipped(context.userDataDir).includes(String(game.appId))) return [];
-    const local = installed(context), files = clientFiles(context);
+    const local = installed(context), files = clientFiles(context, 'full');
     if (local && files) return [];
     const unusable = base.getState({ userDataDir: context.userDataDir }).installed.filter(row => row.ready === false);
     const selected = base.resolveSelection(null, {}, context.userDataDir, { verification: 'status',
@@ -156,6 +157,7 @@ function create({ dependencies = {}, identifyGame = identify, discoverClient = c
         libraries: ['lsteamclient.dll', 'mlsteam-bootstrap.dll', 'steam.exe'] });
       if (!admitted.accepted) return null;
       await context.useRuntime?.({ managerId: id, version: current.version, sourcePath: current.installDir });
+      await context.useRuntime?.({ managerId: ClientFiles.id, version: components.version || components.archiveSha1, sourcePath: components.installDir || components.root });
       Bundled.verifyPayload(current.root, current.declaration, current.resolveDependency);
       const packageFile = relative => {
         Bundled.relativeFile(relative);

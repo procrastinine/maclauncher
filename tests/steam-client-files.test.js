@@ -1,6 +1,6 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
-const { execFileSync } = require('node:child_process');
+const { writeZipArchive } = require('./helpers/zip-fixture');
 const Upstream = require('../src/modules/shared/runtime/upstream');
 const Custom = require('../src/modules/shared/runtime/custom-runtime');
 const Components = require('../src/modules/crossover/runtime/steam-client-components');
@@ -18,16 +18,16 @@ function scratch(t) {
 // A Windows PE image of one CPU; never loaded.
 function client(is64) { const fixture = peFixture({ is64 }); fixture.bytes.writeUInt16LE(0x2102, fixture.peOffset + 22); return fixture.bytes; }
 // A Valve archive: with the client DLLs, in Valve's layout, or without them.
-function archive(root, name, withClients, marker = name) {
+function archive(root, name, withClients, marker = name, client64 = client(true)) {
   const source = path.join(root, 'src-' + name);
   fs.mkdirSync(path.join(source, 'legacycompat'), { recursive: true });
   const members = withClients ? ['steamclient64.dll', 'legacycompat/steamclient.dll'] : ['readme.txt'];
   if (withClients) {
-    fs.writeFileSync(path.join(source, 'steamclient64.dll'), Buffer.concat([client(true), Buffer.from(marker)]));
+    fs.writeFileSync(path.join(source, 'steamclient64.dll'), Buffer.concat([client64, Buffer.from(marker)]));
     fs.writeFileSync(path.join(source, 'legacycompat/steamclient.dll'), Buffer.concat([client(false), Buffer.from(marker)]));
   } else fs.writeFileSync(path.join(source, 'readme.txt'), marker);
   const zip = path.join(root, name + '.zip');
-  execFileSync('/usr/bin/zip', ['-q', '-X', zip, ...members], { cwd: source });
+  writeZipArchive(zip, members.map(name => ({ name, data: fs.readFileSync(path.join(source, name)), deflate: true })));
   const bytes = fs.readFileSync(zip), filename = `${name}.zip.${sha(bytes, 'sha1')}`;
   return { zip, bytes, listed: { filename, url: Components.ORIGIN + '/' + filename, sha1: sha(bytes, 'sha1'), sha256: sha(bytes), bytes: bytes.length, manifestVersion: '1792618285' } };
 }
@@ -102,6 +102,51 @@ test('a later automatic copy of the client files replaces the earlier automatic 
   assert.deepEqual(ClientFiles.getState({ userDataDir }).sections[0].installed.map(row => row.version).sort(), [kept.listed.sha1, newer.listed.sha1].sort());
 });
 
+test('direct automatic installs record ownership while a saved default and explicit client version survive shared pruning', async t => {
+  const root = scratch(t), userDataDir = path.join(root, 'data'), settings = {};
+  const copies = ['explicit', 'older', 'newer'].map(marker => archive(path.join(root, marker), 'bins_misc_ubuntu12', true, marker));
+  cdn(t, copies);
+  await Components.discover({ userDataDir, resolved: [copies[0].listed] });
+  await act(ClientFiles, userDataDir, 'install', { version: copies[0].listed.sha1 }, settings);
+  await act(ClientFiles, userDataDir, 'setDefault', { version: copies[0].listed.sha1 }, settings);
+  for (const copy of copies.slice(1)) {
+    await Components.discover({ userDataDir, resolved: [copy.listed] });
+    await ClientFiles.installRuntime({ userDataDir, version: copy.listed.sha1, automatic: true });
+  }
+  const Origins = require('../src/core/runtime-install-origins');
+  assert.deepEqual(Origins.read(userDataDir).map(row => row.version), copies.slice(1).map(copy => copy.listed.sha1));
+  const result = await Origins.pruneSuperseded({ userDataDir, managers: [ClientFiles], settings: { runtimes: { [ClientFiles.id]: settings.value } },
+    remove: ({ managerId, ...payload }) => act(ClientFiles, userDataDir, 'uninstall', payload, settings) });
+  assert.deepEqual(result.removed.map(row => row.version), [copies[1].listed.sha1]);
+  assert.deepEqual(ClientFiles.getState({ userDataDir }).installed.map(row => row.version).sort(), [copies[0], copies[2]].map(copy => copy.listed.sha1).sort());
+  assert.equal(settings.value.defaultVersion, copies[0].listed.sha1, 'automatic acquisition does not write a user default');
+});
+
+test('a content-addressed Valve download refuses an actual wrong-CPU client before publishing a managed version', async t => {
+  const root = scratch(t), userDataDir = path.join(root, 'data');
+  const wrong = archive(root, 'bins_misc_ubuntu12', true, 'wrong-cpu', client(false));
+  cdn(t, [wrong]);
+  await Components.discover({ userDataDir, resolved: [wrong.listed] });
+  await assert.rejects(ClientFiles.installRuntime({ userDataDir, version: wrong.listed.sha1 }), /steamclient64\.dll has the wrong Windows CPU/);
+  assert.deepEqual(ClientFiles.getState({ userDataDir }).installed, []);
+  assert.equal(Components.current(userDataDir), null);
+});
+
+test('an installed client record must retain both required CPU members', async t => {
+  const root = scratch(t), userDataDir = path.join(root, 'data'), copy = archive(root, 'bins_misc_ubuntu12', true);
+  cdn(t, [copy]);
+  await Components.discover({ userDataDir, resolved: [copy.listed] });
+  await ClientFiles.installRuntime({ userDataDir, version: copy.listed.sha1 });
+  const directory = path.join(userDataDir, 'runtimes/steam-client-components'), recordPath = path.join(directory, copy.listed.sha1 + '.json');
+  const record = JSON.parse(fs.readFileSync(recordPath));
+  delete record.clients.i386;
+  record.files = record.files.filter(row => row.path !== 'steamclient.dll');
+  for (const name of [recordPath, path.join(directory, 'active.json')]) fs.writeFileSync(name, JSON.stringify(record));
+  assert.equal(Components.current(userDataDir, copy.listed.sha1), null);
+  assert.equal(Components.status(userDataDir, copy.listed.sha1), null);
+  assert.equal(ClientFiles.resolveSelection(null, {}, userDataDir).ready, false);
+});
+
 test('a folder with both Windows Steam clients is registered in place; a wrong or missing client is refused', async t => {
   const root = scratch(t), userDataDir = path.join(root, 'data');
   Custom.instrumentManagers([ClientFiles]);
@@ -115,6 +160,10 @@ test('a folder with both Windows Steam clients is registered in place; a wrong o
   const selected = ClientFiles.resolveSelection(null, settings, userDataDir, { verification: 'status' });
   assert.equal(selected.ready, true);
   assert.equal(selected.install.root, folder);
+  t.mock.method(Components, 'install', () => assert.fail('A usable registered client folder must not download another copy'));
+  const uses = [], reused = await ClientFiles.ensure({ userDataDir, settings, recordRuntimeUse: identity => uses.push(identity) });
+  assert.equal(reused.root, folder);
+  assert.ok(uses.some(identity => identity.managerId === ClientFiles.id && identity.version === folder && identity.sourcePath === folder));
   const swapped = path.join(root, 'swapped');
   fs.mkdirSync(swapped); fs.writeFileSync(path.join(swapped, 'steamclient64.dll'), client(false)); fs.writeFileSync(path.join(swapped, 'steamclient.dll'), client(false));
   await assert.rejects(act(ClientFiles, userDataDir, 'registerCustom', { runtimePath: swapped }), /steamclient64\.dll is not the 64-bit Windows Steam client/);

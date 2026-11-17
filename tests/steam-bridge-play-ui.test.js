@@ -1,6 +1,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto'), vm = require('node:vm');
-const { execFileSync } = require('node:child_process');
+const { writeZipArchive } = require('./helpers/zip-fixture');
+const { peFixture } = require('./helpers/pe-fixture');
 const { prepareForLaunch } = require('../src/core/runtime-preparation');
 const Bridge = require('../src/modules/crossover/runtime/steam-bridge');
 const Components = require('../src/modules/crossover/runtime/steam-client-components');
@@ -41,12 +42,13 @@ function bridgePackage(root, version = '1.0.0', managed = true) {
 function valveArchive(root) {
   const source = path.join(root, 'valve');
   fs.mkdirSync(path.join(source, 'legacycompat'), { recursive: true });
-  fs.writeFileSync(path.join(source, 'steamclient64.dll'), 'genuine x86_64 client');
-  fs.writeFileSync(path.join(source, 'legacycompat/steamclient.dll'), 'genuine i386 client');
+  const clients = { 'steamclient64.dll': peFixture({ is64: true }).bytes, 'legacycompat/steamclient.dll': peFixture({ is64: false }).bytes };
+  for (const bytes of Object.values(clients)) bytes.writeUInt16LE(0x2102, bytes.readUInt32LE(60) + 22);
+  for (const [name, bytes] of Object.entries(clients)) fs.writeFileSync(path.join(source, name), bytes);
   const zip = path.join(root, 'bins_misc_ubuntu12.zip');
-  execFileSync('/usr/bin/zip', ['-q', '-X', zip, 'steamclient64.dll', 'legacycompat/steamclient.dll'], { cwd: source });
+  writeZipArchive(zip, Object.entries(clients).map(([name, data]) => ({ name, data, deflate: true })));
   const filename = 'bins_misc_ubuntu12.zip.' + crypto.createHash('sha1').update(fs.readFileSync(zip)).digest('hex');
-  return { zip, resolved: { filename, url: 'https://client-update.akamai.steamstatic.com/' + filename } };
+  return { zip, clientBytes: Object.values(clients).reduce((sum, bytes) => sum + bytes.length, 0), resolved: { filename, url: 'https://client-update.akamai.steamstatic.com/' + filename } };
 }
 function offlineBridge(root, { version, ...options } = {}) {
   const item = bridgePackage(root, version), valve = valveArchive(root), requests = [];
@@ -180,7 +182,7 @@ test('Runtimes lists the bridge beside its Valve client files, and removing its 
   const files = ClientFiles.getState({ userDataDir }).sections[0], active = Components.status(userDataDir);
   assert.deepEqual(files.installed.map(row => [row.version, row.ready]), [[active.archiveSha1, true]]);
   assert.equal(files.defaultVersion, active.archiveSha1);
-  assert.equal(active.bytes, Buffer.byteLength('genuine x86_64 client') + Buffer.byteLength('genuine i386 client'));
+  assert.equal(active.bytes, valve.clientBytes);
   assert.deepEqual(require('../src/core/runtime-install-origins').read(userDataDir).map(row => [row.managerId, row.version]),
     [['steam-client-components', active.archiveSha1]], 'the files the bridge brought in are an automatic installation');
   // Status reads sizes only; a changed size reads as not installed without hashing.
@@ -269,7 +271,7 @@ test('consented bridge failures surface their actual error without launching or 
   assert.equal(fs.existsSync(path.join(userDataDir, 'runtimes/steam-bridge-skipped.json')), false);
   assert.equal((await bridge.requirements({ name: 'Fixture' }, { userDataDir })).length, 1, 'a failed download can be tried again');
   const Catalog = require('../src/modules/shared/runtime/maclauncher-builds');
-  const unavailable = Bridge.create({ identifyGame: () => ({ appId: '480' }), discoverClient: () => '/client',
+  const unavailable = Bridge.create({ identifyGame: () => ({ appId: '480' }), discoverClient: () => '/client', isRunning: () => false,
     dependencies: { systemVersionSync: () => '26.0', fetchUrlBuffer: async () => ({ status: 404, body: Buffer.from('404: Not Found') }) } });
   await assert.rejects(play({ bridge: unavailable, userDataDir: path.join(root, 'unavailable') }), error => {
     assert.equal(error.statusCode, 404);
