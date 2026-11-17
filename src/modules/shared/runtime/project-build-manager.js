@@ -178,21 +178,25 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     const { all } = includedPackages(options);
     const explicit = selectRuntimeVersion({ manual: options.version, recommended: entry?.runtimeData?.[runtimeId]?.version }).version;
     const recommendation = options.recommendedVersion ?? options.recommended;
+    const savedDefault = core.normalizeSettings(settings?.runtimes?.[projectId]).defaultVersion;
     const eligibleInstalled = row => !options.compatible || options.compatible(row.catalogEntry || row.declaration || row);
     const layer = selectRuntimeVersion({ manual: explicit,
       recommended: explicit ? null : typeof recommendation === "function" ? recommendation() : recommendation,
-      defaultVersion: core.normalizeSettings(settings?.runtimes?.[projectId]).defaultVersion,
+      defaultVersion: savedDefault,
       fallback: managerDefaultVersion({ listed: core.core.listDiscoveredCatalog({ userDataDir }).filter(pin => compatible(pin) && !pin.installReason && (!options.compatible || options.compatible(pin))).map(pin => pin.version).sort(compareRuntimeVersions),
         installed: all.filter(item => item.present && item.ready && eligibleInstalled(item)).map(item => item.version).concat(core.getState({userDataDir}).installed.filter(row => row.ready !== false && eligibleInstalled(row)).map(row => row.version)).sort(compareRuntimeVersions) }) });
     const configured = layer.version;
+    // Resolving this chosen version exactly is an implementation detail, not
+    // a new manual choice. Keep the original caller's layer and ownership.
+    const intent = { automatic: !explicit && (!savedDefault || layer.source === "recommended"), selectionSource: layer.source };
     const published = core.core.listDiscoveredCatalog({ userDataDir }).filter(pin => pin.projectPackage && pin.asset);
     const select = selectedVersion => {
       const version = selectedVersion.trim().replace(/^v(?=\d)/i, "");
       const bundled = all.find(item => item.version === version);
       const pin = core.core.catalog.find(item => item.version === version);
-      if (pin && options.compatible && !options.compatible(pin)) return { version, ready: false, install: null,
+      if (pin && options.compatible && !options.compatible(pin)) return { version, ready: false, install: null, ...intent,
         reason: `${label} ${version} has an incompatible runtime profile.` };
-      if (bundled?.present) return { version, ready: bundled.ready, install: bundled,
+      if (bundled?.present) return { version, ready: bundled.ready, install: bundled, ...intent,
         reason: bundled.ready ? null : bundled.error || `${label} ${version} requires a compatible Mac with macOS ${bundled.declaration.minimumMacOS}.` };
       const selected = core.resolveSelection(entry, settings, userDataDir, { ...options, version });
       if (selected.install) {
@@ -200,9 +204,9 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
           const record = Catalog.validateProjectRecord(selected.install.catalogEntry.projectPackage, optionsForRecord(selected.install.catalogEntry.projectPackage));
           const inspected=inspect(path.join(selected.install.installDir, "payload"), record, {userDataDir,verification:options.verification});
           require('./package-dependencies').attach(Object.assign(selected.install,inspected),inspected);
-        } catch (error) { return { version, ready: false, install: null, reason: error.message }; }
+        } catch (error) { return { version, ready: false, install: null, reason: error.message, ...intent }; }
       }
-      return bundled && !selected.ready ? { ...selected, version, install: null, reason: bundled.error } : selected;
+      return { ...(bundled && !selected.ready ? { ...selected, version, install: null, reason: bundled.error } : selected), ...intent };
     };
     if (versionCompatibility && layer.source !== "manual") {
       let installed = all.filter(item => item.present && item.ready).concat(core.getState({userDataDir}).installed)
@@ -219,7 +223,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
       }
     }
     if (configured) return select(configured);
-    return { version: null, ready: false, install: null,
+    return { version: null, ready: false, install: null, ...intent,
       requiresDownload: true, discoveryRequired: !published.some(compatible),
       reason: `No ${label} versions are available to download.` };
   }
