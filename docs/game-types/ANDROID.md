@@ -231,7 +231,8 @@ The Android image reader is managed separately in Tools and is acquired with
 the image when the selected runtime does not already provide it.
 
 Play reuses a compatible installed image without Refresh or another download
-dialog. AIM lists the original image and its reader in the runtime download
+dialog. A base image that an earlier preparation already holds is used as it
+is, without downloading the original again. AIM lists the original image and its reader in the runtime download
 consent, including the Android SDK terms.
 When a Klepton package reveals its exact image only after installation, the
 runtime download dialog names that conditional image and its SDK terms. The
