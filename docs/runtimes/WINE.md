@@ -87,3 +87,5 @@ Which features a source can offer depends on its installed Wine tree. When a ver
 The Wine trees of Sikarugir and WineCX run as Intel (x86-64) processes, which need Rosetta on Apple Silicon. For CrossOver, the loader's architecture is read from the registered application.
 
 A WineVulkan helper package can also declare an `opengl32` pair in its provider record, with `graphicsLibraryAPI: 1`, a Unix library and Windows libraries. On Apple Silicon Wine with WineMetalGL, when the graphics layer loads, Play replaces the prefix's `opengl32.dll` with the owned builtin for that architecture and restores the original after the session. Its 361 exports forward to WineMetalGL; its initializer opens the Unix library, whose constructor applies `MACLAUNCHER_GRAPHICS_LIBRARIES`. `OPENGL_BACKEND=wine` and `WINEMETALGL=0` retain Wine's OpenGL library.
+
+A Direct3D choice places files only for APIs whose entry points the selected component supplies. A component without a Direct3D 8 entry point does not place its Direct3D 9 or 11 libraries for that role.

@@ -171,3 +171,5 @@ When one of those checks fails, the game still starts. It uses the copy of the s
 The inspector always shows the translators a game actually used, so you can check what ran even when nothing went wrong.
 
 Further reading: the [graphics translator reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/TRANSLATORS.md) and [How games run on a Mac](/maclauncher/background/how-games-run/#compatibility-layers-translate-the-conversation).
+
+A Direct3D choice places files only for APIs whose entry points the selected component supplies. A component without a Direct3D 8 entry point does not place its Direct3D 9 or 11 libraries for that role.
