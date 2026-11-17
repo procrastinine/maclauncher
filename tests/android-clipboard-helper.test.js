@@ -11,6 +11,8 @@ test('native clipboard helper observes activation and released shortcuts before 
  const binary=path.join(root,'helper'),state=path.join(root,'input');fs.writeFileSync(state,'0 0');
  const compilation=spawnSync('clang++',['-std=c++20','-fobjc-arc','-mmacosx-version-min=13.0','-Isrc/modules/android/native','tests/fixtures/android-clipboard/HelperProbe.mm','-framework','AppKit','-framework','Carbon','-framework','CoreGraphics','-o',binary],{encoding:'utf8'});
  assert.equal(compilation.status,0,compilation.stderr);
+ const contract=spawnSync(binary,[state+'.sample-contract','sample-contract'],{encoding:'utf8',timeout:3000});
+ assert.equal(contract.status,0,'one observer sample keeps its flags/key snapshot when the publisher advances: '+contract.stderr);
  // Keep the real broker API (one executable, no input flags) while supplying a
  // fixture-only process entry point that receives its private input file.
  const entry=path.join(root,'entry');fs.writeFileSync(entry,`#!${process.execPath}\nconst child=require('node:child_process').spawn(${JSON.stringify(binary)},[${JSON.stringify(state)}],{stdio:'inherit'});child.once('exit',(code)=>process.exit(code??1));\n`,{mode:0o700});

@@ -4,6 +4,7 @@
 #import <objc/runtime.h>
 #include <atomic>
 #include <cstdio>
+#include <cstring>
 #include <thread>
 #include <unistd.h>
 
@@ -14,8 +15,11 @@
 static std::atomic<int> inputPid{0}, inputOperation{0};
 static NSPasteboard* privateBoard;
 static NSString* observedPath;
+// The publisher may advance after the acknowledgement. One native sample
+// must read the operation captured with its flags for every key query.
+static int sampledOperation=0;
 static CGEventFlags fixtureFlags(CGEventSourceStateID){
- int pid=inputPid.load(),operation=inputOperation.load();
+ int pid=inputPid.load(),operation=inputOperation.load();sampledOperation=operation;
  static int previousPid=-1,previousOperation=-1;
  // A plain write: the test polls for the exact text, and an atomic replacement needs a
  // temporary-items directory that restricted environments refuse.
@@ -43,10 +47,27 @@ static id fixturePasteboard(id,SEL){return privateBoard;}
 #undef CGEventSourceFlagsState
 
 static bool fixtureKey(CGEventSourceStateID,CGKeyCode key){
- int operation=inputOperation.load();const auto&keys=operation==1?copyKeys:pasteKeys;
+ int operation=sampledOperation;const auto&keys=operation==1?copyKeys:pasteKeys;
  return operation&&std::find(keys.begin(),keys.end(),key)!=keys.end();
 }
+// Deterministically advance the publisher between flags and keys. The
+// next complete sample must still capture the paste edge exactly once.
+static int sampleContract(const char*observation){
+ observedPath=[NSString stringWithUTF8String:observation];
+ inputPid.store(101);inputOperation.store(0);copyKeys={8};pasteKeys={9};
+ KLClipboardGestures contract;contract.enroll(101);
+ contract.sample(101,false,false,false,false,0);
+ auto flags=fixtureFlags(kCGEventSourceStateHIDSystemState);
+ inputOperation.store(2);
+ contract.sample(101,flags&kCGEventFlagMaskCommand,false,fixtureKey(kCGEventSourceStateHIDSystemState,8),fixtureKey(kCGEventSourceStateHIDSystemState,9),.1);
+ flags=fixtureFlags(kCGEventSourceStateHIDSystemState);
+ contract.sample(101,flags&kCGEventFlagMaskCommand,false,fixtureKey(kCGEventSourceStateHIDSystemState,8),fixtureKey(kCGEventSourceStateHIDSystemState,9),.2);
+ const bool allowed=contract.consume(101,101,false,.3);
+ fprintf(stderr,"sample contract: final paste allowed=%d\n",allowed);
+ return allowed?0:1;
+}
 int main(int argc,char**argv){@autoreleasepool{
+ if(argc==3&&strcmp(argv[2],"sample-contract")==0)return sampleContract(argv[1]);
  if(argc!=2)return 2;
  privateBoard=[NSPasteboard pasteboardWithUniqueName];
  [privateBoard setString:@"fixture initial λ" forType:NSPasteboardTypeString];
