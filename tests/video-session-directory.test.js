@@ -16,6 +16,17 @@ async function child(t, args) {
 // sandboxed test cannot list other processes with ps, so the inventory is passed in.
 const inventory = (...children) => ({ listProcesses: () => children.filter(value => value.exitCode == null && value.signalCode == null)
   .map(value => `${value.pid} ${value.spawnargs.join(" ")}`).join("\n") });
+// Register both events before yielding: message and exit can arrive together.
+function workerCompletion(worker) {
+  return Promise.all([once(worker, "message"), once(worker, "exit")]);
+}
+test("worker completion subscribes to exit before a message can arrive", async () => {
+  const { EventEmitter } = require("node:events"), worker = new EventEmitter();
+  const completed = workerCompletion(worker);
+  assert.equal(worker.listenerCount("exit"), 1);
+  worker.emit("message", "prepared");worker.emit("exit", 0);
+  assert.deepEqual(await completed, [["prepared"], [0]]);
+});
 function old(directory) { const time = new Date(Date.now() - 120000);fs.utimesSync(directory, time, time); }
 test("session cleanup is idempotent, retries a failed removal and never follows resource links", t => {
   const root = fixture(t), session = Sessions.create(), original = path.join(root, "original");
@@ -75,7 +86,7 @@ test("legacy partial allocation without generated contents is reclaimed after it
 test("worker shutdown removes preparation that never reached a player", async t => {
   const root=fixture(t), {Worker}=require("node:worker_threads"), modulePath=require.resolve("../src/modules/video/configuration");
   const worker=new Worker(`const {parentPort}=require('node:worker_threads');const s=require(${JSON.stringify(modulePath)}).prepare({userDataDir:${JSON.stringify(root)},runtimeSettings:{uosc:false,timelinePreviews:false}});parentPort.postMessage(s.directory);`,{eval:true,env:{...process.env,TMPDIR:root}});
-  t.after(()=>worker.terminate());const [directory]=await once(worker,"message");await once(worker,"exit");assert.equal(fs.existsSync(directory),false);
+  t.after(()=>worker.terminate());const [[directory], [code]]=await workerCompletion(worker);assert.equal(code,0);assert.equal(fs.existsSync(directory),false);
 });
 test("a live player remains protected after its launcher has been killed", async t => {
   const root=fixture(t), modulePath=require.resolve("../src/modules/video/session-directory");
