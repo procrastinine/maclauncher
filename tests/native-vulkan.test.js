@@ -437,7 +437,8 @@ test("stock KosmicKrisp discovers upstream metadata, installs verified closures 
       routes[kosmickrispUrl(version) + ".git"] = String(index + 1).repeat(40) + "\n";
     }
     Harness.network.routes = routes;
-    const userDataDir = path.join(root, "data"), manager = Libraries.createManager("kosmickrisp", {systemVersionSync: () => "26.0"});
+    const loaderManager = require("../src/modules/shared/vulkan/loader-manager").createManager({systemVersionSync: () => "26.0"});
+    const userDataDir = path.join(root, "data"), manager = Libraries.createManager("kosmickrisp", {systemVersionSync: () => "26.0", loaderManager});
     let requests = Harness.network.requests.length;
     assert.deepEqual(manager.getState({userDataDir}).catalog.versions, []);
     assert.equal(Harness.network.requests.length, requests);
@@ -451,7 +452,7 @@ test("stock KosmicKrisp discovers upstream metadata, installs verified closures 
     assert.equal(pin.asset.bytes, fs.statSync(driver).size);
     assert.equal(pin.upstreamRevision, "1".repeat(40));
     assert.equal(manager.core.catalog.find(pin => pin.version === versions[1]).asset.sha256, driverSha);
-    const installed = await manager.installRuntime({userDataDir, version: versions[0]});
+    const installed = await manager.installRuntime({userDataDir, version: versions[0], confirmRuntimeInstall: async () => true});
     assert.equal(installed.archiveSha256, driverSha);
     assert.equal(installed.integritySource, "recorded-local");
     assert.deepEqual(installed.installationMetadata.libraries.map(row => row.file), ["libvulkan_kosmickrisp.dylib", "libvulkan.1.dylib"]);
@@ -461,7 +462,12 @@ test("stock KosmicKrisp discovers upstream metadata, installs verified closures 
     for (const name of fs.readdirSync(sourceLicenses))
       assert.deepEqual(fs.readFileSync(path.join(licenseDirectory, name)), fs.readFileSync(path.join(sourceLicenses, name)), "Bundled texts merge without discarding the loader's licence");
     tamperedBottle = true;
-    await assert.rejects(manager.installRuntime({userDataDir, version: versions[1]}), /vulkan-loader\.tar\.gz does not match the checksum its publisher lists/);
+    const tamperedLoaderData = path.join(root, "tampered-loader-data");
+    await loaderManager.refreshCatalog({userDataDir: tamperedLoaderData, force: true});
+    await assert.rejects(loaderManager.installRuntime({userDataDir: tamperedLoaderData, version: "888.777.6"}), /checksum|SHA-256/);
+    const loaderDownloads = Harness.network.requests.filter(url => url === bottleUrl).length;
+    await manager.installRuntime({userDataDir, version: versions[1]});
+    assert.equal(Harness.network.requests.filter(url => url === bottleUrl).length, loaderDownloads, "another driver version reuses the installed managed loader");
     tamperedBottle = false;
     await manager.installRuntime({userDataDir, version: versions[1]});
     metadataFailure = true;

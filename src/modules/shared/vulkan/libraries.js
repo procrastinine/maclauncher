@@ -6,6 +6,7 @@ const Upstream = require("../runtime/upstream");
 const { readMachOLoadCommands, assertSystemLibraryClosure } = require("../runtime/macho-load-commands");
 const { systemVersionSync, versionAtLeast } = require("../runtime/bundled-native");
 const Custom = require("../runtime/custom-runtime");
+const Loader = require("./loader-manager");
 const run = promisify(execFile);
 const MoltenVKSource=require('../../../runtime-sources/vulkan-driver/khronos-moltenvk.json');
 const {createSourceBackedManager}=require('../../../runtime-sources/manager');
@@ -53,26 +54,7 @@ const kosmickrisp = Upstream.index({ locations: [LWJGL_RELEASES], hosts: ["lwjgl
     }));
     return rows.filter(Boolean).sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
   } });
-// KosmicKrisp loads the Vulkan loader from Homebrew's bottle for this macOS,
-// verified by the SHA-256 in Homebrew's formula metadata. Known release names
-// order the bottles, newest not above this Mac first; another arm64 bottle is
-// used when none of them is offered.
-const BOTTLE_RELEASES = { golden_gate: "27.0", tahoe: "26.0", sequoia: "15.0", sonoma: "14.0", ventura: "13.0", monterey: "12.0", big_sur: "11.0" };
-function loaderSource(dependencies = {}) {
-  return Upstream.index({ locations: ["https://formulae.brew.sh/api/formula/vulkan-loader.json"], hosts: ["formulae.brew.sh", "ghcr.io"],
-    parse: async ([document], { fetch: read }) => {
-      const formula = JSON.parse(document.text), bottles = formula?.bottle?.stable?.files || {}, macOS = (dependencies.systemVersionSync || systemVersionSync)();
-      const known = Object.keys(BOTTLE_RELEASES).filter(name => versionAtLeast(macOS, BOTTLE_RELEASES[name])).map(name => "arm64_" + name);
-      const name = [...known, "all", ...Object.keys(bottles).filter(key => key.startsWith("arm64_"))].find(key => bottles[key]?.url);
-      const bottle = name && bottles[name];
-      if (!bottle) return [];
-      // GitHub Packages hands out an anonymous pull token for the bottle's repository.
-      const scope = /\/v2\/(.+)\/blobs\//.exec(new URL(bottle.url).pathname)?.[1];
-      const token = scope && JSON.parse((await read(`https://ghcr.io/token?service=ghcr.io&scope=repository:${scope}:pull`).catch(() => null))?.text || "{}")?.token;
-      return [{ version: String(formula.versions?.stable || "current"), details: { headers: typeof token === "string" && token ? { Authorization: "Bearer " + token } : {} },
-        files: [{ name: "vulkan-loader.tar.gz", url: bottle.url, digest: bottle.sha256, algorithm: "sha256" }] }];
-    } });
-}
+const loaderSource = Loader.loaderSource;
 // The known path wins; otherwise a bounded search prefers a macOS folder and
 // then the shallowest match, skipping __MACOSX.
 function findFile(root, known, pattern) {
@@ -91,32 +73,23 @@ function findFile(root, known, pattern) {
 async function extract(archive, output, signal) {
   await run("/usr/bin/tar", ["-xf", archive, "-C", output], { signal, maxBuffer: 1024 * 1024 });
 }
-async function installLoader(unpacked, loader, signal) {
-  const archive = path.join(unpacked, ".vulkan-loader.tar.gz");
-  const [row] = await loader.discover({ signal });
-  if (!row?.files[0]) throw new Error("The Vulkan loader publisher has no compatible Mac bottle.");
-  await loader.download(row.files[0], archive, { signal, headers: row.details?.headers });
+function loaderContext(options) {
+  let settings = options.settings?.runtimes ? options.settings : null;
+  if (!settings) try { settings = JSON.parse(fs.readFileSync(path.join(options.userDataDir, "settings.json"), "utf8")); } catch {}
+  return { ...options, settings: settings || {} };
+}
+async function installLoader(unpacked, context, manager) {
+  const selected = Loader.selection(loaderContext(context), manager);
+  if (!selected.ready) throw new Error("The selected KosmicKrisp driver requires the Vulkan loader from Tools.");
+  await cloneOrCopy(selected.install.executablePath, path.join(unpacked, "libvulkan.1.dylib"), { signal: context.signal });
   try {
-    const listing = await run("/usr/bin/tar", ["-tf", archive], { signal, maxBuffer: 1024 * 1024 });
-    const members = listing.stdout.trim().split("\n");
-    if (members.length > 4096 || members.some(name => name.length > 1024 || name.startsWith("-") || /[\\\x00-\x1f]/.test(name) ||
-        path.posix.isAbsolute(name) || name.split("/").includes(".."))) throw new Error("The Vulkan loader archive has invalid members.");
-    const libraries = members.filter(name => /(?:^|\/)lib\/libvulkan\.\d+(?:\.\d+)+\.dylib$/.test(name));
-    if (libraries.length !== 1) throw new Error("The Vulkan loader archive has no unique native library.");
-    const library = libraries[0], prefix = library.slice(0, library.lastIndexOf("/lib/"));
-    // The bottle's license notice accompanies the library when it has one.
-    const license = members.find(name => name === prefix + "/LICENSE.txt" || name === prefix + "/LICENSE");
-    const content = await run("/usr/bin/tar", ["-xOf", archive, library], { signal, maxBuffer: 32 * 1024 * 1024, encoding: "buffer" });
-    fs.writeFileSync(path.join(unpacked, "libvulkan.1.dylib"), content.stdout);
-    try { if (license) {
-      const text = await run("/usr/bin/tar", ["-xOf", archive, license], { signal, encoding: "buffer" });
-      fs.mkdirSync(path.join(unpacked, "licenses"), { recursive: true });
-      fs.writeFileSync(path.join(unpacked, "licenses", "Vulkan-Loader.txt"), text.stdout);
-    } } catch (error) { signal?.throwIfAborted(); console.warn("The optional Vulkan loader license could not be copied:", error.message); }
-  } finally { fs.rmSync(archive, { force: true }); }
+    const licenses = path.join(selected.install.installDir, "licenses");
+    if (fs.existsSync(licenses)) cloneOrCopySync(licenses, path.join(unpacked, "licenses"));
+  } catch (error) { context.signal?.throwIfAborted(); console.warn("The optional Vulkan loader license could not be copied:", error.message); }
 }
 function createManager(backend, dependencies = {}) {
-  const definition = definitions[backend], loader = backend === "kosmickrisp" ? loaderSource(dependencies) : null;
+  const definition = definitions[backend], loader = backend === "kosmickrisp";
+  const loaderManager = dependencies.loaderManager || Loader.manager;
   const manager = createPinnedNativeManager({
     versionCompatibility: () => true, // Vulkan is stable across versions of this driver id; consumer capability checks remain separate.
      id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source, sourceLabel: "Source", sourceName: definition.sourceName, sourceDescription: definition.sourceDescription,
@@ -142,7 +115,7 @@ function createManager(backend, dependencies = {}) {
       return { ...native, translator, translatorRoot: root };
     }, upstream: backend === "moltenvk" ? moltenvk : kosmickrisp,
     resolveExecutable: root => path.join(root, definition.library),
-    prepareInstall: async ({ unpacked, signal }) => {
+    prepareInstall: async ({ unpacked, signal, userDataDir }) => {
       if (backend === "moltenvk") {
         const library = findFile(unpacked, "MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib", /^libMoltenVK\.dylib$/);
         if (!library) throw new Error("The MoltenVK package has no macOS library.");
@@ -156,7 +129,7 @@ function createManager(backend, dependencies = {}) {
           fs.writeFileSync(path.join(unpacked, name), bytes);
         }
       } else {
-        await installLoader(unpacked, loader, signal);
+        await installLoader(unpacked, { signal, userDataDir }, loaderManager);
         try { cloneOrCopySync(path.join(__dirname, "notices"), path.join(unpacked, "licenses")); }
         catch (error) { console.warn("The optional Vulkan licenses could not be copied:", error.message); }
       }
@@ -173,7 +146,7 @@ function createManager(backend, dependencies = {}) {
       return { translator: stored, backend, minimumMacOS, libraries: files.map(file => ({ file, sha256: hashFile(path.join(unpacked, file)) })) };
     }, dependencies: { ...dependencies, extractArchive: (archive, output, signal) => backend === "moltenvk" ? extract(archive, output, signal)
       : cloneOrCopy(archive, path.join(output, definition.library), { signal }) } });
-  const result = { ...manager, upstream: loader ? [kosmickrisp, loader] : moltenvk, backend, translatorEngine: backend, ui: { groupId: "vulkan-drivers", sectionLabel: definition.label, memberOrder: backend === "moltenvk" ? 20 : 21, management: "managed", ...(backend === "kosmickrisp" ? { hostFeature: "METAL4" } : {}) } };
+  const result = { ...manager, upstream: loader ? kosmickrisp : moltenvk, backend, translatorEngine: backend, ui: { groupId: "vulkan-drivers", sectionLabel: definition.label, memberOrder: backend === "moltenvk" ? 20 : 21, management: "managed", ...(backend === "kosmickrisp" ? { hostFeature: "METAL4" } : {}) } };
   Custom.configure(result, { inspect(runtimePath) {
     const native = Custom.inspectExecutable(runtimePath, { candidates: [definition.library, "MoltenVK", "Versions/A/MoltenVK"], allowLibrary: true });
     native.executablePath = fs.realpathSync(native.executablePath);
@@ -193,6 +166,30 @@ function createManager(backend, dependencies = {}) {
       return { ...inspected, translator, translatorRoot: translator.root };
   } });
   const backendManager=Component.withIncludedReferences(result);
+  if (backend === "kosmickrisp") {
+    const install = backendManager.installRuntime, resolve = backendManager.resolveSelection;
+    backendManager.loaderManager = loaderManager;
+    backendManager.installRuntime = async function (options = {}) {
+      const context = loaderContext(options), selected = resolve.call(this, null, context.settings, options.userDataDir, options);
+      if (!selected.ready) await Loader.ensure(context, { manager: loaderManager });
+      return install.call(this, options);
+    };
+    backendManager.resolveSelection = function (entry, settings, userDataDir, options = {}) {
+      const selected = resolve.call(this, entry, settings, userDataDir, options);
+      if (!selected.ready || !selected.install) return selected;
+      const architecture = require("../runtime/architecture").normalizeArchitecture(options.architecture || selected.architecture || selected.install.architecture) || "arm64";
+      const dependency = Loader.selection({ settings, userDataDir }, loaderManager, architecture);
+      if (!dependency.ready) return dependency.install ? { ...selected, ready: false, reason: dependency.reason } : selected;
+      const install = { ...selected.install }, root = install.translatorRoot || install.installDir;
+      const Description = require("../runtime/translator-description");
+      const description = install.translator || (install.installationMetadata?.translator && Description.restoreInstallationDescription(root, install.installationMetadata.translator));
+      if (!description) return selected;
+      install.translator = { ...description, files: [...description.files.filter(file => !/libvulkan(?:\.\d+)*\.dylib$/.test(file.path)),
+        Description.inspectFile({ path: dependency.install.executablePath, relative: "libvulkan.1.dylib" })] };
+      return { ...selected, install, runtimeUses: [{ managerId: this.id, version: selected.version, sourcePath: selected.install.installDir },
+        { managerId: loaderManager.id, version: dependency.version, sourcePath: dependency.install.installDir }] };
+    };
+  }
   return backend==='moltenvk'?createSourceBackedManager({id:backendManager.id,source:MoltenVKSource,adapter:require('../../../runtime-adapters/vulkan-driver'),backend:backendManager}):backendManager;
 }
 const managers = Object.keys(definitions).map(backend => createManager(backend));

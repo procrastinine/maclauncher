@@ -7,6 +7,7 @@ const Custom = require("../runtime/custom-runtime");
 const Architecture = require("../runtime/architecture");
 const Requirements = require("../runtime/feature-requirements");
 const Host = require("../runtime/host-capabilities");
+const Loader = require("./loader-manager");
 
 function unavailableReason(backend, dependencies) {
   if (backend !== "kosmickrisp" && backend !== managed.projectId) return null;
@@ -89,11 +90,24 @@ function installed(context, dependencies = {}) {
         if (file !== install.executablePath && hashFile(file) !== item.sha256) throw new Error("Native library differs from its installation.");
         return file;
       });
-      const library = manager.backend === "kosmickrisp" ? path.join(root, "libvulkan.1.dylib") : install.custom ? install.executablePath : path.join(root, definition.library);
+      let library = manager.backend === "kosmickrisp" ? path.join(root, "libvulkan.1.dylib") : install.custom ? install.executablePath : path.join(root, definition.library);
+      let loaderRuntimeUse;
+      if (manager.backend === "kosmickrisp") {
+        const dependency = Loader.selection(context, manager.loaderManager || Loader.manager, dependencies.architecture || "arm64");
+        if (dependency.install && !dependency.ready) throw new Error(dependency.reason);
+        if (dependency.ready) {
+          library = dependency.install.executablePath;
+          inspect(library, dependencies);
+          readable.push(library);
+          loaderRuntimeUse = { managerId: (manager.loaderManager || Loader.manager).id, version: dependency.version,
+            sectionId: "default", sourcePath: dependency.install.installDir };
+        }
+      }
       const driver = install.custom ? install.executablePath : path.join(root, definition.library);
       if (!readable.includes(library) || !readable.includes(driver)) continue;
       result.push({ id: manager.backend + ":" + install.version, backend: manager.backend, version: install.version,
-        label: install.versionLabel || install.catalogEntry?.versionLabel || definition.label + " " + install.version, library, driver, readable });
+        label: install.versionLabel || install.catalogEntry?.versionLabel || definition.label + " " + install.version, library, driver, readable,
+        ...(loaderRuntimeUse ? { loaderRuntimeUse } : {}) });
     } catch (error) { if (dependencies.signal?.aborted) throw error; }
     }
   }
@@ -150,7 +164,8 @@ function requirements(context, dependencies = {}) {
     const selected = request === "auto" ? available.find(item => !item.sceneOnly) : request.endsWith(":auto")
       ? available.find(item => item.backend === request.slice(0, -5) && !item.projectId) : available.find(item => item.id === request);
     if (selected) {
-      context.recordRuntimeUse?.({ managerId: selected.projectId || "vulkan-" + selected.backend, version: selected.version, sectionId: "default", sourcePath: path.dirname(selected.library) });
+      context.recordRuntimeUse?.({ managerId: selected.projectId || "vulkan-" + selected.backend, version: selected.version, sectionId: "default", sourcePath: path.dirname(selected.driver || selected.library) });
+      if (selected.loaderRuntimeUse) context.recordRuntimeUse?.(selected.loaderRuntimeUse);
       return [];
     }
     const architecture = dependencies.architecture || Architecture.selectedArchitecture();
@@ -175,14 +190,19 @@ function requirements(context, dependencies = {}) {
         { version: explicit || undefined, verification: "status", ...installOptions });
       const versions = [selected.version].filter(value => value && value !== "auto");
       // Nothing listed or installed yet: consented preparation discovers versions.
-      if (!versions.length && selected.discoveryRequired) return [{ managerId: manager.id, version: null, discoveryRequired: true, requiresDownload: true, installOptions }];
+      if (!versions.length && selected.discoveryRequired) return [
+        ...(manager.loaderManager ? Loader.requirements(context, { manager: manager.loaderManager, architecture }) : []),
+        { managerId: manager.id, version: null, discoveryRequired: true, requiresDownload: true,
+          ...(selected.automatic ? { automatic: true } : {}), installOptions }];
       for (const version of versions) {
         const pin = entries.find(item => item.version === version);
         if (pin?.deprecated || (pin ? !Architecture.matchesArchitecture(pin, architecture) : architecture !== Architecture.selectedArchitecture())) continue;
         if (catalog.versionRequirements?.[version]?.installReason) continue;
         const selection = manager.resolveSelection(null, context.settings, context.userDataDir, { version, verification: "status", ...installOptions });
         if (selection.ready) throw new Error("The selected Vulkan runtime has no compatible " + architecture + " library. Install a compatible version in Runtimes.");
-        return [{ managerId: manager.id, version, requiresDownload: true, installOptions }];
+        return [...(manager.loaderManager ? Loader.requirements(context, { manager: manager.loaderManager, architecture }) : []),
+          { managerId: manager.id, version, requiresDownload: true,
+            ...(selected.automatic ? { automatic: true } : {}), installOptions }];
       }
     }
     throw new Error("A compatible " + architecture + " Vulkan runtime is unavailable. Select a compatible version in game Settings.");

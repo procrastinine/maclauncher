@@ -32,6 +32,7 @@ MacLauncher never moves a custom runtime, and removing the registration leaves t
 | Native runtimes and tools | A compatible native executable, application or runtime directory with its libraries and data. Windows tools keep their PE executable format. |
 | Python tools | A complete source package with the configured script or module entry point and its required files. The launcher supplies Python. |
 | Vulkan | A compatible dynamic library or runtime directory. KosmicKrisp also requires its Vulkan loader, and MacLauncher's KosmicKrisp build keeps its package metadata. |
+| Vulkan loader | A native `libvulkan.1.dylib`, or a directory containing it at the root or under `lib`. The loader's CPU must match the process loading the Vulkan driver. |
 | Graphics models | A compatible Lossless Scaling DLL or a complete neural model bundle. Registration reads the existing model formats and keeps the original weights and resources. |
 | Shader collections | A complete compatible collection directory with its shader sources, includes and textures. |
 
