@@ -333,6 +333,17 @@ test("Sikarugir names the translator versions of an installed engine and of list
   assert.match(state.installed[0].componentSummary, /(?:^| · )DXMT 0\.80-244-g7c8dee1(?: · |$)/);
   assert.equal(requirements[sameTemplate.version].contents, `Includes ${state.installed[0].componentSummary}.`);
   assert.equal(requirements[other.version].contents, "The translator versions in Template 1.0.24 are known after download.");
+  // A registered copy of the same engine names the same translators, read the same way.
+  const Custom = require("../src/modules/shared/runtime/custom-runtime");
+  Custom.instrumentManagers([manager]);
+  const managed = state.installed[0], folder = path.join(root, "registered", "Sikarugir");
+  fs.cpSync(managed.installDir, folder, { recursive: true, verbatimSymlinks: true });
+  await Custom.register(manager, { runtimePath: folder, userDataDir: root, settings: {} });
+  const unprepared = manager.getState({ userDataDir: root }).installed.find(row => row.custom);
+  assert.equal(unprepared.ready, true); assert.equal(unprepared.componentSummary, undefined, "a state reads retained descriptions only");
+  await manager.prepareLocalState({ userDataDir: root, logger: { warn() {} } });
+  const custom = manager.getState({ userDataDir: root }).installed.find(row => row.custom);
+  assert.equal(custom.componentSummary, managed.componentSummary, "custom and installed rows share one Includes line");
 });
 
 test("Sikarugir download tasks display readable version labels while retaining the exact identifier", async t => {

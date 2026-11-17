@@ -329,11 +329,16 @@ function customArchitecture(architectures = []) {
   return values.length > 1 ? "universal" : values[0] || null;
 }
 // Registers a Wine source's custom inspector with the shared custom runtime
-// list. Its installed and registered versions share one selection.
+// list. Its installed and registered versions share one selection, and a
+// registered Wine names its included translators as an installed version does.
 function configureCustom(manager, inspect) {
   require("../../shared/runtime/custom-runtime").configure(manager, { defaultsPath: () => ["defaultVersion"], providers: [{ core: manager.core,
     lists: { listInstalled: "default" }, resolves: { resolveInstalled: "default", resolveRegistered: "default" },
-    versions: ["normalizeVersion"], directories: ["getInstallDir"] }], inspect });
+    versions: ["normalizeVersion"], directories: ["getInstallDir"] }], inspect, rowDetails: (row, options = {}) => {
+    if (options.componentSummaries === false) return row;
+    const componentSummary = require("../../shared/runtime/wine-translators").includedSummary(row, manager.id, options);
+    return componentSummary ? { ...row, componentSummary } : row;
+  } });
 }
 module.exports = { INVENTORY, MAXIMUM_FILES, MAXIMUM_INVENTORY_BYTES, safeRelative, regularFile, walk, nativeInfo, inspectClosure,
   hashAsync, writeInventory, mentions, wineCapabilities, wineVersion, createInventoryCheck, prepareInstalled, requiresMacOS, currentInspection, INSPECTION_VERSION, later, inside, stamp,

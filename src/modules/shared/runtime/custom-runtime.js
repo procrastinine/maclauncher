@@ -455,7 +455,10 @@ function instrumentManagers(values) {
       const state = getState.call(this, options), selectedDefaults = defaults(options.settings);
       const sections = state.sections?.length ? state.sections : [{ ...state, id: "default" }];
       const updated = sections.map(section => {
-        const local = listFor(manager, { sectionId: section.id, userDataDir: options.userDataDir });
+        // A manager's rowDetails adds what its installed rows show, such as a Wine's included translators.
+        const details = manager.customRuntime?.rowDetails;
+        const local = listFor(manager, { sectionId: section.id, userDataDir: options.userDataDir })
+          .map(row => row.ready && typeof details === "function" ? details(row, options) : row);
         const labels = Object.fromEntries(local.map(row => [row.version, row.versionLabel]));
         const customVersions = new Set(local.map(row => row.version));
         const listed = (section.catalog?.installableVersions || section.catalog?.versions || []).filter(version => !section.catalog?.versionRequirements?.[version]?.installReason);

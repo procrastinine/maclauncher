@@ -242,6 +242,8 @@ function createBackend({source, dependencies = {}}) {
     async prepareLocalState(options={}) {
       const Translators=require('../modules/shared/runtime/wine-translators');
       for(const row of base.core.listInstalled(options.userDataDir)){const resolved=row.ready===false?null:resolvePayload(row,{verification:'status'});if(resolved?.install)await Translators.describedIncluded(resolved.install,source.id,options);}
+      // Registered Wines are described the same way for their row's included translators.
+      for(const row of require('../modules/shared/runtime/custom-runtime').list({managerId:manager.id,userDataDir:options.userDataDir}))if(row.ready)await Translators.describedIncluded(row,source.id,options);
     },
     getState(options={}) {
       const state=base.getState(options),requirements={...state.catalog.versionRequirements};
