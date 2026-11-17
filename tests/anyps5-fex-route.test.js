@@ -14,6 +14,8 @@ function launchFixture(t, {appleSilicon = true, fexReady = true, rosettaReady = 
   const Input = require('../src/modules/anyps5/input'), Focus = require('../src/modules/shared/runtime/native-focus');
   const Prepare = require('../src/modules/anyps5/prepare');
   const DockIcon = require('../src/modules/shared/dock-icon');
+  const Application = require('../src/modules/shared/native-application');
+  t.mock.method(Application, 'prepare', async options => ({executablePath:path.join(options.directory, Application.bundleName(options.title),'Contents/MacOS',options.executableName),app:path.join(options.directory,Application.bundleName(options.title))}));
   const record = {vulkan: [], launched: [], prepared: 0, rosettaPrompts: 0, icons: [], iconError: null};
   const fexRoot = path.join(f.root, 'fex-runtime'), host = path.join(fexRoot, HOST);
   fs.mkdirSync(path.dirname(host), {recursive: true}); fs.writeFileSync(host, 'fixture host');
@@ -47,13 +49,13 @@ function launchFixture(t, {appleSilicon = true, fexReady = true, rosettaReady = 
   return {f, anyps5, manager, record, host, context};
 }
 
-test('on Apple silicon the FEX route runs the start host on the imported programs and a staged app0, without a converted bundle or Rosetta', async t => {
+test('on Apple silicon the FEX route runs the start host on the imported programs and a staged app0, with a game identity bundle and without conversion or Rosetta', async t => {
   const {f, anyps5, record, host, context} = launchFixture(t);
   const launch = await anyps5.launchRuntime('anyps5', f.entry, context('auto'));
   const Prepare = require('../src/modules/anyps5/prepare');
   const root = Prepare.gameDirectory(f.entry, {userDataDir: f.profile}), folder = path.join(root, 'fex');
   assert.equal(record.prepared, 0, 'no conversion runs'); assert.equal(record.rosettaPrompts, 0);
-  assert.equal(launch.executablePath, host); assert.equal(launch.needsRosetta, false);
+  assert.equal(launch.executablePath, path.join(folder, 'application/Fixture Game.app/Contents/MacOS/Fixture Game')); assert.equal(launch.needsRosetta, false);
   assert.deepEqual(launch.args, [path.join(folder, 'app0'), folder, '0', 'run', fs.realpathSync(f.programs)]);
   // /app0 is writable for the game, as on the converted route, so it is a staged copy: the imported folder never changes.
   const staged = path.join(folder, 'app0', 'assets', 'data.bin'), original = path.join(f.assets, 'assets', 'data.bin');
@@ -71,7 +73,7 @@ test('on Apple silicon the FEX route runs the start host on the imported program
   assert.equal(launch.options.env.APS5_PLAYGO_UNLISTED_CHUNKS ?? 'installed', process.env.APS5_PLAYGO_UNLISTED_CHUNKS ?? 'installed');
   assert.equal(fs.readlinkSync(path.join(folder, 'data')), path.join(root, 'saves'));
   assert.equal(fs.readlinkSync(path.join(folder, '_sd')), path.join(root, 'saves', '_sd'));
-  assert.deepEqual(fs.readdirSync(root).sort(), ['fex', 'saves'], 'nothing else is created for the game: no launch.app, no staged copy');
+  assert.deepEqual(fs.readdirSync(root).sort(), ['fex', 'saves'], 'backend preparation and saves stay within their existing owned roots');
   assert.deepEqual([...new Set(record.vulkan)], ['arm64']);
   assert.equal(f.entry.defaultSaveDir, path.join(root, 'saves'));
   assert.ok(anyps5.resolveSaveLocations(f.entry, {userDataDir: f.profile}).directories.some(row => row.directory === path.join(folder, '_sd_mem')));
@@ -79,7 +81,7 @@ test('on Apple silicon the FEX route runs the start host on the imported program
   assert.equal(anyps5.settingsActions.listCpuRoutes, undefined);
 });
 
-test('the FEX start host carries the game name and its prepared Dock icon, without a per-game bundle', async t => {
+test('the FEX start host carries the game name and its prepared Dock icon, through its game identity bundle', async t => {
   const {f, anyps5, record, context} = launchFixture(t);
   f.entry.iconPath = path.join(f.root, 'cover.png'); fs.writeFileSync(f.entry.iconPath, 'artwork');
   const icons = require('../src/modules/shared/game-data').resolveGameIconsDir(f.profile, f.entry.gameId);

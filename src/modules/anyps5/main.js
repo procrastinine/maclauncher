@@ -3,7 +3,7 @@ const path=require("node:path");
 const manifest=require("./manifest.json");
 const {detectGame}=require("./detect");
 const manager=require("./runtime/manager");
-const {gameDirectory,saveDirectory,resolveSaveLocations,resolveProgram,prepareGame,bindSaveData,fexDirectory,stageFexApp0}=require("./prepare");
+const {gameDirectory,saveDirectory,resolveSaveLocations,resolveProgram,prepareGame,prepareFexGame,applicationIdentity}=require("./prepare");
 const {spawnForegroundNativeGame}=require("../shared/runtime/native-focus");
 const Vulkan=require("../shared/vulkan");
 const Tools=require("./tools");
@@ -35,30 +35,15 @@ function launchEnvironment(entry,context,vulkan,directory,input){
   delete environment.ANYPS5_MOUSE_ROUTING;
   return environment;
 }
-// The start host runs from its version's shared bundle, so the game's name and
-// Dock icon reach it as launch identity, without a per-game application.
-async function gameIdentity(entry,context){
-  let icon=entry.iconPath||"";
+// Both native backends receive the same game identity for their app, menu and Dock.
+async function gameIdentity(entry,context,identity){
+  let icon=identity.iconFile;
   try {
     const directory=GameData.resolveGameIconsDir(context.userDataDir,entry.gameId);
     Writable.assertOwnDirectory(context.userDataDir,directory);
-    icon=await DockIcon.prepare(entry.iconPath||path.join(__dirname,"resources/icon.png"),directory,{signal:context.signal});
+    icon=await DockIcon.prepare(identity.iconFile,directory,{signal:context.signal});
   } catch(error) {context.signal?.throwIfAborted?.();context.logger?.debug?.("[anyps5] Dock icon: "+error.message);}
-  return GameIdentity.environment({...entry,iconPath:icon},{});
-}
-// The start host loads the imported programs in place and sees a staged copy
-// as /app0. Its working folder holds that copy, the PS5 data and save aliases
-// and the files AnyPS5 writes beside them; the shader cache would otherwise go
-// beside the host, inside the shared runtime.
-async function prepareFexFolder(entry,context){
-  if(entry.moduleData?.inspectionOnly) throw new Error(entry.moduleData.inspectionReason||"An unpacked PS5 game is required for Play.");
-  const program=resolveProgram(entry),root=gameDirectory(entry,context),directory=fexDirectory(entry,context);
-  Writable.assertOwnDirectory(context.userDataDir,root);Writable.assertOwnDirectory(root,directory);
-  bindSaveData(entry,context,directory,program.sourceRoot);
-  bindSaveData(entry,context,directory,program.sourceRoot,{name:"_sd",suffix:"_sd"});
-  entry.defaultSaveDir=saveDirectory(entry,context);
-  const {app0}=await stageFexApp0(program,directory,context);
-  return {program,directory,app0};
+  return GameIdentity.environment({...entry,name:identity.title,iconPath:icon},{});
 }
 
 module.exports={id:manifest.id,manifest,detectGame,resolveSaveLocations,runtimeManagers:[manager],normalizeRuntimeId:value=>value==="inspection"?value:"anyps5",
@@ -81,29 +66,16 @@ module.exports={id:manifest.id,manifest,detectGame,resolveSaveLocations,runtimeM
     const inputRouting=Input.routingEnvironment(context.runtimeSettings,selected.install);
     Bundled.verifyPayload(selected.install.root,selected.install.declaration);
     context.recordRuntimeUse?.({managerId:manager.id,version:selected.version,sectionId:"default",sourcePath:selected.install.installDir});
-    if(route==="fex"){
-      const {program,directory,app0}=await prepareFexFolder(entry,context);
-      const input=Input.prepare(entry,context,selected.install);
-      const vulkan=Vulkan.resolve(context,vulkanOptions(route));
-      if(!vulkan) throw new Error("A compatible Apple silicon Vulkan runtime is required. Install one in Runtimes.");
-      const environment={...launchEnvironment(entry,context,vulkan,directory,input),...await gameIdentity(entry,context),
-        ANYPS5_SHADER_CACHE_DIR:path.join(directory,"shader_cache")};
-      Object.assign(environment,inputRouting);
-      context.onEntryChange?.({defaultSaveDir:entry.defaultSaveDir,moduleData:entry.moduleData});
-      return spawnForegroundNativeGame({context,executablePath:selected.install.executablePath,
-        args:[app0,directory,"0","run",program.programRoot],needsRosetta:false,
-        options:{cwd:directory,gameArguments:false,env:environment}});
-    }
     const needsRosetta=route==="rosetta";
     if(needsRosetta) await context.ensureRosetta?.();
-    const launch=await prepareGame(entry,context,selected.install);
-    const input=Input.prepare(entry,context,selected.install);
-    const vulkan=Vulkan.resolve(context,vulkanOptions(route));
-    if(!vulkan) throw new Error("A compatible Intel Vulkan runtime is required. Install one in Runtimes.");
-    const environment=launchEnvironment(entry,context,vulkan,launch.directory,input);
-    Object.assign(environment,inputRouting);
+    const launch=route==="fex"?await prepareFexGame(entry,context,selected.install):await prepareGame(entry,context,selected.install);
+    const identity=launch.identity||applicationIdentity(entry,context);
+    const input=Input.prepare(entry,context,selected.install),vulkan=Vulkan.resolve(context,vulkanOptions(route));
+    if(!vulkan) throw new Error("A compatible "+(route==="fex"?"Apple silicon":"Intel")+" Vulkan runtime is required. Install one in Runtimes.");
+    const environment={...launchEnvironment(entry,context,vulkan,launch.directory,input),
+      ...await gameIdentity(entry,context,identity),...launch.environment,...inputRouting};
     context.onEntryChange?.({defaultSaveDir:entry.defaultSaveDir,moduleData:entry.moduleData});
-    return spawnForegroundNativeGame({context,executablePath:launch.executable,args:context.gameArguments||[],needsRosetta,
+    return spawnForegroundNativeGame({context,executablePath:launch.executable,args:launch.args||context.gameArguments||[],needsRosetta,
       options:{cwd:launch.directory,gameArguments:false,env:environment}});
   },
   cleanupGameData:(entry,context)=>{fs.rmSync(gameDirectory(entry,context),{recursive:true,force:true});return true;},

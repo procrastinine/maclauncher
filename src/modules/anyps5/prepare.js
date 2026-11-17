@@ -187,10 +187,42 @@ function applicationLayout(entry,context) {
   Writable.atomicWrite(record,JSON.stringify({...previous,executableName,previousExecutableName:undefined})+"\n",{root});
   return {app,contents,directory,executableName,executable:path.join(directory,executableName)};
 }
+// Shared native identity for every execution backend. User artwork wins; a module default does not replace the imported game's icon.
+function applicationIdentity(entry,context,program=resolveProgram(entry)) {
+  const imported=path.join(program.assetRoot,"sce_sys","icon0.png");
+  const explicit=entry.iconPath && entry.iconSource!=="module-default";
+  const iconFile=explicit?entry.iconPath:fs.existsSync(imported)?imported:entry.iconPath||path.join(__dirname,"resources/icon.png");
+  return {title:entry.name||"Game",identifier:"com.maclauncher.anyps5."+entry.gameId,
+    executableName:Application.bundleName(entry.name||"Game").slice(0,-4),iconFile};
+}
+function prepareData(entry,context,directory,program) {
+  bindSaveData(entry,context,directory,program.sourceRoot);
+  bindSaveData(entry,context,directory,program.sourceRoot,{name:"_sd",suffix:"_sd"});
+  entry.defaultSaveDir=saveDirectory(entry,context);
+}
+// The FEX backend uses the same game application identity as a converted game. Only the owned host entry is cloned;
+// its native sibling closure stays with the verified immutable runtime, and guest programs stay at their original paths.
+async function prepareFexGame(entry,context,install,dependencies={}) {
+  if(entry.moduleData?.inspectionOnly) throw new Error(entry.moduleData.inspectionReason||"An unpacked PS5 game is required for Play.");
+  const program=resolveProgram(entry),root=gameDirectory(entry,context),directory=fexDirectory(entry,context);
+  assertOutsideSource(program.sourceRoot,root);
+  Writable.assertOwnDirectory(context.userDataDir,root);Writable.assertOwnDirectory(root,directory);
+  prepareData(entry,context,directory,program);
+  const {app0}=await stageFexApp0(program,directory,context);
+  const identity=applicationIdentity(entry,context,program),hostDirectory=path.dirname(install.executablePath);
+  const nativeLinks=Object.fromEntries(fs.readdirSync(hostDirectory).filter(name=>name!==path.basename(install.executablePath))
+    .map(name=>[name,path.join(hostDirectory,name)]));
+  const application=await Application.prepare({executablePath:install.executablePath,executableName:identity.executableName,
+    directory:path.join(directory,"application"),title:identity.title,identifier:identity.identifier,iconFile:identity.iconFile,
+    nativeLinks,showInDock:true,signal:context.signal,applicationLabel:"Game",nameFallback:"Game",
+    originalInfo:{LSApplicationCategoryType:"public.app-category.games"}},dependencies.runApplicationCommand);
+  return {directory,executable:application.executablePath,app:application.app,identity,
+    args:[app0,directory,"0","run",program.programRoot],environment:{ANYPS5_SHADER_CACHE_DIR:path.join(directory,"shader_cache")}};
+}
 async function applicationMetadata(entry,context,layout,dependencies) {
-  const title=entry.name||"Game", root=gameDirectory(entry,context), identifier="com.maclauncher.anyps5."+entry.gameId;
+  const {title,identifier,iconFile}=applicationIdentity(entry,context),root=gameDirectory(entry,context);
   const resources=path.join(layout.contents,"Resources");Writable.assertOwnDirectory(root,resources);
-  const source=entry.iconPath||path.join(__dirname,"resources/icon.png");
+  const source=iconFile;
   const receiptPath=path.join(root,"application.json"), receipt=readRecord(receiptPath);
   const iconIdentity=Native.hashFile(source), iconPath=path.join(resources,"Game.icns");
   if(receipt?.iconIdentity!==iconIdentity||!fs.existsSync(iconPath)) {
@@ -209,9 +241,7 @@ async function prepareGame(entry,context,install,dependencies={}) {
   assertOutsideSource(program.sourceRoot,root);
   const layout=applicationLayout(entry,context), {directory,executable}=layout;
   Writable.assertOwnDirectory(root,directory);Writable.assertOwnDirectory(root,path.join(directory,"app0"));
-  bindSaveData(entry,context,directory,program.sourceRoot);
-  bindSaveData(entry,context,directory,program.sourceRoot,{name:"_sd",suffix:"_sd"});
-  entry.defaultSaveDir=saveDirectory(entry,context);
+  prepareData(entry,context,directory,program);
   const assetFiles=await sourceFiles(program.assetRoot,context);
   const programFiles=program.programRoot===program.assetRoot?assetFiles:await sourceFiles(program.programRoot,context);
   const modules=programFiles.filter(file=>file.full!==program.executablePath&&isGuestModule(file));
@@ -268,4 +298,4 @@ async function prepareGame(entry,context,install,dependencies={}) {
     return {directory,executable,app:layout.app,cached:false};
   } finally { fs.rmSync(temporary,{recursive:true,force:true}); }
 }
-module.exports={gameDirectory,saveDirectory,fexDirectory,resolveSaveLocations,resolveProgram,runtimePaths,prepareGame,bindSaveData,stageFexApp0,unwrapFile,sourceFiles,isGuestModule};
+module.exports={gameDirectory,saveDirectory,fexDirectory,resolveSaveLocations,resolveProgram,runtimePaths,prepareGame,prepareFexGame,applicationIdentity,bindSaveData,stageFexApp0,unwrapFile,sourceFiles,isGuestModule};
