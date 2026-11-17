@@ -27,7 +27,6 @@ function recognize(release) {
 }
 const source = Upstream.github({ repository: `${GOGDL.owner}/${GOGDL.repo}`, allArchitectures: true, recognize });
 
-const pending = new Map();
 const newer = (a, b) => b.version.localeCompare(a.version, undefined, { numeric: true });
 async function valid(file, record) {
   try {
@@ -51,55 +50,11 @@ async function installed(parent, arch) {
   }
   return rows.sort(newer);
 }
-// The newest release with a build for this Mac. A file the publisher replaced
-// is checked against GitHub's current digest; without one, the download's own
-// SHA-256 is recorded. When the release list is unavailable, the newest
-// installed helper is used.
-// The default publisher build follows the launcher CPU, independently of physical hardware.
-async function ensureGogdl({ userDataDir, signal, onProgress, arch = process.arch, platform = process.platform, logger } = {}) {
+// Ordinary store actions use the same installed/default/custom selection as
+// Runtimes. A missing helper is discovered and installed only after consent.
+async function ensureGogdl(options = {}) {
+  const { userDataDir, arch = process.arch, platform = process.platform } = options;
   if (platform !== 'darwin' || !['arm64', 'x64'].includes(arch) || !path.isAbsolute(userDataDir || '')) throw new Error('The GOG game download helper requires a supported Mac.');
-  const parent = path.join(userDataDir, 'external/tools');
-  signal?.throwIfAborted();
-  let release;
-  try {
-    const row = (await source.discover({ signal, logger })).filter(item => item.architecture === arch).sort(newer)[0];
-    release = row && { version: row.version, revision: row.revision, file: row.files[0], url: row.files[0]?.url,
-      sha256: row.files[0]?.digest?.algorithm === 'sha256' ? row.files[0].digest.value : null };
-  }
-  catch (error) {
-    signal?.throwIfAborted();
-    const [present] = await installed(parent, arch);
-    if (present) return { executablePath: present.executablePath, version: present.version };
-    throw new Error(`The GOG download helper is unavailable: ${error.message || error}`);
-  }
-  if (!release?.file) {
-    const [present] = await installed(parent, arch);
-    if (present) return { executablePath: present.executablePath, version: present.version };
-    throw new Error('The GOG download helper has no published build for this Mac.');
-  }
-  const current = (await installed(parent, arch)).find(row => row.url === release.url && row.version === release.version && (!release.sha256 || row.sha256 === release.sha256));
-  if (current) return { executablePath: current.executablePath, version: current.version };
-  const key = JSON.stringify([parent, release.url, release.sha256]);
-  if (pending.has(key)) return pending.get(key);
-  const operation = (async () => {
-    await fs.promises.mkdir(parent, { recursive: true, mode: 0o700 });
-    const stage = await fs.promises.mkdtemp(path.join(parent, '.gogdl-setup-'));
-    try {
-      onProgress?.({ detail: `Downloading GOG download helper ${release.version}`, downloaded: 0, total: release.file.bytes ?? null });
-      const executable = path.join(stage, 'gogdl');
-      const { sha256, bytes, integrity } = await Upstream.download(release.file, executable, { signal,
-        onProgress: progress => onProgress?.({ detail: `Downloading GOG download helper ${release.version}`, ...progress }) });
-      if (!bytes) throw new Error('The GOG download helper download is empty.');
-      await fs.promises.chmod(executable, 0o755);
-      await fs.promises.writeFile(path.join(stage, 'source.json'), JSON.stringify({ version: release.version, source: GOGDL.source,
-        revision: release.revision, license: GOGDL.license, url: release.url, sha256, size: bytes, integrity }), { mode: 0o600, flag: 'wx' });
-      const target = path.join(parent, `gogdl-${release.version}-${arch}-${sha256.slice(0, 12)}`);
-      await fs.promises.rm(target, { recursive: true, force: true });
-      await fs.promises.rename(stage, target);
-      return { executablePath: path.join(target, 'gogdl'), version: release.version };
-    } finally { await fs.promises.rm(stage, { recursive: true, force: true }); }
-  })();
-  pending.set(key, operation);
-  try { return await operation; } finally { if (pending.get(key) === operation) pending.delete(key); }
+  return require('../modules/shared/stores/runtime/gogdl-manager').ensure({ ...options, arch });
 }
 module.exports = { GOGDL, ensureGogdl, installed, macExecutable, source };

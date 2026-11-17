@@ -29,30 +29,15 @@ module.exports = [
     match: require("./storage-maintenance").TRASH
   },
   {
-    // Store download helpers. A newer release installs beside the earlier
-    // one; downloads use the newest (Legendary also keeps the newest one that
-    // can confirm Epic builds), so earlier helpers are never used again.
+    // Earlier Legendary copies that no longer provide the selected manifest APIs.
     id: "external-download-helpers",
     directories: ({ userDataDir }) => [path.join(userDataDir, "external", "tools")],
-    match: /^(?:gogdl-[\w.+-]+-(?:arm64|x64)|legendary-[\w.+-]+)-[0-9a-f]{12}$/,
+    match: /^legendary-[\w.+-]+-[0-9a-f]{12}$/,
     async keep(directory) {
-      let names = [];
-      try { names = fs.readdirSync(directory); } catch {}
-      const count = (prefix, part = "") => names.filter(name => name.startsWith(prefix) && name.includes(part)).length;
-      // Verifying a helper reads its files, so it happens only while an
-      // earlier helper is present.
-      const arches = ["arm64", "x64"].filter(arch => count("gogdl-", `-${arch}-`) > 1);
-      if (!arches.length && count("legendary-") < 2) return () => true;
       const legendary = require("./external-store-downloads").installedLegendary(directory);
-      const { installed } = require("./gogdl-tool");
-      // Each list is sorted newest first; an architecture with one helper keeps it.
-      const gogdl = await Promise.all(arches.map(arch => installed(directory, arch)));
-      const name = item => path.basename(item.packagesPath || path.dirname(item.executablePath));
-      const listed = new Set([...legendary, ...gogdl.flat()].map(name));
-      const kept = new Set([legendary[0], legendary.find(item => item.confirmsBuilds), ...gogdl.map(rows => rows[0])]
-        .filter(Boolean).map(name));
-      // Only verified, superseded helpers are removed; anything unrecognized,
-      // and every helper of an architecture with one, stays.
+      const name = item => path.basename(item.packagesPath);
+      const listed = new Set(legendary.map(name));
+      const kept = new Set([legendary[0], legendary.find(item => item.confirmsBuilds)].filter(Boolean).map(name));
       return entry => !listed.has(entry) || kept.has(entry);
     }
   }

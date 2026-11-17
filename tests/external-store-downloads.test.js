@@ -101,11 +101,18 @@ test("store cancellation removes partial data and preserves an existing destinat
   const result = await until(() => service.snapshot().downloads.find(row => row.id === job.id && row.status === "cancelled")); assert.equal(fs.existsSync(result.path), false); assert.deepEqual(fs.readdirSync(path.dirname(result.path)), []);
 });
 test("GOG enumerates historical Galaxy builds and passes the exact selected build to gogdl", async t => {
+  const coordinator = require('../src/core/runtime-coordinator').createRuntimeCoordinator(), client = coordinator.client();
+  t.after(() => client.close());
+  const helperSettings = { runtimes: { gogdl: { defaultVersion: '1.3.1' } } }, consent = async () => true;
   const commands = []; const { service } = fixture(t, "gog", {
     builds: [{ build_id: "11111111111111111", version_name: "1.0", os: "windows", public: true, date_published: "2020-01-01T00:00:00Z", generation: 2 },
       { build_id: "22222222222222222", version_name: "2.0", os: "windows", public: true, date_published: "2021-01-01T00:00:00Z", generation: 2 }],
-    ensureGogdl: async () => ({ executablePath: "/fixture/gogdl", version: "1.3.1" }),
-    execute: async (_command, args, execution) => { commands.push(args); assert.ok(execution.env.GOGDL_CONFIG_PATH.startsWith(execution.cwd + path.sep)); fs.writeFileSync(path.join(execution.env.GOGDL_CONFIG_PATH, "fixture-cache"), "private"); fs.writeFileSync(path.join(args[args.indexOf("--path") + 1], "game.exe"), fileBytes); return { stdout: "" }; }
+    getHelperContext: () => ({ settings: helperSettings, confirmRuntimeInstall: consent, runtimeCoordinator: client }),
+    ensureGogdl: async context => { assert.equal(context.settings, helperSettings); assert.equal(context.confirmRuntimeInstall, consent);
+      return { executablePath: "/fixture/gogdl", version: "1.3.1" }; },
+    execute: async (_command, args, execution) => { commands.push(args);
+      assert.ok(coordinator.snapshot().active.some(lease => lease.kind === 'use' && lease.identities.some(row => row.managerId === 'gogdl' && row.version === '1.3.1')));
+      assert.ok(execution.env.GOGDL_CONFIG_PATH.startsWith(execution.cwd + path.sep)); fs.writeFileSync(path.join(execution.env.GOGDL_CONFIG_PATH, "fixture-cache"), "private"); fs.writeFileSync(path.join(args[args.indexOf("--path") + 1], "game.exe"), fileBytes); return { stdout: "" }; }
   });
   await connectGog(service); const versions = await service.getVersions("710000"), previous = versions.branches.find(row => row.buildId === "11111111111111111");
   assert.equal(previous.delivery, "galaxy"); assert.deepEqual(previous.platforms, ["windows"]);
@@ -115,6 +122,7 @@ test("GOG enumerates historical Galaxy builds and passes the exact selected buil
   assert.equal(fs.existsSync(path.join(result.path, "game.exe")), true); assert.equal(result.branch, previous.id);
   const metadata = JSON.parse(fs.readFileSync(path.join(result.path, ".maclauncher-external.json")));
   assert.equal(metadata.buildId, "11111111111111111"); assert.equal(metadata.versionName, "1.0"); assert.equal(metadata.importPath, result.path);
+  assert.equal(coordinator.snapshot().active.length, 0, 'the helper use lease ends with the store transfer');
 });
 test("GOG retries an expired reused session once and never forwards account auth through redirects", async t => {
   let profiles = 0, refreshes = 0; const authHeaders = [];

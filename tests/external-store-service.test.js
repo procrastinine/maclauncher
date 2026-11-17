@@ -104,3 +104,14 @@ test('saved Google reuse delegates directly to the lazy client and window recove
   assert.equal(await service.openLogin('google-play'), true);
   await service.dispose();
 });
+
+test('store helper preparation reads the current shared manager settings and consent context lazily', () => {
+  let version = '1', received, prompts = 0;
+  const consent = async () => { prompts++; return true; };
+  const service = createExternalStoreService({ userDataDir: '/profile', helperContext: () => ({ settings: { runtimes: { gogdl: { defaultVersion: version } } }, confirmRuntimeInstall: consent }),
+    createDownloads: options => { received = options; return { snapshot: () => ({}) }; } });
+  assert.equal(received, undefined); service.snapshot('gog');
+  assert.equal(received.getHelperContext().settings.runtimes.gogdl.defaultVersion, '1');
+  version = '2'; assert.equal(received.getHelperContext().settings.runtimes.gogdl.defaultVersion, '2');
+  assert.equal(received.getHelperContext().confirmRuntimeInstall, consent); assert.equal(prompts, 0);
+});

@@ -325,6 +325,7 @@ function createExternalStoreDownloads(options = {}) {
   const store = options.store;
   if (!["epic", "gog"].includes(store) || !path.isAbsolute(options.userDataDir || "")) throw new Error("A store and MacLauncher profile are required.");
   const homeDir = options.homeDir || os.homedir(), root = path.join(options.userDataDir, "external"), storeRoot = path.join(root, store), defaultDirectory = path.join(root, "downloads", store);
+  const helperContext = () => ({ ...options.getHelperContext?.(), userDataDir: options.userDataDir });
   const cache = readJson(path.join(storeRoot, "library.json"), {});
   const state = { connection: { status: "disconnected", accountName: cache.accountName || "" }, library: cache.library || [], libraryLoading: false,
     libraryFetchedAt: cache.fetchedAt || null, libraryError: null, downloads: [], defaultDirectory };
@@ -533,19 +534,22 @@ function createExternalStoreDownloads(options = {}) {
           if (branch.delivery === "galaxy") {
             job.version = branch.name; job.buildId = branch.buildId;
             if (!Number.isFinite(Date.parse(session.expires_at || "")) || Date.parse(session.expires_at) < Date.now() + 30000) await gogToken({ grant_type: "refresh_token", refresh_token: session.refresh_token }, generation, signal);
-            const { executablePath } = await (options.ensureGogdl || require("./gogdl-tool").ensureGogdl)({ userDataDir: options.userDataDir, signal, onProgress: detail => { job.detail = typeof detail === "string" ? detail : detail.detail || "Preparing GOG download support"; emit(); } });
+            const support = await (options.ensureGogdl || require("./gogdl-tool").ensureGogdl)({ ...helperContext(), signal,
+              onProgress: detail => { job.detail = typeof detail === "string" ? detail : detail.detail || "Preparing GOG download support"; emit(); } });
+            const { executablePath } = support;
             runtimeDir ||= fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-gog-session-")); fs.chmodSync(runtimeDir, 0o700);
             const authFile = path.join(runtimeDir, `auth-${job.id}.json`);
             const helperConfigRoot = path.join(runtimeDir, `gogdl-${job.id}`); fs.mkdirSync(helperConfigRoot, { mode: 0o700 });
             writeJson(authFile, { [GOG_CLIENT_ID]: { ...session, loginTime: Math.floor(Date.now() / 1000), expires_in: Math.max(1, Math.floor((Date.parse(session.expires_at || "") - Date.now()) / 1000)) || 3600 } });
             try {
               job.branch = branch.id; job.status = "downloading"; job.detail = "Downloading game files"; emit();
-              await (options.execute || launch)(executablePath, ["--auth-config-path", authFile, "download", appId, "--build", branch.buildId,
+              await require("./coordinated-runtime-managers").withRuntimeUse({ managerId: support.managerId || "gogdl", version: support.version,
+                sourcePath: support.installDir || path.dirname(executablePath) }, () => (options.execute || launch)(executablePath, ["--auth-config-path", authFile, "download", appId, "--build", branch.buildId,
                 "--path", content, "--platform", osName === "macos" ? "osx" : osName, "--lang", job.language === "english" ? "en" : job.language, "--skip-dlcs"], {
                 signal, cwd: runtimeDir, env: { ...process.env, GOGDL_CONFIG_PATH: helperConfigRoot, XDG_CONFIG_HOME: path.join(helperConfigRoot, "config"), XDG_CACHE_HOME: path.join(helperConfigRoot, "cache"), XDG_DATA_HOME: path.join(helperConfigRoot, "data") }, captureOutput: false, onLine: line => {
                   const percent = /(?:progress|download)[^\d]*([0-9.]+)%/i.exec(line);
                   job.detail = percent ? `Downloading · ${percent[1]}%` : "Downloading game files"; emit();
-                } });
+                } }), { userDataDir: options.userDataDir, coordinator: helperContext().runtimeCoordinator });
               const updated = readJson(authFile)?.[GOG_CLIENT_ID]; if (updated?.refresh_token) { session = { ...session, ...updated }; await persist(); }
             } finally { fs.rmSync(authFile, { force: true }); await fs.promises.rm(helperConfigRoot, { recursive: true, force: true }); }
             if (!fs.readdirSync(content).length) throw publicError("GOG did not return any game files.");

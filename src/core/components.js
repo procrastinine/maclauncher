@@ -7,22 +7,13 @@ const readJson = file => { try { return JSON.parse(fs.readFileSync(file, "utf8")
 
 module.exports = [
   {
-    // gogdl (GOG) and Legendary (Epic) download store games. Each download
-    // checks for the newest helper and installs it after the store action.
+    // Legendary copies use the existing store-helper management route.
     id: "external-download-helpers",
-    label: "Store download helpers",
-    description: "Heroic's gogdl downloads GOG games, and Legendary downloads Epic Games Store games. A helper is downloaded with the first store download that needs it.",
+    label: "Epic download helper",
+    description: "Legendary downloads Epic Games Store games. It is downloaded with the first store action that needs it.",
     list(context) {
       return Components.storeEntries(tools(context)).flatMap(directory => {
         const name = path.basename(directory);
-        const gogdl = /^gogdl-([\w.+-]+)-(arm64|x64)-([0-9a-f]{12})$/.exec(name);
-        if (gogdl) {
-          const record = readJson(path.join(directory, "source.json")) || {};
-          return [{ id: name, label: "gogdl", version: `gogdl ${gogdl[1]}`, architecture: gogdl[2],
-            identity: /^[a-f0-9]{64}$/.test(record.sha256 || "") ? `SHA-256 ${record.sha256}` : null, path: directory,
-            source: /^https:\/\//.test(record.url || "") ? { url: record.url } : { url: "https://github.com/Heroic-Games-Launcher/heroic-gogdl" },
-            users: ["GOG downloads"] }];
-        }
         const legendary = /^legendary-([\w.+-]+)-([0-9a-f]{12})$/.exec(name);
         return legendary ? [{ id: name, label: "Legendary", version: `Legendary ${legendary[1]}`, path: directory,
           source: { url: "https://pypi.org/project/legendary-gl/" }, users: ["Epic Games Store downloads"] }] : [];
@@ -32,10 +23,8 @@ module.exports = [
     // Refresh reads both helpers' catalogs; the next store download installs a newer helper.
     async refresh({ signal, logger } = {}) {
       const newest = rows => rows.map(row => String(row.version)).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0] || null;
-      const [gogdl, legendary] = await Promise.all([
-        require("./gogdl-tool").source.discover({ signal, logger }).then(rows => newest(rows.filter(row => row.architecture === process.arch))),
-        require("./external-store-downloads").LEGENDARY.discover({ signal, logger }).then(newest)]);
-      const found = [gogdl && `gogdl ${gogdl}`, legendary && `Legendary ${legendary}`].filter(Boolean);
+      const legendary = await require("./external-store-downloads").LEGENDARY.discover({ signal, logger }).then(newest);
+      const found = [legendary && `Legendary ${legendary}`].filter(Boolean);
       return found.length ? `Newest: ${found.join(", ")}. The next store download installs a newer helper.` : "No helper release is listed.";
     }
   },

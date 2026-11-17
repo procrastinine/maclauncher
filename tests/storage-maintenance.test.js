@@ -116,7 +116,7 @@ test("MKXP-Z upkeep keeps the newest sessions of each version and every other pe
   assert.equal(fs.readFileSync(path.join(root, "games", "game1", "modules", "rgss", "saves", "Save01.rvdata2"), "utf8"), "save");
 });
 
-test("download helper upkeep keeps the helpers downloads use and unrecognized folders", async t => {
+test("legacy helper upkeep preserves GOG copies governed by managed runtime origins", async t => {
   const root = profile(t), tools = path.join(root, "external", "tools");
   const legendary = (version, confirmsBuilds) => {
     const directory = path.join(tools, `legendary-${version}-${sha(version).slice(0, 12)}`);
@@ -131,8 +131,8 @@ test("download helper upkeep keeps the helpers downloads use and unrecognized fo
     write(path.join(directory, "source.json"), JSON.stringify({ version, sha256: sum, size: bytes.length }));
     return folder(directory);
   };
-  const kept = [legendary("0.21.1", false), legendary("0.20.0", true), gogdl("1.4.0")];
-  const removed = [legendary("0.19.0", true), gogdl("1.3.0")];
+  const kept = [legendary("0.21.1", false), legendary("0.20.0", true), gogdl("1.4.0"), gogdl("1.3.0")];
+  const removed = [legendary("0.19.0", true)];
   const partial = folder(path.join(tools, "legendary-0.18.0-incomplete"));
   await pass({ userDataDir: root, stores: coreStores, now: NOW });
   for (const directory of [...kept, partial]) assert.ok(exists(directory), directory);

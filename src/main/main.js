@@ -2457,6 +2457,8 @@ const hostAccountActions = require("./module-host-account-actions").createModule
 });
 const externalStores = require("./external-store-service").createExternalStoreService({
   userDataDir, confirmDuplicate: confirmDuplicateDownload, importGame: job => steamWindow.importExternal(job), openExternal: url => shell.openExternal(url),
+  helperContext: () => ({ settings: loadSettings(), confirmRuntimeInstall: confirmRuntimeInstallation,
+    downloads: downloadManager, logger: console, runtimeCoordinator: settingsCoordinator }),
   browserLogin: options => googleAccountManager.browserLogin(options),
   focusLogin: accountId => googlePlayAuth.focus(accountId),
   clearBrowserAccount: accountId => googleAccountManager.clearBrowserAccount(accountId),
