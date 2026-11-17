@@ -151,3 +151,45 @@ test("the inspector lane keeps listed installations and verified app bundles unt
   assert.equal(App.appBundleStatus(app).ready, false, "an inventory change validates the bundle again");
   assert.ok(observed > 0);
 });
+
+// A runtime settings window's choice lists and the inspector's rows each read
+// every translator manager's state and selections. In the inspector lane the
+// same request is read once until the runtime inventory changes; a
+// request for another build, one that passes a callback and every other lane
+// read again.
+test("the inspector lane keeps each runtime manager's state and selections until the runtime inventory changes", t => {
+  const InventoryRevision = require("../src/core/runtime-inventory-revision");
+  const { instrumentRuntimeManagers } = require("../src/core/coordinated-runtime-managers");
+  const Architecture = require("../src/modules/shared/runtime/architecture");
+  t.after(() => InventoryRevision.activate({ retainReads: false }));
+  let states = 0, selections = 0;
+  const manager = { id: "fixture-retained-reads",
+    getState: options => ({ read: ++states, installed: [{ version: "1.0" }], settings: options.settings }),
+    resolveSelection: (entry, settings, userDataDir, options = {}) => ({ read: ++selections, version: options.version || "1.0", ready: true, install: { version: "1.0" } }) };
+  instrumentRuntimeManagers([manager]);
+  const options = { userDataDir: "/profile", settings: { defaultVersion: null }, logger: { warn() {} } };
+  const select = (extra = {}) => manager.resolveSelection({ gameId: "game" }, { runtimes: {} }, "/profile", { verification: "status", ...extra });
+
+  InventoryRevision.activate({ retainReads: false });
+  assert.equal(manager.getState(options).read, 1); assert.equal(manager.getState(options).read, 2, "outside the inspector lane every state is read");
+  assert.equal(select().read, 1); assert.equal(select().read, 2, "outside the inspector lane every selection is read");
+
+  InventoryRevision.activate({ retainReads: true });
+  const first = manager.getState(options);
+  first.installed = [];
+  assert.equal(manager.getState(options).read, first.read, "the same state request is read once");
+  assert.equal(manager.getState(options).installed.length, 1, "a caller's change to its copy is not kept");
+  assert.equal(manager.getState({ ...options, logger: { info() {} } }).read, first.read, "a logger is not part of the request");
+  assert.equal(Architecture.withArchitecture("x64", () => manager.getState(options)).read, first.read + 1, "another build is another request");
+  assert.equal(manager.getState({ ...options, settings: { defaultVersion: "1.0" } }).read, first.read + 2, "other settings are another request");
+  const selected = select();
+  assert.equal(select().read, selected.read, "the same selection is read once");
+  assert.equal(select({ version: "2.0" }).read, selected.read + 1, "another version is another request");
+  const compatible = () => true;
+  assert.equal(select({ compatible }).read, selected.read + 2);
+  assert.equal(select({ compatible }).read, selected.read + 3, "a request with a callback is read again");
+
+  InventoryRevision.advance();
+  assert.equal(manager.getState(options).read, states, "an inventory change reads the state again");
+  assert.equal(select().read, selections, "an inventory change reads the selection again");
+});

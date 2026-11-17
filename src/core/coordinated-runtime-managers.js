@@ -144,11 +144,54 @@ async function withRuntimeUse(identity, fn, { coordinator, userDataDir } = {}) {
   finally { finished = true; await release(); }
 }
 
+// A manager's state and selections for the same request are kept in the
+// inspector's lane until its runtime inventory changes, as
+// memoizeRuntimeResolution keeps a module's own selections. A runtime settings
+// window's choice lists, the inspector's rows and a translator inventory each
+// read every translator manager's state and selections, and a selection
+// without an explicit version reads its manager's whole state again, so each
+// choice list otherwise read every installed runtime and its catalog. The
+// request's build (Architecture.withArchitecture) is part of the request; a
+// request that passes a callback, such as a compatibility test, and other
+// lanes, Play preparation and reads during a change read the files again.
+// Callers receive their own copy of the top-level object. A translator
+// manager is asked for each installed version on each CPU, so a manager keeps
+// up to 512 requests, each by the digest of its arguments.
+const RETAINED_REQUESTS = 512;
+function retainedKey(args) {
+  let callback = false;
+  try {
+    const key = JSON.stringify([Architecture.selectedArchitecture(), args], (name, value) => {
+      if (typeof value === "function") { if (name !== "logger") callback = true; return undefined; }
+      return value instanceof Map || value instanceof Set || name === "logger" || name === "signal" ? undefined : value;
+    });
+    return callback ? null : crypto.createHash("sha256").update(key).digest("base64");
+  } catch { return null; }
+}
+function retainReads(manager, method) {
+  const read = manager[method], retained = { revision: null, values: new Map() };
+  manager[method] = function retainedRead(...args) {
+    const revision = InventoryRevision.retained(), store = operations.getStore();
+    const key = revision === null || store?.mutations?.length || store?.runtimeUseScope ? null : retainedKey(args);
+    if (key === null) return read.apply(this, args);
+    if (retained.revision !== revision) { retained.revision = revision; retained.values.clear(); }
+    let value = retained.values.get(key);
+    if (value === undefined) {
+      value = read.apply(this, args);
+      if (!value || typeof value !== "object" || typeof value.then === "function") return value;
+      if (retained.values.size >= RETAINED_REQUESTS) retained.values.delete(retained.values.keys().next().value);
+      retained.values.set(key, value);
+    }
+    return Array.isArray(value) ? [...value] : { ...value };
+  };
+}
+
 /** Module methods retain ownership of compatibility, versions and installation. */
 function instrumentRuntimeManagers(managers) {
   for (const manager of managers) {
     if (!manager?.id || instrumented.has(manager)) continue;
     instrumented.add(manager);
+    for (const method of ["getState", "resolveSelection"]) if (typeof manager[method] === "function") retainReads(manager, method);
     if (typeof manager.resolveSelection === "function") {
       const original = manager.resolveSelection;
       manager.resolveSelection = function observedSelection(...args) {

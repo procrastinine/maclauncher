@@ -77,8 +77,18 @@ function readRegistry(text) {
   }
   return result;
 }
+// Each registry file is read and parsed when it is first used. Listing
+// environments names each one from its own settings and user registry, so
+// it reads no machine registry, which is several megabytes in a CrossOver
+// bottle.
 function registryValues(prefixPath) {
-  return Object.fromEntries(["system.reg", "user.reg", "userdef.reg"].map(file => [file, readRegistry(textFile(path.join(prefixPath, file)))]));
+  const values = {};
+  for (const file of ["system.reg", "user.reg", "userdef.reg"]) {
+    let parsed;
+    Object.defineProperty(values, file, { enumerable: true, configurable: true,
+      get: () => parsed ||= readRegistry(textFile(path.join(prefixPath, file))) });
+  }
+  return values;
 }
 function normalizeSettings(environment, metadata, registry, wrapper) {
   const user = registry["user.reg"] || {};

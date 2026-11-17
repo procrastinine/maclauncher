@@ -275,6 +275,9 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     },
     // Modules prepare in the given order, then in registry order.
     async warmInspectorLane(settings, order = []) {
+      // The runtime states and selections this preparation reads are kept for
+      // the lane's later requests (coordinated-runtime-managers.js retainReads).
+      require("./coordinated-runtime-managers").instrumentRuntimeManagers(managers);
       const rank = id => { const index = order.indexOf(id); return index < 0 ? order.length : index; };
       for (const id of registry.listModuleIds().sort((a, b) => rank(a) - rank(b))) {
         const warm = registry.getModule(id)?.warmBackendLane;
