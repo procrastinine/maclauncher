@@ -123,4 +123,6 @@ async function prepareSelection({ prefixPath, dllRoot, windows, unixName, client
   };
 }
 
-module.exports = { prepareSelection };
+function inspectClientName(input) { return clientName(checked(input)); }
+
+module.exports = { prepareSelection, inspectClientName };
