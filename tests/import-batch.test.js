@@ -16,6 +16,20 @@ test('batch attempts every input, reports every failure and counts progress thro
   assert.equal(progress[0].failures.length, 0);
 });
 
+test('batch hands every input over at once and reports its unfinished inputs in order', async () => {
+  const {runImportBatch} = await import('../src/renderer/src/ui/import-batch.mjs');
+  const started = [], settle = {}, progress = [];
+  const running = runImportBatch(['/a','/b','/c'], input => { started.push(input); return new Promise((resolve, reject) => { settle[input] = {resolve, reject}; }); }, row => progress.push(row));
+  assert.deepEqual(started, ['/a','/b','/c'], 'the launcher queue receives every input before any finishes');
+  assert.deepEqual(progress[0].pendingPaths, ['/a','/b','/c']);
+  settle['/b'].resolve(); await new Promise(setImmediate);
+  assert.deepEqual([progress.at(-1).completed, progress.at(-1).currentPath, progress.at(-1).pendingPaths], [1, '/a', ['/a','/c']]);
+  settle['/c'].reject(new Error('Unreadable.')); settle['/a'].resolve();
+  const result = await running;
+  assert.equal(result.added, 2); assert.equal(result.completed, 3); assert.equal(result.currentPath, null); assert.deepEqual(result.pendingPaths, []);
+  assert.deepEqual(result.failures, [{inputPath:'/c',reason:'Unreadable.'}]);
+});
+
 test('resolving a failed item updates counts and retains unrelated failures', async () => {
   const {runImportBatch,resolveImportFailure} = await import('../src/renderer/src/ui/import-batch.mjs');
   const original = await runImportBatch(['/bad1','/good','/bad2'], async p => { if (p.startsWith('/bad')) throw Error('Choose a file.'); });

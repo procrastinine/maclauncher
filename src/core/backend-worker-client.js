@@ -244,10 +244,11 @@ const PERSISTENT = new Set(["state", "inspector"]);
 // The inspector lane keeps its reads of installed runtimes until a runtime
 // inventory change; see runtime-inventory-revision.js.
 const RETAINED_READS = new Set(["inspector"]);
-// A game's first request otherwise waits for a new worker to load every
-// module. One spare worker loads them in advance and becomes the next game's
-// lane; another starts shortly after.
+// A game's or an import's first request otherwise waits for a new worker to
+// load every module. One spare worker loads them in advance and becomes the
+// next such lane; another starts shortly after.
 const SPARE = "spare", SPARE_DELAY_MS = 250;
+const adoptsSpare = lane => lane.startsWith("game:") || lane.startsWith("library-import:");
 function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
   idleMs = 120000, maxIdleWorkers = 2, workerPath, runtimeCoordinator } = {}) {
   const coordinator = runtimeCoordinator || (userDataDir ? coordinatorFor(userDataDir) : createRuntimeCoordinator());
@@ -311,7 +312,7 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
     cancelIdle(lane);
     let client = clients.get(lane);
     if (!client || client.closed) {
-      const spare = lane.startsWith("game:") && clients.get(SPARE);
+      const spare = adoptsSpare(lane) && clients.get(SPARE);
       if (spare && !spare.closed) {
         clients.delete(SPARE); spare.lane = lane; clients.set(lane, spare); client = spare;
         if (sparePrepared) setTimeout(prepareSpare, SPARE_DELAY_MS).unref();

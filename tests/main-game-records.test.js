@@ -18,12 +18,13 @@ function fixture(t) {
   let writes = 0;
   const context = vm.createContext({GAME_SCHEMA_VERSION: GameStore.CURRENT_RECORD_SCHEMA_VERSION, StoredPlan, mergeSettingsChanges, structuredClone,
     app: {getPath: () => userDataDir}, gameRecordsCache: null,
-    assertGameNotRemoving() {}, isGameRemoving: () => false, hydrateCheatsFromFiles: () => false,
+    assertGameNotRemoving() {}, isGameRemoving: () => false, hydrateCheatsFromFiles: () => false, syncCheatsFiles() {},
     NetworkAccess: {preferenceForEntry: () => false}, loadSettings: () => ({}),
     GameStore: {...GameStore, writeGameRecord(...args) {writes++; return GameStore.writeGameRecord(...args);}}});
   vm.runInContext(section("function serializeGameEntry(", "// Notices from the one-time graphics upgrade") +
     section("function graphicsNotices(", "function isGameRemoving(") +
     section("function saveGameRecord(", "function persistGames(") +
+    section("function persistGames(", "let gameRecordsCache = null;") +
     section("function loadGamesHydrated(", "function orderGames("), context);
   const entry = context.serializeGameEntry({gameId: "game", gamePath: path.join(userDataDir, "Original"),
     name: "Original title", notes: "Original notes", networkAccess: false, moduleId: "fixture",
@@ -70,6 +71,18 @@ test("batch saves keep freshly merged disk fields in the cache", t => {
   f.context.saveGameRecords([userEdit]);
   assert.equal(f.read().notes, "Batch edit");assert.equal(f.read().moduleData.version, "worker");
   assert.equal(f.context.gameRecordsCache[0].moduleData.version, "worker");assert.equal(f.writes(), 1);
+});
+
+test("an import writes only its own record and keeps every other cached record", t => {
+  const f = fixture(t), other = {...f.entry, gameId: "other", gamePath: path.join(f.userDataDir, "Other")};
+  f.write(other); f.context.gameRecordsCache.push(structuredClone(other));
+  f.write({...other, notes: "Disk only"});
+  const imported = {...f.entry, gameId: "new", gamePath: path.join(f.userDataDir, "New"), name: "New"};
+  f.context.persistGames([imported, structuredClone(f.entry), structuredClone(other)], imported);
+  assert.equal(f.writes(), 1);assert.equal(GameStore.readGameRecord(f.userDataDir, "new").name, "New");
+  assert.deepEqual(f.context.gameRecordsCache.map(game => game.gameId), ["new", "game", "other"]);
+  assert.equal(f.context.gameRecordsCache[2].notes, "Original notes", "other records are not read again from disk");
+  assert.equal(f.context.loadGamesHydrated({clone: false}), f.context.gameRecordsCache, "a reader can use the cached records without a copy");
 });
 
 test("the initial hydrated library read cannot mutate the writer's cached baseline", t => {

@@ -1,21 +1,30 @@
 // Keep each selected input independent: a failed import never discards later inputs.
+// Every input is handed to the launcher at once. Its import queue starts them in
+// this order, a few at a time, so one slow game never holds up the rest. The
+// batch reports the first input still in progress and every unfinished input.
 export async function runImportBatch(paths, add, onProgress = () => {}) {
-  const result = { total: paths.length, completed: 0, added: 0, currentPath: null, failures: [] };
-  for (const inputPath of paths) {
-    result.currentPath = inputPath;
-    onProgress({ ...result, failures: [...result.failures] });
+  const result = { total: paths.length, completed: 0, added: 0, currentPath: null, pendingPaths: [], failures: [] };
+  const failures = new Array(paths.length), finished = new Array(paths.length).fill(false);
+  const report = () => {
+    result.pendingPaths = paths.filter((_, index) => !finished[index]);
+    result.currentPath = result.pendingPaths[0] ?? null;
+    result.failures = failures.filter(Boolean);
+    onProgress({ ...result, pendingPaths: [...result.pendingPaths], failures: [...result.failures] });
+  };
+  report();
+  await Promise.all(paths.map(async (inputPath, index) => {
     try {
       await add(inputPath);
       result.added++;
     } catch (error) {
-      result.failures.push({ inputPath, reason: String(error?.message || error), ...(typeof error?.code === "string" ? { code: error.code } : {}),
-        ...(Array.isArray(error?.nestedGames) && error.nestedGames.length ? { nestedGames: error.nestedGames } : {}) });
+      failures[index] = { inputPath, reason: String(error?.message || error), ...(typeof error?.code === "string" ? { code: error.code } : {}),
+        ...(Array.isArray(error?.nestedGames) && error.nestedGames.length ? { nestedGames: error.nestedGames } : {}) };
     }
+    finished[index] = true;
     result.completed++;
-  }
-  result.currentPath = null;
-  onProgress({ ...result, failures: [...result.failures] });
-  return result;
+    report();
+  }));
+  return { ...result, pendingPaths: [], failures: failures.filter(Boolean) };
 }
 
 export function resolveImportFailure(batch, index, replacement) {

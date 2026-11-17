@@ -238,6 +238,14 @@ test("a spare worker becomes the next game's lane and another starts after it", 
   assert.deepEqual(events, []);
 });
 
+test("an import lane adopts the prepared spare worker", { timeout: 10000 }, async t => {
+  const service = createBackendService({ workerPath });
+  t.after(() => service.close());
+  assert.equal(service.prepareSpareLane(), true);
+  assert.equal((await service.request("library-import:0", "moduleAction", {}, "status", {})).lane, "spare", "the first import adopts the spare");
+  assert.equal((await service.request("library", "moduleAction", {}, "status", {})).lane, "library", "the library lane keeps its own worker");
+});
+
 test("native host callbacks roundtrip asynchronously and preserve structured errors", async t => {
   const client = new BackendWorkerClient({ workerPath, callbacks: { choose: async descriptor => ({ path: descriptor.path }) } });
   t.after(() => client.close());

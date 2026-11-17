@@ -20,7 +20,7 @@ export function useImportBatches(api: ImportApi | undefined) {
   async function addPaths(paths: string[]) {
     if (!api || !paths.length) return;
     const id = ++nextId.current;
-    setBatches(previous => [...previous, { id, total: paths.length, completed: 0, added: 0, currentPath: paths[0], failures: [] }]);
+    setBatches(previous => [...previous, { id, total: paths.length, completed: 0, added: 0, currentPath: paths[0], pendingPaths: paths, failures: [] }]);
     await runImportBatch(paths, path => api.addRecent(path), progress => {
       setBatches(previous => previous.map(batch => batch.id === id ? { id, ...progress } : batch));
     });
@@ -58,7 +58,8 @@ type Props = Omit<ReturnType<typeof useImportBatches>, "remove" | "reveal"> & Pa
 // Running batches and fully added ones keep their own notices. Every failure of
 // the finished batches is listed in one banner with a single Dismiss.
 export function ImportBatches({ batches, jobs, onCancel, resolve, dismiss, remove = () => {}, reveal = () => {} }: Props) {
-  const batchPaths = new Set(batches.map(batch => batch.currentPath));
+  // A running batch reports its own inputs; their jobs are not listed again.
+  const batchPaths = new Set(batches.flatMap(batch => batch.pendingPaths?.length ? batch.pendingPaths : [batch.currentPath]));
   const failed = batches.filter(batch => !batch.currentPath && batch.failures.length);
   return <div className="importBatches">
     {batches.filter(batch => !failed.includes(batch)).map(batch =>

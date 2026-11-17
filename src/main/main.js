@@ -825,14 +825,23 @@ function saveGameRecords(entries) {
   gameRecordsCache = (entries || []).map(entry => isGameRemoving(entry) ? serializeGameEntry(entry) : saveGameRecord(entry));
 }
 
-function persistGames(entries) {
-  saveGameRecords(entries);
+// `changed` names the one record an import added or updated. Only that record
+// is written then; the others keep their cached records, which entryChanged
+// events keep current, and are not read again from disk.
+function persistGames(entries, changed = null) {
+  if (changed) {
+    const record = saveGameRecord(changed);
+    const cached = new Map((gameRecordsCache || []).map(game => [game.gameId, game]));
+    gameRecordsCache = entries.map(game => game.gameId === record.gameId ? record : cached.get(game.gameId) || serializeGameEntry(game));
+  } else saveGameRecords(entries);
   syncCheatsFiles(entries);
 }
 
 let gameRecordsCache = null;
-function loadGamesHydrated({ persist = true } = {}) {
-  if (gameRecordsCache) return structuredClone(gameRecordsCache);
+// `clone: false` returns the cached records themselves, for a caller that only
+// reads them.
+function loadGamesHydrated({ persist = true, clone = true } = {}) {
+  if (gameRecordsCache) return clone ? structuredClone(gameRecordsCache) : gameRecordsCache;
   const games = GameStore.loadGames(app.getPath("userData"));
   let changed = false;
   try {
@@ -840,7 +849,7 @@ function loadGamesHydrated({ persist = true } = {}) {
   } catch {}
   if (changed && persist) saveGameRecords(games);
   gameRecordsCache = games;
-  return structuredClone(games);
+  return clone ? structuredClone(games) : games;
 }
 
 // One library record for a request about one game, without copying the
@@ -3623,7 +3632,7 @@ async function showGameOpenDialog() {
 }
 
 async function importGameIntoLibrary(resolved, options = {}) {
-  const previous = loadGamesHydrated({ persist: false }).find(entry => [entry.gamePath, entry.importPath].includes(resolved));
+  const previous = loadGamesHydrated({ persist: false, clone: false }).find(entry => [entry.gamePath, entry.importPath].includes(resolved));
   if (previous) assertGameNotRemoving(previous);
   const lane = claimImportLane(resolved);
   let detected;
@@ -3640,7 +3649,7 @@ async function importGameIntoLibrary(resolved, options = {}) {
   assertGameNotRemoving(existing || detected);
   detected.gameId = existing?.gameId || detected.gameId || GameData.createGameId();
   const upserted = upsertGame(games, detected, settings, checks);
-  persistGames(upserted.games);
+  persistGames(upserted.games, upserted.entry);
   saveSettings(settings);
   cachedState = buildState(settings, upserted.games);
   broadcastState();
