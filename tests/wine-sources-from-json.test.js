@@ -54,9 +54,17 @@ test("a Wine declared only by JSON lists the releases its asset patterns match, 
   assert.equal(catalog().versionRequirements[arm].architecture, "arm64");
   assert.deepEqual(catalog().installableVersions, [intel], "the arm64 build needs the application's loader");
   assert.match(catalog().versionRequirements[arm].installReason, /runs through Highball, which is not installed/);
+  // Play: the arm64 build is never the automatic choice or a planned download
+  // while the loader is missing; choosing it states the reason.
+  const select = options => manager.resolveSelection({}, {}, userDataDir, options);
+  assert.notEqual(select({}).version, arm, "the automatic choice is not the build that cannot install");
+  const chosen = select({ version: arm });
+  assert.equal(chosen.ready, false);assert.equal(chosen.version, null, "no download is planned for the arm64 build");
+  assert.match(chosen.reason, /runs through Highball, which is not installed/);
   const loader = path.join(applications, "Highball.app/Contents/Helpers/WineLoader.app/Contents/MacOS/wine");
   fs.mkdirSync(path.dirname(loader), { recursive: true }); fs.writeFileSync(loader, "");
   assert.deepEqual([...catalog().installableVersions].sort(), [intel, arm].sort(), "with the application installed, the arm64 build is offered");
+  assert.equal(select({ version: arm }).version, arm, "with the application installed, choosing the arm64 build plans its download");
 });
 
 test("the Wine tree of a download is found by its files, in an archive folder or inside an application", t => {

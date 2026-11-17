@@ -210,8 +210,11 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       ? (dependencies.systemVersionSync || systemVersionSync)() : null;
     return actual && versionAtLeast(actual, pin.minimumMacOS) ? null : `${label} ${pin.version} requires macOS ${pin.minimumMacOS}.`;
   }
+  // Why a listed download cannot be installed on this Mac now: an expired
+  // link, or a reason its source reads live, such as a loader application that
+  // is not installed (`dependencies.listedReason`).
   const assetReason = pin => pin?.asset?.expiresAt && Date.parse(pin.asset.expiresAt) <= (dependencies.now || Date.now)()
-    ? "This build's download expired. Refresh versions to find a current build." : null;
+    ? "This build's download expired. Refresh versions to find a current build." : pin && dependencies.listedReason?.(pin) || null;
   let discoveryState = { status: "idle", fetchedAt: null, error: null, source: sourceUrl || null, mode: null };
   const sourceStates = Object.fromEntries(sourceIds.map(sourceId => [sourceId, { status: "idle", fetchedAt: null, error: null, mode: null }]));
   const discoveryPromises = new Map();
@@ -726,6 +729,10 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     }
     const { layer, version, pin, install } = chosen;
     const automatic = !manual && (!saved || layer.source === "recommended" || preferredVersion != null);
+    // A listed version that cannot be installed here is not planned: Play
+    // states the reason instead of offering its download.
+    if (version && pin && !install && assetReason(pin)) return { version: null, install: null, ready: false, requiresDownload: false, automatic,
+      discoveryRequired: false, reason: assetReason(pin) };
     if (!version) return { version: null, install: null, ready: false, requiresDownload: true, automatic,
       discoveryRequired: remote.size === 0,
       reason: preferredArchitectures(remoteEntries).map(hostReason).find(Boolean) || `No ${label} versions are available to download.` };

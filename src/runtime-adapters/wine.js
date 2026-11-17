@@ -187,6 +187,15 @@ function createBackend({source, dependencies = {}}) {
   const {createPinnedNativeManager} = require('../modules/shared/runtime/pinned-native-manager');
   const Shared = require('../modules/crossover/sources/wine-payload');
   const label = source.label, id = source.manager?.id || source.id;
+  // A listed build the source says cannot be installed on this Mac now, such
+  // as one whose loader application is not installed, is neither the default
+  // nor offered by Play, and its CPU offers no build through it.
+  const listedReason = pin => {
+    if (typeof Catalog.describeRequirements !== 'function' || !pin?.version) return null;
+    const requirements = {[pin.version]: {}};
+    try { Catalog.describeRequirements([pin], requirements, [], {}, dependencies); } catch { return null; }
+    return requirements[pin.version]?.installReason || null;
+  };
   const base = createPinnedNativeManager({id, label, sourceUrl: Catalog.SOURCE_URL, sourceName: source.labels?.source,
     formatVersionLabel: Catalog.versionLabel, discoverCatalog: dependencies.discoverCatalog || Catalog.discover,
     resolveExecutable: (root, pin, {installationMetadata} = {}) => path.join(root, installationMetadata?.entry || source.layout?.entry || require('./wine-release').findWine(root)?.entry || 'bin/wine'),
@@ -194,7 +203,7 @@ function createBackend({source, dependencies = {}}) {
     ...(dependencies.verifyArtifact ? {verifyArtifact: dependencies.verifyArtifact} : {}),
     // A payload with its own custom inspector registers custom Wines on the
     // composed manager below; its stored versions stay the base's.
-    ...(typeof Payload.configureCustom === 'function' ? {customRuntime:false} : {}), dependencies});
+    ...(typeof Payload.configureCustom === 'function' ? {customRuntime:false} : {}), dependencies: {...dependencies, listedReason: pin => listedReason(pin) || dependencies.listedReason?.(pin) || null}});
   const inspect = Payload.createPayloadResolver(dependencies);
   const resolvePayload = (install, options) => {
     if (install && Payload.validateInstallIdentity) {
@@ -217,6 +226,7 @@ function createBackend({source, dependencies = {}}) {
     const choose = () => {
       base.core.listCatalog({userDataDir:options.userDataDir});
       const selection=base.resolveSelection({},settings,options.userDataDir,{version:options.version}),version=selection.preferredVersion||selection.version;
+      if(!version&&selection.reason&&selection.discoveryRequired===false)throw new Error(selection.reason);
       return {version,pin:base.core.catalog.find(pin=>pin.version===version)};
     };
     let choice=choose();
