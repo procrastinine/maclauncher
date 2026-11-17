@@ -300,7 +300,12 @@ async function fetchPackages({ lock = readLock({ arch: process.arch }), repoRoot
     try{
       let outer;const declaration=await extractPackage(archive,staging,record,{onDeclaration:bytes=>{outer=bytes;}}),resolveDependency=P.resolver(children);
       P.materialize(staging,declaration,resolveDependency);
-      if(fs.existsSync(destination)){P.materialize(destination,declaration,resolveDependency);}
+      if(fs.existsSync(destination)){
+        // A folder holding other bytes under this release, such as an earlier
+        // unpublished build, is replaced by the verified published package.
+        try{P.materialize(destination,declaration,resolveDependency);}
+        catch{const stale=destination+'.stale-'+crypto.randomUUID();fs.renameSync(destination,stale);fs.renameSync(staging,destination);await removeStaging(stale);}
+      }
       else fs.renameSync(staging,destination);
       const sidecar=path.join(root,'.declarations',record.asset.sha256+'.json');
       if(fs.existsSync(sidecar)&&!fs.readFileSync(sidecar).equals(outer))throw new Error('An included sealed declaration changed.');
