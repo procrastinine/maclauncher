@@ -71,6 +71,9 @@ const findChoice = (choices, value, usable = () => true) => {
 const identity = description => description && `${description.id}:${description.root || ''}`;
 function filesForRole(description, role) {
   const files = description?.files || [], primary = files.filter(file => Roles.fileApis(file).some(api => role.apis.includes(api)));
+  // An absent API entry point cannot supply that role. In particular, the
+  // automatic D3D8 role must not place stock D3D11/DXGI over another route.
+  if (!primary.length && files.some(file => Roles.fileApis(file).length)) return [];
   if (!primary.length || primary.some(file => file.importsComplete !== true)) return files;
   const otherImports = new Set(files.filter(file => file.format === 'pe' && Roles.fileApis(file).length && !primary.includes(file)).flatMap(file => file.peImports || []));
   const wanted = new Set([...primary, ...files.filter(file => file.format === 'pe' && !Roles.fileApis(file).length &&
