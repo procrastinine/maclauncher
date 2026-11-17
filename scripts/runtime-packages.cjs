@@ -301,10 +301,10 @@ async function fetchPackages({ lock = readLock({ arch: process.arch }), repoRoot
       let outer;const declaration=await extractPackage(archive,staging,record,{onDeclaration:bytes=>{outer=bytes;}}),resolveDependency=P.resolver(children);
       P.materialize(staging,declaration,resolveDependency);
       if(fs.existsSync(destination)){
-        // A folder holding other bytes under this release, such as an earlier
-        // unpublished build, is replaced by the verified published package.
+        // An installed release is immutable. A folder holding other bytes under
+        // it is reported with its path and kept as it is.
         try{P.materialize(destination,declaration,resolveDependency);}
-        catch{const stale=destination+'.stale-'+crypto.randomUUID();fs.renameSync(destination,stale);fs.renameSync(staging,destination);await removeStaging(stale);}
+        catch(error){error.message=`${path.relative(repoRoot,destination)} holds other bytes than ${record.id} ${record.version}: ${error.message.replace(/\.?$/,'.')} Remove that folder and fetch again.`;throw error;}
       }
       else fs.renameSync(staging,destination);
       const sidecar=path.join(root,'.declarations',record.asset.sha256+'.json');
