@@ -4,7 +4,7 @@ const Static = require('./model-source.json'), Models = require('./models');
 const RAW = /^https:\/\/raw\.githubusercontent\.com\/([^/]+\/[^/]+)\/([a-f0-9]{40})\/(.+)$/;
 const safe = name => typeof name === 'string' && name.length <= 256 && !/[\0/\\]/.test(name);
 const validEntry = row => safe(row?.version) && row.version.length <= 240 && typeof row.label === 'string' &&
-  typeof row.repository === 'string' && row.repository.startsWith('https://github.com/') && row.files?.length > 0 && row.files.length <= 32 &&
+  typeof row.repository === 'string' && /^https:\/\/(?:github\.com|huggingface\.co)\//.test(row.repository) && row.files?.length > 0 && row.files.length <= 32 &&
   row.files.every(file => safe(file.file) && /^https:\/\//.test(file.url) && Number.isSafeInteger(file.bytes) && file.bytes > 0 && file.bytes <= Models.MAX_WEIGHTS &&
     (/^[a-f0-9]{64}$/.test(file.sha256 || '') || /^[a-f0-9]{40}$/.test(file.gitBlobSha1 || '')));
 function read(userDataDir) { return Cache.readRuntimeCatalog({userDataDir, managerId: Models.ID, sourceId: 'upstream', validateEntry: validEntry}); }
@@ -67,6 +67,10 @@ async function refresh(context = {}, dependencies = {}) {
         files: [{file: file.name, url: file.url, bytes: file.bytes, sha256: file.digest.value}]});
     }
   } catch (error) { signal?.throwIfAborted();failures.push('DLSSMac: ' + error.message); }
+  for (const base of Static.sources.filter(row => require('./hub-source').HUGGING_FACE.test(row.repository))) try {
+    const source = require('./hub-source').create(base);
+    for (const row of await source.discover({signal})) if (validEntry(row.details?.profile)) entries.push(row.details.profile);
+  } catch (error) { signal?.throwIfAborted();failures.push(base.label + ': ' + error.message); }
   if (!entries.length && groups.size) throw Error(failures[0] || 'No compatible checkpoint versions were returned. Existing model sources remain available.');
   const previous = read(context.userDataDir)?.entries || [];
   const merged = [...entries.filter(validEntry), ...previous.filter(row => !entries.some(current => current.version === row.version))].slice(0, 500);
