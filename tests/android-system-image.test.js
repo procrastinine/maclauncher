@@ -69,6 +69,27 @@ test('verified JVM image requirements use shared consent/downloads and preserve 
   assert.equal(f.downloads,1);assert.ok(!f.events.includes('consent'));
 });
 
+test('a freshly installed verified JVM profile acquires its exact image with the SDK terms named in the original Play dialog',async t=>{
+  const f=await fixture(t),Custom=require('../src/modules/android/custom-main'),manager=require('../src/modules/android/runtime-manager');
+  const shown=[];let runtime,prepared;
+  delete f.deps.confirm;
+  f.context.runtimeId='klepton';f.context.settings={runtimes:{}};
+  f.context.confirmRuntimeInstall=async plan=>{
+    assert.equal(runtime,undefined,'consent precedes the profile acquisition');
+    shown.push(plan);return {approved:true,licenseAccepted:true};
+  };
+  t.mock.method(manager,'resolveSelection',()=>({ready:false,version:'selected-runtime'}));
+  const host={id:manager.id,label:manager.label,installRuntime(){},getState:()=>({installed:[],catalog:{}})};
+  const mod={runtimeManagers:[host],ensureRuntime:Custom.ensureRuntime,
+    prepareLaunch:async()=>{prepared=await RuntimeImage.prepare({payload:runtime.payload,context:f.context},{imageDependencies:f.deps});}};
+  assert.equal(await require('../src/core/runtime-preparation').prepareForLaunch({entry:{},mod,info:{runtime:{}},context:f.context,
+    registry:{listModuleIds:()=>['fixture'],getModule:()=>mod},install:async()=>{runtime=runtimeFixture(f);}}),true);
+  assert.equal(shown.length,1);assert.equal(f.downloads,1);assert.equal(prepared.archiveSha256,f.image.sha256);
+  assert.equal(shown[0].companions[0].managerId,'android-system-image');
+  assert.equal(shown[0].companions[0].licenseUrl,'https://developer.android.com/studio/terms');
+  assert.equal(shown[0].companions[0].version,undefined,'the runtime profile supplies the exact content after acquisition');
+});
+
 test('JVM image requirement denial, cancellation and changed descriptor never start acquisition',async t=>{
   const f=await fixture(t),runtime=runtimeFixture(f),denied=Error('Original image consent declined');
   f.deps.confirm=async()=>{throw denied;};

@@ -39,7 +39,9 @@ module.exports = {
   prepareSaveLocation(entry, context) { return Storage.prepareStorage(entry, context.userDataDir); },
   ensureRuntime(entry, context) {
     const selection = manager.resolveSelection(entry, context?.settings, context?.userDataDir);
-    return selection.ready ? null : { managerId: manager.id, version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
+    return selection.ready ? null : { managerId: manager.id, version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {},
+      companions: [{ managerId: 'android-system-image', label: 'Android system image if required by the selected runtime',
+        licenseRequired: true, licenseUrl: 'https://developer.android.com/studio/terms' }] };
   },
   getRuntimeRequirements(entry, context) {
     if (context.runtimeId && context.runtimeId !== "klepton") return [];

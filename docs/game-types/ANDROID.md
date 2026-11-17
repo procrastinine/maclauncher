@@ -231,6 +231,10 @@ the image when the selected runtime does not already provide it.
 Play reuses a compatible installed image without Refresh or another download
 dialog. AIM lists the original image and its reader in the runtime download
 consent, including the Android SDK terms.
+When a Klepton package reveals its exact image only after installation, the
+runtime download dialog names that conditional image and its SDK terms. The
+accepted terms cover that manager's required image in the same Play; another
+manager or different terms require their own consent.
 Earlier automatic copies retire when unused; explicit installations, defaults,
 custom roots and images in use remain protected. Image storage is shared with
 the existing read-only cache rather than copied into another runtime folder.

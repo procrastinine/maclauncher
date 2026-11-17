@@ -346,7 +346,7 @@ test("LÖVE Play prefers a detected release over the global release choice, whic
   const f = loveFixture(t, { stable: ["11.5", "11.4"], nightly: ["new-nightly"] });
   const ctx = context("love", { love: { stable: { defaultVersion: "11.4" }, nightly: { defaultVersion: "new-nightly" } } });
   const saved = structuredClone(ctx.settings);
-  assert.deepEqual(await Love.ensureRuntime({ moduleData: { detectedVersion: "11.5" } }, ctx), { managerId: "love", version: "11.5", installOptions: { sectionId: "stable" } });
+  assert.deepEqual(await Love.ensureRuntime({ moduleData: { detectedVersion: "11.5" } }, ctx), { managerId: "love", version: "11.5", installOptions: { sectionId: "stable" }, automatic: true });
   assert.equal((await Love.ensureRuntime({ moduleData: { detectedVersion: "11.5" } }, context("love"))).version, "11.5");
   assert.equal((await Love.ensureRuntime({}, context("love", { love: { stable: { defaultVersion: "11.4" } } }))).version, "11.4");
   assert.deepEqual(ctx.settings, saved);
@@ -503,12 +503,12 @@ test("cold LÖVE preparation keeps declared-version evidence through consented r
   assert.equal(approvals, 1, "the nightly discovery after the release discovery needs no second question");
   assert.deepEqual(f.calls.map(call => call.sectionId), ["stable", "nightly"]);
   assert.deepEqual(f.calls.map(call => call.latestOnly), [false, true], "Development-family discovery keeps the bounded latest-artifact query");
-  assert.deepEqual(installs, [{sectionId:"nightly",version:"declared-development-build"}]);
+  assert.deepEqual(installs, [{sectionId:"nightly",version:"declared-development-build",automatic:true}]);
   entry.runtimeData = { love: { channel: "nightly", version: "declared-development-build" } };
   assert.equal(await prepare(), true); assert.equal(await prepare(), true);
   assert.equal(approvals, 1);
   assert.equal(f.calls.length, 2);
-  assert.deepEqual(installs, [{ sectionId: "nightly", version: "declared-development-build" }]);
+  assert.deepEqual(installs, [{ sectionId: "nightly", version: "declared-development-build", automatic: true }]);
 });
 
 test("Ren'Py SDK planning keeps game generation and version evidence and exact global and game choices offline", async t => {

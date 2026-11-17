@@ -193,21 +193,33 @@ async function runtimePlans(entry, mod, info, context, managers) {
 // (such as starting the Steam client), a download declined earlier in this Play,
 // an optional offer, a question with companions to choose from and a download
 // under a licence (a licence sheet, an agreement or a named licence) are still
-// asked.
+// asked. A required download can reuse exact terms its named companion already
+// accepted in this Play; it cannot inherit another manager's or terms' approval.
 const licensed = plan => plan?.licenseRequired === true || plan?.kind === "licence" || typeof plan?.licenseUrl === "string";
+const termsKey = plan => licensed(plan) && typeof plan?.managerId === 'string' && plan.managerId &&
+  typeof plan?.licenseUrl === 'string' && plan.licenseUrl ? JSON.stringify([plan.managerId, plan.licenseUrl]) : null;
 function askOncePerPlay(context) {
   const ask = context.confirmRuntimeInstall;
   if (typeof ask !== "function" || ask.oncePerPlay) return;
   let approved = false;
+  const acceptedTerms = new Set();
   context.confirmRuntimeInstall = Object.assign(async (plan, ...rest) => {
-    const covered = approved && plan?.requiresDownload === true && !licensed(plan) && plan?.optional !== true && !plan?.companions?.length &&
-      !context.declinedChoices?.has(`download:${plan?.managerId}`);
+    const covered = plan?.requiresDownload === true && plan?.optional !== true && !plan?.companions?.length &&
+      !context.declinedChoices?.has(`download:${plan?.managerId}`) &&
+      (approved && !licensed(plan) || plan.kind !== 'licence' && acceptedTerms.has(termsKey(plan)));
     if (covered) {
       context.logger?.info?.(`[runtimes] ${plan.label || plan.managerId} downloads with the approval given for this Play.`);
-      return true;
+      return licensed(plan) ? { approved: true, licenseAccepted: true } : true;
     }
     const answer = await ask(plan, ...rest);
     if ((answer === true || answer?.approved === true) && !licensed(plan)) approved = true;
+    if (answer?.approved === true && answer.licenseAccepted === true) {
+      for (const item of [plan, ...(Array.isArray(plan?.companions) ? plan.companions : [])]) {
+        if (item?.optional === true || item?.checkboxLabel && answer.companionsDeclined === true) continue;
+        const key = termsKey(item);
+        if (key) acceptedTerms.add(key);
+      }
+    }
     return answer;
   }, { oncePerPlay: true });
 }
@@ -295,14 +307,15 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
         // that companion and approves the download the dialog names in its place.
         const optional = listed.find(item => typeof item.plan.companionCheckbox === "string" && item.plan.companionCheckbox);
         const named = plan => [plan.label || managers.find(manager => manager.id === plan.managerId)?.label || plan.managerId, plan.versionLabel || plan.version].filter(Boolean).join(" ");
+        const namedCompanions = [...listed.map(item => ({ label: item.plan.label || item.manager.label || item.manager.id,
+          ...(item.versionLabel || item.plan.version ? { versionLabel: item.versionLabel || item.plan.version } : {}),
+          ...(item.plan.bytes ? { bytes: item.plan.bytes } : {}),
+          ...(licensed(item.plan) ? { managerId: item.plan.managerId, licenseRequired: true, ...(typeof item.plan.licenseUrl === "string" ? { licenseUrl: item.plan.licenseUrl } : { detail: item.plan.detail }) } : {}),
+          ...(item === optional ? { checkboxLabel: item.plan.companionCheckbox, ...(item.plan.fallback ? { fallbackLabel: named(item.plan.fallback) } : {}) } : {}) })),
+          ...[{ plan }, ...listed].flatMap(item => Array.isArray(item.plan.companions) ? item.plan.companions : [])];
         const consent = typeof context.confirmRuntimeInstall === "function" ? await context.confirmRuntimeInstall({ ...plan, ...(versionLabel ? { versionLabel } : {}),
           label: plan.label || manager.label || manager.id, requiresDownload,
-          ...(listed.length ? { companions: listed.map(item => ({ label: item.plan.label || item.manager.label || item.manager.id,
-            ...(item.versionLabel || item.plan.version ? { versionLabel: item.versionLabel || item.plan.version } : {}),
-            ...(item.plan.bytes ? { bytes: item.plan.bytes } : {}),
-            // A listed download keeps its licence, which the dialog shows and asks to agree to.
-            ...(licensed(item.plan) ? { licenseRequired: true, ...(typeof item.plan.licenseUrl === "string" ? { licenseUrl: item.plan.licenseUrl } : { detail: item.plan.detail }) } : {}),
-            ...(item === optional ? { checkboxLabel: item.plan.companionCheckbox, ...(item.plan.fallback ? { fallbackLabel: named(item.plan.fallback) } : {}) } : {}) })) } : {}),
+          ...(namedCompanions.length ? { companions: namedCompanions } : {}),
           // An optional download asked alone names the download its skip uses.
           ...(!listed.length && plan.optional && plan.fallback ? { fallbackLabel: named(plan.fallback) } : {}) }) : false;
         if (consent !== true && consent?.approved !== true) {

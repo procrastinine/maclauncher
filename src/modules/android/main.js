@@ -40,7 +40,7 @@ module.exports = {
   onImport(entry, context) { return owner(entry, context).onImport(entry, withRuntime(entry, context)); },
   ensureRuntime(entry, context) { return owner(entry, context).ensureRuntime(entry, withRuntime(entry, context)); },
   getRuntimeRequirements(entry, context){
-    if(runtimeFor(entry,context)!=='aim')return [];
+    if(runtimeFor(entry,context)!=='aim')return owner(entry,context).getRuntimeRequirements?.(entry,context)||[];
     const Aim=require('./providers/aim'),selected=Aim.manager.resolveSelection(entry,context.settings,context.userDataDir,{verification:'status'});
     const runtime=selected.ready?{...selected.install,root:selected.install.payloadRoot}:null;
     return require('./system-image-manager').requirements(context,{image:require('./providers/aim/image-source.json'),
