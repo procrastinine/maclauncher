@@ -500,14 +500,20 @@ test('translator member declarations separate DirectX targets, Vulkan drivers an
   const groupUi = require('../src/modules/shared/runtime/group-ui.json');
   const states = unique.map(owner => { const ui={ ...(registry.getRuntimeManagerUi(owner.id) || owner.ui), ...providerUi[owner.id] }; return { id: owner.id, label: owner.label, ui: {...ui,...groupUi[ui.groupId]},
     sections: [{ id: 'default', label: 'Versions' }] }; });
+  // Each group holds exactly the managers that declare it; the named members
+  // keep this relative order among them.
+  const declaring = id => states.filter(state => state.ui.groupId === id && state.ui.hidden !== true && state.ui.management !== 'built-in').map(state => state.id).sort();
+  const expected = [
+    ['directx-vulkan','DirectX → Vulkan',['translator-dxvk','dxvk','translator-vkd3d-proton','translator-vkd3d','dxvk-nvapi','vkd3d-proton']],
+    ['directx-metal','DirectX → Metal',['sikarugir-graphics-bridge','translator-d3dmetal','translator-mullion']],
+    ['vulkan-drivers','Vulkan drivers',['vulkan-moltenvk','vulkan-kosmickrisp','maclauncher-kosmickrisp','vulkan-moltenvk-scene']],
+    ['codecs','Video codecs',['translator-gstreamer']]].map(([id, label, named]) => [id, label, named, declaring(id)]);
   modelTest(`const groups=groupRuntimeManagers(${JSON.stringify(states)});
-    for(const [id,label,members] of [
-      ['directx-vulkan','DirectX → Vulkan',['translator-dxvk','dxvk','translator-vkd3d-proton','translator-vkd3d','dxvk-nvapi','vkd3d-proton']],
-      ['directx-metal','DirectX → Metal',['sikarugir-graphics-bridge','translator-d3dmetal','translator-mullion']],
-      ['vulkan-drivers','Vulkan drivers',['vulkan-moltenvk','vulkan-kosmickrisp','maclauncher-kosmickrisp','vulkan-moltenvk-scene']],
-      ['codecs','Video codecs',['translator-gstreamer']]]){
+    for(const [id,label,named,declared] of ${JSON.stringify(expected)}){
       const group=groups.find(group=>group.id===id);assert.equal(group.label,label);
-      assert.deepEqual(runtimeGroupSections(group,sections).map(row=>row.managerId),members);
+      const members=runtimeGroupSections(group,sections).map(row=>row.managerId);
+      assert.deepEqual([...members].sort(),declared);
+      assert.deepEqual(members.filter(member=>named.includes(member)),named);
     }
     assert.equal(groups.some(group=>group.id==='translators'),false);`);
   // Grouped catalogs are one card each, with their member catalogs as variants.

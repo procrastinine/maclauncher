@@ -286,8 +286,10 @@ test("CrossOver and Sikarugir share one DXMT manager and list the same installed
   // One manager serves both hosts and appears once in Runtimes, under DirectX → Metal.
   assert.equal(Support.forRuntime("crossover"), Support.forRuntime("sikarugir"));
   assert.equal(Support.forRuntime("unrelated"), null);
+  // MacLauncher DXMT packages from the Builds project are a separate provider beside it.
+  const builds = source => (source.sources || []).some(declared => declared.upstream?.builds);
   const registered = [...new Set(registry.listModules().flatMap(info => registry.getModule(info.id).runtimeManagers || [])
-    .filter(source => /dxmt/i.test(source.label || "") || /graphics-bridge/.test(source.id)))];
+    .filter(source => (/dxmt/i.test(source.label || "") || /graphics-bridge/.test(source.id)) && !builds(source)))];
   assert.deepEqual(registered.map(source => source.id), [Support.id]);
   assert.deepEqual([Support.ui.groupId, Support.ui.sectionLabel], ["directx-metal", "DXMT"]);
   // A catalog saved by an earlier launcher carries composed labels; they are not shown.
