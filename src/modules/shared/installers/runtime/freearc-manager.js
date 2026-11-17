@@ -16,7 +16,7 @@ function createManager(dependencies = {}) {
     await confirmToolInstall(context, { manager, version: selected.version, requiresDownload: true, detail: "Required to read the FreeArc archives beside this installer." });
     if (!selected.version || selected.discoveryRequired) { await manager.refreshCatalog({ ...context, force: false }); context.onRuntimeStateChange?.(); throwIfAborted(context.signal); selected = manager.resolveSelection(entry, context.settings, context.userDataDir, { version: payload.toolVersion }); }
     if (!selected.version) throw installerError("No FreeArc decoder versions are available to download.", "INSTALLER_TOOL_MISSING");
-    const installed = await manager.installRuntime({ ...context, version: selected.version }); context.onRuntimeStateChange?.(); return installed;
+    const installed = await manager.installRuntime({ ...context, version: selected.version, automatic: selected.automatic === true }); context.onRuntimeStateChange?.(); return installed;
   };
   return manager;
 }

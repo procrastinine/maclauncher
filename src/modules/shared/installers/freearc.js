@@ -7,7 +7,7 @@ const Streams = require("./freearc-stream");
 const { runHelper } = require("./process");
 const { installerError } = require("./inno-header");
 const Manager = require("./runtime/freearc-manager");
-const ABI = "freearc-builtins-external-srep-v2";
+const ABI = "freearc-managed-srep-v3";
 async function toolsFor(context) {
   if (context.freeArcTools) return context.freeArcTools;
   let install;
@@ -33,7 +33,17 @@ async function toolsFor(context) {
     if (!record || record.size !== stat.size || !/^[a-f0-9]{64}$/.test(record.sha256 || "")) throw installerError("The FreeArc decoder package manifest is incomplete.", "INSTALLER_TOOL_MISSING");
     identities.push(record.sha256);
   }
+  const srep = require("./runtime/srep-manager").selectedForInstaller(context);
+  if (srep) { tools.srep = srep.install.executablePath; identities.push(srep.install.binarySha256 || srep.install.sha256); }
   return { ...tools, identity: crypto.createHash("sha256").update(JSON.stringify([ABI, install.version, identities])).digest("hex") };
+}
+async function needsSrep(archives, tools, context) {
+  for (const archive of archives) {
+    const blocks = await Format.mapArchive(archive, { signal: context.signal,
+      decode: (method, input, size) => Streams.decodeControl(method, input, size, tools, context) });
+    if (blocks.some(block => /(?:^|[+:])srep(?=[:+]|$)/i.test(block.method))) return true;
+  }
+  return false;
 }
 async function inspectShell(root, { allowMissing = false } = {}) {
   let bytes = 0, count = 0; const configurations = [];
@@ -69,7 +79,7 @@ async function prepare(file, archives, stage, helper, tools, context, payload) {
   const mapped = [];
   for (const archive of archives) {
     const blocks = await Format.mapArchive(archive, { signal: context.signal, decode: (method, input, size) => Streams.decodeControl(method, input, size, tools, { ...context, work }) });
-    mapped.push({ path: archive, blocks: blocks.map(block => ({ ...block, stages: Codecs.planChain(block.method, payload.ini, payload.files) })) });
+    mapped.push({ path: archive, blocks: blocks.map(block => ({ ...block, stages: Codecs.planChain(block.method, payload.ini, payload.files, tools) })) });
   }
   const files = mapped.flatMap(a => a.blocks.flatMap(b => b.files)); Format.validateFiles(files);
   return { archives: mapped, files, work, helpers: payload.helpers, requiresWine: mapped.some(a => a.blocks.some(b => Codecs.needsWine(b.stages))) };
@@ -102,4 +112,4 @@ async function extract(plan, output, tools, context, selectedWine) {
     }
   }
 }
-module.exports = { ABI, toolsFor, inspectShell, stageShell, prepare, extract, findArchives: Format.findArchives };
+module.exports = { ABI, toolsFor, needsSrep, inspectShell, stageShell, prepare, extract, findArchives: Format.findArchives };

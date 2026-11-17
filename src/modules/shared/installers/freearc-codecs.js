@@ -36,11 +36,12 @@ function split4x4(method) {
   for (let i = 1; i < parts.length; i++) if (!/^\d|^.\d/.test(parts[i])) return parts.slice(i).join(":");
   bad("The 4x4 decoder has no inner method.");
 }
-function planStage(method, ini, files, depth = 0) {
+function planStage(method, ini, files, depth = 0, tools = {}) {
   if (depth > 8 || typeof method !== "string" || !method || method.length > 4096 || /[\x00-\x1f]/.test(method)) bad("The FreeArc decoder method is invalid.");
   const [name] = method.split(":"), lower = name.toLowerCase();
+  if (lower === "srep" && tools.srep) return { kind: "native-srep", name: lower, method, header: ini[lower]?.header !== "0" };
   if (lower === "srep" && !Object.hasOwn(ini, lower)) bad("This installer doesn't include the SREP decoder its archives need.");
-  if (lower === "4x4") return { kind: "4x4", name: lower, method, inner: planStage(split4x4(method), ini, files, depth + 1) };
+  if (lower === "4x4") return { kind: "4x4", name: lower, method, inner: planStage(split4x4(method), ini, files, depth + 1, tools) };
   if (BUILTINS.has(lower)) return { kind: "native", name: lower, method };
   const found = wanted => files.find(file => file.toLowerCase() === wanted.toLowerCase());
   if (Object.hasOwn(ini, lower)) {
@@ -65,9 +66,9 @@ function planStage(method, ini, files, depth = 0) {
   if (dll) return { kind: "cls", name: lower, method, dll, parameters: method.slice(name.length + 1) };
   bad("No decoder is available for the FreeArc method: " + method);
 }
-function planChain(chain, ini = {}, files = []) {
+function planChain(chain, ini = {}, files = [], tools = {}) {
   const parts = String(chain).split("+"); if (parts.length > 32) bad("The FreeArc decoder chain exceeds its limit.");
-  return parts.reverse().map(method => planStage(method.trim(), ini, files));
+  return parts.reverse().map(method => planStage(method.trim(), ini, files, 0, tools));
 }
-const needsWine = stages => stages.some(stage => stage.kind === "4x4" ? needsWine([stage.inner]) : stage.kind !== "native");
+const needsWine = stages => stages.some(stage => stage.kind === "4x4" ? needsWine([stage.inner]) : !["native", "native-srep"].includes(stage.kind));
 module.exports = { BUILTINS, parseIni, argv, planStage, planChain, needsWine };

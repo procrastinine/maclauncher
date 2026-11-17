@@ -18,6 +18,14 @@ async function prepareDownloads(context, dependencies = {}) {
     { manager: decoders, selection: context.freeArcTools ? { ready: true } : select(decoders) },
     { manager: wineManager, selection: select(wineManager), wine: true }
   ];
+  const srep = dependencies.srep || require("./runtime/srep-manager");
+  const host = dependencies.host || require("../runtime/host-capabilities").getHostCapabilities();
+  if (host.hardwareArch === "arm64" && !srep.selectedForInstaller(context) && rows[1].selection.ready && context.inputPath) {
+    const freeArc = dependencies.freeArc || require("./freearc");
+    const archives = freeArc.findArchives(context.inputPath);
+    const tools = await freeArc.toolsFor({ ...context, readOnly: true });
+    if (await freeArc.needsSrep(archives, tools, context)) rows.push({ manager: srep, selection: select(srep), optional: true });
+  }
   if (!rows[2].selection.ready && source.downloads === false) throw installerError("The selected Wine runtime cannot be downloaded by the installer reader.", "INSTALLER_TOOL_MISSING");
   const rosetta = dependencies.rosetta || Rosetta;
   const requiresRosetta = dependencies.requiresRosetta || (selection => selection.requiresRosetta === true || selection.install?.needsRosetta === true || Architecture.requiresRosetta(selection.architecture));
@@ -29,6 +37,7 @@ async function prepareDownloads(context, dependencies = {}) {
     const selection = row.selection, pin = row.manager.core?.catalog?.find(pin => pin.version === selection.version);
     const bytes = selection.downloadBytes || selection.bytes || pin?.downloadBytes || pin?.projectPackage?.archiveBytes;
     return { managerId: row.manager.id, label: row.manager.label || row.manager.id,
+      ...(row.optional ? { detail: "SREP 3.93 by Bulat Ziganshin, all rights reserved; from the selected mac-game-porter publisher release. The installer's Wine decoder is used if unavailable." } : {}),
       ...(selection.versionLabel || selection.version ? { versionLabel: selection.versionLabel || selection.version } : {}),
       ...(Number.isFinite(bytes) && bytes > 0 ? { bytes } : {}) };
   };
@@ -42,7 +51,11 @@ async function prepareDownloads(context, dependencies = {}) {
       ...(ros ? { licenseRequired: true, licenseUrl: ros.licenseUrl } : {}) };
     const consent = await context.confirmRuntimeInstall?.(plan);
     throwIfAborted(context.signal);
-    if (consent !== true && consent?.approved !== true) throw createAbortError("Installer preparation canceled.");
+    if (consent !== true && consent?.approved !== true) {
+      if (missing.every(row => row.optional) && !ros) return { context: { ...approvedContext, freeArcSrepDisabled: true },
+        wine: { source, manager: wineManager, install: rows[2].selection.install, version: rows[2].selection.version } };
+      throw createAbortError("Installer preparation canceled.");
+    }
     const permitted = new Map([...missing.map(row => [row.manager.id, row.selection.version]), ...(ros ? [[ros.managerId, null]] : [])]);
     approvedContext = { ...context, licenseAccepted: consent?.licenseAccepted === true,
       confirmRuntimeInstall: async plan => {
@@ -57,9 +70,12 @@ async function prepareDownloads(context, dependencies = {}) {
         selected = select(row.manager, row.version);
       }
       if (!selected.version) throw installerError("No " + (row.manager.label || row.manager.id) + " versions are available to download.", "INSTALLER_TOOL_MISSING");
-      await row.manager.installRuntime({ ...approvedContext, version: selected.version }); context.onRuntimeStateChange?.();
+      await row.manager.installRuntime({ ...approvedContext, version: selected.version, automatic: selected.automatic === true }); context.onRuntimeStateChange?.();
     };
-    const results = await Promise.allSettled([...missing.map(install), ...(ros ? [rosetta.ensure(approvedContext)] : [])]);
+    const results = await Promise.allSettled([...missing.map(row => row.optional ? install(row).catch(error => {
+      approvedContext.freeArcSrepDisabled = true;
+      context.logger?.warn?.("The upstream SREP tool is unavailable; using the installer's Wine decoder. " + error.message);
+    }) : install(row)), ...(ros ? [rosetta.ensure(approvedContext)] : [])]);
     const failed = results.find(result => result.status === "rejected"); if (failed) throw failed.reason;
   }
   const selected = select(wineManager);

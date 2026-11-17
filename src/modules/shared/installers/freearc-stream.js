@@ -113,6 +113,20 @@ async function *decodeStage(stage, input, context) {
     seekableSrep = (header.readUInt32LE(8) & 255) === 4;
     body = reader.rest(header);
   }
+  if (stage.kind === "native-srep") {
+    if (!context.tools.srep) throw error("The selected SREP tool is unavailable.");
+    if (!seekableSrep) { yield* run(context.tools.srep, ["-d", "-", "-"], body, context); return; }
+    const directory = await fs.promises.mkdtemp(path.join(context.work, "srep-"));
+    try {
+      const source = path.join(directory, "input"), target = path.join(directory, "output");
+      await writeStream(source, body, { signal: context.signal });
+      for await (const ignored of run(context.tools.srep, ["-d", source, target], [], context)) { /* Drain bounded diagnostics. */ }
+      const stat = await fs.promises.lstat(target);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > LIMITS.bytes) throw error("SREP did not produce a regular output file.");
+      yield* fs.createReadStream(target);
+    } finally { await fs.promises.rm(directory, { recursive: true, force: true }); }
+    return;
+  }
   const wine = context.wine || await context.getWine?.();
   if (!wine) throw error("This FreeArc method requires a Wine runtime.");
   const windowsPath = require("../runtime/managed-windows-tool").windowsPath;
