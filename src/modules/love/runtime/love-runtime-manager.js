@@ -242,7 +242,11 @@ function getState({ settings, userDataDir, resourcesRoot }) {
       { ...LuaSteam.getSection({ settings: cfg.luasteam, resourcesRoot }), supportsDefault: true, defaultSource: cfg.luasteam.defaultVersion ? "saved" : "manager" }
     ]
   };
-  const family = releaseLine;
+  const family = version => {
+    if (!Custom.isPath(version)) return releaseLine(version);
+    const row = stableInstalled.find(row => row.version === version), section = row?.sectionId || SECTION_STABLE;
+    return section === SECTION_STABLE ? "11" : section.startsWith(SECTION_STABLE + "-") ? section.slice(SECTION_STABLE.length + 1).replaceAll("-", ".") : "11";
+  };
   const stable = state.sections[0], families = [...new Set([...stable.catalog.versions, ...stable.installed.map(row => row.version)].map(family))];
   // A game's channel choice names the LÖVE 11 line or nightly builds; the other
   // lines have no choice of their own, so a version from one of them leaves the
@@ -267,7 +271,8 @@ async function installRuntime({
   downloads,
   signal: callerSignal,
   resourcesRoot,
-  archiveFile
+  archiveFile,
+  automatic
 } = {}) {
   if (sectionId === LuaSteam.SECTION_ID) {
     const included = LuaSteam.resolveBundle({ version, resourcesRoot });
@@ -299,6 +304,7 @@ async function installRuntime({
         Core.installNightlyVersion({
           userDataDir,
           entry: nightlyCatalogEntriesByVersion[buildKey] || { buildKey, version: buildKey },
+          automatic,
           logger,
           onProgress: taskProgress,
           signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal
@@ -331,7 +337,7 @@ async function installRuntime({
         logger,
         onProgress: taskProgress,
         signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal,
-        archiveFile,
+        archiveFile, automatic,
         entriesByVersion: stableCatalogEntriesByVersion
       }),
     { onProgress }
@@ -349,6 +355,7 @@ function uninstallRuntime({ userDataDir, version, installDir, sectionId } = {}) 
 }
 
 function updateSettingsAfterInstall(settings, installed, payload) {
+  if (payload?.automatic === true) return settings;
   const cfg = normalizeSettings(settings);
   const next = {
     stable: { ...cfg.stable },
@@ -437,14 +444,16 @@ Custom.configure(module.exports, {
   defaultsPath: sectionId => [sectionId, "defaultVersion"],
   providers: [
     { core: Core, versions: ["normalizeVersion"], directories: ["getInstallDir"],
-      lists: { listInstalled: ({ args }) => Core.normalizeChannel(args[1]), listInstalledStable: SECTION_STABLE, listInstalledNightly: SECTION_NIGHTLY },
-      resolves: { resolveInstalled: ({ query }) => Core.normalizeChannel(query.channel) } },
+      lists: { listInstalled: { section: "*", filter: (row, { args }) => sectionChannel(row.sectionId) === Core.normalizeChannel(args[1]) },
+        listInstalledStable: { section: "*", filter: row => sectionChannel(row.sectionId) === SECTION_STABLE }, listInstalledNightly: SECTION_NIGHTLY },
+      resolves: { resolveInstalled: { section: "*", compatible: (row, { query }) => sectionChannel(row.sectionId) === Core.normalizeChannel(query.channel) } } },
     { core: require("../version"), versions: ["normalizeLoveVersion", "normalizeNightlyBuildKey"] },
     { core: LuaSteam, resolves: { resolveBundle: { section: LuaSteam.SECTION_ID,
       result: install => install || { ready: false, reason: "The selected LuaSteam runtime is unavailable. Check its path in Runtimes." } } } }
   ],
-  sectionForEntry: entry => entry?.runtimeData?.love?.channel ||
-    (Number.parseInt(entry?.moduleData?.detectedVersionNormalized || entry?.moduleData?.detectedVersion, 10) >= 12 ? "nightly" : "stable"),
+  sectionForEntry: entry => Custom.isPath(entry?.runtimeData?.love?.version) ? null : entry?.runtimeData?.love?.channel ||
+    (Number.parseInt(entry?.moduleData?.detectedVersionNormalized || entry?.moduleData?.detectedVersion, 10) >= 12 ? SECTION_NIGHTLY
+      : sectionIdForVersion(SECTION_STABLE, entry?.runtimeData?.love?.version || entry?.moduleData?.detectedVersionNormalized || entry?.moduleData?.detectedVersion)),
   inspect(runtimePath, { sectionId }) {
     if (sectionId === LuaSteam.SECTION_ID) return LuaSteam.inspectCustomRuntime(runtimePath);
     const native = Custom.inspectExecutable(runtimePath, { candidates: ["love", "love.app/Contents/MacOS/love"] });
@@ -452,6 +461,8 @@ Custom.configure(module.exports, {
     for (let directory = path.dirname(native.executablePath), depth = 0; !appPath && depth < 5; depth++, directory = path.dirname(directory)) {
       if (directory.toLowerCase().endsWith(".app")) appPath = directory;
     }
+    if (appPath) Core.validateDownloadedBundle(appPath, { arch: native.architecture });
+    else Core.validateNativeRuntime(native.executablePath, { architecture: native.architecture });
     const runtimeVersion = appPath ? AppBundle.readAppBundleVersion(appPath) : null;
     const major = Number.parseInt(runtimeVersion, 10);
     if (Number.isFinite(major) && (sectionId === "nightly" ? major < 12 : major >= 12)) {

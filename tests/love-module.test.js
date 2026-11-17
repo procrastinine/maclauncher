@@ -554,7 +554,7 @@ test("LÖVE release lines: Automatic names the detected line and a chosen channe
   assert.equal(label(automatic.moduleData.resolvedSection), "LÖVE 0.10");
   assert.deepEqual(LoveModule.runtimeRecommendation(automatic, context), { version: "0.10.2", sectionId: "stable" });
   assert.deepEqual(await LoveModule.ensureRuntime(game(), { ...context, runtimeId: "love" }),
-    { managerId: "love", version: "0.10.2", installOptions: { sectionId: "stable" } });
+    { managerId: "love", version: "0.10.2", automatic: true, installOptions: { sectionId: "stable" } });
 
   // The LÖVE 11 channel keeps to its line, while Automatic still names the detected line.
   const chosen = game({ channel: "stable" });

@@ -286,6 +286,11 @@ async function ensureRuntime(entry, context) {
   const selection = resolveRuntimeSelection(entry, context);
   if (selection.reason) throw new Error(selection.reason);
   if (selection.ready && selection.install?.appPath) return null;
+  const request = plan => {
+    const cfg = LoveRuntimeManager.normalizeSettings(context.settings?.runtimes?.love), channel = plan.installOptions?.sectionId === CHANNEL_NIGHTLY ? CHANNEL_NIGHTLY : CHANNEL_STABLE;
+    const explicit = selectRuntimeVersion({ manual: resolveRuntimeData(entry).version, defaultVersion: cfg[channel]?.defaultVersion }).version;
+    return { ...plan, ...(!explicit ? { automatic: true } : {}) };
+  };
   const sections = resolveManagerSections(context.settings, context.userDataDir);
   const detected = normalizeLoveVersion(selection.requiredVersion);
   let channel = normalizeChannel(selection.installChannel || selection.resolvedChannel) || CHANNEL_STABLE;
@@ -295,26 +300,26 @@ async function ensureRuntime(entry, context) {
     version = LoveCore.normalizeVersion(version || detected || sections.stable.catalog?.versions?.[0]);
     const known = version && (sections.stable.catalog?.versions || []).some(candidate => LoveCore.normalizeVersion(candidate) === version);
     if (version && !known && sections.stable.catalog?.status === "success") {
-      if (explicit || resolveExplicitChannel(resolveRuntimeData(entry))) return { managerId: LoveRuntimeManager.id, version,
-        installOptions: { sectionId: CHANNEL_STABLE } };
+      if (explicit || resolveExplicitChannel(resolveRuntimeData(entry))) return request({ managerId: LoveRuntimeManager.id, version,
+        installOptions: { sectionId: CHANNEL_STABLE } });
       channel = CHANNEL_NIGHTLY; version = null;
     } else if ((!version || !known) && !sections.stable.catalog?.versions?.length) {
-      return { managerId: LoveRuntimeManager.id, version: null, discoveryRequired: true,
-        installOptions: { sectionId: CHANNEL_STABLE } };
+      return request({ managerId: LoveRuntimeManager.id, version: null, discoveryRequired: true,
+        installOptions: { sectionId: CHANNEL_STABLE } });
     }
   }
   if (channel === CHANNEL_NIGHTLY) {
     version = normalizeNightlyBuildKey(version || sections.nightly.catalog?.versions?.[0]);
     if ((!version || !(sections.nightly.catalog?.versions || []).includes(version)) && !sections.nightly.catalog?.versions?.length) {
-      return { managerId: LoveRuntimeManager.id, version: null, discoveryRequired: true, latestOnly: !version,
-        installOptions: { sectionId: CHANNEL_NIGHTLY } };
+      return request({ managerId: LoveRuntimeManager.id, version: null, discoveryRequired: true, latestOnly: !version,
+        installOptions: { sectionId: CHANNEL_NIGHTLY } });
     }
-    if (version && !(sections.nightly.catalog?.versions || []).includes(version)) return { managerId: LoveRuntimeManager.id, version,
-      installOptions: { sectionId: CHANNEL_NIGHTLY } };
+    if (version && !(sections.nightly.catalog?.versions || []).includes(version)) return request({ managerId: LoveRuntimeManager.id, version,
+      installOptions: { sectionId: CHANNEL_NIGHTLY } });
   }
-  if (!version) return { managerId: LoveRuntimeManager.id, version: null, discoveryRequired: true, installOptions: { sectionId: channel } };
+  if (!version) return request({ managerId: LoveRuntimeManager.id, version: null, discoveryRequired: true, installOptions: { sectionId: channel } });
   if (LoveCore.resolveInstalled({ userDataDir: context.userDataDir, channel, version })?.appPath) return null;
-  return { managerId: LoveRuntimeManager.id, version, installOptions: { sectionId: channel } };
+  return request({ managerId: LoveRuntimeManager.id, version, installOptions: { sectionId: channel } });
 }
 
 function ensureAppImageState(entry, userDataDir) {

@@ -214,6 +214,30 @@ function detectArchitecture(executablePath) {
   return { architecture: "unknown", requiresRosetta: false };
 }
 
+function validateNativeRuntime(executablePath, { architecture } = {}) {
+  const Compat = require("../../shared/runtime/binary-compatibility");
+  const cpu = architecture === "x64" ? "x86_64" : architecture;
+  const pending = [{ file: executablePath, runPaths: [] }], visited = new Set();
+  while (pending.length) {
+    const { file, runPaths } = pending.shift(), actual = fs.realpathSync(file);
+    if (visited.has(actual)) continue;
+    visited.add(actual);
+    const info = readMachOLoadCommands(actual, { architecture: cpu }), image = info.slices.find(slice => slice.architecture === cpu);
+    if (!image) throw new Error("A required LÖVE file has no " + cpu + " slice: " + path.basename(actual));
+    const paths = Compat.nativeRunPaths(actual, image, executablePath, runPaths);
+    for (const dependency of image.dependencies) {
+      if (/^\/(?:usr\/lib|System\/Library)\//.test(dependency.path)) continue;
+      const target = Compat.resolveNativeDependency(actual, image, dependency.path, { executablePath, runPaths: paths });
+      if (!target) {
+        if (dependency.kind === "weak") continue;
+        throw new Error("A required LÖVE dependency is missing: " + dependency.path);
+      }
+      pending.push({ file: target, runPaths: paths });
+    }
+  }
+  return visited;
+}
+
 function validateDownloadedBundle(appPath, { arch = require("../../shared/runtime/architecture").selectedArchitecture() } = {}) {
   const executable = resolveExecutablePath(appPath);
   const info = readMachOLoadCommands(executable);
@@ -221,6 +245,8 @@ function validateDownloadedBundle(appPath, { arch = require("../../shared/runtim
   if (!info.architectures.includes(nativeArch) && !(nativeArch === "arm64" && info.architectures.includes("x86_64"))) {
     throw new Error("The LÖVE download has no supported 64-bit executable for this Mac.");
   }
+  AppBundle.validateAppBundle(appPath, { executablePath: executable });
+  validateNativeRuntime(executable, { architecture: info.architectures.includes(nativeArch) ? nativeArch : "x86_64" });
   return info.architectures;
 }
 
@@ -467,11 +493,10 @@ function pickStableReleaseAsset(release) {
   return assets[0];
 }
 
-// Stable releases from 0.7.0, the first with a 64-bit Mac build, with the Mac
-// archive under its current name or a renamed or reformatted one.
+// Keep the publisher catalog complete; downloaded headers decide CPU support.
 const stableSource = Upstream.github({ repository: `${REPO_OWNER}/${REPO_NAME}`, allArchitectures: true, recognize: release => {
   const version = normalizeReleaseVersion(release), asset = pickStableReleaseAsset(release);
-  return version && asset && compareLoveVersions(version, "0.7.0") >= 0 ? { version, assets: [asset] } : null;
+  return version && asset ? { version, assets: [asset] } : null;
 } });
 
 // One row per version, from its newest release.
@@ -607,13 +632,13 @@ async function installStableVersion({
   onProgress,
   signal,
   entriesByVersion,
-  archiveFile
+  archiveFile,
+  automatic
 } = {}) {
   const targetVersion = normalizeRuntimeVersion(version);
   const build = projectManager().core.listCatalog({ userDataDir }).find(row => row.version === targetVersion);
-  if (build?.projectPackage) return projectInstall(await projectManager().core.installVersion({ userDataDir, version: targetVersion, archiveFile, logger, onProgress, signal }));
+  if (build?.projectPackage) return projectInstall(await projectManager().core.installVersion({ userDataDir, version: targetVersion, archiveFile, automatic, logger, onProgress, signal }));
   if (!targetVersion) throw new Error(`Invalid LÖVE version: ${String(version || "")}`);
-  if (compareLoveVersions(targetVersion, "0.7.0") < 0) throw new Error("LÖVE releases before 0.7 have no 64-bit macOS download.");
   const existing = resolveInstalled({ userDataDir, channel: CHANNEL_STABLE, version: targetVersion });
   if (existing?.appPath) return existing;
 
@@ -762,6 +787,8 @@ module.exports = {
   readInstallMeta,
   writeInstallMeta,
   readBundleInfo,
+  validateNativeRuntime,
+  validateDownloadedBundle,
   resolveExecutablePath,
   fetchAvailableVersions,
   listNightlyBuilds,

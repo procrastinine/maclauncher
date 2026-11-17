@@ -262,17 +262,17 @@ test("damaged stable and nightly LÖVE bundles cannot satisfy runtime selection"
   assert.equal(state.sections.find(section => section.id === "stable").catalog.latestInstalledVersion, "11.4");
 });
 
-test("LÖVE excludes old 32-bit releases and checks the actual downloaded CPU before installation", async t => {
+test("LÖVE lists upstream releases and checks actual downloaded CPUs before installation", async t => {
   const root = makeTempDir("love-cpu-");
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const releases = ["0.6.2", "0.8.0", "11.5"].map(version => Harness.githubRelease("love2d/love", version, [`love-${version}-macosx-ub.zip`]));
   t.after(() => { Harness.network.routes = null; });
   Harness.network.routes = Harness.githubRoutes("love2d/love", releases);
   const catalog = await Manager.core.fetchAvailableVersions();
-  assert.deepEqual(catalog.versions, ["11.5", "0.8.0"]);
-  await assert.rejects(Manager.core.installStableVersion({ userDataDir: root, version: "0.6.2" }), /no 64-bit macOS download/);
+  assert.deepEqual(catalog.versions, ["11.5", "0.8.0", "0.6.2"]);
   const app = path.join(root, "love.app"), executable = path.join(app, "Contents/MacOS/love");
   fs.mkdirSync(path.dirname(executable), { recursive: true });
+  fs.writeFileSync(path.join(app, "Contents/Info.plist"), "<plist><dict><key>CFBundleExecutable</key><string>love</string></dict></plist>");
   function binary(cpu, wide) {
     const data = Buffer.alloc(wide ? 32 : 28);
     data.writeUInt32LE(wide ? 0xfeedfacf : 0xfeedface, 0);data.writeUInt32LE(cpu, 4);data.writeUInt32LE(2, 12);
