@@ -19,13 +19,14 @@ module.exports = { metadataSources: ["icon.js"], resolveGameIcon: require("./ico
     const backend = backendFor(runtimeFor(entry, context)), info = backend.launch.inspectEntry(entry);
     entry.moduleData = { ...entry.moduleData, ...info }; context.onEntryChange?.({ moduleData: entry.moduleData });
     const selected = backend.manager.resolveSelection(entry, context.settings, context.userDataDir);
-    return selected.ready ? null : { managerId: backend.manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: true, installOptions: {} };
+    return selected.ready ? null : { managerId: backend.manager.id, version: selected.version, ...(selected.automatic === true ? { automatic: true } : {}), ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: true, installOptions: {} };
   },
   getRuntimeRequirements: (entry, context) => {
     if (runtimeFor(entry, context) !== "rlvm") return [];
     const engine = rlvmManager.resolveSelection(entry, context.settings, context.userDataDir);
     const selected = rlvmManager.adapterSelection(engine.install, entry, context);
     return selected.ready ? [] : [{ managerId: rlvmManager.adapterManager.id, version: selected.version,
+      ...(selected.automatic === true ? { automatic: true } : {}),
       ...(selected.discoveryRequired ? { discoveryRequired: true } : {}),
       requiresDownload: true, installOptions: {} }];
   },

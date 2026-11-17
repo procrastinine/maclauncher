@@ -98,18 +98,29 @@ async function discoverRlvm(releases) {
   Harness.network.routes = Harness.githubRoutes(repository, releases);
   try { return await Catalog.source.discover({}); } finally { Harness.network.routes = null; }
 }
-test("RLVM discovery retains older history without offering incompatible Mac downloads", async () => {
+test("RLVM discovery offers each upstream macOS release with its publisher identity", async () => {
   const releases = ["0.15", "0.14", "0.13.1"].map(version => rlvmRelease(version));
   delete releases[1].assets[0].digest;
   const entries = await discoverRlvm(releases);
   assert.deepEqual(entries.map(entry => entry.version), ["0.15", "0.14", "0.13.1"]);
   assert.equal(entries[0].files[0].digest.value, releases[0].assets[0].digest.slice(7), "A publisher digest verifies a newer release");
   assert.equal(entries[1].files[0].digest, undefined, "A release without a published digest records its own at installation");
-  assert.deepEqual(entries[2].files, []);
-  assert.match(entries[2].installReason, /0\.14 or later/);
+  assert.deepEqual(entries[2].files.map(file => file.name), ["rlvm_0.13.1.dmg"]);
+  assert.equal(entries[2].installReason, undefined);
   releases[0] = rlvmRelease("0.15", ["rlvm-0.15-macos-universal.zip", "rlvm-0.15-linux-x86_64.tar.gz"]);
   const renamed = (await discoverRlvm(releases))[0];
   assert.deepEqual(renamed.files.map(file => file.name), ["rlvm-0.15-macos-universal.zip"], "A renamed Mac archive is followed");
+});
+test("RLVM engine and adapter plans retain the manager's automatic install intent", t => {
+  const { entry, context } = fixture(t);
+  let automatic = true;
+  t.mock.method(Manager, "resolveSelection", () => ({ ready: false, version: "0.14", automatic }));
+  t.mock.method(Manager, "adapterSelection", () => ({ ready: false, version: "1.0.5", automatic }));
+  assert.equal(Module.ensureRuntime(entry, context).automatic, true);
+  assert.equal(Module.getRuntimeRequirements(entry, context)[0].automatic, true);
+  automatic = false;
+  assert.equal(Module.ensureRuntime(entry, context).automatic, undefined);
+  assert.equal(Module.getRuntimeRequirements(entry, context)[0].automatic, undefined);
 });
 test("RLVM manager stays offline and preserves explicit per-game version selection", () => {
   const manager = Manager.createManager(), before = Harness.network.requests.length;
