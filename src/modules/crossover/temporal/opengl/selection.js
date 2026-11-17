@@ -2,11 +2,15 @@ const fs = require('node:fs'), path = require('node:path');
 const { fileDigest } = require('../../../shared/runtime/verified-identity');
 const { readPeExports } = require('../../../shared/runtime/pe-exports');
 
+function available(layout, environment = {}) {
+  return environment.OPENGL_BACKEND !== 'wine' && String(environment.WINEMETALGL) !== '0' && layout.architecture === 'arm64' &&
+    layout.windows.some(folder => fs.existsSync(path.resolve(layout.dllRoot,'../winemetalgl',folder,'opengl32.dll')));
+}
 // The graphics helper package declares this pair beside its WineVulkan pair.
 // It preserves WineMetalGL's complete forwarding API and opens the graphics
 // libraries from its Unix constructor, before the first OpenGL context.
 function select(root, manifest, layout, environment = {}) {
-  if (environment.OPENGL_BACKEND === 'wine' || String(environment.WINEMETALGL) === '0') return null;
+  if (!available(layout, environment)) return null;
   const declaration = manifest.provider?.opengl32;
   if (!declaration || declaration.graphicsLibraryAPI !== 1 || layout.architecture !== 'arm64') return null;
   const checked = relative => {
@@ -32,12 +36,12 @@ async function prepare(selection, {prefixPath, dllRoot, layout, signal}) {
   const views = [];
   try {
     for (const pair of selection.clients) views.push(await require('../vulkan/selection').prepareSelection({
-      ...pair, native: selection.native, prefixPath, dllRoot: path.join(dllRoot, 'maclauncher-opengl', pair.windows), unixName: layout.unixName, signal, dll: 'opengl32'}));
+      ...pair, native: selection.native, prefixPath, dllRoot: path.join(dllRoot, 'maclauncher-opengl'), unixName: layout.unixName, signal, dll: 'opengl32'}));
   } catch (error) { for (const view of views.reverse()) await view.restore(); throw error; }
   return {
-    env: {WINEDLLPATH: views.map(view => view.env.WINEDLLPATH).join(path.delimiter), WINEDLLOVERRIDES: 'opengl32=b'},
+    env: {WINEDLLPATH: [...new Set(views.map(view => view.env.WINEDLLPATH))].join(path.delimiter), WINEDLLOVERRIDES: 'opengl32=b'},
     async applyPrefix() { try { for (const view of views) await view.applyPrefix(); } catch (error) { for (const view of views.toReversed()) await view.restore(); throw error; } },
     async restore() { for (const view of views.toReversed()) await view.restore(); },
   };
 }
-module.exports = {select, prepare};
+module.exports = {available, select, prepare};

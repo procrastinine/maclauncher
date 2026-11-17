@@ -559,8 +559,9 @@ function wineVulkanSelection(root, install, { layout = wineLayout(install), sign
   return matches[0] || null;
 }
 function wineVulkanRuntimeSelection(entry, context, install, {translatorPlan=context.translatorPlan, root, manager=require("../temporal/vulkan/manager")}={}) {
-  if (!translatorPlan?.components?.["vulkan-driver"]?.used) return {selection:null};
+  if (!translatorPlan) return {selection:null};
   const layout=translatorPlan.layout||wineLayout(install), Architecture=require("../../shared/runtime/architecture");
+  if (!translatorPlan.components?.["vulkan-driver"]?.used&&!require("../temporal/opengl/selection").available(layout,translatorPlan.graphicsPolicy?.env)) return {selection:null};
   if(!Architecture.targetArchitecture(layout.architecture))return {selection:null};
   const selected=Architecture.withArchitecture(Architecture.normalizeArchitecture(layout.architecture),()=>manager.resolveSelection({...entry,runtimeId:manager.id},context.settings,context.userDataDir,{verification:"status"}));
   if(selected.ready&&selected.install){
@@ -606,21 +607,23 @@ async function prepareWineVulkanView(selection,{prefixPath,dllRoot,layout,signal
     async restore(){await opengl.restore();await vulkan.restore();}};
 }
 async function wineVulkanRequirements(entry,context,{install,translatorPlan=context.translatorPlan,root,graphicsRoot,manager=require("../temporal/vulkan/manager")}={}){
-  if(!translatorPlan?.components?.["vulkan-driver"]?.used)return [];
+  if(!translatorPlan)return [];
   if(!install){
     const source=require(".").get(context.runtimeId||entry.runtimeId||"crossover");
     install=context.wineEnvironment?.install||source.manager().resolveSelection(entry,context.settings,context.userDataDir,context.runtimeSettings).install;
   }
   if(!install)return [];
+  if(!translatorPlan.components?.["vulkan-driver"]?.used&&!require("../temporal/opengl/selection").available(translatorPlan.layout||wineLayout(install),translatorPlan.graphicsPolicy?.env))return [];
   // On a loader that ignores DYLD variables, a graphics value that renders
   // through Vulkan loads no Metal shim, so whenever the launch loads the
   // graphics layer (effects, live controls or screenshots) it needs a client
   // that applies the graphics libraries.
   const ReShade=require("../../shared/reshade");
-  const attaches=ReShade.layerLoads(entry,{root:graphicsRoot||ReShade.runtimeRoot(context.app),graphicsHost:"window"})&&
-    require("../../../core/runtime-resolution/graphics-policy").rendersThroughVulkan(translatorPlan)&&loadsUnsignedLibraries(install);
+  const layerLoads=ReShade.layerLoads(entry,{root:graphicsRoot||ReShade.runtimeRoot(context.app),graphicsHost:"window"})&&loadsUnsignedLibraries(install);
+  const openglAttaches=layerLoads&&require("../temporal/opengl/selection").available(translatorPlan.layout||wineLayout(install),translatorPlan.graphicsPolicy?.env);
+  const attaches=layerLoads&&(openglAttaches||require("../../../core/runtime-resolution/graphics-policy").rendersThroughVulkan(translatorPlan));
   const resolved=wineVulkanRuntimeSelection(entry,context,install,{translatorPlan,root,manager});
-  if(resolved.selection&&(!attaches||resolved.selection.graphicsLibraries)){
+  if(resolved.selection&&(!attaches||resolved.selection.graphicsLibraries)&&(!openglAttaches||resolved.selection.opengl)){
     if(resolved.managed)context.recordRuntimeUse?.({managerId:manager.id,version:resolved.selected.version,sourcePath:resolved.selected.install.installDir||resolved.selected.install.modulePayloadRoot||resolved.selected.install.executablePath});
     return [];
   }
@@ -633,6 +636,7 @@ async function wineVulkanRequirements(entry,context,{install,translatorPlan=cont
   const compatible=pin=>{
     const binding=pin.runtimeProfile||pin.capabilities?.runtimeProfile||pin.projectPackage?.capabilities?.runtimeProfile;
     if(attaches&&(pin.graphicsLibraryAPI??pin.capabilities?.graphicsLibraryAPI??pin.projectPackage?.capabilities?.graphicsLibraryAPI)!==1)return false;
+    if(openglAttaches&&(pin.openglLibraryAPI??pin.capabilities?.openglLibraryAPI??pin.projectPackage?.capabilities?.openglLibraryAPI)!==1)return false;
     const files=wineVulkanProfile(binding,layout),original=path.join(layout.primaryWindowsRoot,"winevulkan.dll"),native=path.join(layout.unixRoot,"winevulkan.so");
     if(!files||!fs.existsSync(original)||!fs.existsSync(native)||!files.has(fs.realpathSync(original))||!files.has(fs.realpathSync(native)))return false;
     const image=require("../../shared/runtime/macho-load-commands").readMachOLoadCommands(native,{signal:context.signal}).slices.find(row=>row.architecture===layout.architecture);
