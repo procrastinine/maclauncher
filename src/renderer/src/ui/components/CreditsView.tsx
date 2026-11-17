@@ -21,6 +21,12 @@ export function creditLinkText(url: string) {
   return url.replace(/^https?:\/\/(?:www\.)?/i, "").replace(/\/$/, "");
 }
 
+// A trailing parenthetical, such as a licence or a role, reads as a note after the project's name.
+export function creditLabelParts(label: string): [string, string] {
+  const match = /^(.*\S)\s+\(([^()]+)\)$/.exec(label);
+  return match ? [match[1], match[2]] : [label, ""];
+}
+
 export function CreditsView({ acknowledgments, canOpenExternal, onOpenLink }: CreditsViewProps) {
   return <main className="launcherView creditsView" aria-labelledby="credits-title">
     <LauncherViewHeader title="Credits" titleId="credits-title" />
@@ -32,7 +38,7 @@ export function CreditsView({ acknowledgments, canOpenExternal, onOpenLink }: Cr
             <div className="ackCell ackUrl">Link</div>
           </div>
           {acknowledgments.map(item => <div className="ackRow" key={`${item.label}-${item.url}`}>
-            <div className="ackCell ackTitle">{item.label}</div>
+            <div className="ackCell ackTitle">{(([name, note]) => <>{name}{note && <span className="ackNote"> ({note})</span>}</>)(creditLabelParts(item.label))}</div>
             <div className="ackCell ackUrl ellipsis"><CreditLink url={item.url} label={creditLinkText(item.url)} canOpen={canOpenExternal} onOpen={onOpenLink} /></div>
           </div>)}
         </div>}

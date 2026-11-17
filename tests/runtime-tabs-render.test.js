@@ -297,8 +297,15 @@ test('Settings and Credits use plain native-window content without HTML close or
   assert.match(credits, /<div class="ackCell ackUrl ellipsis"><a [^>]*title="https:\/\/example\.com\/project"[^>]*>example\.com\/project<\/a><\/div>/);
   assert.doesNotMatch(credits, /ackUrl mono|>https:\/\/example/);
   assert.match(credits, /<div class="ackCell ackUrl">Link<\/div>/);
+  // A licence or role in parentheses reads as a muted note after the name, and names and links share the width (GUI 0913 N8).
+  const noted = renderToStaticMarkup(React.createElement(CreditsView, { acknowledgments: [{ label: 'AIM (Apache-2.0)', url: 'https://github.com/hahnlee/aim' },
+    { label: 'Apktool', url: 'https://github.com/iBotPeaches/Apktool' }], canOpenExternal: true, onOpenLink: offline }));
+  assert.match(noted, /<div class="ackCell ackTitle">AIM<span class="ackNote"> \(Apache-2\.0\)<\/span><\/div>/);
+  assert.match(noted, /<div class="ackCell ackTitle">Apktool<\/div>/);
   const ackCss = require('node:fs').readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
   assert.match(ackCss, /\.ackRow \{[^}]*padding: 5px 12px;/);
+  assert.match(ackCss, /\.ackRow \{[^}]*grid-template-columns: minmax\(180px, 1fr\) minmax\(0, 1fr\);/);
+  assert.match(ackCss, /\.ackNote \{\s*color: var\(--muted\);\s*font-size: var\(--font-sm\);\s*\}/);
   assert.doesNotMatch(/\.ackTitle \{[^}]*\}/.exec(ackCss)[0], /font-weight/);
   for (const markup of [settings, credits]) assert.doesNotMatch(markup, /modalBackdrop|aria-modal|role="dialog"|aria-label="Close"|Back to Library/);
 });

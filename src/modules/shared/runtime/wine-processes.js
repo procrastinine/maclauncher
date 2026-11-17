@@ -57,7 +57,7 @@ async function runningState(prefixPath, { serverRoots, uid = process.getuid?.(),
         timer = setTimeout(() => done(false), 250);
       } catch { done(false); }
     });
-    if (running) return { running: true, socketPath, lockedSettings: ["MSync", "High Resolution"] };
+    if (running) return { running: true, socketPath, lockedSettings: ["MSync", "High resolution"] };
   }
   return { running: false };
 }
@@ -65,7 +65,7 @@ async function runningState(prefixPath, { serverRoots, uid = process.getuid?.(),
 async function prepareEnvironment(record, context, options) {
   if (!record) return null;
   Object.assign(record, await runningState(record.prefixPath, options));
-  if (record.running) context.logger?.warn?.("MSync and High Resolution cannot change until this Windows environment's wineserver stops.");
+  if (record.running) context.logger?.warn?.("MSync and High resolution cannot change until this Windows environment's wineserver stops.");
   return record;
 }
 

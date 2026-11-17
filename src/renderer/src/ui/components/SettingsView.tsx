@@ -64,7 +64,7 @@ export function appUpdateStatus(update: AppUpdateState | undefined): { action: A
 const LAUNCHER_HELP = {
   networkAccess: "Initial setting for newly imported games. Each game's inspector has its own checkbox. Changes here do not change existing games.",
   steamClient: "Steam games that use their own macOS Steam API can start the Steam client before launch. Ask requests permission because Steam may connect to the Internet. Don't start launches the game without starting or waiting for Steam.",
-  checkAtLaunch: "Each start asks GitHub for a newer MacLauncher release and shows a dialog when one is available. While this is off, MacLauncher contacts GitHub for updates only through Check for Updates…."
+  checkAtLaunch: "Each start asks GitHub for a newer MacLauncher release and shows a dialog when one is available. While this is off, MacLauncher asks GitHub for updates only when a check is started by hand."
 };
 const TOOLS_BUTTON_HELP = "Tools remain available via Cmd+Shift+T and the menu bar.";
 export function launcherSettingsHelp(): HelpItem[] {

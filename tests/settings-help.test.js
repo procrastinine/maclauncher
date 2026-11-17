@@ -44,6 +44,8 @@ test('the Launcher section has one help button listing its rows, and each row la
     'Bypass graphics effects', 'Save processed screenshot', 'Toggle pointer in window graphics', 'Toggle graphics for front app', 'Check for updates at launch']);
   assert.match(markup, /<div class="settingsLabel" title="Initial setting for newly imported games\.[^"]*">Network access<\/div>/);
   assert.match(markup, /<div class="settingsLabel" title="Each start asks GitHub[^"]*">Check for updates at launch<\/div>/);
+  // GUI 0913 H1, H2: Settings does not point to itself, and no button name ends a sentence ("Check for Updates….").
+  assert.doesNotMatch(list, /Assign the keyboard shortcut in Settings|…\./);
 });
 
 test('a runtime form reports its rows\' explanations to the Settings heading and shows no help button of its own', () => {
@@ -53,14 +55,19 @@ test('a runtime form reports its rows\' explanations to the Settings heading and
   const inline = renderToStaticMarkup(react.createElement(ui.RuntimeSettingsWindow, props));
   assert.doesNotMatch(inline, /helpTipButton/);
   assert.match(inline, /<div class="settingsLabel" title="[^"]+">Direct3D 12/);
+  // GUI 0913 W4: labels are in sentence case.
+  assert.match(inline, />High resolution \(Retina\)</);
   const harness = componentHarness(ui.RuntimeSettingsWindow, props);
   try { harness.render(); harness.render(); } finally { harness.close(); }
   const labels = reported.at(-1).map(item => item.label);
-  assert.ok(labels.includes('Direct3D 12') && labels.includes('Windows version'), JSON.stringify(labels));
+  assert.ok(labels.includes('Windows version'), JSON.stringify(labels));
+  // GUI 0913 H3: rows with the same explanation share one entry naming each of them once.
+  assert.ok(labels.includes('Direct3D 8, 9, 10 / 10.1, 11 and 12'), JSON.stringify(labels));
+  assert.equal(new Set(reported.at(-1).map(item => item.text)).size, reported.at(-1).length, 'no explanation is listed twice');
   // The game's own Runtime Settings window keeps one help button, in its header.
   const window = renderToStaticMarkup(react.createElement(ui.RuntimeSettingsWindow, { ...props, inline: false, onHelpChange: undefined }));
   assert.equal((window.match(/class="helpTipButton"/g) || []).length, 1);
-  assert.match(window, /<dt>Direct3D 12<\/dt>/);
+  assert.match(window, /<dt>Direct3D 8, 9, 10 \/ 10\.1, 11 and 12<\/dt>/);
 });
 
 test('a game type section shows the shown runtime form\'s explanations behind its heading\'s one help button', () => {
@@ -85,4 +92,22 @@ test('the Settings label column fits the longest label, and a heading\'s help po
   const popover = /\n\.helpPopover \{([^}]*)\}/.exec(css)[1];
   for (const rule of ['font-weight: 400', 'letter-spacing: normal', 'text-transform: none', 'white-space: normal'])
     assert.ok(popover.includes(rule), rule);
+});
+
+test('a text area\'s label and trailing button line up with its first line (GUI 0913 W3)', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.settingsRow:has\(> \.settingsControl > textarea\) \{ align-items: start; \}/);
+  assert.match(css, /\.settingsRow:has\(> \.settingsControl > textarea\) > \.settingsLabel \{ padding-top: calc\(var\(--control-padding-y\) \+ 1px\); \}/);
+  assert.match(css, /\.settingsControl:has\(> textarea\) \{ align-items: flex-start; \}/);
+  assert.match(css, /\.fieldRow:has\(> \.fieldControl > textarea\) \{ align-items: start; \}/);
+});
+
+test('user-facing module text uses straight apostrophes (GUI 0913 H4)', () => {
+  const registry = require('../src/modules/registry'), found = [];
+  const walk = (value, where) => {
+    if (typeof value === 'string') { if (value.includes('\u2019')) found.push(`${where}: ${value.slice(0, 80)}`); }
+    else if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) walk(item, `${where}.${key}`);
+  };
+  for (const info of registry.listModules()) walk(info, info.id);
+  assert.deepEqual(found, []);
 });

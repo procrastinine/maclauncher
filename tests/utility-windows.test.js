@@ -925,7 +925,7 @@ test('the Credits shell reserves the real table layout at the top without a visi
   const body=rule(html,'.shell-body'),realBody=rule(styles,'.launcherViewBody');
   assert.ok(body.includes('padding:16px18px')&&realBody.includes('padding:16px18px'),'The table starts at the same content inset');
   const row=rule(html,'.shell-row'),realRow=rule(styles,'.ackRow');
-  for(const property of ['grid-template-columns:minmax(180px,3fr)minmax(0,2fr)','gap:12px','padding:5px12px'])assert.ok(row.includes(property)&&realRow.includes(property),property);
+  for(const property of ['grid-template-columns:minmax(180px,1fr)minmax(0,1fr)','gap:12px','padding:5px12px'])assert.ok(row.includes(property)&&realRow.includes(property),property);
   assert.ok(rule(html,'#utility-shell h1').includes('clip-path:inset(50%)'),'Only the native title is visible, as in CreditsView');
   assert.ok(!rule(html,'#utility-shell').includes('display:grid'),'Auto-sized grid rows must not spread the heading and table over the viewport');
 });

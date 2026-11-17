@@ -194,7 +194,7 @@ function environmentActions(runtimeId, { crossoverRoot, resolveOptions } = {}) {
       const states = await Promise.all(rows.map(row => require("./wine-processes").runningState(row.prefixPath, context.processOptions)));
       return { environments: [{ value: "private", label: "Private (MacLauncher)" }, ...rows.map((row, index) => ({
         value: row.path === selected?.path && typeof selectedValue === "string" ? selectedValue : JSON.stringify(row.reference),
-        label: `${source.labels.environmentName}: ${row.name}${states[index].running ? " (running; MSync and High Resolution require a restart)" : ""}` }))] };
+        label: `${source.labels.environmentName}: ${row.name}${states[index].running ? " (running; MSync and High resolution require a restart)" : ""}` }))] };
     },
     async chooseEnvironment(_entry, payload, context) {
       const { getUiServices } = require("../ui-services");

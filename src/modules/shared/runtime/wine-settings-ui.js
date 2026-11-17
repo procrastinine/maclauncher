@@ -4,7 +4,7 @@ const tri = (key, label, section, extra = {}) => ({ key, label, section, advance
 const engine = (key, value) => ({ visibleWhen: [{ key, equals: value }] });
 function fields() {
   return [
-    tri('retina', 'High Resolution (Retina)', 'Basic'),
+    tri('retina', 'High resolution (Retina)', 'Basic'),
     { key: 'dpi', label: 'DPI', type: 'string', section: 'Display', advanced: true, description: 'Positive DPI; empty uses the runtime default.' },
     tri('fullscreenCapture', 'Fullscreen display capture', 'Display'), tri('verticalSync', 'Vertical sync', 'Display'),
     { key: 'virtualDesktop', label: 'Virtual desktop', type: 'string', section: 'Display', advanced: true, description: 'WIDTHxHEIGHT, such as 1920x1080; off disables the desktop; empty uses the runtime default.' },

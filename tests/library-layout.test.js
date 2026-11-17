@@ -77,7 +77,8 @@ test('launch arguments remain a common game control across every registered runt
       const markup = renderDetails(state, game, { moduleInfo });
       assert.match(markup, /aria-label="Launch arguments"/, `${moduleInfo.id}/${runtimeId}`);
       assert.match(markup, />--name &quot;A B&quot;<\/textarea>/, `${moduleInfo.id}/${runtimeId}`);
-      assert.match(markup, /aria-label="About launch arguments"/, `${moduleInfo.id}/${runtimeId}`);
+      assert.match(markup, /<div class="detailLabel" title="Additional arguments for this game\.[^"]*"><label[^>]*>Launch arguments<\/label>|<div class="detailLabel" title="Additional arguments for this game\.[^"]*">Launch arguments/, `${moduleInfo.id}/${runtimeId}`);
+      assert.match(markup, /aria-label="About Launch"[\s\S]*?<dt>Launch arguments<\/dt>/, `${moduleInfo.id}/${runtimeId}`);
     }
   }
 });
@@ -90,7 +91,7 @@ test('Android choices describe automatic Play and preserve each runtime capabili
     const markup=renderDetails(state,{...game,runtimeId},{moduleInfo});
     assert.match(markup,/<option value="klepton"[^>]*>MacLauncher Android<\/option>/);
     assert.match(markup,/Each runtime keeps separate game data; switching preserves it/);
-    assert.match(markup,/aria-label="About this runtime"/);
+    assert.match(markup,/aria-label="About Launch"[\s\S]*?<dt>Runtime<\/dt><dd>[^<]*switching preserves it/);
     assert.doesNotMatch(markup,/Klepton \+ Java 21|cargo |Install Android runtime/);
     if(runtimeId==='aim'){
       assert.match(markup,/macOS 26\.0 or later/);assert.match(markup,/2560 × 1600 at 320 dpi/);
@@ -352,6 +353,31 @@ test('the Saves folder button ends its row after Change… and Reset, under the 
   const order = [...actions.matchAll(/<button[^>]*?(?:aria-label="([^"]+)"[^>]*)?>([^<]*)/g)].map(match => match[1] || match[2]);
   assert.deepEqual(order.slice(-1), ['Reveal in Finder']);
   assert.ok(order.indexOf('Change…') < order.indexOf('Reveal in Finder'));
+});
+
+test('each inspector section has at most one help button, beside its heading, and row labels keep their explanations as tooltips (GUI 0877 L6)', () => {
+  const state = createLibraryFixture(), game = { ...state.recents[0], steamClientEligible: true };
+  const moduleInfo = structuredClone(state.modules[0]);
+  Object.assign(moduleInfo.runtime.entries[game.runtimeId] || moduleInfo.runtime.entries.managed, { description: 'Runtime description', dataNotice: 'Separate runtime data' });
+  const markup = renderDetails(state, game, { moduleInfo });
+  const headings = [...markup.matchAll(/<h3 class="detailSectionHeading">([\s\S]*?)<\/h3>/g)].map(match => match[1]);
+  // Files and Launch; the Graphics section's header holds its own single help.
+  const [files] = markup.split(/<section[^>]*graphicsSection/), graphicsHeader = /<div class="collapsibleHeader graphicsHeader">[\s\S]*?<\/span>(?=<)/.exec(markup)?.[0] || '';
+  const buttons = [...files.matchAll(/<button type="button" class="helpTipButton"[^>]*aria-label="([^"]+)"/g)].map(match => match[1]);
+  assert.ok(buttons.length > 0);
+  for (const label of buttons) assert.ok(headings.some(heading => heading.includes(`aria-label="${label}"`)), `${label} is a heading's help`);
+  assert.equal((graphicsHeader.match(/class="helpTipButton"/g) || []).length, 1);
+  assert.equal(new Set(buttons).size, buttons.length, 'one help per section');
+  const launch = headings.find(heading => heading.startsWith('Launch'));
+  assert.deepEqual([...launch.matchAll(/<dt>([^<]+)<\/dt>/g)].map(match => match[1]), ['Launch arguments', 'Runtime', 'Network access', 'Steam client on Play']);
+  assert.match(launch, /<dt>Runtime<\/dt><dd>Runtime description\nSeparate runtime data<\/dd>/);
+  assert.match(markup, /<div class="detailLabel" title="Allow Internet and local-network connections for this game\.[^"]*">Network access<\/div>/);
+  assert.match(markup, /<div class="detailLabel" title="Starting Steam connects to the Internet\.[^"]*">Steam client on Play<\/div>/);
+  assert.match(markup, /<div class="detailLabel" title="Runtime description\nSeparate runtime data">Runtime<\/div>/);
+  assert.doesNotMatch(markup, /About graphics views|About network access|About this runtime/);
+  assert.match(markup, /aria-label="About graphics effects"[\s\S]*?<p>Simple and Advanced edit the same settings\./);
+  const css = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.helpList dd \{ margin: 2px 0 0; white-space: pre-line; \}/);
 });
 
 test('the inspector names the game type as the library and Settings do, and its Output disclosure matches the others (GUI 0904)', () => {

@@ -3,7 +3,6 @@ import React, { useEffect, useId, useRef, useState } from "react";
 import type { ModuleEntrySelector, RecentGame } from "../types";
 import { matchesAnyCondition } from "../ui-helpers";
 import { RefreshIcon } from "../icons";
-import { HelpTip } from "./HelpTip";
 import { ErrorText } from "./ErrorText";
 
 type Selection = {
@@ -70,7 +69,7 @@ export function ModuleEntrySelectorControl({ gamePath, field, visible, running, 
   const selectedAvailable = selection?.options.some(option => option.value === selection.value);
   return <>
     <div className="detailRow">
-      <label className="detailLabel" htmlFor={id}>{field.label}{description && <> <HelpTip label={`About ${field.label.toLowerCase()}`}>{description}</HelpTip></>}</label>
+      <label className="detailLabel" htmlFor={id} title={description || undefined}>{field.label}</label>
       <div className="detailValue">
         <Select id={id} className="input" style={{ width: "100%", maxWidth: "100%" }} aria-label={field.label} aria-busy={busy || undefined}
           value={selection?.value || ""} disabled={!visible || busy || running || preparing || !selection?.options.length}
@@ -86,6 +85,12 @@ export function ModuleEntrySelectorControl({ gamePath, field, visible, running, 
     </div>
     <ErrorText error={error} inline />
   </>;
+}
+
+/** The shown selectors' descriptions, for the Files heading's help. */
+export function entrySelectorHelp(game: RecentGame, fields?: ModuleEntrySelector[]) {
+  return (fields || []).filter(field => !matchesAnyCondition(game, field.hiddenWhen))
+    .map(field => ({ label: field.label, text: typeof field.description === "string" ? field.description : "" }));
 }
 
 export function ModuleEntrySelectors({ game, fields, visible, running, preparing }: {

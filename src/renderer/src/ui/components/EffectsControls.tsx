@@ -45,6 +45,8 @@ function NoticeList({notices, lead, alert}: {notices: GraphicsNotice[]; lead: st
  * of the same plan. A game's editor is a collapsible inspector section whose
  * header keeps the master switch, status and actions visible while closed.
  */
+const GRAPHICS_VIEWS_HELP = "Simple and Advanced edit the same settings. Simple inserts effects in the default order. Advanced controls each effect and its position. Switching views preserves the chain.";
+
 export function EffectsControls({footer, visible = true, warnings = [], children: _children, ...props}: Props) {
   const [open, setOpenState] = useState(graphicsSectionOpen), [savingPreset, setSavingPreset] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false), [templates, setTemplates] = useState<EffectsChainTemplate[]>();
@@ -86,7 +88,8 @@ export function EffectsControls({footer, visible = true, warnings = [], children
     <div className="graphicsViewSwitcher" role="group" aria-label="Graphics view">
       <button type="button" className="btn small" aria-pressed={view === "simple"} onClick={() => editor.setView("simple")}>Simple</button>
       <button type="button" className="btn small" aria-pressed={view === "advanced"} onClick={() => editor.setView("advanced")}>Advanced</button>
-      <HelpTip label="About graphics views">Both views edit the same settings. Simple inserts effects in the default order. Advanced controls each effect and its position. Switching views preserves the chain.</HelpTip>
+      {/* Outside the inspector the switcher has no section heading, so it keeps its own help. */}
+      {embedded && <HelpTip label="About graphics views">{GRAPHICS_VIEWS_HELP}</HelpTip>}
     </div>
     {running && info?.activeLaunch?.runtimeId && info.activeLaunch.runtimeId !== game.runtimeId &&
       <p className="detailMeta">Running: {info.activeLaunch.runtimeId} · Next launch: {game.runtimeId}</p>}
@@ -111,9 +114,10 @@ export function EffectsControls({footer, visible = true, warnings = [], children
       <span className="graphicsHeaderControls">
         <input type="checkbox" aria-label="Enable graphics chain" checked={!planError && plan.enabled !== false} disabled={Boolean(planError)}
           onChange={event => void editor.setMaster(event.target.checked)} />
-        <HelpTip label="About graphics effects">Effects run from top to bottom. Turning Graphics off bypasses the chain and preserves its settings. Drop shader files to add effects, or onto a method to replace it.
+        <HelpTip label="About graphics effects"><p>Effects run from top to bottom. Turning Graphics off bypasses the chain and preserves its settings. Drop shader files to add effects, or onto a method to replace it.
           {running && (live ? " Changes update during play when the loaded graphics adapter supports them." : " The current runtime applies graphics changes on its next launch.")}
-          {device && ` The launcher's default graphics device is ${device}; a running game may select another.`}
+          {device && ` The launcher's default graphics device is ${device}; a running game may select another.`}</p>
+          <p>{GRAPHICS_VIEWS_HELP}</p>
         </HelpTip>
       </span>
       {!open && <span className="collapsibleSummary">{summary}</span>}

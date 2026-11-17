@@ -16,6 +16,12 @@ export function runtimeDescriptionParagraphs(moduleInfo: ModuleManifest | null |
     {runtime.dataNotice && <p>{runtime.dataNotice}</p>}
   </>;
 }
+/** The same paragraphs as plain text, one per line, for a section's help list. */
+export function runtimeDescriptionText(moduleInfo: ModuleManifest | null | undefined, runtimeId: RuntimeId) {
+  const runtime = resolveRuntimeEntry(moduleInfo, runtimeId);
+  return [runtime?.description, runtime?.requirements, runtime?.preparation, runtime?.dataNotice]
+    .filter((part): part is string => typeof part === "string" && Boolean(part.trim())).join("\n");
+}
 export function RuntimeDescription({ moduleInfo, runtimeId, text = false }: { moduleInfo?: ModuleManifest | null; runtimeId: RuntimeId; text?: boolean }) {
   const paragraphs = runtimeDescriptionParagraphs(moduleInfo, runtimeId);
   if (!paragraphs) return null;

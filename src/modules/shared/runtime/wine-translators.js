@@ -370,8 +370,8 @@ function withSettings(manifest) {
   const result = structuredClone(manifest);
   const controls = [{ label: 'Default Direct3D engine', settingsKey: SETTINGS['d3d-renderer'],
     optionsKey: SETTINGS['d3d-renderer'] + 'Options', description: 'Sets the renderer for Direct3D versions without an override.' },
-    ...Roles.ROLES.map(role => ({ ...role, description: role.apis.length ? `Chooses the installed translator for ${role.label}. Shared libraries can also update linked Direct3D choices.` :
-      role.id === 'vulkan-driver' ? 'Chooses the Vulkan driver used by translators that render through Vulkan.' : 'Adds codec plugins to the runtime’s video support.' }))];
+    ...Roles.ROLES.map(role => ({ ...role, description: role.apis.length ? 'Chooses the installed translator for this Direct3D version. Shared libraries can also update linked Direct3D choices.' :
+      role.id === 'vulkan-driver' ? 'Chooses the Vulkan driver used by translators that render through Vulkan.' : "Adds codec plugins to the runtime's video support." }))];
   for (const runtime of Object.keys(result.runtime.entries)) {
     const schema = result.runtime.entries[runtime].settings;
     schema.visibilityAction = 'listRuntimeRoles';

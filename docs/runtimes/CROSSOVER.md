@@ -52,7 +52,7 @@ Selecting a bottle stores only a reference to its path. The bottle stays in plac
 
 CrossOver then runs with the bottle's absolute path, `--wait-children` and `--no-update`. Selected settings and translator files can change the bottle, while its profile mappings stay as they were. Logs stay in MacLauncher's data. **Open Windows files** opens the selected bottle, whose Windows profiles are listed as alternate save locations.
 
-Stop ends only the launched game's processes by default. **Close All Applications** asks for confirmation, then asks the bottle's other Windows programs to close and forces the remaining ones to quit. When the game exits normally, the bottle's other programs keep running. While the bottle's wineserver is running, the selector shows it, and MSync and High Resolution changes have to wait until it stops.
+Stop ends only the launched game's processes by default. **Close All Applications** asks for confirmation, then asks the bottle's other Windows programs to close and forces the remaining ones to quit. When the game exits normally, the bottle's other programs keep running. While the bottle's wineserver is running, the selector shows it, and MSync and High resolution changes have to wait until it stops.
 
 ## Runtime settings
 
@@ -80,13 +80,13 @@ The graphics and synchronization choices follow the [CrossOver Mac user guide](h
 
 ### Display, input, compatibility and diagnostics
 
-Runtime Settings keeps the basic launch choices above separate from four advanced groups. **Display** holds High Resolution (Retina), DPI, fullscreen capture, vertical sync and virtual desktops, and **Input** maps Option to Alt and Command to Ctrl and configures mouse capture. **Compatibility** holds Rosetta AVX advertisement together with options for particular engines: DXVK async, DXMT frame-rate presets and MetalFX spatial, D3DMetal frame limits and Metal 4, MoltenVK fast math, argument buffers and UE4 compatibility, and WineD3D configuration. Each engine's options appear only when that engine is selected. **Diagnostics**, finally, offers the Metal and DXVK HUDs, the Wine crash dialog and Wine debug channels.
+Runtime Settings keeps the basic launch choices above separate from four advanced groups. **Display** holds High resolution (Retina), DPI, fullscreen capture, vertical sync and virtual desktops, and **Input** maps Option to Alt and Command to Ctrl and configures mouse capture. **Compatibility** holds Rosetta AVX advertisement together with options for particular engines: DXVK async, DXMT frame-rate presets and MetalFX spatial, D3DMetal frame limits and Metal 4, MoltenVK fast math, argument buffers and UE4 compatibility, and WineD3D configuration. Each engine's options appear only when that engine is selected. **Diagnostics**, finally, offers the Metal and DXVK HUDs, the Wine crash dialog and Wine debug channels.
 
-Environment variables for CrossOver and its translators have global values in **Settings → Environment variables** and a game's own values in the **Environment variables** section of its Runtime Settings, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes. A variable set there replaces the value that one of these controls sets, such as `WINEDEBUG` or `MTL_HUD_ENABLED`. Registry settings apply to the selected Windows environment on its next launch, and High Resolution and synchronization changes can require restarting the environment's Windows programs.
+Environment variables for CrossOver and its translators have global values in **Settings → Environment variables** and a game's own values in the **Environment variables** section of its Runtime Settings, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes. A variable set there replaces the value that one of these controls sets, such as `WINEDEBUG` or `MTL_HUD_ENABLED`. Registry settings apply to the selected Windows environment on its next launch, and High resolution and synchronization changes can require restarting the environment's Windows programs.
 
 | Control | Values and effect |
 | --- | --- |
-| High Resolution (Retina) | Runtime default, On or Off; On selects 192 DPI unless DPI is set explicitly. |
+| High resolution (Retina) | Runtime default, On or Off; On selects 192 DPI unless DPI is set explicitly. |
 | DPI | A positive REG_DWORD integer; empty keeps the current value. |
 | Option as Alt, Command as Ctrl | Map both the left and right modifier keys. |
 | Mouse capture | Configures cursor confinement and DirectInput mouse warping. |

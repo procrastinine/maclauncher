@@ -56,7 +56,8 @@ module.exports = async function runtimeSettingVisibilityBrowserTests(page, state
   assert(await field('Vulkan implementation').inputValue() === 'saved-driver', 'Hidden saved driver must return');
   await field('Execution').selectOption('art');
   await page.waitForFunction(() => window.__visibilityTest.calls.some(call => call.method === 'module' && call.values?.execution === 'art' && call.values?.vulkanRuntime === 'saved-driver'));
-  await page.getByRole('button', { name: 'About this runtime', exact: true }).click();
+  // The window's one help button, in its header, holds the runtime's details and each field's explanation.
+  await page.getByRole('button', { name: /^About .+ settings$/ }).click();
   const help = page.locator('.helpPopover:popover-open');
   assert(await help.isVisible(), 'Runtime help must open');
   assert((await help.innerText()).includes('switching preserves it'), 'Data notice must remain available');

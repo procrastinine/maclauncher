@@ -430,7 +430,7 @@
         "id": "patchLive2D",
         "label": "Install Live2D library",
         "kind": "primary",
-        "confirm": "Install the compatible Live2D Core library in this game’s macOS runtime? An existing library is backed up."
+        "confirm": "Install the compatible Live2D Core library in this game's macOS runtime? An existing library is backed up."
       },
       {
         "id": "removeLive2D",
@@ -500,7 +500,7 @@
           "patchLive2D",
           "removeLive2D"
         ],
-        "note": "SDK libraries are managed per version in Runtimes. These actions change this game’s patched macOS runtime.",
+        "note": "SDK libraries are managed per version in Runtimes. These actions change this game's patched macOS runtime.",
         "hiddenWhen": [
           {
             "key": "gamePath",

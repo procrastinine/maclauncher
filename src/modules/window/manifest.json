@@ -30,7 +30,7 @@
               "key": "output",
               "type": "select",
               "label": "Output",
-              "description": "Scaled output keeps the window’s aspect ratio and needs the Accessibility permission. A display is always shown in place.",
+              "description": "Scaled output keeps the window's aspect ratio and needs the Accessibility permission. A display is always shown in place.",
               "options": [
                 {
                   "value": "inPlace",

@@ -177,6 +177,22 @@ test('one source is a compact row without its repeated name, URL filler or a sec
   assert.doesNotMatch(markup, /\(<a|runtimeUpstreamCode|runtimeRemoteField/);
 });
 
+test('each source menu offers its own versions, never another source\'s installed build or a registered folder (GUI 0913 M1)', () => {
+  const installed = [{ version: '0.41.0-MCLv8', ready: true }, { version: '0.41.0-macos-14-arm64', ready: true }, { version: '0.41.0-MCLv6', ready: true },
+    { version: '/tmp/registered/mpv-0.41.0', custom: true, ready: false }];
+  const render = catalog => renderToStaticMarkup(react.createElement(ui.RuntimeCatalogSources, { managerId: 'fixture',
+    section: { id: 'default', label: 'Versions', installed, catalog }, identity: 'Fixture', links: [],
+    ui: { installVersion: {}, installVariant: {}, pendingActions: {} }, busy: false, variant: '', downloads: [], onSelect() {}, onInstall() {}, onRefresh() {} }));
+  const menus = markup => [...markup.matchAll(/<select[^>]*>([\s\S]*?)<\/select>/g)].map(match =>
+    [...match[1].matchAll(/<option value="([^"]*)"([^>]*)>/g)].map(option => option[1] + (/selected=""/.test(option[2]) ? ' *' : '')));
+  const split = render({ status: 'success', sources: [{ id: 'builds', label: 'MacLauncher Builds', status: 'success', versions: ['0.41.0-MCLv8'] },
+    { id: 'upstream', label: 'Upstream', status: 'success', versions: ['0.41.0-macos-14-arm64'] }] });
+  assert.deepEqual(menus(split), [['', '0.41.0-MCLv8 *'], ['', '0.41.0-macos-14-arm64 *']]);
+  // One source still lists every installed download, but never a registered folder's path.
+  const single = render({ status: 'success', versions: ['0.41.0-MCLv8'] });
+  assert.deepEqual(menus(single), [['', '0.41.0-MCLv8 *', '0.41.0-macos-14-arm64', '0.41.0-MCLv6']]);
+});
+
 test('one help button per panel; row details and the Register custom explanation are tooltips', () => {
   const markup = render([runtime([{ version: '1.0', ready: true, platformKey: 'mac-arm64', installDir: '/Runtimes/1.0', minimumMacOS: '14.0' }],
     { defaultVersion: '1.0', customRuntime: true, description: 'About the runtime.' })], 'fixture', { onRuntimeRegister() {} });

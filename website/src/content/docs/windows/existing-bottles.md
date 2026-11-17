@@ -35,6 +35,6 @@ Each [runtime setting](/maclauncher/windows/settings/) starts at **Bottle settin
 
 A bottle can have other Windows programs running in it, so **Stop** ends only the game's own processes. To close everything, use **Close All Applications**, which asks before it closes the bottle's other programs and forces any that remain to quit. When the game exits on its own, the other programs keep running.
 
-While the bottle's WINE server (the background process that runs the bottle's programs) is running, MacLauncher shows that in the selector and keeps the bottle's current synchronization and High Resolution settings, because those can only change once the server stops.
+While the bottle's WINE server (the background process that runs the bottle's programs) is running, MacLauncher shows that in the selector and keeps the bottle's current synchronization and High resolution settings, because those can only change once the server stops.
 
 Further reading: the [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md#existing-bottles) and [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md#existing-wrappers) references.

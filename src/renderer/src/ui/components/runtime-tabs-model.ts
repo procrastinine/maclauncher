@@ -142,6 +142,13 @@ export function runtimeCatalogSources(catalog: Record<string, any> | null | unde
   });
 }
 
+/** Installed versions a source's menu lists besides its own: every installed download when the panel has one source, none
+ * when it has several, so each menu offers only what its source publishes. A registered folder is never a download version. */
+export function runtimeSourceInstalledVersions(installed: unknown, sourceCount: number): string[] {
+  if (sourceCount > 1 || !Array.isArray(installed)) return [];
+  return installed.filter((item: any) => item && !item.custom && typeof item.version === "string" && item.version.trim()).map((item: any) => item.version);
+}
+
 export function isRuntimeManageable(manager: RuntimeManagerState | null | undefined, sectionId?: string | null): boolean {
   if (!manager || manager.ui?.hidden === true || manager.ui?.management === "built-in") return false;
   return !sectionId || manager.ui?.sectionManagement?.[sectionId] !== "built-in";

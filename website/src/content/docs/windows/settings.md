@@ -27,7 +27,7 @@ The settings come in a Basic group and four advanced groups: Display, Input, Com
 
 ## Display
 
-**High Resolution (Retina)** renders at your screen's full resolution and sets 192 DPI unless you choose a DPI yourself, and **DPI** sets the scaling directly. **Fullscreen display capture** and **Vertical sync** can be forced on or off.
+**High resolution (Retina)** renders at your screen's full resolution and sets 192 DPI unless you choose a DPI yourself, and **DPI** sets the scaling directly. **Fullscreen display capture** and **Vertical sync** can be forced on or off.
 
 **Virtual desktop** runs the game inside a Windows desktop window of a size you choose, written as width by height, such as `1920x1080`. Type `off` to turn it off, or leave it empty to keep the runtime's default.
 
@@ -67,6 +67,6 @@ Apple's **Metal Performance HUD** and the **DXVK HUD** show frame rates and othe
 
 When a game runs in one of your own bottles or wrappers, every setting starts at **Bottle setting** or **Wrapper setting**, along with the value currently stored there, which MacLauncher reads without starting WINE. To change one, choose **Custom setting**; settings stored in the Windows registry are then written into that bottle. MacLauncher writes nothing for settings you leave as they are.
 
-If the bottle's WINE server is still running, the selector shows it, and changes to High Resolution or synchronization wait until it stops.
+If the bottle's WINE server is still running, the selector shows it, and changes to High resolution or synchronization wait until it stops.
 
 Further reading: the full settings tables in the [CrossOver](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/CROSSOVER.md#runtime-settings) and [Sikarugir](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SIKARUGIR.md#runtime-settings) references, which WineCX shares through the [Wine runtimes](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/WINE.md#shared-behavior) page.

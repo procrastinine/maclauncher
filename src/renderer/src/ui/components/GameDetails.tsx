@@ -16,15 +16,16 @@ import { FolderIcon, RefreshIcon, SettingsIcon, XIcon } from "../icons";
 import type { LibraryActions } from "./library-actions";
 import { GameNotes } from "./GameNotes";
 import { GameActions } from "./GameActions";
-import { GameArguments } from "./GameArguments";
+import { GameArguments, LAUNCH_ARGUMENTS_HELP } from "./GameArguments";
 import { GameIcon } from "./GameIcon";
 import { HelpTip } from "./HelpTip";
+import { SectionHelp, helpItems } from "./HelpList";
 import { ACTIONS, ACTION_HELP } from "../../../../modules/shared/graphics-shortcuts.mjs";
 import { ModuleTools } from "./ModuleTools";
-import { ModuleEntrySelectors } from "./ModuleEntrySelectors";
+import { ModuleEntrySelectors, entrySelectorHelp } from "./ModuleEntrySelectors";
 import { moduleToolGroups, presentModuleFields } from "./module-tools-model";
 import { isRuntimeManageable } from "./runtime-tabs-model";
-import { RuntimeDescription } from "./RuntimeDescription";
+import { runtimeDescriptionText } from "./RuntimeDescription";
 import { resolveInspectorRuntimeSection, runtimeInspectorInstall, runtimeInspectorRepair, runtimeInspectorSelectedVersion,
   runtimeInspectorVersions, runtimeInspectorVersionOptions, runtimeInspectorVersionPatch, runtimeVersionTagWithout } from "./runtime-inspector-model";
 import { EffectsControls } from "./EffectsControls";
@@ -133,6 +134,10 @@ function SessionTargets({ gamePath, targets, onRemove }: {
     })}
   </>;
 }
+
+// Row explanations: each inspector section's heading help lists them, and each row's label shows its own on hover.
+const APP_QUARANTINE_HELP = "Remove the download quarantine attribute if macOS reports this app as damaged.";
+const STEAM_CLIENT_HELP = "Starting Steam connects to the Internet. Ask requests permission at Play when Steam is not running. Don't start launches the game without starting or waiting for Steam. Default follows Settings.";
 
 // An app action's shortcut also ends the front app's session. The row names
 // its assignment in macOS menu glyphs, or opens the Launcher section of
@@ -443,6 +448,9 @@ export const GameDetails = memo(function GameDetails({
   const otherActionError = moduleActionError && !["explainDetection", "removeAppQuarantine", "locateGame"].includes(moduleActionError.actionId) &&
     !toolActionIds.has(moduleActionError.actionId) ? moduleActionError.message : null;
   const networkConfigurable = moduleInfo?.runtime?.entries?.[g.runtimeId]?.networkAccess !== false;
+  const networkHelp = networkConfigurable
+    ? "Allow Internet and local-network connections for this game. Changes apply on the next launch. New games start with the default set in Settings."
+    : "This runtime runs applications offline.";
   const defaultNetworkAccess = state.launcherSettings?.networkAccess === true;
   const detectionReport = moduleActionResults.explainDetection;
   const detection = detectionDisplay(g, moduleInfo, state, detectionReport);
@@ -480,7 +488,8 @@ export const GameDetails = memo(function GameDetails({
               launch settings, patches, tools or notes of its own; its
               inspector holds Stop and Graphics. */}
           {!g.ephemeral && <>
-          <h3 className="detailSectionHeading">Files</h3>
+          <h3 className="detailSectionHeading">Files<SectionHelp label="About Files" items={helpItems([...entrySelectorHelp(g, moduleUi?.entrySelectors),
+            hasAppBundle && { label: "App quarantine", text: APP_QUARANTINE_HELP }])} /></h3>
           <div className="detailRow">
             <div className="detailLabel">Game</div>
             <div className="detailValue mono">
@@ -540,7 +549,7 @@ export const GameDetails = memo(function GameDetails({
 
           {hasAppBundle && (
             <div className="detailRow detailToolRow">
-              <div className="detailLabel">App quarantine<HelpTip label="About app quarantine">Remove the download quarantine attribute if macOS reports this app as damaged.</HelpTip></div>
+              <div className="detailLabel" title={APP_QUARANTINE_HELP}>App quarantine</div>
               <div className="detailValue">
                 {moduleActionResults.removeAppQuarantine?.status && <div className="detailMeta">{moduleActionResults.removeAppQuarantine.status}</div>}
                 <ErrorText error={actionError("removeAppQuarantine")} inline />
@@ -584,11 +593,15 @@ export const GameDetails = memo(function GameDetails({
               title={filesUnavailable || "Refresh detection diagnostics"} aria-label="Refresh detection diagnostics"><RefreshIcon /></button>
           </details>
 
-          <h3 className="detailSectionHeading">{canLaunch ? "Launch" : "Runtime"}</h3>
+          <h3 className="detailSectionHeading">{canLaunch ? "Launch" : "Runtime"}<SectionHelp label={canLaunch ? "About Launch" : "About Runtime"} items={helpItems([
+            canLaunch && { label: "Launch arguments", text: LAUNCH_ARGUMENTS_HELP },
+            { label: "Runtime", text: runtimeDescriptionText(moduleInfo, g.runtimeId) },
+            canLaunch && { label: "Network access", text: networkHelp },
+            canLaunch && g.steamClientEligible && { label: "Steam client on Play", text: STEAM_CLIENT_HELP }])} /></h3>
           {canLaunch && <GameArguments key={`arguments:${g.gamePath}`} value={g.launchArguments || ""}
             onSave={value => actions.onSetLaunchArguments(g.gamePath, value)} />}
           <div className="detailRow detailControlRow">
-            <div className="detailLabel">Runtime <RuntimeDescription moduleInfo={moduleInfo} runtimeId={g.runtimeId} /></div>
+            <div className="detailLabel" title={runtimeDescriptionText(moduleInfo, g.runtimeId) || undefined}>Runtime</div>
             <div className="detailActions menuWithIcon">
               <Select aria-label="Runtime"
                 className="input"
@@ -628,9 +641,7 @@ export const GameDetails = memo(function GameDetails({
 
           {canLaunch && <>
           <div className="detailRow detailControlRow">
-            <div className="detailLabel">Network access<HelpTip label="About network access">{networkConfigurable
-              ? "Allow Internet and local-network connections for this game. Changes apply on the next launch. New games start with the default set in Settings."
-              : "This runtime runs applications offline."}</HelpTip></div>
+            <div className="detailLabel" title={networkHelp}>Network access</div>
             <div className="detailActions">
               <label className="inlineCheck settingsToggle">
                 <input type="checkbox" aria-label="Network access" disabled={!networkConfigurable}
@@ -641,7 +652,7 @@ export const GameDetails = memo(function GameDetails({
           </div>
 
           {g.steamClientEligible && <div className="detailRow detailControlRow">
-            <div className="detailLabel">Steam client on Play<HelpTip label="About Steam client on Play">Starting Steam connects to the Internet. Ask requests permission at Play when Steam is not running. Don't start launches the game without starting or waiting for Steam. Default follows Settings.</HelpTip></div>
+            <div className="detailLabel" title={STEAM_CLIENT_HELP}>Steam client on Play</div>
             <div className="detailActions"><Select className="input" aria-label="Steam client on Play" value={g.startSteamClient || "inherit"}
               onChange={event => actions.onSetSteamClientStart(g.gamePath, event.target.value === "inherit" ? null : event.target.value as "ask" | "automatic" | "never")}>
               <option value="inherit">{`Default (${steamClientStartLabels[state.launcherSettings?.startSteamClient || "ask"]})`}</option><option value="ask">Ask</option><option value="automatic">Start automatically</option><option value="never">Don't start</option>

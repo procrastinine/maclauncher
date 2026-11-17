@@ -21,22 +21,21 @@ test.before(async () => {
   GameDetails = compiled.exports.GameDetails.type;
 });
 
-test("runtime description and requirements share one help button beside Runtime", t => {
+test("runtime description and requirements are one entry of the Launch heading's help and the Runtime label's tooltip", t => {
   const state = createLibraryFixture(), moduleInfo = structuredClone(state.modules[0]);
   Object.assign(moduleInfo.runtime.entries.managed, { description: "Runtime description", requirements: "Included · Apple Silicon · macOS 13.0 or later",
     preparation: "Automatic preparation", dataNotice: "Separate runtime data" });
   const actions = new Proxy({}, { get: () => async () => {} });
   const harness = componentHarness(GameDetails, { g: state.recents[0], state, moduleInfo, actions,
     moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null }); t.after(() => harness.close());
-  const tree = harness.render(), nodes = elements(tree), description = nodes.filter(n => n.type?.name === "RuntimeDescription");
-  assert.equal(description.length, 1);
-  assert.ok(nodes.some(n => n.props.className === "detailLabel" && React.Children.toArray(n.props.children).some(c => React.isValidElement(c) && c.type?.name === "RuntimeDescription")), "Runtime help sits inside its label");
-  const help = description[0].type(description[0].props);
-  assert.equal(help.type.name, "HelpTip");
-  const markup = renderToStaticMarkup(help);
-  assert.equal((markup.match(/aria-label="About this runtime"/g) || []).length, 1);
-  for (const text of ["Runtime description", "Included · Apple Silicon · macOS 13.0 or later", "Automatic preparation", "Separate runtime data"]) assert.ok(markup.includes(text));
-  assert.match(markup, /popover="auto"/);
+  const markup = renderToStaticMarkup(harness.render());
+  const text = "Runtime description\nIncluded · Apple Silicon · macOS 13.0 or later\nAutomatic preparation\nSeparate runtime data";
+  const launch = /<h3 class="detailSectionHeading">Launch([\s\S]*?)<\/h3>/.exec(markup)[1];
+  assert.equal((launch.match(/class="helpTipButton"/g) || []).length, 1);
+  assert.ok(launch.includes(`<dt>Runtime</dt><dd>${text}</dd>`));
+  assert.match(launch, /popover="auto"/);
+  assert.ok(markup.includes(`<div class="detailLabel" title="${text}">Runtime</div>`), "the label keeps the same text as its tooltip");
+  assert.doesNotMatch(markup, /aria-label="About this runtime"/);
 });
 
 test("library startup keeps spinner and accessible Cancel without visible Starting text", t => {

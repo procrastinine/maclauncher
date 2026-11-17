@@ -15,7 +15,8 @@ const display = (accelerator: string) => accelerator.split("+").map(part => GLYP
 const SHORTCUT_HELP: Record<string, string> = {
   bypass: "Turns the frontmost game's graphics off or back on, like the Graphics checkbox.",
   screenshot: "Saves the frontmost game's final processed image as a PNG file. The performance overlay is not included.",
-  ...(ACTION_HELP as Record<string, string>)};
+  // Settings is where shortcuts are assigned, so the pointer to it is left out here.
+  ...Object.fromEntries(Object.entries(ACTION_HELP as Record<string, string>).map(([action, text]) => [action, text.replace(/\s*Assign the keyboard shortcut in Settings\.$/, "")]))};
 export function graphicsShortcutHelp(): HelpItem[] {
   return helpItems(Object.entries(ACTIONS as Record<string, string>).map(([action, label]) => ({ label, text: SHORTCUT_HELP[action] })));
 }

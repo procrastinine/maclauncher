@@ -64,7 +64,7 @@ Selecting a wrapper stores a reference and leaves the wrapper in place. MacLaunc
 
 A missing or incomplete wrapper reports an error and is not recreated. Removing the game leaves the wrapper intact, and a removal whose directory contains the wrapper is refused. **Open Windows files** opens the selected prefix, whose Windows profiles are listed as alternate save locations.
 
-Stop ends only the game's processes by default. **Close All Applications** asks for confirmation, then asks the other Windows programs in the prefix to close and forces the remaining ones to quit. When the game exits normally, the other programs keep running. While the prefix's wineserver is running, the selector shows it, and MSync and High Resolution changes have to wait until it stops.
+Stop ends only the game's processes by default. **Close All Applications** asks for confirmation, then asks the other Windows programs in the prefix to close and forces the remaining ones to quit. When the game exits normally, the other programs keep running. While the prefix's wineserver is running, the selector shows it, and MSync and High resolution changes have to wait until it stops.
 
 ## Runtime settings
 
@@ -92,13 +92,13 @@ The optional **Enable BepInEx winhttp override**, listed for Unity and Windows g
 
 ### Display, input, compatibility and diagnostics
 
-Runtime Settings keeps the basic launch choices above separate from four advanced groups. **Display** holds High Resolution (Retina), DPI, fullscreen capture, vertical sync and virtual desktops, and **Input** maps Option to Alt and Command to Ctrl and configures mouse capture. **Compatibility** holds Rosetta AVX advertisement together with options for particular engines: DXVK async, DXMT frame-rate presets and MetalFX spatial, D3DMetal frame limits and Metal 4, MoltenVK fast math, argument buffers and UE4 compatibility, and WineD3D configuration. Each engine's options appear only when that engine is selected. **Diagnostics**, finally, offers the Metal and DXVK HUDs, the Wine crash dialog and Wine debug channels.
+Runtime Settings keeps the basic launch choices above separate from four advanced groups. **Display** holds High resolution (Retina), DPI, fullscreen capture, vertical sync and virtual desktops, and **Input** maps Option to Alt and Command to Ctrl and configures mouse capture. **Compatibility** holds Rosetta AVX advertisement together with options for particular engines: DXVK async, DXMT frame-rate presets and MetalFX spatial, D3DMetal frame limits and Metal 4, MoltenVK fast math, argument buffers and UE4 compatibility, and WineD3D configuration. Each engine's options appear only when that engine is selected. **Diagnostics**, finally, offers the Metal and DXVK HUDs, the Wine crash dialog and Wine debug channels.
 
-Environment variables for Sikarugir and its translators have global values in **Settings → Environment variables** and a game's own values in the **Environment variables** section of its Runtime Settings, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes. A variable set there replaces the value that one of these controls sets, such as `WINEDEBUG` or `MTL_HUD_ENABLED`. Registry settings apply to the selected Windows environment on its next launch, and High Resolution and synchronization changes can require restarting the environment's Windows programs.
+Environment variables for Sikarugir and its translators have global values in **Settings → Environment variables** and a game's own values in the **Environment variables** section of its Runtime Settings, as [translator environment variables](TRANSLATOR_ENVIRONMENT.md) describes. A variable set there replaces the value that one of these controls sets, such as `WINEDEBUG` or `MTL_HUD_ENABLED`. Registry settings apply to the selected Windows environment on its next launch, and High resolution and synchronization changes can require restarting the environment's Windows programs.
 
 | Control | Values and effect |
 | --- | --- |
-| High Resolution (Retina) | Runtime default, On or Off; On selects 192 DPI unless DPI is set explicitly. |
+| High resolution (Retina) | Runtime default, On or Off; On selects 192 DPI unless DPI is set explicitly. |
 | DPI | A positive REG_DWORD integer; empty keeps the current value. |
 | Option as Alt, Command as Ctrl | Map both the left and right modifier keys. |
 | Mouse capture | Configures cursor confinement and DirectInput mouse warping. |

@@ -7,7 +7,7 @@ import { ErrorText } from "./ErrorText";
 import { RefreshIcon } from "../icons";
 import { Select } from "./Select";
 import { isRuntimeIncluded, runtimeInstallVersion, runtimeCatalogPresentation, runtimeCatalogSources, runtimeDistinctLinks, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey,
-  runtimeVersionBlocked, translatorVersionBuild } from "./runtime-tabs-model";
+  runtimeSourceInstalledVersions, runtimeVersionBlocked, translatorVersionBuild } from "./runtime-tabs-model";
 
 type Props = {
   managerId: string;
@@ -96,10 +96,12 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
         explicit: group.explicit, secondary: group.secondary, status: group.status, error: group.error, failedAt: group.failedAt, fetchedAt: group.fetchedAt } : group;
       const key = runtimeSourceUiKey(section.id, source.explicit ? source.id : undefined);
       const versions: string[] = [...new Set([...(Array.isArray(source.versions) ? source.versions : []),
-        ...installed.map((item: any) => item.version)])];
+        ...runtimeSourceInstalledVersions(installed, primary.length)])];
       const requested = ui.installVersion[key] || ui.installVersion[section.id];
       const recommendation = source.recommendedVersion || section.catalog?.recommendedVersion;
-      const sourceSection = { ...section, installed, versionLabels: source.versionLabels || section.versionLabels, catalog: { ...source, versions } };
+      // The source's own choice is made among its own versions, so another source's installed build is never preselected.
+      const sourceSection = { ...section, installed: installed.filter((item: any) => versions.includes(item.version)),
+        versionLabels: source.versionLabels || section.versionLabels, catalog: { ...source, versions } };
       const versionTag = runtimeVersionTagger(sourceSection);
       const version = runtimeInstallVersion(sourceSection, requested, recommendation);
       const presentation = runtimeCatalogPresentation(source, version, selectedVariant);

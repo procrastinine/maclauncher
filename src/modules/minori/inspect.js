@@ -63,7 +63,7 @@ function inspectGame(root, { inputPath, detection } = {}) {
       title: originalRunner?.strings?.ProductName || path.basename(root), originalRunnerPath: runner || null, originalRunner: originalRunner || null,
       originalRunnerIdentity: runnerStat ? [runnerStat.dev, runnerStat.ino, runnerStat.size, runnerStat.mtimeMs, runnerStat.ctimeMs].join(":") : null,
       originalEngineVersion: null, versionSource: null, cryptoProfile: null,
-      archives, supported: null, compatibility: "The native interpreter verifies this edition’s archive and script profile before play." };
+      archives, supported: null, compatibility: "The native interpreter verifies this edition's archive and script profile before play." };
   } catch (error) { if (error.code === "DETECTION_LIMIT") throw error; return null; }
 }
 module.exports = { LIMITS, GROUPS, parseHeader, inspectArchive, inspectGame };

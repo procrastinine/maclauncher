@@ -159,7 +159,7 @@ async function prepareLaunch(entry, context, distribution) {
     MACLAUNCHER_MINORI_PAZ_XOR: original.data.xorKey.toString(16),
     ...(original.data.originalRunnerPath ? { MACLAUNCHER_MINORI_ORIGINAL_RUNNER: original.data.originalRunnerPath } : {}),
     ...(distribution.movieDecoder ? { MACLAUNCHER_MINORI_MOVIE_DECODER: distribution.movieDecoder } : {}) };
-  if (original.verification.archives.some(archive => archive.group === "mov") && !distribution.movieDecoder) throw new Error("This Minori game needs the native distribution’s movie decoder.");
+  if (original.verification.archives.some(archive => archive.group === "mov") && !distribution.movieDecoder) throw new Error("This Minori game needs the native distribution's movie decoder.");
   entry.defaultSaveDir = saves; context.onEntryChange?.(entry);
   return { ...original, directory, cwd: path.resolve(original.root), saves, env, args: ["--game-root", path.resolve(original.root)] };
 }

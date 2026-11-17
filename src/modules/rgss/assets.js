@@ -432,7 +432,7 @@ function ensureAssetsStaged({ userDataDir, logger, force, resourceRoot, kawariki
   if (!overlayStat || !overlayStat.isFile()) missingResources.push(KAWARIKI_OVERLAY_PATH);
   if (missingResources.length > 0) {
     throw new Error(
-      `The included RGSS support files are missing: ${missingResources.join(", ")}. Restore MacLauncher’s support files.`
+      `The included RGSS support files are missing: ${missingResources.join(", ")}. Restore MacLauncher's support files.`
     );
   }
   const destRoot = ownedRoot(userDataDir, { create: true });

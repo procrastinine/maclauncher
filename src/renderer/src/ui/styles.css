@@ -2093,7 +2093,8 @@ select.input:not([multiple]) {
 
 .ackRow {
   display: grid;
-  grid-template-columns: minmax(180px, 3fr) minmax(0, 2fr);
+  /* Names and links share the width, so long links keep their room. */
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   padding: 5px 12px;
@@ -2118,6 +2119,11 @@ select.input:not([multiple]) {
 
 .ackTitle {
   overflow-wrap: anywhere;
+}
+
+.ackNote {
+  color: var(--muted);
+  font-size: var(--font-sm);
 }
 
 .creditsResources {
@@ -2327,6 +2333,11 @@ select.input:not([multiple]) {
 /* Buttons after a field share one width, so the fields before them end together. */
 .settingsControl > .input + .btn:not(.iconOnly) { min-width: 6.5rem; }
 
+/* A text area's label and trailing button line up with its first line, as in a native form. */
+.settingsRow:has(> .settingsControl > textarea) { align-items: start; }
+.settingsRow:has(> .settingsControl > textarea) > .settingsLabel { padding-top: calc(var(--control-padding-y) + 1px); }
+.settingsControl:has(> textarea) { align-items: flex-start; }
+
 /* The update button keeps its size; the result beside it stays on one line while the window allows. */
 .settingsRow:has(> .settingsUpdateControl) { grid-template-columns: minmax(var(--field-label), 18rem) minmax(0, 1fr); }
 .settingsUpdateControl { flex-wrap: nowrap; }
@@ -2437,7 +2448,7 @@ select.input:not([multiple]) {
 .helpList { margin: 0; }
 .helpList dt { font-weight: 600; }
 .helpList dt:not(:first-child) { margin-top: 8px; }
-.helpList dd { margin: 2px 0 0; }
+.helpList dd { margin: 2px 0 0; white-space: pre-line; }
 .helpPopover > :not(.helpList) + .helpList { margin-top: 10px; }
 .helpPopover { position: fixed; inset: auto; margin: 0; max-width: min(30rem, calc(100vw - 32px)); max-height: calc(100vh - 16px); overflow: auto; padding: 12px; background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; font-size: var(--font-sm); font-weight: 400; line-height: 1.5; letter-spacing: normal; text-transform: none; text-align: left; white-space: normal; box-shadow: var(--shadow-drop); }
 
@@ -2773,6 +2784,8 @@ select.input:not([multiple]) {
 /* One label column for inspector and form rows. */
 .fieldRow { grid-template-columns: var(--field-label) minmax(0, 1fr) auto; }
 .fieldRow > .detailLabel { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.fieldRow:has(> .fieldControl > textarea) { align-items: start; }
+.fieldRow:has(> .fieldControl > textarea) > .detailLabel { padding-top: calc(var(--control-padding-y) + 1px); }
 .fieldControl { display: grid; gap: 6px; min-width: 0; }
 .fieldRow > .fieldControl:last-child { grid-column: 2 / -1; }
 .fieldControl > .input { width: 100%; min-width: 0; }

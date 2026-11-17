@@ -316,7 +316,7 @@ const detailProps = (state, overrides = {}) => ({ g: state.recents[0], state, mo
 test('the inspector places Graphics after Tools as a collapsible section and Notes last', () => {
   const state = createLibraryFixture();
   const markup = renderToStaticMarkup(React.createElement(ui.GameDetails, detailProps(state)));
-  const order = ['>Files</h3>', '>Detection</summary>', '>Launch</h3>', '>Patches</h3>', '>Tools</h3>',
+  const order = ['class="detailSectionHeading">Files', '>Detection</summary>', 'class="detailSectionHeading">Launch', '>Patches</h3>', '>Tools</h3>',
     'class="effectsControls collapsibleSection graphicsSection', 'id="game-notes"'].map(text => markup.indexOf(text));
   assert.ok(order.every(index => index >= 0), JSON.stringify(order));
   assert.deepEqual([...order].sort((a, b) => a - b), order);

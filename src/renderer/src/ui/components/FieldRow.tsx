@@ -7,6 +7,8 @@ export type FieldRowProps = {
   help?: React.ReactNode;
   /** Accessible name of the help button; defaults to "About <label>". */
   helpLabel?: string;
+  /** The label's tooltip: the row's explanation when its section heading's help lists it. */
+  title?: string;
   /** Id of the control, when the label should focus it. */
   labelFor?: string;
   className?: string;
@@ -17,10 +19,10 @@ export type FieldRowProps = {
 };
 
 // Label · control · trailing actions on the shared --field-label column.
-export function FieldRow({ label, help, helpLabel, labelFor, className, children, actions }: FieldRowProps) {
+export function FieldRow({ label, help, helpLabel, title, labelFor, className, children, actions }: FieldRowProps) {
   const name = typeof label === "string" ? label.toLowerCase() : "this setting";
   return <div className={["detailRow", "fieldRow", className].filter(Boolean).join(" ")}>
-    <div className="detailLabel">
+    <div className="detailLabel" title={title}>
       {labelFor ? <label htmlFor={labelFor}>{label}</label> : label}
       {help ? <HelpTip label={helpLabel || `About ${name}`}>{help}</HelpTip> : null}
     </div>
