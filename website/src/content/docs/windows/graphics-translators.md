@@ -34,7 +34,7 @@ In MacLauncher, each layer is a separate setting. The **Default Direct3D engine*
 
 [DXMT](https://github.com/3Shain/dxmt) is an open-source translator that turns Direct3D 10 and 11 directly into Metal, written for WINE on macOS. It needs macOS 14 or later and a Metal GPU that supports it. For Direct3D 10 and 11 games, several MacLauncher features also build on DXMT. Games that call NVIDIA's DLSS upscaler can get upscaling from MetalFX, Apple's own upscaler, through it, and the [camera and XeSS adapters](/maclauncher/windows/effects-and-upscaling/#temporal-upscaling) only work while DXMT is the game's Direct3D engine.
 
-CrossOver, Sikarugir's Template (the package of translators that comes with each Sikarugir engine) and WineCX all include DXMT, and MacLauncher can also install releases from the DXMT project itself. Its settings offer frame-rate presets and MetalFX spatial upscaling of its output.
+CrossOver, Sikarugir's Template (the package of translators that comes with each Sikarugir engine) and WineCX all include DXMT, and MacLauncher can also install releases from the DXMT project itself. **MacLauncher DXMT**, from MacLauncher Builds, is a complete Apple Silicon build of DXMT for [MetalSharp Wine](/maclauncher/windows/crossover-and-sikarugir/#metalsharp-wine-and-highball-wine): its Windows libraries are ARM64X and its Metal renderer is a native Apple Silicon library, so none of it goes through Rosetta or FEX. Its settings offer frame-rate presets and MetalFX spatial upscaling of its output.
 
 ### D3DMetal
 
@@ -69,7 +69,7 @@ WINE also has its own Direct3D 12 library, vkd3d. It translates Direct3D 12 into
 
 | Translator | Translates | Into | Needs | Comes from |
 | --- | --- | --- | --- | --- |
-| DXMT | Direct3D 10 and 11 | Metal | macOS 14 or later | CrossOver, Sikarugir's Template, WineCX, DXMT releases |
+| DXMT | Direct3D 10 and 11 | Metal | macOS 14 or later | CrossOver, Sikarugir's Template, WineCX, DXMT releases, MacLauncher DXMT |
 | D3DMetal | Direct3D 11 and 12 | Metal | Apple Silicon and a 64-bit game | CrossOver, Sikarugir's Template, your Game Porting Toolkit |
 | DXVK | Direct3D 8 to 11, depending on the build | Vulkan | A Vulkan driver | CrossOver, Sikarugir's Template, WineCX, DXVK and Gcenx releases |
 | vkd3d-proton | Direct3D 12 | Vulkan | A Vulkan driver, preferably KosmicKrisp | vkd3d-proton releases |
