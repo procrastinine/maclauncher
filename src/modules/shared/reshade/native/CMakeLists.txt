@@ -199,6 +199,7 @@ target_sources(reshade-macos PRIVATE src/denoised-ingress.mm)
 set_source_files_properties(src/denoised-ingress.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 
 target_sources(reshade-macos PRIVATE src/scene-copy-boundary.mm)
+target_sources(reshade-macos PRIVATE src/caller-copy.mm)
 set_source_files_properties(src/scene-copy-boundary.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 
 target_sources(reshade-macos PRIVATE src/scene-aov-normalize.mm)
