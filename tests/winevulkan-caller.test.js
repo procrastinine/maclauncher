@@ -300,35 +300,29 @@ test('the game process loads the graphics libraries through the WineVulkan clien
     /inProcessGraphics\(install, \{ runtimeLibraryRoot, vulkanSelection, environment \}\) \? \{ inProcessGraphics: true \} : \{\}/);
 });
 
-// A module built for a Wine release binds to what can be measured in any build of it: the release in the Wine's
-// ntdll.so build string, and the Wine libraries' exports of every symbol the module's Unix side imports.
-test('a WineVulkan module bound to a Wine release follows the measured release and library exports, not file digests',async t=>{
+// A module built for a Wine release binds to the release in the Wine's ntdll.so build string, which any build
+// of that release reports.
+test('a WineVulkan module bound to a Wine release follows the release measured from the Wine, not file digests',async t=>{
   const f=moduleFixture(t),Tool=require('../src/modules/crossover/temporal/vulkan/manager'),unix=path.join(f.engine,'lib/wine/aarch64-unix');
   const layout=require('../src/modules/shared/runtime/wine-layout').wineLayout(f.install);
   const ntdll=build=>put(path.join(unix,'ntdll.so'),Buffer.concat([image({cpu:ARM64}),Buffer.from('\0'+build+'\0')]));
-  put(f.moduleNative,image({cpu:ARM64,dependencies:['@rpath/ntdll.so','@rpath/win32u.so','/usr/lib/libSystem.B.dylib'],
-    imports:[{symbol:'NtClose',ordinal:1},{symbol:'NtUserGetDC',ordinal:2},{symbol:'malloc',ordinal:3}]}));
-  f.manifest.files=f.manifest.files.map(row=>({...row,sha256:digest(path.join(f.moduleRoot,row.path)),size:fs.statSync(path.join(f.moduleRoot,row.path)).size}));
-  f.manifest.provider.files=structuredClone(f.manifest.files);
   f.manifest.provider.runtimeProfile={id:'fixture-wine11.20',product:'Fixture Wine',wineVersion:'11.20'};
   put(path.join(f.moduleRoot,'manifest.json'),JSON.stringify(f.manifest));
-  const exported=(ntdllNames,win32uNames)=>({layout,modules:Object.fromEntries([['ntdll.so',ntdllNames],['win32u.so',win32uNames]]
-    .map(([name,exports])=>[name,{exports,reexports:[],complete:true,image:{dependencies:[]}}]))});
-  const select=record=>Graphics.wineVulkanSelection(f.moduleRoot,f.install,{layout,module:Tool.inspectPayload(f.moduleRoot),record});
+  const select=()=>Graphics.wineVulkanSelection(f.moduleRoot,f.install,{layout,module:Tool.inspectPayload(f.moduleRoot)});
   ntdll('wine-11.20 (Fixture Wine 7.0)');
-  assert.equal(select(exported(['NtClose'],['NtUserGetDC']))?.native.file,f.moduleNative);
+  assert.equal(select()?.native.file,f.moduleNative);
   ntdll('wine-11.20 (Fixture Wine 7.1)');
-  assert.equal(select(exported(['NtClose'],['NtUserGetDC']))?.native.file,f.moduleNative,'another build of the same release, with other bytes');
-  assert.equal(select(exported(['NtClose'],[])),null,'a Wine library without an imported symbol');
-  assert.equal(select(undefined),null,'no measured exports');
+  assert.equal(select()?.native.file,f.moduleNative,'another build of the same release, with other bytes');
   ntdll('wine-11.21 (Fixture Wine 7.2)');
-  assert.equal(select(exported(['NtClose'],['NtUserGetDC'])),null,'another Wine release');
+  assert.equal(select(),null,'another Wine release');
+  ntdll('no release string');
+  assert.equal(select()?.native.file,f.moduleNative,'a release that cannot be read counts as usable');
   // Play offers a listed module of the Wine's release; the release is the binding before the download.
   ntdll('wine-11.20-8726-g2e2f5fca349');
   const pin={version:'2.0.0',capabilities:{runtimeProfile:{id:'fixture-wine11.20',wineVersion:'11.20'}},asset:{bytes:42}};
   const manager={id:'winevulkan-scene',label:'WineVulkan helper',core:{catalog:[pin]},resolveSelection:()=>({ready:false,version:pin.version}),getState:()=>({installed:[]})};
   const ask=()=>Graphics.wineVulkanRequirements({name:'Fixture',effects:{}},{runtimeId:'metalsharp-wine',runtimeSettings:{dlss:true},settings:{runtimes:{}},userDataDir:path.join(f.root,'profile'),
-    translatorPlan:{layout,components:{'vulkan-driver':{used:{engine:'moltenvk'}}},record:exported(['NtClose'],['NtUserGetDC'])}},{install:f.install,manager,root:path.join(f.root,'absent-component')});
+    translatorPlan:{layout,components:{'vulkan-driver':{used:{engine:'moltenvk'}}}}},{install:f.install,manager,root:path.join(f.root,'absent-component')});
   assert.equal((await ask()).length,1);
   pin.capabilities.runtimeProfile.wineVersion='11.0';
   assert.deepEqual(await ask(),[]);

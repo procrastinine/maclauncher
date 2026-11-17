@@ -3,7 +3,7 @@ const ARM64 = 0x0100000c, X64 = 0x01000007;
 function image({ cpu = ARM64, little = true, wide = !!(cpu & 0x01000000), fileType = 6,
   dependencies = ["/usr/lib/libSystem.B.dylib"], installName = "@rpath/libfixture.dylib",
   runPaths = [], platform = 1, minimumOS = 0x000d0000, legacyVersion = false,
-  symbols = [], imports = [], extraCommands = [] } = {}) {
+  symbols = [], extraCommands = [] } = {}) {
   const write = (bytes, value, offset) => little ? bytes.writeUInt32LE(value, offset) : bytes.writeUInt32BE(value, offset);
   const commands = [], alignment = wide ? 8 : 4;
   const command = (kind, size) => {
@@ -22,31 +22,23 @@ function image({ cpu = ARM64, little = true, wide = !!(cpu & 0x01000000), fileTy
   for (const item of dependencies) stringCommand(typeof item === "string" ? 0xc : item.kind,
     typeof item === "string" ? item : item.path, 24);
   for (const value of runPaths) stringCommand(0x8000001c, value, 12);
-  const symbolCommand = symbols.length || imports.length ? command(2, 24) : null;
+  const symbolCommand = symbols.length ? command(2, 24) : null;
   commands.push(...extraCommands);
   const headerSize = wide ? 32 : 28;
   const commandBytes = Buffer.concat(commands), header = Buffer.alloc(headerSize);
   write(header, wide ? 0xfeedfacf : 0xfeedface, 0); write(header, cpu, 4); write(header, fileType, 12);
   write(header, commands.length, 16); write(header, commandBytes.length, 20);
-  // Two-level imports name their dependency by ordinal (1-based, in load-command order).
-  if (imports.length) write(header, 0x80, 24);
   let records = Buffer.alloc(0), names = Buffer.alloc(0);
   if (symbolCommand) {
     const stride = wide ? 16 : 12;
-    records = Buffer.alloc(stride * (symbols.length + imports.length)); const strings = [Buffer.from([0])]; let nameOffset = 1;
+    records = Buffer.alloc(stride * symbols.length); const strings = [Buffer.from([0])]; let nameOffset = 1;
     symbols.forEach((name, i) => {
       const bytes = Buffer.from("_" + name + "\0");
       write(records, nameOffset, i * stride); records[i * stride + 4] = 0x0f; records[i * stride + 5] = 1;
       strings.push(bytes); nameOffset += bytes.length;
     });
-    imports.forEach(({ symbol, ordinal }, j) => {
-      const i = symbols.length + j, bytes = Buffer.from("_" + symbol + "\0");
-      write(records, nameOffset, i * stride); records[i * stride + 4] = 0x01;
-      if (little) records.writeUInt16LE(ordinal << 8, i * stride + 6); else records.writeUInt16BE(ordinal << 8, i * stride + 6);
-      strings.push(bytes); nameOffset += bytes.length;
-    });
     names = Buffer.concat(strings);
-    write(symbolCommand, headerSize + commandBytes.length, 8); write(symbolCommand, symbols.length + imports.length, 12);
+    write(symbolCommand, headerSize + commandBytes.length, 8); write(symbolCommand, symbols.length, 12);
     write(symbolCommand, headerSize + commandBytes.length + records.length, 16); write(symbolCommand, names.length, 20);
   }
   return Buffer.concat([header, ...commands, records, names]);
