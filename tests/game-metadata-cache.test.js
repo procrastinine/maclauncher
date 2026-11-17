@@ -59,6 +59,24 @@ test("unchanged games reuse detection, icon and save facts across service restar
   assert.deepEqual(f.counts, { detection: 1, save: 1, icon: 1 });
 });
 
+test("background metadata refresh keeps installer preparation read-only while import permits acquisition", async t => {
+  const f = fixture(t), preparations = [];let consents = 0, acquisitions = 0;
+  const service = createGameMetadataService({ userDataDir: f.userDataDir, registry: f.registry,
+    confirmRuntimeInstall: async () => { consents++; return true; },
+    inputPreparation: async (inputPath, options) => {
+      preparations.push(options.readOnly);
+      if (options.readOnly !== true && await options.confirmRuntimeInstall()) acquisitions++;
+      return { inputPath };
+    }
+  });
+  await service.refreshEntry(f.entry, f.settings, { force: true, persist: false });
+  assert.deepEqual(preparations, [true]);
+  assert.equal(consents, 0);assert.equal(acquisitions, 0);
+  await service.importEntry(f.gamePath, f.settings, { force: true });
+  assert.deepEqual(preparations, [true, false]);
+  assert.equal(consents, 1);assert.equal(acquisitions, 1);
+});
+
 test("metadata caches store a compact profile hash and refresh stale analysis once", async t => {
   const f = fixture(t), original = fs.statSync, metadataSource = require.resolve("../src/core/game-metadata");
   f.registry.getModule().metadataSources = ["main.js"];
