@@ -139,7 +139,7 @@ test("a registered runtime that was moved or deleted reads as not found instead 
   assert.match(incomplete.reason, /ENOENT.*runtime\.json/, "a missing file inside an existing folder keeps its detail");
 });
 
-test("a selection reads the manager's state for a custom default only while a registration or a saved path exists", t => {
+test("a selection reads the manager's state for a custom default only while a registration or a saved path exists", async t => {
   const Custom = require("../src/modules/shared/runtime/custom-runtime");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "custom-selection-reads-")), folder = path.join(root, "Player");
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -157,6 +157,7 @@ test("a selection reads the manager's state for a custom default only while a re
   assert.equal(manager.resolveSelection(null, { runtimes: { [manager.id]: { defaultVersion: folder } } }, root).version, folder);
   fs.mkdirSync(path.join(root, "runtimes", manager.id), { recursive: true });
   fs.writeFileSync(path.join(root, "runtimes", manager.id, "custom-runtimes.json"), JSON.stringify({ runtimes: [{ path: folder, sectionId: "default" }] }));
+  await null; // A registration file written outside the launcher is read by the next read.
   // The manager's own default decides without inspecting the registrations.
   inspections = 0;
   assert.equal(manager.resolveSelection(null, { runtimes: { [manager.id]: { defaultVersion: "1.0" } } }, root).version, "1.0");
@@ -190,9 +191,12 @@ test("a registered package's status inspection is reused until its folder or man
   assert.equal(list()[0].versionLabel, "1");
   manager.getState({ userDataDir });
   assert.deepEqual(inspected, ["full", "status"], "an unchanged package is inspected once for every later listing and state read");
+  // Each change is seen by the next read; one synchronous read sees one state.
   fs.writeFileSync(manifest, JSON.stringify({ version: "1.1" }));
+  await null;
   assert.equal(list()[0].versionLabel, "1.1", "a changed manifest is read again");
   fs.writeFileSync(path.join(folder, "added"), "");
+  await null;
   list();
   assert.equal(inspected.length, 4, "a changed folder is read again");
   await manager.installRuntime({ version: "2.0", userDataDir });
@@ -208,4 +212,29 @@ test("a registered package's status inspection is reused until its folder or man
   assert.deepEqual(inspected.slice(6), ["full", "status"], "a new registration of the same path is inspected again");
   assert.equal(Custom.resolve({ managerId: manager.id, userDataDir, version: folder }).versionLabel, "1.1");
   assert.equal(inspected.at(-1), "full", "a full inspection always reads the files");
+});
+
+test("one synchronous state read reads a manager's registration file and each registered folder's identity once", async t => {
+  const Custom = require("../src/modules/shared/runtime/custom-runtime");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "custom-turn-")), folder = path.join(root, "Package");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(folder, { recursive: true });
+  const manager = { id: "turn-fixture", getState: () => ({ installed: [], catalog: { versions: [] } }),
+    customRuntime: { inspect: runtimePath => ({ installDir: runtimePath }) } };
+  Custom.instrumentManagers([manager]);
+  const userDataDir = path.join(root, "data");
+  await manager.registerCustomRuntime({ runtimePath: folder, userDataDir });
+  await null;
+  const file = path.join(userDataDir, "runtimes", manager.id, "custom-runtimes.json");
+  let reads = 0, folderStats = 0;
+  const readFileSync = fs.readFileSync, lstatSync = fs.lstatSync;
+  t.mock.method(fs, "readFileSync", function(target, ...rest) { if (target === file) reads++; return readFileSync.call(this, target, ...rest); });
+  t.mock.method(fs, "lstatSync", function(target, ...rest) { if (target === folder) folderStats++; return lstatSync.call(this, target, ...rest); });
+  for (let i = 0; i < 10; i++) { assert.equal(Custom.list({ managerId: manager.id, userDataDir }).length, 1); manager.getState({ userDataDir }); }
+  assert.deepEqual([reads, folderStats], [1, 1], "repeated listings in one read share one file read and one folder identity");
+  await null;
+  Custom.list({ managerId: manager.id, userDataDir });
+  assert.deepEqual([reads, folderStats], [2, 2], "the next read reads them again");
+  await manager.uninstallRuntime({ version: folder, sectionId: "default", userDataDir });
+  assert.deepEqual(Custom.list({ managerId: manager.id, userDataDir }), [], "a written registration file is read again at once");
 });

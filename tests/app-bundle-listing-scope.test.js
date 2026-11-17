@@ -40,9 +40,13 @@ test('runtime listings reuse only their launch scope, return independent rows an
   await withRuntimeCoordinator(coordinator,root,()=>withRuntimeUseScope(scope,async()=>{
     const first=read(),warm={...counters},registrations=registrationReads;
     first[0][0].ready=false;first[1][0].version='poison';first[3].push({version:'poison'});
+    const sameTurn=read();
+    assert.equal(registrationReads,registrations,'One synchronous read reads each registration file once');
+    assert.equal(sameTurn[0][0].ready,true);
+    await null;
     const second=read();
     assert.deepEqual(counters,warm,'A repeated listing must perform no directory, plist, executable or identity file checks');
-    assert.equal(registrationReads,registrations+4,'Existing outer custom registration checks must remain current');
+    assert.equal(registrationReads,registrations+3,'Existing outer custom registration checks must remain current once a read yields: one per registration file');
     assert.equal(second[0][0].ready,true);assert.equal(second[1][0].version,'11.5');assert.equal(second[3].length,2);
     assert.deepEqual(second[2],[],'Stable/nightly methods have separate keys');
     assert.deepEqual(Godot.listInstalled(path.join(root,'another-profile')),[],'Profile paths have separate keys');

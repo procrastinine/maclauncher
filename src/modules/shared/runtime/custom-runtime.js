@@ -19,8 +19,24 @@ function fileFor(userDataDir, managerId) {
   if (!userDataDir || !/^[a-z0-9][a-z0-9._-]*$/i.test(managerId || "")) throw new Error("Runtime registration storage is unavailable.");
   return path.join(userDataDir, "runtimes", managerId, "custom-runtimes.json");
 }
+// One synchronous read, such as a Runtimes state read that lists a manager's
+// registrations many times, reads each registration file and folder identity
+// once. The memo ends when that read yields, and at once when a registration is
+// written or a runtime install or removal starts or ends.
+let turnMemo = null;
+function inTurn(key, read) {
+  if (!turnMemo) { const memo = turnMemo = new Map(); queueMicrotask(() => { if (turnMemo === memo) turnMemo = null; }); }
+  if (turnMemo.has(key)) return turnMemo.get(key);
+  const value = read();
+  turnMemo.set(key, value);
+  return value;
+}
+function endTurn() { turnMemo = null; }
 function records(userDataDir, managerId) {
   if (!userDataDir) return [];
+  return inTurn(`records\0${userDataDir}\0${managerId}`, () => readRecords(userDataDir, managerId)).slice();
+}
+function readRecords(userDataDir, managerId) {
   try {
     const file = fileFor(userDataDir, managerId);
     if (fs.statSync(file).size > 2 * 1024 * 1024) throw new Error("Runtime registrations exceed their size limit.");
@@ -30,6 +46,7 @@ function records(userDataDir, managerId) {
   } catch (error) { if (error.code === "ENOENT") return []; throw error; }
 }
 function write(userDataDir, managerId, runtimes) {
+  endTurn();
   const file = fileFor(userDataDir, managerId), temporary = file + "." + crypto.randomUUID() + ".tmp";
   fs.mkdirSync(path.dirname(file), { recursive: true });
   try {
@@ -120,6 +137,7 @@ function statusIdentity(target) {
 // starts and again when it ends.
 function changing(run) {
   statusGeneration += 1;
+  endTurn();
   let result;
   try { result = run(); } catch (error) { statusGeneration += 1; throw error; }
   if (result && typeof result.then === "function") return Promise.resolve(result).finally(() => { statusGeneration += 1; });
@@ -141,7 +159,7 @@ function inspect(manager, row, userDataDir, verification = "status") {
   let results = statusResults.get(manager);
   if (!results) statusResults.set(manager, results = new Map());
   const key = JSON.stringify([row.path, row.sectionId, row.registeredAt || null, row.data ?? null, userDataDir || null]);
-  const identity = statusIdentity(row.path), known = results.get(key);
+  const identity = inTurn(`identity\0${statusGeneration}\0${row.path}`, () => statusIdentity(row.path)), known = results.get(key);
   if (known?.identity === identity && known.inspector === inspector) return { ...known.result };
   // A missing, unavailable or still-preparing registration is read every time.
   const result = read();
