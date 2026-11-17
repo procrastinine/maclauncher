@@ -221,8 +221,8 @@ test('CrossOver and Sikarugir manage one shared DXMT support download under Dire
   assert.match(markup, /class="runtimePanelTitle">DXMT<\/div>/);
   assert.match(markup, /id="runtime-group-panel-directx-metal"/);
   assert.doesNotMatch(markup, /class="btn primary"[^>]*>Install/);
-  // Translator versions are chosen per game; the manager has no global default.
-  assert.doesNotMatch(markup, /Set default/);
+  // An installed DXMT version can become the default; games may still choose their own.
+  assert.equal(markup.match(/>\s*Set default\s*</g).length, 1);
   assert.equal(markup.match(/class="runtimePanelTitle">DXMT<\/div>/g).length, 1);
   assert.doesNotMatch(markup, /DXMT · support/);
   for (const engine of engines) assert.doesNotMatch(render([...engines, bridge], engine.id), /class="runtimePanelTitle">DXMT<\/div>/, `${engine.id}: no separate copy`);
@@ -1318,16 +1318,15 @@ test('effective provider arrays expose all used settings without changing saved 
  }
 });
 
-test('translator defaults are absent for custom and Included rows while Vulkan defaults remain available', t => {
+test('installed and custom translator rows offer defaults while Included references remain read-only', t => {
   const {createManager}=require('../src/modules/shared/runtime/translator-managers');
   const translator=createManager('dxvk'),state=translator.getState({});
-  assert.equal(state.supportsDefault,false);
-  const saved={defaultVersion:'kept-choice',unrelated:true};
-  assert.deepEqual(translator.applySettingsUpdate('setDefault',{version:'other'},saved),saved);
-  const rows=[{version:'registered',versionLabel:'Registered component',custom:true,ready:true},{version:'host',versionLabel:'Host component',reference:true,readOnly:true,removable:false,supportsDefault:false,ready:true}];
-  const runtime={...state,id:translator.id,label:translator.label,ui:translator.ui,installed:rows,sections:undefined,defaultVersion:'not-installed'};
-  const markup=render([runtime],translator.id);
-  assert.doesNotMatch(markup,/Set default|Default first|data-runtime-default-missing|>Default<\/span>/);
+  assert.equal(state.supportsDefault,true);
+  const reference={version:'host',versionLabel:'Host component',reference:true,readOnly:true,removable:false,supportsDefault:false,ready:true};
+  const custom={version:'registered',versionLabel:'Registered component',custom:true,ready:true};
+  const runtime=rows=>({...state,id:translator.id,label:translator.label,ui:translator.ui,installed:rows,sections:undefined,defaultVersion:'not-installed'});
+  assert.doesNotMatch(render([runtime([reference])],translator.id),/Set default/);
+  assert.equal(render([runtime([custom,reference])],translator.id).match(/>\s*Set default\s*</g).length,1);
   const driver=manager('vulkan-driver',{groupId:'vulkan-drivers'}, {versions:['1.4.2']},[{version:'1.4.1',ready:true}]);
   driver.supportsDefault=true;driver.defaultVersion='1.4.2';
   assert.match(render([driver]),/Set default/);
