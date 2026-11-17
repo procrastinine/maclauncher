@@ -5,6 +5,7 @@ const Native = require("../../runtime/local-native");
 const { createPinnedNativeManager } = require("../../runtime/pinned-native-manager");
 const Zip = require("../../runtime/zip");
 const { getHostCapabilities } = require("../../runtime/host-capabilities");
+const Custom = require("../../runtime/custom-runtime");
 
 const SOURCE = "https://github.com/KarmSakha/mac-game-porter/releases";
 function recognize(release) {
@@ -27,6 +28,7 @@ async function extractSrep(archive, destination, signal) {
   signal?.throwIfAborted();
 }
 function inspectRuntime(options) {
+  if (path.basename(options.runtimePath || "").toLowerCase() !== "srep") throw new Error("Select the SREP executable or a folder containing it.");
   const install = Native.resolveLocalRuntime(options);
   if (!install.architectures.includes("arm64")) throw new Error("SREP requires an Apple Silicon executable.");
   return install;
@@ -37,6 +39,17 @@ function createManager(dependencies = {}) {
     sourceDescription: "SREP 3.93 by Bulat Ziganshin, all rights reserved; downloaded from mac-game-porter releases.",
     dependencies: { extractArchive: extractSrep, ...dependencies } });
   manager.ui = { groupId: "tools", tabLabel: "Tools", sectionLabel: "SREP", order: 102, memberOrder: 102, management: "managed" };
+  const customRuntime = { inspect(runtimePath) {
+    const directory = fs.statSync(runtimePath).isDirectory();
+    const executable = directory ? ["bin/srep", "srep", "Contents/Resources/tools/srep"].map(relative => path.join(runtimePath, relative))
+      .find(file => fs.statSync(file, { throwIfNoEntry: false })?.isFile()) : runtimePath;
+    if (!executable) throw new Error("Select the SREP executable or a folder containing it.");
+    const install = inspectRuntime({ runtimePath: executable, runtimeVersion: "custom", upstreamRevision: "custom" });
+    const root = directory ? runtimePath : path.dirname(runtimePath);
+    return { ...install, root, installDir: root, payloadRoot: root, requiresRosetta: install.needsRosetta, binarySha256: install.sha256 };
+  } };
+  manager.configureCustomRuntime(customRuntime);
+  Custom.configure(manager, customRuntime);
   manager.selectedForInstaller = context => {
     const host = dependencies.hostCapabilities || getHostCapabilities();
     if (host.hardwareArch !== "arm64" || context.freeArcSrepDisabled) return null;
