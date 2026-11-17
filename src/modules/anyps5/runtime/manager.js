@@ -74,6 +74,10 @@ function createManager(dependencies = {}) {
     const pin = manager.core.listDiscoveredCatalog({userDataDir}).find(pin => pin.version === version && pin.projectPackage);
     return pin ? {route: fexPackage(pin) ? "fex" : Architecture.requiresRosetta("x64") ? "rosetta" : "native"} : {};
   }
+  const withRoute = (selected,userDataDir) => selected.ready || selected.route || !selected.version ? selected
+    : {...selected,...listedRoute(selected.version,userDataDir)};
+  // Automatic installs a FEX package on Apple Silicon only when the catalog lists one; otherwise the converter.
+  const fexListed = userDataDir => manager.core.listDiscoveredCatalog({userDataDir}).some(pin => pin.projectPackage && pin.asset && fexPackage(pin));
   manager.resolveSelection = (entry, settings, userDataDir, options = {}) => {
     const explicit = explicitVersion(entry,settings,options);
     const installed = state({userDataDir}).installed || [];
@@ -92,13 +96,14 @@ function createManager(dependencies = {}) {
       if (fex) return measured(resolve(entry,settings,userDataDir,{...options,recommendedVersion:fex.version,architecture:fex.architecture}));
     }
     const selected = measured(resolve(entry,settings,userDataDir,options));
-    if (selected.ready || explicit || !Architecture.requiresRosetta("x64")) return selected;
-    return measured(resolve(entry,settings,userDataDir,{...options,compatible:fexPackage}));
+    if (selected.ready || !Architecture.requiresRosetta("x64")) return withRoute(selected,userDataDir);
+    const fex = measured(resolve(entry,settings,userDataDir,{...options,compatible:fexPackage}));
+    return withRoute(fex.version ? fex : selected,userDataDir);
   };
   manager.installRuntime = (options = {}) => {
     const settings=options.settings?.runtimes?options.settings:{runtimes:{anyps5:options.settings}};
     return install.call(manager,{...options,...(options.automatic===true&&!explicitVersion(null,settings,options)&&Architecture.requiresRosetta("x64")
-      ? {compatible:fexPackage}: {})});
+      &&fexListed(options.userDataDir) ? {compatible:fexPackage}: {})});
   };
   manager.getState = (options = {}) => {
     const result = state(options);

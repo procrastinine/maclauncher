@@ -16,9 +16,11 @@ const GameIdentity=require("../shared/runtime/game-identity");
 const GameData=require("../shared/game-data");
 const DockIcon=require("../shared/dock-icon");
 
+// A ready selection carries its measured route, and a listed version its project's; a ready one without a route is
+// a converter install, and a version still to be chosen is the FEX package Automatic installs on Apple Silicon.
+const routeOf=selected=>selected.route||(!Architecture.requiresRosetta("x64")?"native":selected.ready?"rosetta":"fex");
 function cpuRoute(entry,context){
-  const selected=manager.resolveSelection(entry,context?.settings,context?.userDataDir);
-  return selected.route || (Architecture.requiresRosetta("x64")?"fex":"native");
+  return routeOf(manager.resolveSelection(entry,context?.settings,context?.userDataDir));
 }
 const vulkanOptions=route=>({architecture:route==="fex"?"arm64":"x64",preferredBackend:"kosmickrisp"});
 // Translator environments of a launch: AnyPS5's own and its Vulkan driver's.
@@ -74,7 +76,7 @@ module.exports={id:manifest.id,manifest,detectGame,resolveSaveLocations,runtimeM
   getRuntimeRequirements:(entry,context)=>entry.moduleData?.inspectionOnly?[]:Vulkan.requirements(context,{...vulkanOptions(cpuRoute(entry,context)),required:true}),
   launchRuntime:async(runtimeId,entry,context)=>{
     if(runtimeId!=="anyps5") return null;
-    const selected=manager.resolveSelection(entry,context.settings,context.userDataDir),route=selected.route;
+    const selected=manager.resolveSelection(entry,context.settings,context.userDataDir),route=routeOf(selected);
     if(!selected.ready) throw new Error(selected.reason);
     const inputRouting=Input.routingEnvironment(context.runtimeSettings,selected.install);
     Bundled.verifyPayload(selected.install.root,selected.install.declaration);
