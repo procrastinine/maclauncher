@@ -23,7 +23,7 @@ async function extractArchive(archive, destination, signal) {
 // Each record identifies its source revision and carries the capabilities
 // modules read. A record without `source` uses the same-version launcher build
 // recipe, or the revision recorded when it was installed.
-function createProjectNativePackage({ projectId, repository, validateManifest, launcherContract = 2 }, { id, catalog, nativeLibrary = false, dependencies = {} }) {
+function createProjectNativePackage({ projectId, repository, validateManifest, executableRelative, launcherContract = 2 }, { id, catalog, nativeLibrary = false, dependencies = {} }) {
   if (projectId !== id) throw new Error("The hosted runtime project must match its native manager.");
   Catalog.catalogUrl({ projectId, repository });
   const recipes = new Map(catalog.filter(pin => !pin.deprecated).map(pin => [pin.version, pin]));
@@ -50,8 +50,12 @@ function createProjectNativePackage({ projectId, repository, validateManifest, l
     resolveDependency ||= P.resolver(installedDependencies||new Map());
     // Lazy import keeps the shared pinned-manager dependency acyclic at load.
     const selected = require("./project-build-manager").inspectPackage(root, record, {
-      projectId, manifestRelative: record.manifestRelative, sourceRelative: null, filesPrefix: "files/", resolveDependency, declaration:outer,metadataOnly,managed:true,
-      executableRelative: manifest => manifest.executableRelative,
+      projectId, manifestRelative: record.manifestRelative, sourceRelative: null,
+      filesPrefix: manifest => !Object.hasOwn(manifest,"executableRelative") && !Object.hasOwn(manifest,"executable") && executableRelative !== undefined &&
+        fs.existsSync(path.join(root,Bundled.relativeFile(executableRelative))) ? "" : "files/",
+      resolveDependency, declaration:outer,metadataOnly,managed:true,
+      executableRelative: manifest => Object.hasOwn(manifest,"executableRelative") || Object.hasOwn(manifest,"executable")
+        ? manifest.executableRelative || manifest.executable : executableRelative,
       validateManifest(manifest) {
         Bundled.validateRuntimeManifest(manifest, { managerId: id, version: pin.version, arch: record.arch });
         validateManifest?.(manifest, pin);
