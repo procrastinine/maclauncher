@@ -43,6 +43,15 @@ const developmentGlobs = Object.freeze([
   '**/node_modules/**/{bench,benchmark,benchmarks}/**'
 ].map(pattern => '!' + pattern));
 
+// The application ships native code from the declared runtime payloads. Keep
+// compiler inputs in the source checkout and corresponding-source packages.
+// Apply these filters only to the application source matcher so sealed
+// resources retain compiled helpers, notices and any source read at runtime.
+const applicationBuildInputGlobs = Object.freeze([
+  '!src/**/*.{c,cc,cpp,cxx,h,hh,hpp,m,mm,metal,rs,swift,spec}',
+  '!src/**/{CMakeLists.txt,build.mjs}'
+]);
+
 function excludedReason(file) {
   const parts = String(file).replaceAll('\\', '/').split('/').filter(Boolean);
   // Bundler::CLI::Gem copies these templates into generated gems. They are
@@ -75,10 +84,15 @@ function applyBuildPolicy(build) {
   // Bare exclusions beside those FileSets create a separate default matcher
   // which Builder expands to **/*, bypassing the original source allowlist.
   const patterns = files.filter(rule => typeof rule === 'string');
-  const mappings = files.filter(rule => typeof rule !== 'string').map(rule => ({ ...rule, filter: [...withExclusions(rule.filter), ...developmentGlobs] }));
+  const mappings = files.filter(rule => typeof rule !== 'string').map(rule => ({
+    ...rule,
+    filter: [...withExclusions(rule.filter), ...developmentGlobs,
+      ...(!rule.from || rule.from === '.' ? applicationBuildInputGlobs : [])]
+  }));
   const sealed = rule => rule.from === 'src/resources' && (rule.to === '.' || rule.to === undefined);
   return { ...build,
-    files: patterns.length || !mappings.length ? [...withExclusions(patterns), ...developmentGlobs, ...mappings] : mappings,
+    files: patterns.length || !mappings.length
+      ? [...withExclusions(patterns), ...developmentGlobs, ...applicationBuildInputGlobs, ...mappings] : mappings,
     extraResources: (build.extraResources || []).map(rule => typeof rule === 'string' ? rule
       : { ...rule, filter: [...withExclusions(rule.filter), ...(sealed(rule) ? [] : developmentGlobs)] })
   };

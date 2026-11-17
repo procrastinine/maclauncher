@@ -158,10 +158,19 @@ test('source-only helper producers and Python SDK inputs are omitted while consu
   const build = Content.applyBuildPolicy(doMergeConfigs([packageConfig().build]));
   const info = { projectDir: projectRoot, buildResourcesDir: 'build', config: build, isPrepackedAppAsar: false, debugLogger: { isEnabled: false } };
   const matchers = getMainFileMatchers(projectRoot, '/stage', value => value, build.mac, { info }, path.join(projectRoot, build.directories.output), false);
-  for (const file of ['src/modules/siglus/native/adapter.m', 'src/modules/siglus/native-host/host.m',
-    'src/modules/nscripter/runtime/portable-native/CMakeLists.txt', 'src/modules/shared/runtime/steamworks/native/offline-0.5.0/contracts.json',
-    'src/modules/minori/runtime/probe.rs'])
+  for (const file of ['src/modules/shared/runtime/steamworks/native/offline-0.5.0/contracts.json',
+    'src/modules/shared/reshade/generation/anr/source.json',
+    'src/modules/shared/reshade/generation/anr/NOTICE.md',
+    'src/modules/crossover/temporal/opengl/selection.js'])
     assert.equal(matchers.some(m => selectedBy(m, file)), true, file);
+  for (const file of ['src/modules/shared/reshade/generation/anr/native/CMakeLists.txt',
+    'src/modules/shared/reshade/generation/anr/native/anr_runtime.mm',
+    'src/modules/shared/reshade/generation/anr/native/frame_constants.hpp',
+    'src/modules/shared/reshade/generation/anr/native/helpers.metal',
+    'src/modules/crossover/temporal/opengl/attach.c', 'src/modules/crossover/temporal/opengl/loader.c',
+    'src/modules/crossover/temporal/opengl/maclauncher-opengl32.spec',
+    'src/modules/crossover/temporal/opengl/build.mjs'])
+    assert.equal(matchers.some(m => selectedBy(m, file)), false, file);
   const resource = require('../scripts/distribution-model.cjs').resourceRules(plan).find(r => r.from === 'src/resources');
   const matcher = new FileMatcher(path.join(projectRoot, resource.from), '/resources', value => value, resource.filter);
   for (const file of ['python/bin/python3', 'python/lib/python3.12/ctypes/__init__.py',
