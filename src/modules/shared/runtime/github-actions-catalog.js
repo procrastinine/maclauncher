@@ -21,7 +21,7 @@ function createGithubActionsDiscovery({ owner, repo, workflow, branch = "main", 
     !Number.isInteger(maxArtifacts) || maxArtifacts < 1 || maxArtifacts > 500) throw new Error("Public GitHub Actions catalog limits are invalid.");
   const name = `${owner}/${repo}`;
   return async ({ logger, signal, latestOnly } = {}) => {
-    const matchedLimit = latestOnly === false ? maxRuns : limit;
+    const fullHistory = latestOnly === false, runsPerPage = fullHistory ? 100 : maxRuns;
     const request = dependencies.request || fetchUrlBuffer;
     const read = async route => {
       throwIfAborted(signal);
@@ -33,13 +33,28 @@ function createGithubActionsDiscovery({ owner, repo, workflow, branch = "main", 
       return JSON.parse(response.body.toString("utf8"));
     };
     logger?.info?.(`[github] fetching public artifacts ${name}`);
-    const data = await read(`actions/workflows/${encodeURIComponent(workflow)}/runs?per_page=${maxRuns}&status=success&branch=${encodeURIComponent(branch)}&event=${event}`);
-    if (!Array.isArray(data.workflow_runs)) throw new Error("Invalid public GitHub workflow list.");
     const entries = [], seenRuns = new Set(), seenArtifacts = new Set();
     let matchedRuns = 0, failure = null;
-    for (const run of data.workflow_runs.slice(0, maxRuns)) {
-      if (!identity(run?.id) || seenRuns.has(run.id)) continue;
-      seenRuns.add(run.id);
+    async function* runs() {
+      for (let page = 1; ; page += 1) {
+        let data;
+        try {
+          data = await read(`actions/workflows/${encodeURIComponent(workflow)}/runs?per_page=${runsPerPage}&status=success&branch=${encodeURIComponent(branch)}&event=${event}` +
+            (fullHistory ? `&page=${page}` : ""));
+          if (!Array.isArray(data.workflow_runs)) throw new Error("Invalid public GitHub workflow list.");
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          failure ||= error; logger?.warn?.(`[github] could not read workflow history of ${name}: ${error.message || error}`); return;
+        }
+        let added = 0;
+        for (const run of data.workflow_runs.slice(0, runsPerPage)) {
+          if (!identity(run?.id) || seenRuns.has(run.id)) continue;
+          seenRuns.add(run.id); added += 1; yield run;
+        }
+        if (!fullHistory || data.workflow_runs.length < runsPerPage || !added) return;
+      }
+    }
+    for await (const run of runs()) {
       if (run.status !== "completed" || run.conclusion !== "success" || run.head_branch !== branch || run.event !== event ||
         String(run.path).split("@")[0] !== `.github/workflows/${workflow}` || run.repository?.full_name?.toLowerCase() !== name.toLowerCase() ||
         run.head_repository?.full_name?.toLowerCase() !== name.toLowerCase() || !/^[a-f0-9]{40}$/i.test(run.head_sha || "") ||
@@ -71,13 +86,14 @@ function createGithubActionsDiscovery({ owner, repo, workflow, branch = "main", 
         try {
           mapped = await mapArtifact(artifact, { run, artifacts, sourceUrl: `https://github.com/${owner}/${repo}/commit/${run.head_sha.toLowerCase()}`,
             githubAssetDigest, nightlyArtifactUrl: () => nightlyArtifactUrl({ owner, repo, artifactId: artifact.id }), signal });
+          throwIfAborted(signal);
         } catch (error) {
           if (signal?.aborted) throw error;
           failure ||= error; logger?.warn?.(`[github] skipped artifact ${artifact.name} of ${name}: ${error.message || error}`); continue;
         }
         for (const entry of Array.isArray(mapped) ? mapped : mapped ? [mapped] : []) { entries.push(entry); matched = true; }
       }
-      if (matched && ++matchedRuns >= matchedLimit) break;
+      if (matched && ++matchedRuns >= limit && !fullHistory) break;
     }
     if (failure && !entries.length) throw failure;
     return entries;
