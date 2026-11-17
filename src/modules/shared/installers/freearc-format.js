@@ -125,7 +125,9 @@ async function mapArchive(file, { decode, signal } = {}) {
         }
         blocks.push(block);
       }
-      if (r.pos !== r.bytes.length) fail("The FreeArc directory table contains unexpected data.");
+      // FreeArc 0.67 writes aTAG_END (the canonical zero varint) after CRCs.
+      // Earlier directory writers end immediately after the CRC column.
+      if (r.pos < r.bytes.length && r.take(1)[0] !== 0 || r.pos !== r.bytes.length) fail("The FreeArc directory table contains unexpected data.");
     }
     validateFiles(blocks.flatMap(b => b.files));
     if (!blocks.length) fail("The FreeArc archive has no file table.");
