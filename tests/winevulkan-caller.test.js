@@ -264,13 +264,20 @@ test('a hardened Wine loader on a Vulkan graphics value asks for a WineVulkan cl
   const manager={id:'winevulkan-scene',label:'WineVulkan helper',core:{catalog:[pin]},resolveSelection:()=>({ready:false,version:pin.version}),getState:()=>({installed:[]})};
   const plan=value=>({runtime:'metalsharp-wine',layout:require('../src/modules/shared/runtime/wine-layout').wineLayout(f.install),
     components:{'vulkan-driver':{used:{engine:'kosmickrisp'}}},...(value?{graphicsPolicy:{variable:'GRAPHICS_BACKEND',value,lanes:[]}}:{})});
+  // The graphics root has no runtime here, so only effects load the layer unless live controls are supported.
   const ask=(effects,value,options={})=>Graphics.wineVulkanRequirements({name:'Fixture',effects},{runtimeId:'metalsharp-wine',runtimeSettings:{},settings:{runtimes:{}},userDataDir:path.join(f.root,'profile'),
-    translatorPlan:plan(value)},{install:f.install,manager,root:path.join(f.root,'absent-component'),...options});
+    translatorPlan:plan(value)},{install:f.install,manager,root:path.join(f.root,'absent-component'),graphicsRoot:path.join(f.root,'absent-graphics'),...options});
   const spatial={schema:2,mode:'advanced',enabled:true,video:[{id:'cas',kind:'spatial',enabled:true,method:'cas',settings:{}}]};
   assert.equal((await ask(spatial,'dxvk')).length,1,'a spatial filter on DXVK needs the client to attach');
   assert.equal((await ask(spatial,'vkd3d')).length,1);
   assert.deepEqual(await ask(spatial,null),[],'Mullion\'s winemetal applies them on the unset value');
-  assert.deepEqual(await ask({schema:2,mode:'advanced',enabled:false,video:[]},'dxvk'),[],'no processing, no client');
+  const off={schema:2,mode:'advanced',enabled:false,video:[]};
+  assert.deepEqual(await ask(off,'dxvk'),[],'no effects and no live controls: the layer does not load');
+  // Live controls and screenshots load the layer without effects, as Mullion's winemetal does on its value.
+  const Live=require('../src/modules/shared/reshade/live-resources'),supported=Live.supported;Live.supported=()=>true;t.after(()=>{Live.supported=supported;});
+  assert.equal((await ask(off,'dxvk')).length,1,'the screenshot shortcut needs the client too');
+  assert.deepEqual(await ask(off,null),[]);
+  Live.supported=supported;
   delete pin.capabilities.graphicsLibraryAPI;
   assert.deepEqual(await ask(spatial,'dxvk'),[],'a client without the graphics library constructor is not downloaded for it');
   const scene={schema:2,mode:'advanced',enabled:true,video:[{id:'t',kind:'temporal',enabled:true,method:'metalfx',settings:{}}]};

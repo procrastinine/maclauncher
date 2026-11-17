@@ -304,6 +304,13 @@ function launchLog(directory) {
   try { fs.renameSync(file, file + ".previous"); } catch { /* No earlier log; a log never prevents Play. */ }
   return file;
 }
+// Whether a launch loads the graphics layer: for effects that need the
+// processor, or for live controls and screenshots on a graphics runtime that
+// supports them on this host.
+function layerLoads(entry, {root, graphicsHost, demand = ExecutionRequirements.analyze(entry),
+  live = require("./live-resources").supported(root, graphicsHost)} = {}) {
+  return demand.needed.processor || live;
+}
 async function prepare(entry, options = {}) {
   options = {...options, translatorPlan: LaunchBinding.usedTranslatorPlan(options.translatorPlan)};
   const Effects = require("../effects/runtime");
@@ -321,7 +328,7 @@ async function prepare(entry, options = {}) {
   const demand = ExecutionRequirements.analyze(entry, {diagnostics: diagnostics && (capture || timing || options.trace === true)});
   const root = options.root || runtimeRoot(options.app);
   const liveReady = require("./live-resources").supported(root, options.graphicsHost);
-  if (!demand.needed.processor && !liveReady) return {};
+  if (!layerLoads(entry, {demand, live: liveReady})) return {};
   const finish = environment => {
     if (!environment.RESHADE_EFFECT_PLAN) return environment;
     const launchFile = path.join(path.dirname(environment.RESHADE_EFFECT_PLAN), "launch.json");
@@ -520,7 +527,7 @@ async function describeParameters(entry, { userDataDir, app, root = runtimeRoot(
     }) };
   } finally { await fs.promises.rm(temporary, { recursive: true, force: true }); }
 }
-module.exports = { PRESETS, normalizeSettings, updateSettings, runtimeRoot, launchState, getState, stateSettings, prepare, mergeEnvironment, resolvePresentationLibrary, describeParameters, resolveShaderSelection,
+module.exports = { PRESETS, normalizeSettings, updateSettings, runtimeRoot, launchState, getState, stateSettings, layerLoads, prepare, mergeEnvironment, resolvePresentationLibrary, describeParameters, resolveShaderSelection,
   createPublication: require("./live-publication").createPublication,
   bindLaunchProcess: LaunchBinding.bind,
   executionRequirements: ExecutionRequirements.analyze };

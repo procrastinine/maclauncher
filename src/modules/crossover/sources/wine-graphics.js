@@ -591,7 +591,7 @@ async function prepareWineVulkanView(selection,{prefixPath,dllRoot,layout,signal
   return require("../temporal/vulkan/selection").prepareSelection({...selection,prefixPath,dllRoot:directory,windows:layout.primaryWindows,unixName:layout.unixName,
     native:{...selection.native,dependencies},signal});
 }
-async function wineVulkanRequirements(entry,context,{install,translatorPlan=context.translatorPlan,root,manager=require("../temporal/vulkan/manager")}={}){
+async function wineVulkanRequirements(entry,context,{install,translatorPlan=context.translatorPlan,root,graphicsRoot,manager=require("../temporal/vulkan/manager")}={}){
   if(!translatorPlan?.components?.["vulkan-driver"]?.used)return [];
   if(!install){
     const source=require(".").get(context.runtimeId||entry.runtimeId||"crossover");
@@ -599,9 +599,11 @@ async function wineVulkanRequirements(entry,context,{install,translatorPlan=cont
   }
   if(!install)return [];
   // On a loader that ignores DYLD variables, a graphics value that renders
-  // through Vulkan loads no Metal shim, so processing needs a client that
-  // applies the graphics libraries.
-  const attaches=require("../../shared/effects/execution-requirements").analyze(entry).needed.processor&&
+  // through Vulkan loads no Metal shim, so whenever the launch loads the
+  // graphics layer (effects, live controls or screenshots) it needs a client
+  // that applies the graphics libraries.
+  const ReShade=require("../../shared/reshade");
+  const attaches=ReShade.layerLoads(entry,{root:graphicsRoot||ReShade.runtimeRoot(context.app),graphicsHost:"window"})&&
     require("../../../core/runtime-resolution/graphics-policy").rendersThroughVulkan(translatorPlan)&&loadsUnsignedLibraries(install);
   const resolved=wineVulkanRuntimeSelection(entry,context,install,{translatorPlan,root,manager});
   if(resolved.selection&&(!attaches||resolved.selection.graphicsLibraries)){
