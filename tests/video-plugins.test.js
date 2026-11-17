@@ -235,13 +235,13 @@ test('uosc 5.13.0 and the former thumbfast revision stay usable offline with the
   assert.equal(Harness.network.requests.length, before);
 });
 
-test('Update installs the newest uosc release and replaces the earlier copy after verification', async t => {
+test('Update installs the newest uosc release and keeps the earlier explicit copy', async t => {
   const userDataDir = temporary(t), { dependencies } = fixture(t), manager = Plugins.createManager(dependencies);
   const previous = legacyUosc(userDataDir);
   const updated = await manager.updatePlugin({ id: 'uosc', userDataDir });
   assert.equal(updated.updated, true);
   assert.equal(updated.version, '5.14.0');
-  assert.equal(fs.existsSync(previous), false);
+  assert.equal(fs.existsSync(previous), true);
   assert.equal(Plugins.status(userDataDir, 'uosc').version, '5.14.0');
   assert.equal((await manager.updatePlugin({ id: 'uosc', userDataDir })).updated, false);
 });
@@ -256,4 +256,159 @@ test('a failed Refresh keeps the last plugin catalog', async t => {
   assert.deepEqual(state.catalog.versions, ['5.14.0', '5.13.0']);
   assert.equal(state.catalog.status, 'error');
   assert.equal(state.plugin.version, '5.14.0');
+});
+
+test('installed plugin defaults govern offline installation and ordinary playback', async t => {
+  const userDataDir = temporary(t), manager = Plugins.createManager(offline());
+  legacyUosc(userDataDir);
+  legacyInstall(userDataDir, 'uosc', '5.14.0', revisions['5.14.0'], {
+    'scripts/uosc/main.lua': 'new controls', 'scripts/uosc/bin/ziggy-darwin': intelHelper()
+  });
+  const updated = path.join(userDataDir, 'runtimes/mpv-plugins/uosc/5.14.0/plugin.json');
+  const record = JSON.parse(fs.readFileSync(updated));record.installedAt = '2026-10-01T00:00:00.000Z';
+  fs.writeFileSync(updated, JSON.stringify(record));
+  const before = Harness.network.requests.length;
+  assert.equal(section(manager, userDataDir, 'uosc').supportsDefault, true);
+  const preferences = manager.applySettingsUpdate('setDefault', {sectionId: 'uosc', version: '5.13.0'}, {});
+  const settings = {runtimes: {'mpv-plugins': preferences}};
+  const chosen = manager.getState({userDataDir, settings: preferences}).sections.find(row => row.id === 'uosc');
+  assert.equal(chosen.defaultVersion, '5.13.0');assert.equal(chosen.plugin.version, '5.13.0');
+  assert.equal(Plugins.status(userDataDir, 'uosc', {settings}).version, '5.13.0');
+  assert.equal(Plugins.playbackStatus(userDataDir, 'uosc', {settings}).version, '5.13.0');
+  assert.equal((await manager.installRuntime({sectionId: 'uosc', userDataDir, settings})).version, '5.13.0');
+  assert.equal(Harness.network.requests.length, before);
+  assert.equal(fs.existsSync(path.join(userDataDir, 'runtimes/mpv-plugins/uosc/5.14.0')), true);
+  await manager.uninstallRuntime({sectionId: 'uosc', version: '5.13.0', userDataDir});
+  assert.equal(Plugins.status(userDataDir, 'uosc', {settings}).version, '5.14.0');
+});
+
+test('plugin update preserves explicitly installed and selected earlier versions', async t => {
+  const userDataDir = temporary(t), {dependencies} = fixture(t), manager = Plugins.createManager(dependencies);
+  const previous = legacyUosc(userDataDir);
+  const result = await manager.updatePlugin({id: 'uosc', userDataDir,
+    settings: {runtimes: {'mpv-plugins': {defaultVersions: {uosc: '5.13.0'}}}}});
+  assert.equal(result.version, '5.14.0');assert.equal(fs.existsSync(previous), true);
+  assert.equal(Plugins.status(userDataDir, 'uosc', {settings: {defaultVersions: {uosc: '5.13.0'}}}).version, '5.13.0');
+});
+
+test('custom plugin selection preserves enabled sources and loads only the chosen provider', async t => {
+  const userDataDir = temporary(t), copy = require('../src/modules/shared/copy-file');
+  const modulePath = require.resolve('../src/modules/video/custom-plugins'), original = require.cache[modulePath];
+  t.mock.method(copy, 'cloneOrCopySync', (source, destination) => fs.cpSync(source, destination, {recursive: true}));
+  delete require.cache[modulePath];t.after(() => { require.cache[modulePath] = original; });
+  const manager = Plugins.createManager(offline()), source = path.join(userDataDir, 'source');
+  fs.mkdirSync(path.join(source, 'scripts/uosc/bin'), {recursive: true});
+  fs.writeFileSync(path.join(source, 'scripts/uosc/main.lua'), 'custom controls');
+  fs.writeFileSync(path.join(source, 'scripts/uosc/bin/ziggy-darwin'), intelHelper());
+  fs.chmodSync(path.join(source, 'scripts/uosc/bin/ziggy-darwin'), 0o755);
+  fs.writeFileSync(path.join(source, 'LICENSE'), 'notice');
+  legacyUosc(userDataDir);
+  const supplied = await manager.installRuntime({source, userDataDir});
+  const state = manager.getState({userDataDir}), own = state.sections.find(row => row.id === supplied.id);
+  assert.equal(own.supportsDefault, true);
+  const customDefault = manager.applySettingsUpdate('setDefault', {sectionId: 'uosc', version: supplied.version}, {}, {userDataDir});
+  assert.equal(manager.playbackStatus(userDataDir, 'uosc', {settings: customDefault}).version, supplied.version);
+  assert.deepEqual(manager.playbackStatus(userDataDir, 'uosc', {settings: customDefault}).architectures, ['x86_64']);
+  const managedDefault = manager.applySettingsUpdate('setDefault', {sectionId: 'uosc', version: '5.13.0'}, customDefault, {userDataDir});
+  assert.equal(manager.playbackStatus(userDataDir, 'uosc', {settings: managedDefault}).version, '5.13.0');
+  assert.deepEqual(manager.listCustom(userDataDir, {settings: managedDefault}), []);
+  assert.equal(manager.listCustom(userDataDir)[0].enabled, true, 'changing default preserves the custom source and enabled choice');
+  const restored = manager.applySettingsUpdate('setDefault', {sectionId: 'uosc', version: supplied.version}, managedDefault, {userDataDir});
+  assert.equal(manager.listCustom(userDataDir, {settings: restored}).length, 1);
+  fs.writeFileSync(path.join(source, 'scripts/uosc/main.lua'), 'updated custom controls');
+  const newer = await manager.installRuntime({source, userDataDir, previous: supplied, settings: restored});
+  assert.notEqual(newer.id, supplied.id);
+  assert.equal(newer.enabled, false);
+  assert.equal(manager.listCustom(userDataDir).find(row => row.id === supplied.id).enabled, true);
+  assert.equal(manager.playbackStatus(userDataDir, 'uosc', {settings: restored}).version, supplied.version);
+  await manager.uninstallRuntime({sectionId: supplied.id, version: supplied.version, userDataDir});
+  await manager.uninstallRuntime({sectionId: newer.id, version: newer.version, userDataDir});
+  assert.equal(manager.listCustom(userDataDir).length, 0);assert.equal(fs.existsSync(source), true);
+});
+
+test('custom plugin native helpers are measured before publishing the managed copy', async t => {
+  const userDataDir = temporary(t), copy = require('../src/modules/shared/copy-file');
+  const modulePath = require.resolve('../src/modules/video/custom-plugins'), original = require.cache[modulePath];
+  t.mock.method(copy, 'cloneOrCopySync', (source, destination) => fs.cpSync(source, destination, {recursive: true}));
+  delete require.cache[modulePath];t.after(() => { require.cache[modulePath] = original; });
+  const manager = Plugins.createManager(offline()), source = path.join(userDataDir, 'source');
+  fs.mkdirSync(path.join(source, 'scripts/uosc/bin'), {recursive: true});
+  fs.writeFileSync(path.join(source, 'scripts/uosc/main.lua'), 'controls');
+  fs.writeFileSync(path.join(source, 'scripts/uosc/bin/ziggy-darwin'), 'not a native helper');
+  fs.writeFileSync(path.join(source, 'LICENSE'), 'notice');
+  await assert.rejects(manager.installRuntime({source, userDataDir}), /Mach-O|native|executable/);
+  assert.equal(manager.listCustom(userDataDir).length, 0);
+  assert.equal(fs.readFileSync(path.join(source, 'scripts/uosc/main.lua'), 'utf8'), 'controls');
+});
+
+test('ordinary video preparation uses the saved plugin without discovery or duplicate providers', async t => {
+  const userDataDir = temporary(t), Configuration = require('../src/modules/video/configuration');
+  const Sessions = require('../src/modules/video/session-directory'), Video = require('../src/modules/video/main');
+  const Player = require('../src/modules/video/runtime/manager');
+  const older = legacyUosc(userDataDir);
+  legacyInstall(userDataDir, 'uosc', '5.14.0', revisions['5.14.0'], {
+    'scripts/uosc/main.lua': 'latest controls', 'scripts/uosc/bin/ziggy-darwin': intelHelper()
+  });
+  const session = path.join(userDataDir, 'session');
+  t.mock.method(Sessions, 'create', () => {
+    fs.mkdirSync(session);return {directory: session, cleanup: () => fs.rmSync(session, {recursive: true, force: true})};
+  });
+  t.mock.method(Player, 'resolveSelection', () => ({ready: true, install: {executablePath: '/player/mpv'}}));
+  const uses = [], context = {userDataDir, runtimeSettings: {timelinePreviews: false},
+    settings: {runtimes: {'mpv-plugins': {defaultVersions: {uosc: '5.13.0'}}}},
+    recordRuntimeUse: use => uses.push(use)};
+  const network = Harness.network.requests.length;
+  assert.deepEqual(await Video.getRuntimeRequirements({}, context), []);
+  assert.equal(uses.find(use => use.managerId === 'mpv-plugins').version, '5.13.0');
+  const prepared = Configuration.prepare(context, {executablePath: '/player/mpv'});
+  assert.deepEqual(prepared.args.filter(arg => arg.startsWith('--script=')), ['--script=' + path.join(older, 'scripts/uosc')]);
+  assert.equal(Harness.network.requests.length, network);
+  prepared.cleanup();assert.equal(fs.existsSync(session), false);
+});
+
+test('shared upkeep retires only an unused automatic plugin and preserves user installations', async t => {
+  const userDataDir = temporary(t), {dependencies} = fixture(t, [uoscRelease('5.15.0'), uoscRelease('5.14.0'), uoscRelease('5.13.0')]);
+  const manager = Plugins.createManager(dependencies), Origins = require('../src/core/runtime-install-origins');
+  const {runRuntimeManagerAction} = require('../src/core/runtime-manager-service');
+  const coordinator = require('../src/core/runtime-coordinator').createRuntimeCoordinator({userDataDir, isProcessAlive: () => true}).client();
+  const settings = {runtimes: {'mpv-plugins': {}}};
+  const action = (name, payload) => runRuntimeManagerAction({manager, action: name, payload, userDataDir,
+    runtimeCoordinator: coordinator, readSettings: () => settings.runtimes[manager.id],
+    saveSettings: value => { settings.runtimes[manager.id] = value; }});
+  await manager.installRuntime({userDataDir, sectionId: 'uosc', version: '5.13.0'});
+  // The existing shared Play hook records the result of each automatic plan.
+  for (const version of ['5.14.0', '5.15.0']) {
+    const installedBefore = manager.getState({userDataDir}).sections.flatMap(row => row.installed.map(item => item.version));
+    const plan = {version, automatic: true, installOptions: {sectionId: 'uosc'}};
+    const result = await manager.installRuntime({userDataDir, sectionId: 'uosc', version, automatic: true});
+    assert.equal(Origins.recordPlayInstall({userDataDir, manager, plan, result, settings, installedBefore}), true);
+  }
+  await action('install', {sectionId: 'uosc', version: '5.13.0'});
+  const earlier = Plugins.status(userDataDir, 'uosc', {version: '5.14.0'});
+  const lease = await coordinator.acquireUse({managerId: manager.id, version: earlier.version, sectionId: 'uosc', sourcePath: earlier.installDir});
+  coordinator.bindUse(lease, process.pid);
+  const prune = () => Origins.pruneSuperseded({userDataDir, managers: [manager], settings,
+    remove: ({managerId, ...payload}) => { assert.equal(managerId, manager.id);return action('uninstall', payload); }});
+  assert.deepEqual((await prune()).removed, []);
+  assert.equal(fs.existsSync(earlier.installDir), true);
+  await coordinator.release(lease);
+  assert.deepEqual((await prune()).removed.map(row => row.version), ['5.14.0']);
+  assert.deepEqual(Origins.read(userDataDir).map(row => row.version), ['5.15.0']);
+  assert.equal(Plugins.status(userDataDir, 'uosc', {version: '5.13.0'}).ready, true);
+  await action('setDefault', {sectionId: 'uosc', version: '5.13.0'});
+  assert.equal(manager.getState({userDataDir, settings: settings.runtimes[manager.id]}).sections.find(row => row.id === 'uosc').defaultVersion, '5.13.0');
+});
+
+test('ordinary plugin plans distinguish manager choices from saved defaults', async t => {
+  const userDataDir = temporary(t), {dependencies} = fixture(t), manager = Plugins.createManager(dependencies);
+  const Video = require('../src/modules/video/main'), Player = require('../src/modules/video/runtime/manager');
+  t.mock.method(Player, 'resolveSelection', () => ({ready: true, install: {executablePath: '/player/mpv'}}));
+  await manager.refreshCatalog({userDataDir, sectionId: 'uosc'});
+  const network = Harness.network.requests.length, context = {userDataDir, runtimeSettings: {timelinePreviews: false}, settings: {runtimes: {}}};
+  const automatic = await Video.getRuntimeRequirements({}, context);
+  assert.equal(automatic.length, 1);assert.equal(automatic[0].automatic, true);assert.equal(automatic[0].version, '5.14.0');
+  context.settings.runtimes[manager.id] = {defaultVersions: {uosc: '5.13.0'}};
+  const saved = await Video.getRuntimeRequirements({}, context);
+  assert.equal(saved[0].automatic, undefined);assert.equal(saved[0].version, '5.13.0');
+  assert.equal(Harness.network.requests.length, network);
 });

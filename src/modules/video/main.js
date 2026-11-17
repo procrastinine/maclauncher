@@ -46,19 +46,20 @@ module.exports = {
   getRuntimeRequirements: async (entry, context) => {
     const selected = selectionFor(entry, context);
     const host = selected.install?.executablePath && require("./runtime/render-host").read(selected.install.executablePath)?.value;
-    const requirements = Configuration.required(context.runtimeSettings, context.userDataDir).flatMap(pkg => {
-      const install = Plugins.status(context.userDataDir, pkg.id);
+    const requirements = Configuration.required(context.runtimeSettings, context.userDataDir, context.settings).flatMap(pkg => {
+      const install = Plugins.status(context.userDataDir, pkg.id, { settings: context.settings });
       if (install) {
         context.recordRuntimeUse?.({ managerId: Plugins.manager.id, sectionId: pkg.id, version: install.version, sourcePath: install.installDir });
         return [];
       }
-      const section = Plugins.manager.getState({ userDataDir: context.userDataDir }).sections.find(section => section.id === pkg.id);
+      const section = Plugins.manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.[Plugins.manager.id] }).sections.find(section => section.id === pkg.id);
       const version = section?.plugin?.version || null;
       return [{ managerId: Plugins.manager.id, version, ...(!version ? { discoveryRequired: true } : {}),
+        ...(section?.defaultSource === "manager" ? { automatic: true } : {}),
         requiresDownload: true, installOptions: { sectionId: pkg.id }, optional: true, label: pkg.label, cancelLabel: "Skip",
         detail: "Optional playback controls and timeline previews. Declining continues playback without this plugin." }];
     });
-    if (host && Configuration.available(context.runtimeSettings, context.userDataDir).thumbfast) {
+    if (host && Configuration.available(context.runtimeSettings, context.userDataDir, context.settings).thumbfast) {
       const worker = thumbnailPlayer(selected, context, host);
       if (worker.ready) await context.useRuntime?.({ managerId: manager.id, version: worker.version, sourcePath: worker.install.installDir || worker.install.executablePath });
     }
@@ -71,9 +72,9 @@ module.exports = {
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
     if (!selected.ready) throw new Error(selected.reason);
     const renderHost=require("./runtime/render-host").verify(selected.install.executablePath);
-    const uosc = context.runtimeSettings?.uosc !== false && Plugins.playbackStatus(context.userDataDir, "uosc");
+    const uosc = context.runtimeSettings?.uosc !== false && Plugins.playbackStatus(context.userDataDir, "uosc", { settings: context.settings });
     if (uosc?.helperPath) await require("../shared/runtime/rosetta").ensureForExecutable(uosc.helperPath, context);
-    const worker = Configuration.available(context.runtimeSettings, context.userDataDir).thumbfast ? thumbnailPlayer(selected, context, renderHost) : null;
+    const worker = Configuration.available(context.runtimeSettings, context.userDataDir, context.settings).thumbfast ? thumbnailPlayer(selected, context, renderHost) : null;
     if (renderHost && worker?.ready) await context.useRuntime?.({ managerId: manager.id, version: worker.version, sourcePath: worker.install.installDir || worker.install.executablePath });
     const playbackContext = worker && !worker.ready ? { ...context, runtimeSettings: { ...context.runtimeSettings, timelinePreviews: false } } : context;
     const player = Configuration.prepare(playbackContext, { executablePath: selected.install.executablePath, renderHost, thumbnailExecutablePath: worker?.install?.executablePath });

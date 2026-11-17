@@ -8,7 +8,7 @@ const Upstream = require("../shared/runtime/upstream");
 const { runDownloadTask } = require("../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../shared/runtime/runtime-downloads");
 const { readRuntimeCatalog, writeRuntimeCatalog } = require("../shared/runtime/runtime-catalog");
-const { managerDefaultVersion } = require("../shared/runtime/version-choices");
+const { managerDefaultVersion, selectRuntimeVersion } = require("../shared/runtime/version-choices");
 const { readMachOLoadCommands } = require("../shared/runtime/macho-load-commands");
 const { removeManagedRuntimeQuarantine } = require("../shared/runtime/managed-quarantine");
 const Rosetta = require("../shared/runtime/rosetta");
@@ -38,12 +38,36 @@ function provides(plugin, id) {
     return Boolean(repository && ["github.com", "raw.githubusercontent.com"].includes(url.hostname) && url.pathname.split("/").filter(Boolean).slice(0, 2).join("/") === repository);
   } catch { return false; }
 }
-function playbackStatus(userDataDir, id) {
-  const supplied = module.exports.manager.listCustom(userDataDir, { full: true }).find(plugin => plugin.ready && plugin.enabled !== false && provides(plugin, id));
-  if (!supplied) return status(userDataDir, id);
-  if (id !== "uosc") return supplied;
-  const script = supplied.scriptPaths.find(script => fs.statSync(script, { throwIfNoEntry: false })?.isDirectory()), helperPath = script && path.join(script, "bin", "ziggy-darwin");
-  return { ...supplied, ...(helperPath && fs.statSync(helperPath, { throwIfNoEntry: false })?.isFile() ? { helperPath } : {}) };
+function playbackStatus(userDataDir, id, options) { return module.exports.manager.playbackStatus(userDataDir, id, options); }
+function normalizeSettings(value = {}) {
+  const source = value?.runtimes?.[MANAGER_ID] || value || {}, defaultVersions = {};
+  for (const [id, selected] of Object.entries(source.defaultVersions || {})) {
+    const version = selectRuntimeVersion({ defaultVersion: selected }).version;
+    if ((Object.hasOwn(packages, id) || require("./custom-plugins").validId(id)) && Sources.SAFE_VERSION.test(version || ""))
+      defaultVersions[id] = version;
+  }
+  return { defaultVersions };
+}
+function selectedVersion(settings, id, installed, listed = []) {
+  const saved = normalizeSettings(settings).defaultVersions[id];
+  return selectRuntimeVersion({ defaultVersion: installed.length && !installed.includes(saved) ? null : saved,
+    fallback: managerDefaultVersion({ installed, listed }) }).version;
+}
+function inspectHelper(binary, { executable = false } = {}) {
+  const info = readMachOLoadCommands(binary);
+  if (!info.architectures.some(cpu => ["arm64", "x86_64"].includes(cpu)) || info.slices.some(slice => slice.platform !== 1 ||
+    slice.dependencies.some(dep => !dep.path.startsWith("/usr/lib/") && !dep.path.startsWith("/System/Library/"))))
+    throw Error("The uosc helper has unsupported native dependencies.");
+  if (executable && !(fs.statSync(binary).mode & 0o111)) throw Error("The custom uosc native helper is not executable.");
+  return info;
+}
+function customStatus(plugin) {
+  if (!plugin.ready || !provides(plugin, "uosc")) return plugin;
+  const script = plugin.scriptPaths.find(file => fs.statSync(file, { throwIfNoEntry: false })?.isDirectory());
+  const helperPath = script && path.join(script, "bin", "ziggy-darwin");
+  if (!helperPath || !fs.statSync(helperPath, { throwIfNoEntry: false })?.isFile()) return plugin;
+  try { return { ...plugin, helperPath, architectures: inspectHelper(helperPath, { executable: true }).architectures }; }
+  catch (error) { return { ...plugin, ready: false, reason: error.message }; }
 }
 function hash(file) {
   const digest = crypto.createHash("sha256"), buffer = Buffer.alloc(1024 * 1024), fd = fs.openSync(file, "r");
@@ -149,14 +173,11 @@ function installs(userDataDir, id, verification) {
     .sort((a, b) => String(b.installedAt || "").localeCompare(String(a.installedAt || "")));
 }
 // One installed version, or without a version the one playback uses.
-function status(userDataDir, id, { version, verification = "status" } = {}) {
+function status(userDataDir, id, { version, verification = "status", settings } = {}) {
   packageFor(id);
   if (version != null) return receipt(userDataDir, id, version, verification);
-  for (const install of installs(userDataDir, id)) {
-    const verified = verification === "full" ? receipt(userDataDir, id, install.version, "full") : install;
-    if (verified) return verified;
-  }
-  return null;
+  const rows = installs(userDataDir, id, verification), selected = selectedVersion(settings, id, rows.map(row => row.version));
+  return rows.find(row => row.version === selected) || null;
 }
 function removeVersion(userDataDir, id, version) {
   const directory = installDirectory(userDataDir, id, version);
@@ -164,8 +185,30 @@ function removeVersion(userDataDir, id, version) {
 }
 function createManager(dependencies = {}) {
   const run = dependencies.execute || execute;
-  const custom = require("./custom-plugins").create({ storageRoot, inventory, hash, ...dependencies,
+  const custom = require("./custom-plugins").create({ storageRoot, hash, ...dependencies,
+    inventory(directory) {
+      const files = inventory(directory);
+      for (const file of files) if (file.path === "ziggy-darwin" || file.path.endsWith("/bin/ziggy-darwin") || file.path === "bin/ziggy-darwin")
+        inspectHelper(path.join(directory, file.path), { executable: true });
+      return files;
+    },
     installRuntime: options => manager.installRuntime(options) });
+  function selected(userDataDir, id, { settings, version, verification = "status" } = {}) {
+    const supplied = custom.list(userDataDir, { full: verification === "full" }).map(customStatus).filter(plugin => plugin.ready && plugin.enabled !== false && provides(plugin, id));
+    const managed = installs(userDataDir, id, verification), rows = [...supplied, ...managed];
+    const wanted = version || selectedVersion(settings, id, rows.map(row => row.version));
+    const current = rows.find(row => row.version === wanted);
+    return current || null;
+  }
+  async function installCustom(options) {
+    const previous = options.previous, result = await custom.install(options);
+    if (previous?.enabled !== false && previous?.id && result.id !== previous.id &&
+      Object.values(normalizeSettings(options.settings).defaultVersions).includes(previous.version)) {
+      manager.setCustomEnabled({ userDataDir: options.userDataDir, id: previous.id, enabled: true });
+      return { ...result, ...customStatus(custom.read(options.userDataDir, result.id, { full: true })) };
+    }
+    return result;
+  }
   const active = new Map(), discovery = new Map();
   // A successful discovery replaces the plugin's catalog; a failed one keeps it.
   async function discover({ userDataDir, id, signal, logger }) {
@@ -184,10 +227,12 @@ function createManager(dependencies = {}) {
   async function install({ sectionId, version, userDataDir, signal, downloads, onProgress, ...context } = {}) {
     const pkg = packageFor(sectionId);
     const requested = typeof version === "string" && version.trim() ? version.trim() : null;
+    const present = selected(userDataDir, pkg.id, { settings: context.settings, version: requested, verification: "full" });
+    if (present) return present;
     let entries = cachedCatalog(userDataDir, pkg.id)?.entries || [];
     // Without a requested version, Install uses the default: the newest listed
     // version, or the newest installed one while nothing is listed.
-    const target = requested || managerDefaultVersion({ listed: entries.map(entry => entry.version), installed: installs(userDataDir, pkg.id).map(install => install.version) });
+    const target = requested || selectedVersion(context.settings, pkg.id, [], entries.map(entry => entry.version));
     const existing = target && status(userDataDir, pkg.id, { version: target, verification: "full" });
     if (existing) return existing;
     let entry = entries.find(item => item.version === target);
@@ -241,8 +286,7 @@ function createManager(dependencies = {}) {
             ...context, userDataDir, downloads, signal: combined, onProgress: task.onProgress});
           if (!fs.statSync(binary, { throwIfNoEntry: false })?.isFile()) throw new Error("The uosc release has no macOS helper.");
           // Any CPU this Mac runs: its own, or Intel through Rosetta.
-          const info = readMachOLoadCommands(binary);
-          if (!info.architectures.some(cpu => ["arm64", "x86_64"].includes(cpu)) || info.slices.some(slice => slice.platform !== 1 || slice.dependencies.some(dep => !dep.path.startsWith("/usr/lib/") && !dep.path.startsWith("/System/Library/")))) throw new Error("The uosc helper has unsupported native dependencies.");
+          inspectHelper(binary);
           fs.chmodSync(binary, 0o755);
           await (dependencies.ensureForExecutable || Rosetta.ensureForExecutable)(binary, { ...context, signal: combined, onProgress: task.onProgress });
         }
@@ -272,16 +316,16 @@ function createManager(dependencies = {}) {
     return manager.getState({ userDataDir });
   }
   const manager = {
-    id: MANAGER_ID, label: "mpv plugins", normalizeSettings: () => ({}), upstream: [Sources.uosc, Sources.thumbfast],
+    id: MANAGER_ID, label: "mpv plugins", normalizeSettings, upstream: [Sources.uosc, Sources.thumbfast],
     delivery: Object.freeze({ included: "none", catalog: "remote", sourceBuild: false }),
-    getState({ userDataDir } = {}) {
-      const customInstalls = custom.list(userDataDir);
+    getState({ userDataDir, settings } = {}) {
+      const customInstalls = custom.list(userDataDir).map(customStatus);
       const sections = Object.values(packages).map(pkg => {
         const cached = cachedCatalog(userDataDir, pkg.id), entries = cached?.entries || [], newest = entries[0];
         const listed = entries.map(entry => entry.version);
         const managed = userDataDir ? installs(userDataDir, pkg.id) : [], ready = new Set(managed.map(install => install.version));
         const damaged = userDataDir ? installedVersions(userDataDir, pkg.id).filter(version => !ready.has(version)) : [];
-        const supplied = customInstalls.find(plugin => plugin.ready && plugin.enabled !== false && provides(plugin, pkg.id));
+        const supplied = customInstalls.filter(plugin => plugin.ready && plugin.enabled !== false && provides(plugin, pkg.id));
         const labels = Object.fromEntries(entries.map(entry => [entry.version, entry.versionLabel || entry.version]));
         for (const install of managed) if (install.versionLabel) labels[install.version] ||= install.versionLabel;
         const labelFor = version => labels[version] || (REVISION.test(version) ? version.slice(0, 12) : version);
@@ -289,14 +333,16 @@ function createManager(dependencies = {}) {
         const versionLabels = Object.fromEntries(versions.map(version => [version, labelFor(version)]));
         // The card shows the copy playback uses, otherwise the default version
         // that Install obtains, discovering it first when nothing is listed.
-        const version = supplied?.version || managed[0]?.version || managerDefaultVersion({ listed }) || damaged[0] || null;
-        const current = supplied || managed[0];
-        return { id: pkg.id, label: pkg.label, supportsDefault: false,
-          plugin: { settingKey: pkg.settingKey, version, versionLabel: supplied ? supplied.versionLabel || undefined : version ? labelFor(version) : undefined,
+        const current = selected(userDataDir, pkg.id, { settings });
+        const version = current?.version || selectedVersion(settings, pkg.id, [], listed) || damaged[0] || null;
+        const saved = normalizeSettings(settings).defaultVersions[pkg.id];
+        return { id: pkg.id, label: pkg.label, supportsDefault: true, defaultVersion: version,
+          defaultSource: saved === version ? "saved" : "manager",
+          plugin: { settingKey: pkg.settingKey, version, versionLabel: current?.source === "custom" ? current.versionLabel || undefined : version ? labelFor(version) : undefined,
             sourceUrl: pkg.sourceUrl, updatable: true, latestVersionLabel: newest?.versionLabel,
             updateAvailable: Boolean(newest && current && newest.upstreamRevision !== current.upstreamRevision), description: pkg.description },
           installed: [
-            ...(supplied ? [{ ...supplied, providedVersion: supplied.version, providedVersionLabel: supplied.versionLabel, removable: false, suppliedBy: supplied.label }] : []),
+            ...supplied.map(install => ({ ...install, providedVersion: install.version, providedVersionLabel: install.versionLabel, removable: false, suppliedBy: install.label })),
             ...managed.map(install => ({ ...install, versionLabel: labelFor(install.version) })),
             ...damaged.map(version => ({ version, versionLabel: labelFor(version), installDir: path.join(storageRoot(userDataDir), pkg.id, version), ready: false, status: "damaged", removable: true,
               reason: "The installed plugin is incomplete or changed. Install it again to repair it." }))],
@@ -305,34 +351,59 @@ function createManager(dependencies = {}) {
             versions: listed, versionLabels, installable: true, installableVersions: listed, supportsLatestOnly: false,
             versionRequirements: Object.fromEntries(versions.map(version => [version, { requiresDownload: !ready.has(version), available: ready.has(version), installLabel: "Install" }])) } };
       });
-      sections.push(...customInstalls.map(install => ({ id: install.id, label: install.label, supportsDefault: false,
+      sections.push(...customInstalls.map(install => ({ id: install.id, label: install.label, supportsDefault: true,
+        defaultVersion: selectedVersion(settings, install.id, install.ready ? [install.version] : []),
+        defaultSource: normalizeSettings(settings).defaultVersions[install.id] ? "saved" : "manager",
         plugin: { custom: true, enabled: install.enabled, version: install.version, versionLabel: install.versionLabel, sourceUrl: install.sourceUrl,
           updatable: Boolean(install.updateSource || install.sourceKey || install.sourceUrl),
           description: `${install.scripts.length} installed script${install.scripts.length === 1 ? "" : "s"}.` },
         installed: [install], variants: [], catalog: { status: "idle", versions: [], installableVersions: [], installable: false } })));
-      return { id: MANAGER_ID, label: "mpv plugins", supportsDefault: false, sections };
+      return { id: MANAGER_ID, label: "mpv plugins", supportsDefault: true, sections };
     },
-    refreshCatalog, installRuntime: options => options?.source ? custom.install(options) : install(options),
+    applySettingsUpdate(action, payload, settings, { userDataDir } = {}) {
+      const next = normalizeSettings(settings);
+      if (action !== "setDefault") return next;
+      const sectionId = payload?.sectionId;
+      if (!Object.hasOwn(packages, sectionId) && !require("./custom-plugins").validId(sectionId)) throw Error("The selected mpv plugin is unavailable.");
+      const version = selectRuntimeVersion({ defaultVersion: payload.version }).version;
+      if (version == null) delete next.defaultVersions[sectionId];
+      else {
+        if (!Sources.SAFE_VERSION.test(version) || userDataDir && !manager.getState({ userDataDir, settings }).sections
+          .find(section => section.id === sectionId)?.installed.some(row => row.ready !== false && row.version === version))
+          throw Error("Choose an installed mpv plugin version.");
+        next.defaultVersions[sectionId] = version;
+      }
+      return next;
+    },
+    updateSettingsAfterUninstall(settings, { sectionId, version } = {}) {
+      const next = normalizeSettings(settings);
+      if (next.defaultVersions[sectionId] === version) delete next.defaultVersions[sectionId];
+      return next;
+    },
+    playbackStatus: selected,
+    refreshCatalog, installRuntime: options => options?.source ? installCustom(options) : install(options),
     async updatePlugin({ id, ...context }) {
       if (require("./custom-plugins").validId(id)) return custom.update({ ...context, id });
-      const pkg = packageFor(id), supplied = custom.list(context.userDataDir, { full: true }).find(plugin => plugin.ready && plugin.enabled !== false && provides(plugin, id));
+      const pkg = packageFor(id), current = selected(context.userDataDir, id, { settings: context.settings, verification: "full" });
+      const supplied = current?.source === "custom" ? current : null;
       // An added copy that provides this plugin keeps updating as an added plugin.
       if (supplied) return manager.installRuntime({ ...context, source: pkg.updateSource, label: id, enabled: true, previous: supplied });
-      const previous = status(context.userDataDir, id, { verification: "full" });
+      const previous = selected(context.userDataDir, id, { settings: context.settings, verification: "full" });
       if (!previous?.ready) throw new Error("The plugin must be installed before it can be updated.");
       const [newest] = await discover({ userDataDir: context.userDataDir, id, signal: context.signal, logger: context.logger });
       if (newest.version === previous.version) return { ...previous, updated: false };
       const result = await manager.installRuntime({ ...context, sectionId: id, version: newest.version });
-      // The verified new version replaces the earlier copies of this plugin. A
-      // copy that a running playback still uses stays until the next update.
-      for (const version of installedVersions(context.userDataDir, id)) {
-        if (version === result.version) continue;
-        try { await manager.uninstallRuntime({ userDataDir: context.userDataDir, sectionId: id, version }); }
-        catch (error) { context.logger?.warn?.(`The earlier ${pkg.label} copy ${version} was kept: ${error.message}`); }
-      }
+      // Update is an explicit installation. Shared runtime upkeep retires only
+      // superseded automatic copies after their active users have finished.
+      require("../../core/runtime-install-origins").clearRecord(context.userDataDir, { managerId: MANAGER_ID, sectionId: id, version: result.version });
       return { ...result, updated: true };
     },
-    listCustom: custom.list,
+    listCustom(userDataDir, options = {}) {
+      const rows = custom.list(userDataDir, options).map(customStatus);
+      if (!options.settings) return rows;
+      return rows.filter(plugin => !Object.keys(packages).some(id => provides(plugin, id) &&
+        selected(userDataDir, id, options)?.version !== plugin.version));
+    },
     setCustomEnabled(options) {
       const selected = custom.read(options.userDataDir, options.id, { full: true });
       const result = custom.setEnabled(options);

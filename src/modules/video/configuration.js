@@ -35,18 +35,18 @@ function suppliedPlugin(cfg, id) {
   return cfg.scriptFiles.some(file => path.basename(file).replace(/\.(lua|js)$/i, "") === id) ||
     Boolean(cfg.configDirectory && [id, `${id}.lua`, `${id}.js`].some(name => fs.existsSync(path.join(cfg.configDirectory, "scripts", name))));
 }
-function required(value, userDataDir) {
+function required(value, userDataDir, runtimeSettings) {
   const cfg = settings(value);
-  const custom = userDataDir ? Plugins.manager.listCustom(userDataDir).filter(plugin => plugin.ready && plugin.enabled !== false) : [];
+  const custom = userDataDir ? Plugins.manager.listCustom(userDataDir, { settings: runtimeSettings }).filter(plugin => plugin.ready && plugin.enabled !== false) : [];
   return Plugins.required(cfg).filter(pkg => !suppliedPlugin(cfg, pkg.id) && !custom.some(plugin => Plugins.provides(plugin, pkg.id)));
 }
 function customPlugins(cfg, userDataDir, options) {
   return Plugins.manager.listCustom(userDataDir, options).filter(plugin => plugin.enabled !== false &&
     !(cfg.uosc === false && Plugins.provides(plugin, "uosc")) && !(cfg.timelinePreviews === false && Plugins.provides(plugin, "thumbfast")));
 }
-function available(value, userDataDir) {
+function available(value, userDataDir, runtimeSettings) {
   const cfg = settings(value);
-  const present = id => suppliedPlugin(cfg, id) || Boolean(userDataDir && Plugins.playbackStatus(userDataDir, id)?.ready);
+  const present = id => suppliedPlugin(cfg, id) || Boolean(userDataDir && Plugins.playbackStatus(userDataDir, id, { settings: runtimeSettings })?.ready);
   return { uosc: cfg.uosc !== false && present("uosc"), thumbfast: cfg.timelinePreviews !== false && present("thumbfast") };
 }
 function addDirectory(destination, source) {
@@ -58,14 +58,14 @@ function addDirectory(destination, source) {
 }
 function prepare(context, { executablePath, renderHost, thumbnailExecutablePath } = {}) {
   const cfg = settings(context.runtimeSettings);
-  const usable = available(cfg, context.userDataDir);
+  const usable = available(cfg, context.userDataDir, context.settings);
   const session = Sessions.create(), { directory, cleanup } = session;
   try {
-    const installs = required(cfg, context.userDataDir).map(pkg => {
-      const install = Plugins.status(context.userDataDir, pkg.id, { verification: "full" });
+    const installs = required(cfg, context.userDataDir, context.settings).map(pkg => {
+      const install = Plugins.status(context.userDataDir, pkg.id, { verification: "full", settings: context.settings });
       return install ? { ...install, id: pkg.id } : null;
     }).filter(Boolean);
-    const custom = customPlugins(cfg, context.userDataDir, { full: true });
+    const custom = customPlugins(cfg, context.userDataDir, { full: true, settings: context.settings });
     for (const plugin of custom) {
       if (!plugin.ready) { context.logger?.warn?.(`The ${plugin.label} plugin is unavailable for this playback.`);continue; }
       context.recordRuntimeUse?.({ managerId: Plugins.manager.id, sectionId: plugin.id, version: plugin.version, sourcePath: plugin.installDir });
