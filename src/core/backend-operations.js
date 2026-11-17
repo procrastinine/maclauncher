@@ -190,6 +190,29 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     inventoryFingerprints.set(manager.id, fingerprint);
     if (previous !== undefined && previous !== fingerprint) emit("runtimeInventoryChanged", { managerId: manager.id });
   }
+  // Reports the states of the named managers and of managers that list them.
+  // Without `prepare`, managers that prepare local facts first (such as
+  // translator descriptions) report what is already known, and `deferred`
+  // says that a prepared state is still to come.
+  async function reportRuntimeStates(settings, ids, { prepare = true } = {}) {
+    const localPreparations = [], referenceStates = new Map();
+    let deferred = false;
+    for (const manager of managers) {
+      if (ids?.length && !ids.includes(manager.id) && !manager.referenceManagerIds?.some(id => ids.includes(id)) || typeof manager.getState !== "function") continue;
+      if (typeof manager.prepareLocalState === "function" && prepare) {
+        localPreparations.push(Promise.resolve().then(() => manager.prepareLocalState({...context(settings), settings: settings?.runtimes?.[manager.id], referenceStates}))
+          .catch(error => logger.warn(`[runtime:${manager.id}] local state could not be prepared`, error.message))
+          .then(() => emitRuntimeState(manager, managerState(manager, settings, referenceStates))));
+        continue;
+      }
+      if (typeof manager.prepareLocalState === "function") deferred = true;
+      emitRuntimeState(manager, managerState(manager, settings, referenceStates));
+      // Cancellation and new jobs get an opportunity between independent inventories.
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    await Promise.allSettled(localPreparations);
+    return { deferred };
+  }
   function managerState(manager, settings, referenceStates) {
     try {
       const state = manager.getState({ settings: settings?.runtimes?.[manager.id], runtimeSettings: settings?.runtimes, userDataDir, logger, referenceStates });
@@ -237,20 +260,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     },
     removeGameData,
     async runtimeStates(settings, ids) {
-      const localPreparations = [], referenceStates = new Map();
-      for (const manager of managers) {
-        if (ids?.length && !ids.includes(manager.id) && !manager.referenceManagerIds?.some(id => ids.includes(id)) || typeof manager.getState !== "function") continue;
-        if (typeof manager.prepareLocalState === "function") {
-          localPreparations.push(Promise.resolve().then(() => manager.prepareLocalState({...context(settings), settings: settings?.runtimes?.[manager.id], referenceStates}))
-            .catch(error => logger.warn(`[runtime:${manager.id}] local state could not be prepared`, error.message))
-            .then(() => emitRuntimeState(manager, managerState(manager, settings, referenceStates))));
-          continue;
-        }
-        emitRuntimeState(manager, managerState(manager, settings, referenceStates));
-        // Cancellation and new jobs get an opportunity between independent inventories.
-        await new Promise(resolve => setImmediate(resolve));
-      }
-      await Promise.allSettled(localPreparations);
+      await reportRuntimeStates(settings, ids);
       return true;
     },
     // The inspector worker lets each module read what its games share, such as
@@ -356,7 +366,10 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       if (!manager) throw new Error("Runtime manager not found.");
       if (internal?.archiveFile) payload = { ...payload, archiveFile: internal.archiveFile };
       // Installs, removals, registrations and refreshed catalogs change what
-      // translator choices list, whether or not the action succeeds.
+      // translator choices list, whether or not the action succeeds. The
+      // action ends with the changed rows as already known; descriptions that
+      // take seconds to prepare follow from the persistent state lane.
+      let deferred = false;
       try {
         return await runRuntimeManagerAction({ manager, action, payload, userDataDir, logger, downloads, runtimeCoordinator,
           prerequisiteContext: { settings: launcher.loadSettings(), confirmRuntimeInstall: plan => callHost("confirmRuntimeInstall", plan) },
@@ -378,9 +391,12 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
               extensions: catalog.importExtensions || manager.importExtensions || [] });
           },
           chooseInstalledActionInput: descriptor => callHost("chooseInstalledActionInput", descriptor),
-          onStateChange: () => operations.runtimeStates(launcher.loadSettings(), [managerId])
+          onStateChange: async () => { if ((await reportRuntimeStates(launcher.loadSettings(), [managerId], { prepare: false })).deferred) deferred = true; }
         });
-      } finally { emit("runtimeInventoryChanged", { managerId }); }
+      } finally {
+        emit("runtimeInventoryChanged", { managerId });
+        if (deferred) emit("runtimeChanged", { managerId });
+      }
     },
     // Runtimes → Components: list, remove, import and reveal; see component-service.js.
     async componentAction(action, payload) {

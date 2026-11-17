@@ -461,7 +461,7 @@ test("runtime actions publish actual Included references after host installation
   put(path.join("host/support", RELATIVE_PATHS.renderers, "dxvk/version"), "DXVK-Sikarugir-async-v1.10.3\nD9VK-Sikarugir-v2.3\n");
   const copy = { version: "10.0_8-template-1.0.24", engineVersion: "10.0_8", templateVersion: "1.0.24",
     engineRoot, templateRoot, installDir: path.join(root, "host"), ready: true };
-  const copies = [], events = [], published = new EventEmitter();let unrelatedReads = 0;
+  const copies = [], events = [], followUps = [];let unrelatedReads = 0;
   const host = { id: manifest.runtime.manager.sikarugir, core: { listInstalled: () => copies },
     getState: () => ({ installed: [...copies] }),
     installRuntime: async () => { copies.push(copy);return copy; },
@@ -473,14 +473,17 @@ test("runtime actions publish actual Included references after host installation
     getModuleInfo: () => manifest, getModuleDir: () => root, listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null };
   t.mock.method(require("../src/modules/registry"), "getModule", id => id === manifest.id ? mod : null);
   const operations = createBackendOperations({ userDataDir: path.join(root, "data"), registry,
-    emit: (event, payload) => { if (event === "runtimeState") { events.push(payload);published.emit(payload.id, payload.state); } } });
+    emit: (event, payload) => { if (event === "runtimeState") events.push(payload); if (event === "runtimeChanged" && payload.managerId) followUps.push(payload.managerId); } });
   t.after(() => operations.beginShutdown());
   await operations.runtimeStates({}, [component.id]);assert.equal(events.at(-1).state.references, undefined);
   for (const action of ["install", "uninstall"]) {
-    events.length = 0;const changed = once(published, component.id);
+    events.length = 0;followUps.length = 0;
     await operations.runtimeAction(host.id, action, { version: copy.version });
-    const [state] = await changed;
-    assert.deepEqual(events.map(event => event.id), [host.id, component.id]);
+    assert.deepEqual(events.map(event => event.id), [host.id, component.id], "the action reports the host and the managers that list it");
+    assert.deepEqual(followUps, [host.id], "and asks the state lane for their prepared states");
+    // What the main process runs on the persistent state lane for that request.
+    await operations.runtimeStates({}, followUps);
+    const state = events.filter(event => event.id === component.id).at(-1).state;
     if (action === "install") {
       assert.equal(state.references.length, 1);
       assert.deepEqual(state.references[0].reference, { managerId: host.id, version: copy.version, path: copy.installDir });
@@ -493,13 +496,17 @@ test("runtime actions publish actual Included references after host installation
 
 // The service closes idle action lanes beyond its spare count as soon as their
 // requests return, so a state reported after the action returns can be lost.
-test("a runtime action returns after reporting the state it changed, even when that state is prepared asynchronously", async t => {
+test("a runtime action returns after reporting the state it changed, leaving slow preparation to the state lane", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-action-state-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const { restoreRuntimeState } = await import("../src/core/runtime-state-snapshot.mjs");
   const rows = [], events = [], runtimePath = path.join(root, "Libraries");
-  // Like a Wine whose included translators are described before its state is read.
-  const manager = { id: "fixture-wine", prepareLocalState: () => new Promise(resolve => setTimeout(resolve, 20)),
+  // Like a Wine whose included translators take seconds to describe: the
+  // preparation here never finishes while the action runs.
+  let prepared = 0, release;
+  const gate = new Promise(resolve => { release = resolve; });
+  t.after(() => release());
+  const manager = { id: "fixture-wine", prepareLocalState: () => { prepared += 1; return gate; },
     getState: () => ({ installed: [...rows] }),
     registerCustomRuntime: async options => { const row = { version: options.runtimePath, ready: true, custom: true };rows.push(row);return row; },
     uninstallRuntime: async options => { rows.splice(rows.findIndex(row => row.version === options.version), 1);return true; } };
@@ -510,12 +517,18 @@ test("a runtime action returns after reporting the state it changed, even when t
   t.after(() => operations.beginShutdown());
   for (const [action, expected] of [["registerCustom", [runtimePath]], ["uninstall", []]]) {
     events.length = 0;
-    await operations.runtimeAction(manager.id, action, { sectionId: "default", runtimePath, version: runtimePath });
+    let timer;
+    const waited = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${action} waited for the slow preparation`)), 2000); });
+    try { await Promise.race([operations.runtimeAction(manager.id, action, { sectionId: "default", runtimePath, version: runtimePath }), waited]); }
+    finally { clearTimeout(timer); }
     const reported = events.filter(row => row.event === "runtimeState" && row.payload.id === manager.id);
     assert.equal(reported.length, 1, `${action} reported its state before returning`);
     assert.deepEqual(restoreRuntimeState(reported[0].payload.state).installed.map(row => row.version), expected);
     assert.ok(events.indexOf(reported[0]) < events.findIndex(row => row.event === "runtimeInventoryChanged"), "other lanes hear of the change after its state");
+    const followUp = events.findIndex(row => row.event === "runtimeChanged" && row.payload.managerId === manager.id);
+    assert.ok(followUp > events.indexOf(reported[0]), "the state lane is asked for the prepared state afterwards");
   }
+  assert.equal(prepared, 0, "the action's own worker prepares nothing");
 });
 
 test("a failed runtime inventory is isolated and never hides other managers", async t => {
