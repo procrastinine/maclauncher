@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
-const { readJsonObject, writeJsonAtomic } = require("../src/core/json-files");
+const { readJsonObject, writeJsonAtomic, writeJsonCache } = require("../src/core/json-files");
 const GameStore = require("../src/core/game-store");
 
 function fixture(t) {
@@ -59,6 +59,29 @@ test("metadata writes reject existing links and non-files without modifying thei
   assert.throws(() => writeJsonAtomic(link, { bad: true }), /not a regular file/);
   assert.deepEqual(readJsonObject(target), { original: true });
   assert.throws(() => writeJsonAtomic(root, {}), /not a regular file/);
+});
+
+test("cache writes replace the file atomically without flushing, and reject links and non-files", t => {
+  const root = fixture(t);
+  const file = path.join(root, "games", "id", "metadata.json");
+  const fsync = t.mock.method(fs, "fsyncSync");
+  writeJsonCache(file, { first: true });
+  fs.chmodSync(file, 0o640);
+  writeJsonCache(file, { next: [1, 2] });
+  assert.equal(fsync.mock.callCount(), 0, "derived caches do not wait for the disk");
+  assert.deepEqual(readJsonObject(file), { next: [1, 2] });
+  assert.equal(fs.statSync(file).mode & 0o777, 0o640);
+  assert.deepEqual(fs.readdirSync(path.dirname(file)), ["metadata.json"]);
+  const rename = t.mock.method(fs, "renameSync", () => { throw Object.assign(new Error("rename failure"), { code: "EACCES" }); });
+  assert.throws(() => writeJsonCache(file, { lost: true }), /rename failure/);
+  rename.mock.restore();
+  assert.deepEqual(readJsonObject(file), { next: [1, 2] });
+  assert.deepEqual(fs.readdirSync(path.dirname(file)), ["metadata.json"]);
+  const target = path.join(root, "target.json"), link = path.join(root, "link.json");
+  fs.writeFileSync(target, '{"original":true}'); fs.symlinkSync(target, link);
+  assert.throws(() => writeJsonCache(link, { bad: true }), /not a regular file/);
+  assert.deepEqual(readJsonObject(target), { original: true });
+  assert.throws(() => writeJsonCache(root, {}), /not a regular file/);
 });
 
 test("game records reject traversal IDs and malformed array records", t => {

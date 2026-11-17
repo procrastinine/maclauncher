@@ -127,4 +127,29 @@ function writeJsonAtomic(filePath, value) {
   return writeFileAtomic(filePath, JSON.stringify(value, null, 2));
 }
 
-module.exports = { readJsonObject, readJsonObjectForUpdate, readJsonDocument, salvageJsonObject, preserveUnreadable, onUnreadablePreserved, writeJsonAtomic, writeFileAtomic };
+// Derived data, such as a cache that is rebuilt whenever it cannot be read, is
+// replaced atomically as writeJsonAtomic does, without waiting for the disk to
+// flush it.
+function writeJsonCache(filePath, value) {
+  let mode = 0o600;
+  try {
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile()) throw new Error("Atomic write destination is not a regular file: " + filePath);
+    mode = stat.mode & 0o777;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const directory = path.dirname(filePath);
+  fs.mkdirSync(directory, { recursive: true });
+  const temporary = path.join(directory, `.${path.basename(filePath)}.${require("node:crypto").randomBytes(8).toString("hex")}.tmp`);
+  try {
+    fs.writeFileSync(temporary, JSON.stringify(value, null, 2), { flag: "wx", mode });
+    fs.renameSync(temporary, filePath);
+  } catch (error) {
+    try { fs.unlinkSync(temporary); } catch {}
+    throw error;
+  }
+  return filePath;
+}
+
+module.exports = { readJsonObject, readJsonObjectForUpdate, readJsonDocument, salvageJsonObject, preserveUnreadable, onUnreadablePreserved, writeJsonAtomic, writeJsonCache, writeFileAtomic };

@@ -8,7 +8,7 @@ const Icons = require("./icon-utils");
 const GameIcons = require("./game-icons");
 const FileSignature = require("../modules/shared/file-signature");
 const { recordReads, unchanged } = require("./file-observations");
-const { readJsonObject, writeJsonAtomic } = require("./json-files");
+const { readJsonObject, writeJsonCache } = require("./json-files");
 const { mergeDetectedEntry, detectedNativeRuntime } = require("./launch-utils");
 const { hydrateGameSaveLocations } = require("./save-locations");
 const { resolveModuleId, mergeSettingsChanges } = require("./launcher");
@@ -98,8 +98,8 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
         assertOwnDirectory(userDataDir, directory);
         const bytes = (await extractIcon(candidate.path, candidate.source, { signal }))?.png;
         throwIfAborted(signal);
-        if (bytes?.length) { atomicWrite(output, bytes, { root: userDataDir }); if (imagePath(output)) { writeJsonAtomic(receipt, { fingerprint }); return output; } }
-        writeJsonAtomic(receipt, { fingerprint, missing: true }); return null;
+        if (bytes?.length) { atomicWrite(output, bytes, { root: userDataDir }); if (imagePath(output)) { writeJsonCache(receipt, { fingerprint }); return output; } }
+        writeJsonCache(receipt, { fingerprint, missing: true }); return null;
       }
     });
   }
@@ -166,7 +166,8 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
     const active = observed.value.entry;
     throwIfAborted(signal);
     if (observed.cacheable) {
-      try { writeJsonAtomic(cacheFile(active), { profile, key: key(active, settings), files: observed.files,
+      // The analysis cache is rebuilt whenever it is missing or unreadable.
+      try { writeJsonCache(cacheFile(active), { profile, key: key(active, settings), files: observed.files,
         detected: observed.value.detected, facts: observed.value.facts, moduleDataPatch: observed.value.moduleDataPatch, automaticName: observed.value.automaticName }); }
       catch (error) { throwIfAborted(signal); if (isAbortError(error)) throw error; debug("[metadata] cache write", error); }
     }
