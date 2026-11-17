@@ -143,7 +143,8 @@ test("model documents use the existing local manager without opening another pic
     importModel: context.importNeuralModelFile });
   const result = await importer(runtimePath);
   assert.equal(result.kind, "neural-model"); assert.notEqual(result.model.modelPath, runtimePath);
-  assert.equal(settings.runtimes["graphics-neural-models"].defaultVersion, result.model.version);
+  // An imported model stays automatic until the user chooses it as a default.
+  assert.equal(settings.runtimes?.["graphics-neural-models"]?.defaultVersion ?? null, null);
   assert.equal(snapshots.length, 1); assert.equal(context.graphicsImportControllers.size, 0);
   assert.deepEqual(fs.readFileSync(path.join(runtimePath, "weights.safetensors")), weights);
   context.broadcastActivity = () => context.graphicsImportControllers.get(runtimePath)?.abort();

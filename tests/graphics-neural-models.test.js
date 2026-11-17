@@ -39,7 +39,9 @@ test("neural settings retain the useful unmasked blend range through full streng
 test("local neural models are copied once, immutable and removable without changing original packages", async t => {
   const f = fixture(t);
   assert.deepEqual(Models.listInstalled(f.userDataDir), []);
-  assert.equal(Manager.getState({ userDataDir: f.userDataDir }).catalog.delivery, "local-files");
+  // Verified source catalogs download models; a local model folder imports beside them.
+  const catalog = Manager.getState({ userDataDir: f.userDataDir }).catalog;
+  assert.equal(catalog.delivery, "download"); assert.equal(catalog.importable, true);
   assert.deepEqual(fs.readdirSync(f.userDataDir), [], "reading model state creates no files");
   const imported = await Manager.importRuntime(f);
   assert.ok(Models.validVersion(imported.version)); assert.notEqual(imported.modelPath, f.runtimePath);
@@ -49,8 +51,11 @@ test("local neural models are copied once, immutable and removable without chang
   assert.equal((await Manager.importRuntime(f)).version, imported.version);
   assert.equal(Neural.listModels(f.userDataDir).length, 1);
   assert.equal(Neural.model(imported.modelPath), imported.modelPath);
+  // Automatic retention keeps one copy per model operation, so the identity names its operation.
+  const variant = Models.variantFor(Models.listManaged(f.userDataDir).find(item => item.version === imported.version));
+  assert.ok(variant);
   assert.deepEqual(Neural.modelIdentity(f.userDataDir, imported.modelPath), { managerId: Models.ID,
-    sectionId: "default", version: imported.version, sourcePath: imported.installDir });
+    sectionId: "default", version: imported.version, variant, sourcePath: imported.installDir });
   const weightsFile = path.join(imported.modelPath, "weights.safetensors");
   fs.chmodSync(weightsFile, 0o644); fs.writeFileSync(weightsFile, Buffer.alloc(f.weights.length, 8));
   await assert.rejects(Models.resolveModel(f.userDataDir, imported.version), /changed/);

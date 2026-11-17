@@ -34,7 +34,7 @@ function noPartial(f) {
 test("neural source catalog is pinned and model manager state performs no acquisition", t => {
   const f = fixture(t), source = Setup.sourceFor(), state = Manager.getState({userDataDir: f.userDataDir});
   assert.equal(source.bytes, 320194134);assert.equal(source.sha256, "cab2b8abb4c415d888903bad7edc8f88955c44c7279aea5a33bfde6114f24d62");
-  assert.equal(state.setupActions[0].id, "downloadDlssMac");assert.equal(state.catalog.installable, false);
+  assert.equal(state.setupActions[0].id, "downloadDlssMac");assert.equal(state.catalog.installable, state.catalog.importable, "downloads are offered where the host can use models");
   assert.deepEqual(fs.readdirSync(f.userDataDir), [], "status creates no files");
   assert.throws(() => Setup.sourceFor("unlisted"), /available/);
 });
