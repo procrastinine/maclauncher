@@ -156,12 +156,17 @@ function wineCapabilities(wineRoot) {
     d3dMetalBridge: loader.CX_APPLEGPTK_LIBD3DSHARED_PATH === true, adapterIdentity: graphics.D3DM_VENDOR_ID === true };
 }
 // The Wine version a tree reports, from the version text its ntdll carries.
+// The Wine release named in ntdll, read from the Intel or the Apple Silicon build.
 function wineVersion(wineRoot) {
-  try {
-    const file = path.join(wineRoot, "lib", "wine", "x86_64-unix", "ntdll.so");
-    if (fs.statSync(file).size > 64 * 1024 * 1024) return "";
-    return /wine-(\d+\.\d+(?:\.\d+)?(?:-rc\d+)?)\0/.exec(fs.readFileSync(file).toString("latin1"))?.[1] || "";
-  } catch { return ""; }
+  for (const unix of ["x86_64-unix", "aarch64-unix"]) {
+    try {
+      const file = path.join(wineRoot, "lib", "wine", unix, "ntdll.so");
+      if (fs.statSync(file).size > 64 * 1024 * 1024) continue;
+      const version = /wine-(\d+\.\d+(?:\.\d+)?(?:-rc\d+)?)\0/.exec(fs.readFileSync(file).toString("latin1"))?.[1];
+      if (version) return version;
+    } catch {}
+  }
+  return "";
 }
 // Checks an installed tree against its inventory. `verification: "status"`
 // reads only the files named in `important`.

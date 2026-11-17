@@ -19,6 +19,7 @@ import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelect
   translatorInstallBuild, translatorInstallRequirement } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
+import { PathDisplay } from "./PathDisplay";
 import { RuntimeCatalogSources } from "./RuntimeCatalogSources";
 import { LauncherViewHeader } from "./LauncherViewHeader";
 import { ScrollableTabStrip } from "./ScrollableTabStrip";
@@ -668,16 +669,18 @@ export function RuntimesView({
                                 {activeRuntimeHasMultipleVariants && inst.variant && (
                                   <span className="badge">{variantLabel}</span>
                                 )}
-                                {(defaultFor.length > 0 || inst.platformKey || inst.minimumMacOS || installDetail || inst.installDir || Object.keys(inst.libraries || {}).length > 0) && <HelpTip label={`About ${activeRuntimeVersionTag(inst.version)}`}>
+                                {(defaultFor.length > 0 || inst.platformKey || runtimeMinimumNotice(inst.minimumMacOS) || installDetail || (!inst.custom && inst.installDir) || Object.keys(inst.libraries || {}).length > 0) && <HelpTip label={`About ${activeRuntimeVersionTag(inst.version)}`}>
                                   {defaultFor.length > 0 && <p>Automatic for {defaultFor.join(", ")}.</p>}
                                   {inst.platformKey && <p>{inst.platformKey}</p>}
                                   {runtimeMinimumNotice(inst.minimumMacOS) && <p>{runtimeMinimumNotice(inst.minimumMacOS)}</p>}
                                   {installDetail && <p>{installDetail}</p>}
                                   {Object.entries(inst.libraries || {}).map(([id, library]: [string, any]) => library.ready &&
                                     <p key={id}>{library.label || id} {library.version || library.apiProfile || ""}</p>)}
-                                  {(!isRuntimeIncluded(inst) || inst.reference) && inst.installDir && <p className="mono">{inst.installDir}</p>}
+                                  {(!isRuntimeIncluded(inst) || inst.reference) && !inst.custom && inst.installDir && <p className="mono">{inst.installDir}</p>}
                                 </HelpTip>}
                               </div>
+                              {/* A registration is told apart from an installed copy of the same release by its own folder. */}
+                              {inst.custom && (inst.installDir || inst.version) && <div className="dim mono runtimeRegisteredPath"><PathDisplay path={inst.installDir || inst.version} /></div>}
                               {inst.installDir && installSizes[inst.installDir] && <div className="dim" data-runtime-size="true">
                                 {componentSizeText({ path: inst.installDir, bytes: installSizes[inst.installDir].bytes, sizeComplete: installSizes[inst.installDir].complete })}</div>}
                               {apis.length > 0 && <div className="dim">{apis.join(", ")}</div>}

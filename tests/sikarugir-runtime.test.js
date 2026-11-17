@@ -344,6 +344,7 @@ test("Sikarugir names the translator versions of an installed engine and of list
   await manager.prepareLocalState({ userDataDir: root, logger: { warn() {} } });
   const custom = manager.getState({ userDataDir: root }).installed.find(row => row.custom);
   assert.equal(custom.componentSummary, managed.componentSummary, "custom and installed rows share one Includes line");
+  assert.equal(manager.getState({ userDataDir: root }).versionLabels[custom.version], managed.versionLabel, "and one name, not the folder's");
 });
 
 test("Sikarugir download tasks display readable version labels while retaining the exact identifier", async t => {

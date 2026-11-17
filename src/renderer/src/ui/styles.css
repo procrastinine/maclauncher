@@ -2050,6 +2050,12 @@ select.input:not([multiple]) {
   gap: 6px;
 }
 
+/* A registered runtime's folder keeps its last component visible. */
+.runtimeRegisteredPath {
+  min-width: 0;
+  overflow: hidden;
+}
+
 .runtimeSection .saveName {
   font-size: var(--font-sm);
 }

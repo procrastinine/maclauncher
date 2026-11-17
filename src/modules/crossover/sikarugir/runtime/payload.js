@@ -126,7 +126,8 @@ function configureCustom(manager, inspectPayload) {
     const native = Custom.inspectExecutable(path.join(root, Payload.WINE_ROOT, "bin", "wine"));
     const selected = inspectPayload({ ...record, ...native, installDir: root }, { verification: verification === "status" ? "status" : "full" });
     if (!selected.install) throw new Error(selected.reason);
-    return { ...selected.install, runtimeVersion: record.version };
+    const versionLabel = Catalog.versionLabel(null, selected.install);
+    return { ...selected.install, runtimeVersion: record.version, ...(versionLabel ? { versionLabel } : {}) };
   });
 }
 module.exports.configureCustom=configureCustom;

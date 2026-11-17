@@ -1544,6 +1544,17 @@ test('per-game version menus use only the selected runtime recommendation and pr
   assert.deepEqual(original, before);
 });
 
+test('a registered runtime row shows the folder it was registered from beside its version name', () => {
+  const folder = '/Volumes/Games/Wines/WineCX/Libraries';
+  const runtime = manager('wine-registered', {}, { status: 'success', versions: ['4.8.1'], versionLabels: { '4.8.1': 'WineCX 4.8.1 · Wine 11.19' } },
+    [{ version: '4.8.1', ready: true, status: 'ready', installDir: '/data/runtimes/winecx/arm64/4.8.1' },
+      { version: folder, ready: true, status: 'ready', custom: true, installDir: folder, versionLabel: 'WineCX 4.8.1 · Wine 11.19' }]);
+  const markup = render([{ ...runtime, versionLabels: { [folder]: 'WineCX 4.8.1 · Wine 11.19' } }], runtime.id);
+  assert.match(markup, /<div class="dim mono runtimeRegisteredPath"><span class="pathDisplay" title="\/Volumes\/Games\/Wines\/WineCX\/Libraries"/,
+    'the registered row tells itself apart from the installed copy of the same release');
+  assert.equal((markup.match(/runtimeRegisteredPath/g) || []).length, 1, 'installed rows keep their path in the About popover only');
+});
+
 test('a listed version that cannot be installed on this Mac reads Unavailable and is never preselected', () => {
   const reason = 'The Steam bridge package lacks the managed loader paths required by this launcher and needs replacement.';
   const runtime = manager('bridge-listed', {}, { status: 'success', source: 'https://github.com/example/bridge/releases', versions: ['1.0.4-local', '1.0.0'],

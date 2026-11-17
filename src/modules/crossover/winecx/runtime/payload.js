@@ -99,7 +99,11 @@ function inspectCustom(selected, { verification, systemVersionSync = Host.system
     architectures: inspected.architectures, architecture: Shared.customArchitecture(inspected.architectures),
     wineVersion: inspected.wineVersion || "", engineVersion: inspected.wineVersion || "",
     componentVersions: versions.componentVersions || {}, gptkCapable: versions.gptkCapable === true,
-    ...(versions.runtimeVersion ? { runtimeVersion: versions.runtimeVersion } : {}) };
+    ...(versions.runtimeVersion ? { runtimeVersion: versions.runtimeVersion } : {}),
+    // Named like a download: the WineCX release its version file states, then its Wine version.
+    ...(versions.runtimeVersion || inspected.wineVersion ? { versionLabel: versions.runtimeVersion
+      ? require("./catalog").versionLabel({ version: versions.runtimeVersion }, { wineVersion: inspected.wineVersion })
+      : `Wine ${inspected.wineVersion}` } : {}) };
 }
 const configureCustom = (manager, _inspect, dependencies = {}) => Shared.configureCustom(manager,
   (runtimePath, options = {}) => inspectCustom(runtimePath, { ...options, ...(dependencies.systemVersionSync ? { systemVersionSync: dependencies.systemVersionSync } : {}) }));

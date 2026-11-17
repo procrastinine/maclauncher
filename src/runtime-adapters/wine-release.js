@@ -206,7 +206,7 @@ function createPayload(source, dependencies = {}) {
       ...(tree.server ? {serverPath: path.join(root, tree.server)} : {}), libraryRoot: path.join(wineRoot, 'lib'),
       capabilities: inspected.capabilities, minimumMacOS: inspected.minimumMacOS, architectures: inspected.architectures,
       architecture: Shared.customArchitecture(inspected.architectures), wineVersion: inspected.wineVersion || '',
-      engineVersion: inspected.wineVersion || '', componentVersions: {}, ...(inspected.wineVersion ? {runtimeVersion: inspected.wineVersion} : {})};
+      engineVersion: inspected.wineVersion || '', componentVersions: {}, ...(inspected.wineVersion ? {runtimeVersion: inspected.wineVersion, versionLabel: `${label} ${inspected.wineVersion}`} : {})};
   }
   const configureCustom = manager => Shared.configureCustom(manager, inspectCustom);
   return {preparePayload, createPayloadResolver, installDetail, inspectCustom, configureCustom};

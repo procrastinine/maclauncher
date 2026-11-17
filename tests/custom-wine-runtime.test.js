@@ -80,8 +80,9 @@ test("a WineCX folder the user selects is registered in place, measured like a d
   assert.equal(selected.ready, true);
   assert.equal(selected.install.librariesRoot, libraries);
   assert.equal(selected.install.serverPath, path.join(libraries, "Wine", "bin", "wineserver"));
-  assert.equal(manager.getState({ userDataDir, settings: settings.runtimes.winecx, componentSummaries: false }).installed
-    .find(row => row.version === libraries)?.ready, true, "the registration is listed as ready");
+  const listed = manager.getState({ userDataDir, settings: settings.runtimes.winecx, componentSummaries: false });
+  assert.equal(listed.installed.find(row => row.version === libraries)?.ready, true, "the registration is listed as ready");
+  assert.equal(listed.versionLabels[libraries], "WineCX 4.8.1 · Wine 11.19", "it is named like an installed WineCX, not by its folder");
   assert.deepEqual(snapshot(root).filter(row => !row[0].startsWith("profile")), before, "nothing in the selected folder is written or moved");
   // A file inside the folder names the same Libraries folder.
   assert.equal((await register(manager, userDataDir, path.join(libraries, "Wine", "bin", "wineserver"))).librariesRoot, libraries);
@@ -112,7 +113,7 @@ function signedApplication(root) {
   const contents = path.join(root, "MetalSharp Wine.app", "Contents"), unix = path.join(contents, "lib", "wine", "aarch64-unix");
   write(path.join(contents, "MacOS", "wine"), macho(2, { cpu: "arm64" }), 0o755);
   write(path.join(contents, "MacOS", "wineserver"), macho(2, { cpu: "arm64", marker: "WINEMSYNC" }), 0o755);
-  write(path.join(unix, "ntdll.so"), macho(6, { cpu: "arm64" }));
+  write(path.join(unix, "ntdll.so"), Buffer.concat([macho(6, { cpu: "arm64" }), Buffer.from("wine-7.0\0")]));
   write(path.join(unix, "wine.app", "Contents", "MacOS", "wine"), macho(2, { cpu: "arm64" }), 0o755);
   for (const bundle of [contents, path.join(unix, "wine.app", "Contents")]) write(path.join(bundle, "embedded.provisionprofile"), "profile");
   write(path.join(contents, "_CodeSignature", "CodeResources"), "seal");
@@ -133,6 +134,8 @@ test("a signed Wine application the user selects is registered with its seal int
   assert.equal(registered.executablePath, path.join(app, "Contents", "MacOS", "wine"));
   const selected = manager.resolveSelection({}, {}, userDataDir, { version: app });
   assert.equal(selected.ready, true);
+  const label = manager.getState({ userDataDir, componentSummaries: false }).versionLabels[app];
+  assert.ok(registered.wineVersion && label === `MetalSharp Wine ${registered.wineVersion}`, `named by its Wine version, not its folder (${label})`);
   assert.equal(require("../src/modules/crossover/sources/wine-graphics").publisherSigned(selected.install), true, "the launch links the publisher's loader bundles");
   assert.deepEqual(snapshot(path.join(root, "Applications")), before, "the signed application is not modified");
 });
