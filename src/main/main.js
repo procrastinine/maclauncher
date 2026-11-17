@@ -2594,11 +2594,18 @@ const STATE_REBUILD_DELAY_MS = 50;
 let stateRebuildTimer = null;
 function scheduleStateRebuild() {
   if (stateRebuildTimer) return;
-  stateRebuildTimer = setTimeout(() => {
-    stateRebuildTimer = null;
-    if (cachedState) cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-    broadcastState();
-  }, STATE_REBUILD_DELAY_MS);
+  stateRebuildTimer = setTimeout(rebuildState, STATE_REBUILD_DELAY_MS);
+}
+function rebuildState() {
+  clearTimeout(stateRebuildTimer);
+  stateRebuildTimer = null;
+  if (cachedState) cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
+  broadcastState();
+}
+// A rebuild still waiting is sent at once, so a result reaches the windows
+// together with the rows its backend reported.
+function flushStateRebuild() {
+  if (stateRebuildTimer) rebuildState();
 }
 
 function registerLauncherWindow(win) {
@@ -5089,7 +5096,8 @@ ipcMain.handle("launcher:cancelDownload", async (_event, downloadId) => {
 
 ipcMain.handle("launcher:runtimeAction", async (event, managerId, action, payload) => {
   if (!getRuntimeManager(managerId)) throw new Error("Runtime manager not found");
-  return backendService.request(`runtime:${managerId}`, "runtimeAction", managerId, action, payload);
+  try { return await backendService.request(`runtime:${managerId}`, "runtimeAction", managerId, action, payload); }
+  finally { flushStateRebuild(); }
 });
 
 // Runtimes → Components; the backend lists, removes, adds and reveals them.

@@ -227,6 +227,27 @@ test('library work shares availability, runs checks off main, retains previous r
   assert.equal(probes, 1);
   monitor.close();
 });
+test('a runtime action answers only after windows have the state its backend reported', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  const region = (start, end) => source.slice(source.indexOf(start), source.indexOf(end));
+  const sent = [], handlers = new Map(), win = { webContents: { send: (channel, state) => sent.push([channel, state]) } };
+  let snapshot = 'before';
+  const context = { setTimeout, clearTimeout, launcherWindows: new Set([win]), cachedState: null,
+    utilityWindows: { isRetiring: () => false, stateForWindow: (_win, state) => state }, activityDelivery: { supersede() {} },
+    updateBackendRunning() {}, graphicsCatalog: { refresh() {} }, getLauncherState: () => ({ runtimes: snapshot }),
+    buildState: () => null, loadSettings: () => ({}), loadGamesHydrated: () => [],
+    ipcMain: { handle: (name, handler) => handlers.set(name, handler) }, getRuntimeManager: () => ({}),
+    // Like the backend lane: the changed rows arrive as an event just before the action's result.
+    backendService: { request: async () => { snapshot = 'after'; context.scheduleStateRebuild(); return true; } } };
+  vm.createContext(context);
+  vm.runInContext(region('function sendState(', 'function registerLauncherWindow(') +
+    region('ipcMain.handle("launcher:runtimeAction"', '// Runtimes → Components;') + '\nthis.scheduleStateRebuild = scheduleStateRebuild;', context);
+  assert.equal(await handlers.get('launcher:runtimeAction')(null, 'fixture', 'registerCustom', {}), true);
+  assert.deepEqual(sent, [['launcher:state', { runtimes: 'after' }]], 'the changed rows were sent before the result');
+  await new Promise(resolve => setTimeout(resolve, 80));
+  assert.equal(sent.length, 1, 'and are not sent a second time');
+});
+
 test('serialized games use the selected backend capabilities, and library checks that are not current are shown without being saved', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
   const normalizeSource = source.slice(source.indexOf('function normalizeGameEntry('), source.indexOf('\nfunction buildModuleLaunchContext('));
