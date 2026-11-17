@@ -241,9 +241,12 @@ export function normalize(value) {
   if (error) throw Object.assign(new Error(error.message), {code: error.code});
   return plan;
 }
-// Row-level salvage. Only the envelope (schema, mode, shape and master switch)
-// must validate; a newer schema or a broken envelope is reported as `error`,
-// as `inspect` does. Each row is then validated alone and its ownership
+// Row-level salvage. A newer schema, a value that is not a plan object of
+// schema 1 or 2, and a plan over the 4 MiB limit are reported as `error`, as
+// `inspect` does. The rest of the envelope is read where it can be: a missing
+// or other mode reads as the advanced mode, and an unknown plan field, an
+// invalid master switch, a row list that is not a list and rows beyond the
+// limit are left out and reported. Each row is then validated alone and its ownership
 // against the rows that survive, as `leading` does. A helper whose owner is
 // dropped is dropped too. An invalid source request, output setting or depth input is
 // dropped on its own. `check` validates a complete plan; plan.js passes its
@@ -260,13 +263,44 @@ function envelope(value) {
     !Object.keys(value).some(key => !["schema", "mode", "video", "renderResolution", ...(value.schema === 2 ? ["enabled", "output", "depthInput"] : [])].includes(key)) &&
     (value.enabled === undefined || typeof value.enabled === "boolean") && size <= 4 * 1024 * 1024;
 }
+// The readable envelope of a plan of schema 1 or 2 within the size limit:
+// {value, dropped}, or null when it has none.
+const ENVELOPE_LIMIT = 4 * 1024 * 1024;
+function readableEnvelope(value) {
+  let size;
+  try { size = JSON.stringify(value)?.length; } catch { return null; }
+  if (!object(value) || ![1, 2].includes(value.schema) || !(size <= ENVELOPE_LIMIT)) return null;
+  const fields = new Set(["schema", "video", "renderResolution", ...(value.schema === 2 ? ["enabled", "output", "depthInput"] : [])]);
+  const next = {mode: "advanced"}, dropped = [];
+  for (const [key, field] of Object.entries(value)) {
+    if (key === "mode") {
+      if (field !== undefined && field !== "advanced") dropped.push({part: "envelope", id: "mode", reason: "Effects plans use the advanced mode; the rows are read in that mode."});
+    } else if (fields.has(key)) next[key] = field;
+    else dropped.push({part: "envelope", id: key.slice(0, 128), reason: "This version of MacLauncher does not use this plan field."});
+  }
+  if (next.enabled !== undefined && typeof next.enabled !== "boolean") {
+    delete next.enabled;dropped.push({part: "envelope", id: "enabled", reason: "The effects on/off setting is not on or off, so the effects are on."});
+  }
+  if (!Array.isArray(next.video)) {
+    dropped.push({part: "envelope", id: "video", reason: "The effect rows are not a list."});next.video = [];
+  } else if (next.video.length > MAX_NODES) {
+    dropped.push({part: "envelope", id: "video", reason: `Only the first ${MAX_NODES} effect rows are read.`});next.video = next.video.slice(0, MAX_NODES);
+  }
+  return {value: next, dropped};
+}
 export function salvage(value, check = validate) {
   if (value == null) return {plan: null, dropped: []};
   let failure;
   try { return {plan: check(value), dropped: []}; } catch (error) { failure = error; }
-  if (!envelope(value)) return {error: planError(value, failure)};
+  let repaired = [];
+  if (!envelope(value)) {
+    const readable = readableEnvelope(value);
+    if (!readable) return {error: planError(value, failure)};
+    ({value, dropped: repaired} = readable);
+    try { return {plan: check(value), dropped: repaired}; } catch (error) { failure = error; }
+  }
   const base = {schema: value.schema, mode: "advanced", ...(value.enabled !== undefined ? {enabled: value.enabled} : {})};
-  const dropped = [], kept = [], ids = new Set(), removed = new Set();
+  const dropped = [...repaired], kept = [], ids = new Set(), removed = new Set();
   const passes = fields => { try { check({...base, video: [], ...fields});return null; } catch (error) { return reasonOf(error); } };
   value.video.forEach((row, index) => {
     const id = object(row) && rowId(row.id) ? row.id : null;

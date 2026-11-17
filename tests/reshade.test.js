@@ -356,7 +356,7 @@ test("common scaling preparation shares injection without enabling or compiling 
 test("an unreadable saved plan is bypassed with a warning and never reaches the ordered executor (S5)", { skip: process.platform !== "darwin" }, async t => {
   const options = fixture(t, ORDERED), warnings = [], Effects = require("../src/modules/shared/effects/runtime");
   t.mock.method(Effects, "prepare", () => assert.fail("an unreadable plan is not prepared"));
-  const effects = { ...plan(shader()), extra: true }, entry = { gameId: "unreadable", effects }, before = structuredClone(entry);
+  const { schema: _schema, ...effects } = plan(shader()), entry = { gameId: "unreadable", effects }, before = structuredClone(entry);
   assert.deepEqual(await ReShade.prepare(entry, { ...options, execute: () => assert.fail("no shader") }), {}, "without live controls nothing is injected");
   const environment = await ReShade.prepare(entry, { ...options, graphicsHost: "window", logger: { warn: (...args) => warnings.push(args.join(" ")) },
     execute: () => assert.fail("no shader") });

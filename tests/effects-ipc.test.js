@@ -271,7 +271,7 @@ test("a saved row that cannot be prepared for a stopped game leaves the plan sav
   assert.deepEqual(status.rows, {gray: {state: "active"}, broken: {state: "bypassed", reason}});
 });
 test("an unreadable saved plan is reported, blocks edits and stays saved byte for byte (S5)", async t => {
-  const f = fixture(t), damaged = {schema: 2, mode: "advanced", enabled: true, video: [{id: "a", kind: "shader", enabled: true, shader: {preset: "crt"}}], extra: true};
+  const f = fixture(t), damaged = {mode: "advanced", enabled: true, video: [{id: "a", kind: "shader", enabled: true, shader: {preset: "crt"}}], extra: true}; // no schema
   f.entry.effects = structuredClone(damaged);
   const info = await f.invoke("getGameEffects", f.entry.gamePath);
   assert.equal(info.graphicsStatus.phase, "invalid");
@@ -331,7 +331,8 @@ test("an edit with an unreadable row saves and publishes its other rows with a n
   assert.deepEqual(Array.from(accepted.notices, notice => notice.dropped), [true, true]);
   assert.match(Array.from(accepted.notices, notice => notice.message).join("\n"), /effect “cas” is skipped/);
   const saves = f.saved.length;
-  await assert.rejects(async () => f.invoke("setGameEffects", f.entry.gamePath, {...shaderPlan(), extra: true}), /valid ordered effects plan/);
+  const {schema: _schema, ...schemaless} = shaderPlan();
+  await assert.rejects(async () => f.invoke("setGameEffects", f.entry.gamePath, schemaless), /valid ordered effects plan/);
   assert.equal(f.saved.length, saves, "a desired plan without a readable envelope is not saved");
 });
 

@@ -89,9 +89,11 @@ const invalid = (code, error) => ({code, message: code === NEWER ? NEWER_MESSAGE
 // A plan that does not validate as a whole is salvaged row by row
 // (Plan.salvage): an unreadable row, source request or output setting is left
 // out of the effective plan and reported in `dropped`, and the stored document
-// is kept until the next edit saves the salvaged plan. Only a newer schema or a
-// broken envelope is unreadable. The error explains why editing is blocked
-// until Clear effects; the raw value stays persisted byte-equivalent.
+// is kept until the next edit saves the salvaged plan. The envelope is read the
+// same way: an unknown plan field or an invalid master switch is left out.
+// Only a newer schema, a value that is not a plan object of schema 1 or 2, or
+// a plan over the size limit is unreadable. The error explains why editing is
+// blocked until Clear effects; the raw value stays persisted byte-equivalent.
 function inspect(value, options) {
   if (object(value) && value.schema === 1) {
     const upgraded = upgradeLegacy({effects: value}, options).effects;
@@ -174,11 +176,13 @@ function serialize(value) {
 const OUTPUT_LABELS = Object.freeze({motionClarity: "display subframe settings", framePacing: "frame pacing settings", toneMapping: "output tone mapping",
   adaptiveQuality: "adaptive quality setting", comparison: "image comparison setting", hud: "performance overlay setting",
   frameRateCap: "frame-rate cap", presentationOptions: "display sync and drawable settings"});
+const ENVELOPE_LABELS = Object.freeze({mode: "effects mode", enabled: "effects on/off setting", video: "effect list"});
 function notices(result) {
   return (Array.isArray(result?.dropped) ? result.dropped : []).map(row => {
     const name = row.part === "output" ? String(row.id).replace(/^output\.?/, "") : "";
     const what = row.part === "row" ? `effect ${quoted(row.label || row.id)}` : row.part === "renderResolution" ? "source resolution" :
       row.part === "depthInput" ? "depth input setting" :
+      row.part === "envelope" ? ENVELOPE_LABELS[row.id] || `plan field ${quoted(row.id)}` :
       !name ? "output settings" : OUTPUT_LABELS[name] || `output setting ${quoted(name)}`;
     return {message: `The saved ${what} is skipped. ${message({message: row.reason})}`.slice(0, 1024), dropped: true};
   });

@@ -400,7 +400,7 @@ test("a newer desired plan rolls back the exposed candidate and only the newest 
   assert.equal(status.desiredRevision, newer.desiredRevision);assert.equal(status.published.documentRevision, newer.desiredRevision);
 });
 test("an unreadable saved plan rejects edits and keeps its bytes", async t => {
-  const f = mainGraphicsFixture(t), damaged = {schema: 2, mode: "advanced", enabled: true, video: [{id: "a", kind: "shader", enabled: true, shader: {preset: "crt"}}], extra: true};
+  const f = mainGraphicsFixture(t), damaged = {mode: "advanced", enabled: true, video: [{id: "a", kind: "shader", enabled: true, shader: {preset: "crt"}}], extra: true}; // no schema
   f.entry.effects = structuredClone(damaged);
   await assert.rejects(async () => f.handlers["launcher:setGameEffects"]({}, f.entry.gamePath, shaderPlan("grayscale")), {code: "GRAPHICS_STORED_PLAN_INVALID"});
   assert.deepEqual(f.entry.effects, damaged);assert.equal(f.saves.length, 0);

@@ -246,9 +246,9 @@ test("revisions are canonical: key order does not change a digest", () => {
 });
 
 test("an invalid stored plan is reported and survives persistence byte-equivalent (S5)", () => {
-  const unknown = {schema: 2, mode: "advanced", enabled: true, video: [{id: "gray", kind: "shader", enabled: true, shader: {enabled: true, preset: "grayscale"}}], extra: true};
+  const unknown = {mode: "advanced", enabled: true, video: [{id: "gray", kind: "shader", enabled: true, shader: {enabled: true, preset: "grayscale"}}]};
   const newer = {schema: 3, mode: "advanced", video: [], futureField: {nested: [1, 2, 3]}};
-  for (const [effects, code] of [[unknown, StoredPlan.INVALID], [newer, StoredPlan.NEWER], [{schema: 2, video: "rows"}, StoredPlan.INVALID]]) {
+  for (const [effects, code] of [[unknown, StoredPlan.INVALID], [newer, StoredPlan.NEWER], [[{schema: 2, video: []}], StoredPlan.INVALID]]) {
     const entry = {effects}, before = structuredClone(entry);
     const stored = StoredPlan.read(entry);
     assert.equal(stored.source, "invalid");assert.equal(stored.error.code, code);assert.equal(stored.raw, effects);
@@ -330,8 +330,22 @@ test("a stored plan with an unreadable row keeps its other rows and reports the 
   const desired = StoredPlan.salvage(effects);
   assert.deepEqual(desired.plan, stored.plan);assert.deepEqual(desired.dropped, stored.dropped);
   assert.equal(StoredPlan.salvage({schema: 3, mode: "advanced", video: []}).error.code, StoredPlan.NEWER);
-  assert.equal(StoredPlan.salvage({...effects, extra: true}).error.code, StoredPlan.INVALID);
+  assert.equal(StoredPlan.salvage({...effects, schema: undefined}).error.code, StoredPlan.INVALID);
   assert.deepEqual(StoredPlan.notices({}), []);
+});
+test("a stored plan whose envelope does not validate keeps its readable parts and reports what is left out", () => {
+  const gray = {id: "gray", kind: "shader", enabled: true, shader: {enabled: true, preset: "grayscale"}};
+  // A plan without its mode, as a test script passed to Play, reads as the plan it describes.
+  const modeless = {schema: 2, enabled: false, video: [gray]}, entry = {effects: modeless}, before = structuredClone(entry);
+  const stored = StoredPlan.read(entry);
+  assert.equal(stored.source, "effects");assert.deepEqual(stored.plan, Plan.validate({...modeless, mode: "advanced"}));
+  assert.deepEqual(StoredPlan.notices(stored), [], "nothing was left out");
+  assert.deepEqual(entry, before);assert.equal(JSON.stringify(StoredPlan.serialize(modeless)), JSON.stringify(modeless), "the saved value is kept until an edit");
+  const damaged = StoredPlan.read({effects: {schema: 2, mode: "advanced", enabled: "on", video: [gray], extra: true}});
+  assert.equal(damaged.source, "effects");assert.deepEqual(damaged.plan, Plan.validate({schema: 2, mode: "advanced", enabled: true, video: [gray]}));
+  assert.deepEqual(StoredPlan.notices(damaged).map(notice => notice.message.split(" is skipped")[0]),
+    ["The saved plan field “extra”", "The saved effects on/off setting"]);
+  assert.deepEqual(StoredPlan.read({effects: {schema: 2, mode: "advanced", video: "rows"}}).plan.video, []);
 });
 
 // Ownership migration (edit-operations). Saved shapes from effects-plan,

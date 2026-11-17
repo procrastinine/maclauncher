@@ -337,10 +337,29 @@ test("row-level salvage leaves out only the parts that cannot be read", () => {
   assert.match(result.dropped[3].reason, /belongs to could not be read/);assert.equal(result.dropped[0].label, "grayscale");
   assert.deepEqual(damaged, before, "salvage never changes the saved value");
   assert.deepEqual(Plan.salvage(result.plan), {plan: result.plan, dropped: []}, "a salvaged plan reads as is");
-  // Only a newer schema or a broken envelope makes the whole plan unreadable.
+  // Only a newer schema, a value that is not a plan object of schema 1 or 2,
+  // or a plan over the size limit makes the whole plan unreadable.
   assert.equal(Plan.salvage({schema: 3, mode: "advanced", video: []}).error.code, Plan.PLAN_NEWER);
-  for (const envelope of [{schema: 2, mode: "advanced", video: "rows"}, {...valid, extra: true}, {...valid, enabled: "yes"}, [valid]])
-    assert.equal(Plan.salvage(envelope).error.code, Plan.PLAN_INVALID);
+  for (const unreadable of [[valid], {mode: "advanced", video: [shader]}, {...valid, padding: "x".repeat(4 * 1024 * 1024)}])
+    assert.equal(Plan.salvage(unreadable).error.code, Plan.PLAN_INVALID);
+});
+test("a plan whose envelope does not validate keeps every part that can be read", () => {
+  const shader = {id: "gray", kind: "shader", enabled: true, shader: {enabled: true, preset: "grayscale"}};
+  const valid = {schema: 2, mode: "advanced", enabled: false, video: [shader], output: {toneMapping: "auto"}}, {mode: _mode, ...modeless} = valid;
+  const read = value => { const result = Plan.salvage(value); return [result.plan, result.dropped.map(part => [part.part, part.id])]; };
+  assert.deepEqual(read(modeless), [Plan.validate(valid), []], "a missing mode is the only mode, with nothing left out");
+  assert.deepEqual(read({...valid, mode: "simple"}), [Plan.validate(valid), [["envelope", "mode"]]]);
+  assert.deepEqual(read({...valid, extra: true, future: {a: 1}}), [Plan.validate(valid), [["envelope", "extra"], ["envelope", "future"]]]);
+  assert.deepEqual(read({...valid, enabled: "yes"}), [Plan.validate({...valid, enabled: true}), [["envelope", "enabled"]]]);
+  assert.deepEqual(read({...valid, video: "rows"}), [Plan.validate({...valid, video: []}), [["envelope", "video"]]]);
+  const many = Array.from({length: Plan.MAX_NODES + 2}, (_, index) => ({...shader, id: "row" + index}));
+  assert.deepEqual(read({...valid, video: many}), [Plan.validate({...valid, video: many.slice(0, Plan.MAX_NODES)}), [["envelope", "video"]]]);
+  // Rows are still read one by one behind a repaired envelope.
+  assert.deepEqual(read({...modeless, extra: 1, video: [shader, "row"]}), [Plan.validate(valid), [["envelope", "extra"], ["row", "#2"]]]);
+  // A reserved key is left out like any unknown field and never reaches the plan.
+  const reserved = JSON.parse('{"schema":2,"mode":"advanced","video":[],"__proto__":{"polluted":true}}');
+  assert.deepEqual(read(reserved), [Plan.validate({schema: 2, mode: "advanced", video: []}), [["envelope", "__proto__"]]]);
+  assert.equal({}.polluted, undefined);
 });
 test("ordering failures name each row against the rows before it that pass", () => {
   const colour = {id: "colour", kind: "shader", enabled: true, shader: {preset: "grayscale"}};
