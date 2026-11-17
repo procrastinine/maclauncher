@@ -106,12 +106,13 @@ async function resolve(install, runtime, context, { executableArchitecture, host
       return [item.id, Binary.compatibility({ ...item, files, requiredPaths }, record,
         { executableArchitecture, macOSVersion: host.macOSVersion || systemVersionSync() })];
     }))])) : {};
-  // A Direct3D component that the Wine loads itself serves the programs its
-  // value applies to, whatever machine its own files name.
+  // The Wine's loader policy can further restrict an included component, but
+  // cannot replace measured binary, required-file or native-closure admission.
   for (const item of input.included) {
     const lane = require('./graphics-policy').laneCompatibility(runtime, item, executableArchitecture);
     if (!lane) continue;
-    const decided = previous => lane.compatible ? { ...lane, files: previous?.files || item.files } : lane;
+    const decided = previous => previous?.compatible === false ? previous
+      : lane.compatible ? previous || lane : { ...previous, ...lane };
     compatibility[item.id] = decided(compatibility[item.id]);
     for (const role of Object.values(apiCompatibility)) if (role[item.id]) role[item.id] = decided(role[item.id]);
   }

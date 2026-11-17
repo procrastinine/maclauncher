@@ -147,3 +147,29 @@ test('a MetalSharp lane is usable only for the programs its value applies to', (
   assert.equal(Policy.laneCompatibility('metalsharp-wine', { ...description, included: false }, 'x86'), null);
   assert.equal(Policy.laneCompatibility('crossover', description, 'x86'), null);
 });
+
+
+test('a Wine source policy cannot admit a component refused by actual binary or required-file inspection', async t => {
+  const Binary = require('../src/modules/shared/runtime/binary-compatibility');
+  const { createWineResolver } = require('../src/core/runtime-resolution/wine-plan');
+  t.mock.method(Binary, 'wineCompatibilityRecord', async () => ({ layout: { architecture: 'x86_64' }, modules: {} }));
+  for (const kind of ['wrong-cpu', 'missing-file']) {
+    const root = fixture(t), wine = component(root, 'wine-' + kind, 'wined3d', ['d3d11'], { builtin: true });
+    const directory = path.join(root, kind); fs.mkdirSync(directory);
+    const file = path.join(directory, 'd3d11.dll'), pe = peFixture({ is64: kind !== 'wrong-cpu' });
+    pe.bytes.writeUInt16LE(0x2002, pe.peOffset + 22); pe.bytes.write('Wine builtin DLL\0', 64); fs.writeFileSync(file, pe.bytes);
+    const selected = { ...Description.describeTranslator(directory, { engine: 'mullion' }), included: true,
+      id: kind, embedId: 'metalsharp-wine-mullion', requiredPaths: [file] };
+    if (kind === 'missing-file') fs.unlinkSync(file);
+    const measured = Binary.compatibility(selected, { layout: { architecture: 'x86_64' }, modules: {} }, { executableArchitecture: 'x86_64', macOSVersion: '26.0' });
+    assert.equal(measured.compatible, false, kind);
+    const source = require('../src/modules/crossover/sources').get('metalsharp-wine');
+    const resolver = createWineResolver({ sourceFor: () => source,
+      optionsInventory: async () => ({ included: [selected, wine], choices: [], layout: { architecture: 'x86_64' } }) });
+    const plan = await resolver.resolve({}, 'metalsharp-wine', { runtimeSettings: { translatorD3D11: selected.id }, settings: {} },
+      { executableArchitecture: 'x86_64', host: { hardwareArch: 'arm64', macOSVersion: '26.0', physicalAppleGPU: false } });
+    assert.equal(plan.compatibility[selected.id].compatible, false, kind);
+    assert.equal(plan.compatibility[selected.id].reason, measured.reason, kind);
+    assert.notEqual(plan.components.d3d11.used?.id, selected.id, kind);
+  }
+});
