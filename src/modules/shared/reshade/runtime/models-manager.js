@@ -1,6 +1,7 @@
 const Models = require("../models");
 const Sources = require("../model-sources");
 const SteamClient = require("../steam-client-models");
+const Releases = require('../lossless-catalog');
 const {runDownloadTask} = require("../../runtime/download-manager");
 const STEAMCMD_DESCRIPTION = "Downloads SteamCMD from Valve and opens Terminal for Steam sign-in and Steam Guard, separately from the Steam desktop app. An account that owns Lossless Scaling is required. Rosetta may be installed after consent. Compatible models are imported automatically; temporary downloads and sign-in files are removed. CrossOver and the Steam desktop app are not required.";
 
@@ -36,6 +37,8 @@ function getState({ userDataDir, settings, root, platform, macOSVersion } = {}) 
   const installed = Models.listManaged(userDataDir).map(item => ({ ...item, detail: fileDetail(item), removalLabel: "Remove",
     removalConfirm: "Remove this imported model copy? The original Lossless Scaling files will remain unchanged." }));
   const versions = installed.map(item => item.version), versionLabels = Object.fromEntries(installed.map(item => [item.version, item.versionLabel]));
+  const releaseCatalog = Releases.read(userDataDir), releases = releaseCatalog?.entries || [];
+  for (const row of releases) versionLabels[row.version] = row.versionLabel;
   const catalog = { status: "success", delivery: "local-files", versions, versionLabels, installable: false, importable: Models.inspectionAvailable(),
     importLabel: "Import Lossless Scaling DLL…", importBusyLabel: "Inspecting models…",
     importInputKinds: ["file"], importExtensions: ["dll"],
@@ -58,6 +61,14 @@ function getState({ userDataDir, settings, root, platform, macOSVersion } = {}) 
     ],
     defaultVersion: normalizeSettings(settings).defaultVersion, versionLabels, catalog, variants: [] };
   catalog.sourceUrl = Sources.STORE_URL; catalog.source = Sources.STORE_URL;
+  Object.assign(catalog, {versions: [...new Set([...releases.map(row => row.version), ...versions])], versionLabels,
+    delivery: 'download', fetchedAt: releaseCatalog?.fetchedAt || null, refreshLabel: 'Refresh Steam manifest history',
+    installable: Boolean(steamClient && releases.length), installableVersions: steamClient ? releases.map(row => row.version) : [],
+    latestAvailableVersion: releases[0]?.version || null,
+    versionRequirements: Object.fromEntries(releases.map(row => [row.version, {requiresDownload: !installed.some(item => Releases.installedManifest(item) === row.manifestId),
+      available: installed.some(item => Releases.installedManifest(item) === row.manifestId), requiresBuild: false,
+      ...(!steamClient ? {installReason: 'Install Steam for Mac to download an exact depot manifest, or import an installed DLL.'} : {})}]))});
+  section.sourceLinks = [{label: 'Lossless Scaling on Steam', url: Sources.STORE_URL}, {label: 'SteamDB manifest history (third-party)', url: Releases.sourceUrl}];
   return { ...section, id: "graphics-models", sections: [section] };
 }
 
@@ -72,7 +83,15 @@ module.exports = {
     if (["downloadSteam", "downloadSteamCMD"].includes(context.setupActionId)) return require("../steam-models").downloadFromSteam(context);
     throw new Error("Unknown graphics model action.");
   },
-  refreshCatalog: async context => getState(context).catalog,
+  refreshCatalog: async context => { await Releases.refresh(context); return getState(context).catalog; },
+  installRuntime: async context => {
+    const release = Releases.read(context.userDataDir)?.entries.find(row => row.version === context.version);
+    const installed = release && Models.listInstalled(context.userDataDir).find(row => Releases.installedManifest(row) === release.manifestId);
+    if (installed) return installed;
+    if (!release) throw Error('Refresh the Steam manifest history and choose an available version.');
+    if (!SteamClient.findClient()) throw Error('Install Steam for Mac to download an exact depot manifest, or import an installed DLL.');
+    return Releases.recordInstalled(await SteamClient.downloadWithClient({...context, manifestId: release.manifestId}), release.manifestId);
+  },
   uninstallRuntime: ({ userDataDir, version }) => Models.removeModel(userDataDir, version),
   applySettingsUpdate: (action, payload, settings) => action === "setDefault"
     ? normalizeSettings({ defaultVersion: payload?.version }) : normalizeSettings(settings),

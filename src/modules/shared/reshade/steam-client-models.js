@@ -11,6 +11,11 @@ function launchClient(executable, args) {
   });
 }
 const APP_ID = "993090", DEPOT_ID = "993091";
+function manifestId(value) {
+  if (value == null) return null;
+  if (!/^[1-9]\d{0,19}$/.test(value) || BigInt(value) > 0xffffffffffffffffn) throw Error('Choose a valid Steam depot manifest.');
+  return value;
+}
 function clientRoots(home = os.homedir()) {
   return ["/Applications/Steam.app/Contents/MacOS", path.join(home, "Applications/Steam.app/Contents/MacOS"),
     path.join(home, "Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS")];
@@ -49,7 +54,8 @@ async function acquire(context = {}, dependencies = {}) {
   onProgress?.({ detail: "Waiting for Steam; cancel stops automatic import", downloaded: 0, total: null });
   // Steam forwards these arguments to the running client. download_depot uses
   // that client's existing account without changing its platform configuration.
-  await execute(executable, ["-console", "+download_depot", APP_ID, DEPOT_ID]);
+  const manifest = manifestId(context.manifestId);
+  await execute(executable, ["-console", "+download_depot", APP_ID, DEPOT_ID, ...(manifest ? [manifest] : [])]);
   const allowed = new Set([steam, ...clientRoots(home), path.dirname(executable)].map(root =>
     path.join(root, `steamapps/content/app_${APP_ID}/depot_${DEPOT_ID}`)));
   const deadline = Date.now() + timeout;
@@ -78,4 +84,4 @@ function downloadWithClient(context = {}) {
   return runDownloadTask(context.downloads, { dedupeKey: "lossless-steam", managerId: "graphics-models", sectionId: "default",
     label: "Lossless Scaling", detail: "Waiting for Steam; cancel stops automatic import" }, task => acquire({ ...context, ...task }));
 }
-module.exports = { APP_ID, DEPOT_ID, clientRoots, findClient, acquire, downloadWithClient };
+module.exports = { APP_ID, DEPOT_ID, manifestId, clientRoots, findClient, acquire, downloadWithClient };
