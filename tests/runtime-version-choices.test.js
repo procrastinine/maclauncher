@@ -138,3 +138,32 @@ test("a registered runtime that was moved or deleted reads as not found instead 
   const [incomplete] = Custom.list({ managerId: manager.id, userDataDir: root });
   assert.match(incomplete.reason, /ENOENT.*runtime\.json/, "a missing file inside an existing folder keeps its detail");
 });
+
+test("a selection reads the manager's state for a custom default only while a registration or a saved path exists", t => {
+  const Custom = require("../src/modules/shared/runtime/custom-runtime");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "custom-selection-reads-")), folder = path.join(root, "Player");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(folder, { recursive: true });
+  let reads = 0;
+  const manager = { id: "reads-fixture", normalizeSettings: value => ({ ...value }),
+    getState: ({ settings } = {}) => { reads++; return { installed: [], catalog: { versions: [] }, defaultVersion: settings?.defaultVersion || null }; },
+    resolveSelection: () => ({ version: "1.0", ready: true, install: {} }),
+    customRuntime: { inspect: runtimePath => { inspections++; return { installDir: runtimePath, executablePath: runtimePath }; } } };
+  let inspections = 0;
+  Custom.instrumentManagers([manager]);
+  assert.equal(manager.resolveSelection(null, {}, root).version, "1.0");
+  assert.equal(reads, 0, "Without a registration the manager's own selection runs without reading its state");
+  // A path saved in the manager's own default field by an earlier version still selects that path.
+  assert.equal(manager.resolveSelection(null, { runtimes: { [manager.id]: { defaultVersion: folder } } }, root).version, folder);
+  fs.mkdirSync(path.join(root, "runtimes", manager.id), { recursive: true });
+  fs.writeFileSync(path.join(root, "runtimes", manager.id, "custom-runtimes.json"), JSON.stringify({ runtimes: [{ path: folder, sectionId: "default" }] }));
+  // The manager's own default decides without inspecting the registrations.
+  inspections = 0;
+  assert.equal(manager.resolveSelection(null, { runtimes: { [manager.id]: { defaultVersion: "1.0" } } }, root).version, "1.0");
+  assert.equal(inspections, 0, "A manager default needs no registration inspected");
+  reads = 0;
+  const selected = manager.resolveSelection(null, {}, root);
+  assert.equal(selected.version, folder, "A registration is the effective default when the manager has no version of its own");
+  assert.ok(reads > 0);
+  assert.equal(manager.getState({ userDataDir: root }).defaultVersion, folder, "Runtimes shows the same default");
+});

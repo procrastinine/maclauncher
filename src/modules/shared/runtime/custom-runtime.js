@@ -4,7 +4,7 @@ const crypto = require("node:crypto");
 const { managerDefaultVersion } = require("./version-choices");
 
 const managers = new Map(), instrumented = new WeakSet(), registrations = new WeakMap();
-const providerBindings = new WeakMap();
+const providerBindings = new WeakMap(), ownStates = new WeakMap();
 const descriptorOwners = new WeakMap(), providerMethods = new WeakMap(), managerMethods = new WeakMap();
 const executableCache = new Map();
 const MAX_REGISTRATIONS = 256;
@@ -209,6 +209,12 @@ function remove(manager, { version, sectionId = "default", userDataDir } = {}) {
   write(userDataDir, manager.id, next);
   return true;
 }
+function legacyPath(manager, configured, sectionId) {
+  const parts = manager.customRuntime?.defaultsPath?.(sectionId);
+  let value = configured;
+  for (const part of Array.isArray(parts) && parts.length ? parts : ["defaultVersion"]) value = value?.[part];
+  return isPath(value);
+}
 function selectionPath(manager, entry, settings, options = {}) {
   const explicit = [options.version, entry?.runtimeData?.[entry?.runtimeId || manager.id]?.version,
     entry?.runtimeData?.[manager.id]?.version].find(value => typeof value === "string" && value.trim() && value.trim() !== "auto");
@@ -218,12 +224,31 @@ function selectionPath(manager, entry, settings, options = {}) {
   const recommended = typeof recommendation === "function" ? recommendation() : recommendation;
   if (typeof recommended === "string" && recommended.trim() && recommended !== "auto") return isPath(recommended) ? recommended : null;
   const section = options.sectionId || manager.customRuntime?.sectionForEntry?.(entry, settings) || "default";
-  const saved = defaults(settings?.runtimes?.[manager.id])[section];
+  const configured = settings?.runtimes?.[manager.id], saved = defaults(configured)[section];
   if (saved) return saved;
   if (!options.userDataDir) return null;
-  const state = manager.getState?.({ userDataDir: options.userDataDir, settings: settings?.runtimes?.[manager.id] });
-  const effective = state?.sections?.find(row => row.id === section) || state;
-  return isPath(effective?.defaultVersion) ? effective.defaultVersion : null;
+  // The effective default is a path only through a registration or a path
+  // kept in the manager's own default field; without either, the manager's
+  // state is not read.
+  if (!records(options.userDataDir, manager.id).length && !legacyPath(manager, configured, section)) return null;
+  const own = ownStates.get(manager), context = { userDataDir: options.userDataDir, settings: configured };
+  if (!own) {
+    const state = manager.getState?.(context), effective = state?.sections?.find(row => row.id === section) || state;
+    return isPath(effective?.defaultVersion) ? effective.defaultVersion : null;
+  }
+  // The same default as the listed state: the manager's own default, then its
+  // first ready installed version, then the newest ready registration.
+  // Registrations are inspected only when the manager has neither.
+  const state = own.call(manager, context), sections = state?.sections?.length ? state.sections : [{ ...state, id: "default" }];
+  const effective = sections.find(row => row.id === section) || (sections.length === 1 ? sections[0] : null);
+  if (!effective) return isPath(state?.defaultVersion) ? state.defaultVersion : null;
+  const pathOnly = value => isPath(value) ? value : null;
+  if (effective.defaultVersion) return pathOnly(effective.defaultVersion);
+  const installed = managerDefaultVersion({ installed: (effective.installed || []).filter(row => row.ready !== false).map(row => row.version) });
+  if (installed) return pathOnly(installed);
+  const local = listFor(manager, { sectionId: effective.id, userDataDir: options.userDataDir }).filter(row => row.ready)
+    .sort((a, b) => String(b.registeredAt).localeCompare(String(a.registeredAt)));
+  return pathOnly(managerDefaultVersion({ installed: local.map(row => row.version) }));
 }
 function selection(manager, entry, settings, userDataDir, options = {}) {
   const version = selectionPath(manager, entry, settings, { ...options, userDataDir });
@@ -358,6 +383,7 @@ function instrumentManagers(values) {
       return normalized;
     };
     const getState = manager.getState;
+    if (getState) ownStates.set(manager, getState);
     if (getState) manager.getState = function(options = {}) {
       const state = getState.call(this, options), selectedDefaults = defaults(options.settings);
       const sections = state.sections?.length ? state.sections : [{ ...state, id: "default" }];
