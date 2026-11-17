@@ -71,7 +71,13 @@ test("shared model management imports locally, reloads without network and remov
   assert.equal(state.sections[0].installed.length, 1);
   assert.equal(state.catalog.installable, false);
   assert.deepEqual(state.catalog.importExtensions, ["dll"]);
-  assert.deepEqual((await Manager.refreshCatalog(options)).versions, [installed.version]);
+  // Refresh lists Steam's manifest history beside the imported copy; the history page is a fixture here.
+  const manifestId = "1234567890123456789", History = require("../src/modules/shared/reshade/lossless-catalog");
+  t.mock.method(require("../src/modules/shared/runtime/upstream-transport"), "fetchUrlBuffer", async url => {
+    assert.equal(url, History.sourceUrl);
+    return { status: 200, headers: {}, body: Buffer.from(`<h2>Previously seen manifests</h2><table><tr><td>2026-01-01</td><td>${manifestId}</td></tr></table>`) };
+  });
+  assert.deepEqual(new Set((await Manager.refreshCatalog(options)).versions), new Set([installed.version, "steam-manifest-" + manifestId]));
   assert.ok(require("../src/modules/registry").listSharedRuntimeManagers().some(manager => manager.id === Manager.id));
   await Manager.uninstallRuntime({ userDataDir: options.userDataDir, version: installed.version });
   settings = Manager.updateSettingsAfterUninstall(settings, {}, options);
