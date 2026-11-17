@@ -364,7 +364,9 @@ export function RuntimesView({
           {componentLibrary ? <ComponentsView navigationKey={navigationKey} /> : pluginLibrary && activeRuntimeManager ? <PluginLibrary key={activeRuntimeManager.id}
             manager={activeRuntimeManager} sections={activeRuntimeChoices.filter(choice => choice.managerId === activeRuntimeManager.id)}
             state={state} api={settingsApi} ui={activeRuntimeUi} downloads={downloadTasks}
-            onInstall={onRuntimeInstall} onUninstall={onRuntimeUninstall} onOpenSource={onOpenSource} /> : activeRuntimeManager && activeRuntimeSection ? (
+            onInstall={onRuntimeInstall} onUninstall={onRuntimeUninstall} onOpenSource={onOpenSource}
+            onRefresh={onRuntimeRefresh} onSetDefault={(managerId, sectionId, version) => onRuntimeSetDefault(managerId, sectionId, version)}
+            onSelect={updateRuntimeUiSection} /> : activeRuntimeManager && activeRuntimeSection ? (
             <div
               className="runtimeTabPanel"
               id={`runtime-panel-${activeRuntimeManager.id}-${activeRuntimeSection.id}`}

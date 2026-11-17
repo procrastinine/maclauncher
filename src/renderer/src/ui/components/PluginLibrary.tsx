@@ -1,12 +1,15 @@
 import React, { useRef, useState } from "react";
-import type { DownloadTask, LauncherState, RuntimeManagerState, RuntimeUiState } from "../types";
-import { buildRuntimeSettingsDefaults, formatDownloadPercent, formatUserError, normalizeRuntimeSettings, resolveModuleRuntimeSettings,
-  resolveRuntimeSections, resolveRuntimeSettingsSchema, runtimeSettingsEqual } from "../ui-helpers";
+import type { DownloadTask, LauncherState, RuntimeManagerState, RuntimeRefreshOptions, RuntimeUiState } from "../types";
+import { availabilityLabel, buildRuntimeSettingsDefaults, formatDownloadPercent, formatUserError, normalizeRuntimeSettings, resolveModuleRuntimeSettings,
+  resolveRuntimeSections, resolveRuntimeSettingsSchema, runtimeSettingsEqual, runtimeVersionTagger } from "../ui-helpers";
 import type { RuntimeSettingsApi } from "./RuntimeSettingsWindow";
 import type { RuntimeTabSection } from "./runtime-tabs-model";
 import { runtimeSourceUrl } from "./runtime-tabs-model";
 import { ErrorText } from "./ErrorText";
 import { Toggle } from "./FieldRow";
+import { RuntimeCatalogSources } from "./RuntimeCatalogSources";
+import { StatusBadge } from "./StatusBadge";
+import { TrashIcon } from "../icons";
 
 type Props = {
   manager: RuntimeManagerState;
@@ -18,6 +21,10 @@ type Props = {
   onInstall: (managerId: string, sectionId: string, version: string) => unknown;
   onUninstall: (managerId: string, sectionId: string, install: Record<string, any>) => unknown;
   onOpenSource?: (url: string) => void;
+  // The shared Runtimes controls for a plugin's upstream versions and default.
+  onRefresh?: (managerId: string, sectionId: string, options?: RuntimeRefreshOptions) => void;
+  onSetDefault?: (managerId: string, sectionId: string, version: string | null) => void;
+  onSelect?: (managerId: string, key: string, field: "installVersion" | "installVariant" | "installArchitecture", value: string) => void;
 };
 type PluginContext = { moduleId: string; runtimeId: string };
 
@@ -35,9 +42,11 @@ async function setPluginSetting(state: LauncherState | undefined, api: RuntimeSe
 }
 
 // Runtimes → a plugin library: installation, updates and removal of each
-// plugin, and adding a plugin from a URL or a local file. Whether a plugin is
-// used, and the runtime's own configuration, are set in Settings.
-export function PluginLibrary({ manager, sections, state, api, ui, downloads, onInstall, onUninstall, onOpenSource }: Props) {
+// plugin, and adding a plugin from a URL or a local file. Each listed plugin's
+// Versions use the shared Runtimes controls: its upstream versions, installing
+// any of them, and the default and removal of each installed version. Whether
+// a plugin is used, and the runtime's own configuration, are set in Settings.
+export function PluginLibrary({ manager, sections, state, api, ui, downloads, onInstall, onUninstall, onOpenSource, onRefresh, onSetDefault, onSelect }: Props) {
   const [source, setSource] = useState("");
   const [scriptPath, setScriptPath] = useState("");
   const [adding, setAdding] = useState(false);
@@ -91,12 +100,31 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
     const versionLabel = installed?.providedVersionLabel || plugin.versionLabel || (/^[a-f0-9]{40,64}$/i.test(displayVersion) ? displayVersion.slice(0, 12) : displayVersion);
     const link = runtimeSourceUrl(plugin.sourceUrl || section.catalog?.sourceUrl);
     const name = section.label || choice.label;
-    const performAction = async () => {
-      const result = await (ready || plugin.custom ? onUninstall(manager.id, choice.sectionId, installed) : onInstall(manager.id, choice.sectionId, version));
+    // The plugin turns on when its first copy is installed and off when its
+    // last usable copy is removed; other version changes keep the setting.
+    const followSetting = async (result: unknown, enabled: boolean) => {
       if (result === false || result === undefined || typeof plugin.settingKey !== "string" || !context) return;
-      try { await setPluginSetting(state, api, context, plugin.settingKey, !ready); }
+      try { await setPluginSetting(state, api, context, plugin.settingKey, enabled); }
       catch (error) { setActionError(formatUserError(error)); }
     };
+    const performAction = async () => {
+      const result = await (ready || plugin.custom ? onUninstall(manager.id, choice.sectionId, installed) : onInstall(manager.id, choice.sectionId, version));
+      await followSetting(result, !ready);
+    };
+    const usable = (section.installed || []).filter((item: Record<string, any>) => item.ready !== false);
+    const installVersion = async (value: string) => {
+      const result = await onInstall(manager.id, choice.sectionId, value);
+      if (!usable.length) await followSetting(result, true);
+    };
+    const removeVersion = async (row: Record<string, any>) => {
+      const result = await onUninstall(manager.id, choice.sectionId, row);
+      if (row.ready !== false && !usable.some((item: Record<string, any>) => item !== row)) await followSetting(result, false);
+    };
+    // Copies MacLauncher installed for this plugin; a plugin added in its place
+    // is managed on its own card.
+    const versionRows = plugin.custom ? [] : (section.installed || []).filter((item: Record<string, any>) => !item.suppliedBy);
+    const versionTag = runtimeVersionTagger(section);
+    const supportsDefault = section.supportsDefault !== false && Boolean(onSetDefault);
     return <article className="pluginCard" key={choice.id} aria-label={name}>
       <div className="pluginCardTitle">{name}</div>
       {plugin.description && <p className="pluginCardDescription">{plugin.description}</p>}
@@ -121,6 +149,36 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
       </div>
       {installed && !ready && installed.reason && <p className="pluginCardIssue">{installed.reason}</p>}
       {updateResults[choice.sectionId] && <p className="detailMeta" role="status">{updateResults[choice.sectionId]}</p>}
+      {!plugin.custom && onRefresh && <details className="pluginVersions">
+        <summary>Versions</summary>
+        <RuntimeCatalogSources managerId={manager.id} section={section} ui={ui} busy={busy} variant=""
+          downloads={download ? [download] : []} onOpenSource={onOpenSource}
+          onRefresh={options => onRefresh(manager.id, choice.sectionId, options)}
+          onSelect={(key, field, value) => onSelect?.(manager.id, key, field, value)}
+          onInstall={value => installVersion(value)} />
+        {versionRows.length > 0 && <div className="saveList" aria-label={`Installed ${name} versions`}>
+          {versionRows.map((row: Record<string, any>) => {
+            const tag = versionTag(row.version), isDefault = supportsDefault && row.version === section.defaultVersion;
+            return <div className="saveRow" key={row.version}>
+              <div className="saveRowMain"><div className="saveName">{tag}
+                {isDefault && <span className="badge badgeAccent">Default</span>}
+                {row.ready === false && <StatusBadge tone="warning">{availabilityLabel("needsRepair")}</StatusBadge>}
+              </div></div>
+              <div className="saveRowActions">
+                {!isDefault && row.ready !== false && supportsDefault && <button type="button" className="btn small" disabled={busy}
+                  aria-label={`Set ${name} ${tag} as default`} onClick={() => onSetDefault!(manager.id, choice.sectionId, row.version)}>Set default</button>}
+                {row.removable !== false && <button type="button" className="btn iconOnly danger" disabled={busy}
+                  title={`Remove ${name} ${tag}`} aria-label={`Remove ${name} ${tag}`} onClick={() => removeVersion(row)}><TrashIcon /></button>}
+              </div>
+            </div>;
+          })}
+        </div>}
+        {supportsDefault && section.defaultSource === "saved" && <div className="pluginCardActions pluginVersionDefault">
+          <button type="button" className="btn small" disabled={busy} aria-label={`Use the automatic ${name} version`}
+            title={section.defaultVersion ? `${versionTag(section.defaultVersion)} is the chosen default. MacLauncher chooses one automatically again.` : undefined}
+            onClick={() => onSetDefault!(manager.id, choice.sectionId, null)}>Use automatic default</button>
+        </div>}
+      </details>}
     </article>;
   };
   return <section className="pluginLibrary" aria-label="Plugins">

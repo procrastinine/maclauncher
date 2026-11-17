@@ -2331,6 +2331,10 @@ select.input:not([multiple]) {
 .pluginStatus.repair, .pluginCardIssue { color: var(--warning, var(--muted)); }
 .pluginVersion { color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .pluginCardIssue { margin: 10px 0 0; font-size: var(--font-sm); line-height: 1.5; }
+.pluginVersions { margin-top: 12px; }
+.pluginVersions > summary { cursor: pointer; color: var(--muted); font-size: var(--font-sm); }
+.pluginVersions[open] > summary { margin-bottom: 10px; }
+.pluginVersions .saveList, .pluginVersionDefault { margin-top: 10px; }
 
 .settingsDisplayRow { align-items: start; }
 .settingsDisplayTable { width: 100%; border-collapse: collapse; font-size: var(--font-sm); }
