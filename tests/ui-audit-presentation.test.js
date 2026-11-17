@@ -272,9 +272,12 @@ test('results from an action still running stay hidden until completion', () => 
 test('help placement stays next to its anchor and inside each viewport edge', () => {
   const place = components.positionHelpTip;
   assert.deepEqual(place({ left: 100, right: 116, top: 80, bottom: 96 }, 200, 70, 800, 600), { left: 124, top: 76 });
+  // Without room to the right, help opens below or above its button rather than over the heading to its left (GUI 0925 I1).
+  assert.deepEqual(place({ left: 600, right: 616, top: 40, bottom: 56 }, 300, 200, 800, 600), { left: 492, top: 64 });
   const right = place({ left: 750, right: 766, top: 570, bottom: 586 }, 200, 70, 800, 600);
-  assert.equal(right.left, 542);
-  assert.equal(right.top, 522);
+  assert.deepEqual(right, { left: 592, top: 492 });
+  // With no room below or above, it opens to the left.
+  assert.deepEqual(place({ left: 700, right: 716, top: 200, bottom: 216 }, 200, 500, 800, 600), { left: 492, top: 92 });
   const cramped = place({ left: 20, right: 36, top: 20, bottom: 36 }, 240, 160, 280, 200);
   assert.ok(cramped.left >= 8 && cramped.top >= 8 && cramped.left + 240 <= 272 && cramped.top + 160 <= 192);
 });

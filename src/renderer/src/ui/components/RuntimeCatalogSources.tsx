@@ -29,6 +29,8 @@ type Props = {
   identity?: string;
   /** Links the section itself declares, shown with its source's links. */
   links?: Array<{ label?: string; url?: string }>;
+  /** Links the panel already shows elsewhere, such as a plugin card's Source link, which the source rows do not repeat. */
+  shownLinks?: string[];
 };
 
 // A source's own description; nothing is written for it from its URL.
@@ -36,7 +38,7 @@ function sourceDescription(source: Record<string, any>) {
   return typeof source.description === "string" ? source.description.trim() : "";
 }
 
-export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource, onRegister, pathForFile, cpuBuildLabels = false, identity = "", links: sectionLinks = [] }: Props) {
+export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource, onRegister, pathForFile, cpuBuildLabels = false, identity = "", links: sectionLinks = [], shownLinks = [] }: Props) {
   // The automatic CPU is the one Play uses: the launcher's own, or another CPU
   // this Mac runs when the launcher's CPU has no build.
   const defaultArchitecture = section.automaticArchitecture || section.launcherArchitecture || section.catalog?.architecture;
@@ -133,7 +135,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       // a link into the same repository as an earlier one is left out.
       const extraLinks = [...(primary[0] === group ? sectionLinks : []),
         ...(sources.length === 1 && Array.isArray(section.catalog?.sourceLinks) ? section.catalog.sourceLinks : [])];
-      const links = runtimeDistinctLinks([...(url ? [{ url, label: linkLabel }] : []), ...extraLinks]);
+      const links = runtimeDistinctLinks([...(url ? [{ url, label: linkLabel }] : []), ...extraLinks], shownLinks);
       const pending = ui.pendingActions?.[key];
       const refreshing = pending === "refreshCatalog" || source.status === "loading";
       const sourceBusy = busy || Boolean(pending) || refreshing;

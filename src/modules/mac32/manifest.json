@@ -53,7 +53,7 @@
               "key": "enableGamePatches",
               "type": "boolean",
               "label": "Game compatibility patches",
-              "description": "Allow mac32 to apply its compatibility fixes in game memory. Fixes apply only to matching game-library versions; original files remain unchanged."
+              "description": "Allows mac32 to apply its compatibility fixes in game memory. Fixes apply only to matching game-library versions; original files remain unchanged."
             }
           ]
         },

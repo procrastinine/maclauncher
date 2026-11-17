@@ -371,7 +371,7 @@ test('each inspector section has at most one help button, beside its heading, an
   const launch = headings.find(heading => heading.startsWith('Launch'));
   assert.deepEqual([...launch.matchAll(/<dt>([^<]+)<\/dt>/g)].map(match => match[1]), ['Launch arguments', 'Runtime', 'Network access', 'Steam client on Play']);
   assert.match(launch, /<dt>Runtime<\/dt><dd>Runtime description\nSeparate runtime data<\/dd>/);
-  assert.match(markup, /<div class="detailLabel" title="Allow Internet and local-network connections for this game\.[^"]*">Network access<\/div>/);
+  assert.match(markup, /<div class="detailLabel" title="Allows Internet and local-network connections for this game\.[^"]*">Network access<\/div>/);
   assert.match(markup, /<div class="detailLabel" title="Starting Steam connects to the Internet\.[^"]*">Steam client on Play<\/div>/);
   assert.match(markup, /<div class="detailLabel" title="Runtime description\nSeparate runtime data">Runtime<\/div>/);
   assert.doesNotMatch(markup, /About graphics views|About network access|About this runtime/);

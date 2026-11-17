@@ -307,6 +307,8 @@ test('Settings and Credits use plain native-window content without HTML close or
   assert.match(ackCss, /\.ackRow \{[^}]*grid-template-columns: minmax\(180px, 1fr\) minmax\(0, 1fr\);/);
   assert.match(ackCss, /\.ackNote \{\s*color: var\(--muted\);\s*font-size: var\(--font-sm\);\s*\}/);
   assert.doesNotMatch(/\.ackTitle \{[^}]*\}/.exec(ackCss)[0], /font-weight/);
+  // The last section ends with its table, without a stray rule below it (GUI 0925 C3).
+  assert.match(ackCss, /\.creditsResources \{[^}]*border-bottom: 0;/);
   for (const markup of [settings, credits]) assert.doesNotMatch(markup, /modalBackdrop|aria-modal|role="dialog"|aria-label="Close"|Back to Library/);
 });
 // Rows show name, format, input → output and origin; each file's full path and
@@ -497,6 +499,8 @@ test('local application versions show paths and independent defaults without dow
   assert.match(markup, /26.0 · Player Beta<\/span><span class="badge badgeAccent">Default/);
   assert.match(markup, /\/Applications\/Player Beta\.app/);
   assert.match(markup, /aria-label="Find installed applications"/);
+  // The header's refresh is a small control, so the Applications header is as tall as the Versions header (GUI 0877 R29).
+  assert.match(markup, /<button class="btn small iconOnly runtimeRefresh"[^>]*aria-label="Find installed applications"/);
   assert.match(markup, />Add application…<\/button>/);
   assert.equal((markup.match(/aria-label="Remove"/g) || []).length, 2);
   // Each application is its own Default choice.

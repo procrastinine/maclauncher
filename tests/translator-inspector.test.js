@@ -76,14 +76,15 @@ test('actual provider status rows render selected to used for every API, Vulkan 
     props.runtimeStatusEntry = { runtimeId: runtime, status: { ...status, details: [...status.details,
       { label: 'DXMT temporal adapter', value: 'Unavailable', detail: 'Camera fixture notice.' }] } };
     const rendered = renderRows(t, props);
-    for (const row of rows) {
-      const labelRows = rendered.rows.filter(node => elements(node).some(child => child.props.className === 'detailLabel' && child.props.children === row.label));
-      assert.equal(labelRows.length, 1, row.label + ' appears once');
+    // A choice that is also what runs reads once, and neighbouring rows that read the same share one row naming each (GUI 0925 I2).
+    const expected = [['Direct3D 8', 'Automatic'], ['Direct3D 9, 10 / 10.1 and 11', rows[1].selected + ' → ' + rows[1].used],
+      ['Direct3D 12', rows[4].used], ['Vulkan', rows[5].used], ['Video codecs', rows[6].used]];
+    for (const [label, text] of expected) {
+      const labelRows = rendered.rows.filter(node => elements(node).some(child => child.props.className === 'detailLabel' && child.props.children === label));
+      assert.equal(labelRows.length, 1, label + ' appears once');
       const value = elements(labelRows[0]).find(child => child.props.className === 'detailValue');
-      // A choice that is also what runs reads once.
-      const text = row.selected === row.used ? row.used : row.selected + ' → ' + row.used;
       assert.equal(React.Children.toArray(value.props.children).filter(child => typeof child === 'string').join(''), text);
-      assert.equal(renderToStaticMarkup(labelRows[0]).includes(' → '), row.selected !== row.used);
+      assert.equal(renderToStaticMarkup(labelRows[0]).includes(' → '), text.includes(' → '));
     }
     // The arrow says a choice falls back; translator rows carry no reason lines (GUI 0877 L2).
     assert.equal(rendered.markup.includes('Required fixture symbol is absent.'), false);
@@ -168,4 +169,16 @@ test('only the DLSS forwarding line stays under a translator row, and repeated s
   assert.equal(label.presentLabel('DXVK 3.1.1 · dxvk-gplasync'), 'DXVK 3.1.1 · dxvk-gplasync', 'a folder that tells registrations apart stays');
   const css = require('node:fs').readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
   assert.match(css, /\.detailRow\.textRow \{ align-items: baseline; \}/);
+});
+
+test('translator rows that all read the same runtime choice are one Translators row (GUI 0925 I2)', () => {
+  const automatic = "Sikarugir's automatic choice";
+  const rows = ['Direct3D 8', 'Direct3D 9', 'Direct3D 10 / 10.1', 'Direct3D 11', 'Direct3D 12', 'Vulkan', 'Video codecs']
+    .map((label, index) => ({ id: 'row' + index, label, selected: automatic, used: automatic }));
+  assert.deepEqual(inspector.inspectorTranslatorRows(rows), [{ id: 'row0', value: automatic, note: '',
+    label: 'Translators', title: 'Direct3D 8, Direct3D 9, Direct3D 10 / 10.1, Direct3D 11, Direct3D 12, Vulkan and Video codecs' }]);
+  // A row with a line of its own is never merged.
+  const forwarding = { id: 'd3d12', label: 'Direct3D 12', selected: 'DXMT', used: 'DXMT', reasonCode: 'dlss-forwarding', reason: 'DLSS forwards to the graphics pipeline.' };
+  const split = inspector.inspectorTranslatorRows([{ id: 'd3d11', label: 'Direct3D 11', selected: 'DXMT', used: 'DXMT' }, forwarding]);
+  assert.deepEqual(split.map(row => [row.label, row.note]), [['Direct3D 11', ''], ['Direct3D 12', 'DLSS forwards to the graphics pipeline.']]);
 });

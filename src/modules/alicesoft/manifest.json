@@ -126,7 +126,7 @@
               "key": "gameId",
               "type": "string",
               "label": "Game ID override",
-              "description": "Use the upstream game ID for translated or modified games."
+              "description": "Uses the upstream game ID for translated or modified games."
             },
             {
               "key": "textHook",
@@ -190,7 +190,7 @@
               "key": "gameId",
               "type": "string",
               "label": "Game ID override",
-              "description": "Use the upstream game ID for translated or modified games."
+              "description": "Uses the upstream game ID for translated or modified games."
             },
             {
               "key": "textHook",

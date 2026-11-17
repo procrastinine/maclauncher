@@ -76,7 +76,7 @@ Runtimes tabs: 32-bit Mac.
 | --- | --- | --- | --- |
 | Application arguments | List |  | One argument per line. |
 | Additional library directory | Text |  | An optional folder containing compatible 32-bit Mac libraries. |
-| Game compatibility patches | On/Off | Off | Allow mac32 to apply its compatibility fixes in game memory. Fixes apply only to matching game-library versions; original files remain unchanged. |
+| Game compatibility patches | On/Off | Off | Allows mac32 to apply its compatibility fixes in game memory. Fixes apply only to matching game-library versions; original files remain unchanged. |
 
 | Action group | Actions |
 | --- | --- |
@@ -118,7 +118,7 @@ Runtimes tabs: AliceSoft → Alice tools; AliceSoft → System 1–3; AliceSoft 
 | --- | --- | --- | --- |
 | Version | Default; installed or detected options | Default |  |
 | Font override | Text |  | Optional local TTF/OTF. Bundled runtimes provide a default font automatically. |
-| Game ID override | Text |  | Use the upstream game ID for translated or modified games. |
+| Game ID override | Text |  | Uses the upstream game ID for translated or modified games. |
 | Text capture | Off; Console; Clipboard | Off |  |
 | Start fullscreen | On/Off | Off |  |
 
@@ -128,7 +128,7 @@ Runtimes tabs: AliceSoft → Alice tools; AliceSoft → System 1–3; AliceSoft 
 | --- | --- | --- | --- |
 | Version | Default; installed or detected options | Default |  |
 | Font override | Text |  | Optional local TTF/OTF for both text styles. Bundled runtimes provide gothic and mincho fonts automatically. |
-| Game ID override | Text |  | Use the upstream game ID for translated or modified games. |
+| Game ID override | Text |  | Uses the upstream game ID for translated or modified games. |
 | Text capture | Off; Console; Clipboard | Off |  |
 | Start fullscreen | On/Off | Off |  |
 
@@ -166,16 +166,16 @@ Runtimes tabs: Tools → Apktool; Tools → JADX; MacLauncher Android → JVM; M
 | Execution | JVM; ART | JVM | Android execution engine. Changes apply on the next launch. |
 | Initial width | Number 64–8192 | `1280` |  |
 | Initial height | Number 64–8192 | `800` |  |
-| OpenGL ES backend | Metal; Vulkan; installed or detected options | Metal | Select ANGLE's graphics backend for the next launch. Vulkan uses the selected Vulkan implementation. |
-| Vulkan implementation | Text | `auto` | Select an installed Vulkan implementation for Vulkan apps and ANGLE's Vulkan backend. Downloads are handled in Runtimes under Graphics → MoltenVK and KosmicKrisp. |
+| OpenGL ES backend | Metal; Vulkan; installed or detected options | Metal | Selects ANGLE's graphics backend for the next launch. Vulkan uses the selected Vulkan implementation. |
+| Vulkan implementation | Text | `auto` | Selects an installed Vulkan implementation for Vulkan apps and ANGLE's Vulkan backend. Downloads are handled in Runtimes under Graphics → MoltenVK and KosmicKrisp. |
 | Manual tilt *(per game)* | Off; Keyboard; Controller | Off | Provide virtual motion sensors. Keyboard uses Q/E to tilt left/right and R to recenter; Option + arrow keys and Option + 0 are also available. Controller uses the right stick. No physical motion or location is collected. |
 | Keyboard touch joystick *(per game)* | Off; WASD; Arrow keys; WASD and arrow keys | WASD | WASD controls a virtual touch joystick by default while the mouse operates a second touch, such as a boost button. Joystick mapping pauses during text editing; Command shortcuts retain normal keyboard input. Applies on the next launch. |
 | Joystick center X (%) *(per game)* | Number 0–100 | `18` | Horizontal center, measured from the left of the Android display. |
 | Joystick center Y (%) *(per game)* | Number 0–100 | `75` | Vertical center, measured from the top of the Android display. |
 | Joystick radius (%) *(per game)* | Number 0.01–50 | `12` | Drag distance as a percentage of the shorter Android display dimension. Diagonal movement keeps the same distance. |
-| Allow ads | On/Off | Off | Allow connections to known advertising hosts, including rewarded ads. Off by default. Applies on the next launch; game settings can override the Android default. External web links always require confirmation. |
-| Use microG *(per game)* | On/Off | Off | Enable installed Google services for this game without signing in. Restart to apply. |
-| microG account *(per game)* | Text |  | Use microG anonymously or with a shared account from Settings → Android. Restart to apply. |
+| Allow ads | On/Off | Off | Allows connections to known advertising hosts, including rewarded ads. Off by default. Applies on the next launch; game settings can override the Android default. External web links always require confirmation. |
+| Use microG *(per game)* | On/Off | Off | Enables installed Google services for this game without signing in. Restart to apply. |
+| microG account *(per game)* | Text |  | Uses microG anonymously or with a shared account from Settings → Android. Restart to apply. |
 | Audio input *(per game)* | Text |  |  |
 | OBS camera *(per game)* | Text |  |  |
 
@@ -186,8 +186,8 @@ Runtimes tabs: Tools → Apktool; Tools → JADX; MacLauncher Android → JVM; M
 | Initial width | Number 64–8192 | `1280` |  |
 | Initial height | Number 64–8192 | `800` |  |
 | Graphics backend | Automatic; Metal; Vulkan (MoltenVK) | Automatic |  |
-| Google integration *(per game)* | On/Off | Off | Enable Google account access for this application. Restart to apply. |
-| Google account *(per game)* | Text |  | Use Google services anonymously or with an account from Settings → Android. Restart to apply. |
+| Google integration *(per game)* | On/Off | Off | Enables Google account access for this application. Restart to apply. |
+| Google account *(per game)* | Text |  | Uses Google services anonymously or with an account from Settings → Android. Restart to apply. |
 
 | Action group | Actions |
 | --- | --- |
@@ -313,7 +313,7 @@ Runtimes tabs: RFVP; Tools → msg-tool.
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
 | Text encoding | Japanese (Shift-JIS); Chinese (GBK); Unicode (UTF-8) | Japanese (Shift-JIS) | Japanese game data uses Shift-JIS. Select the encoding supplied by a translation patch. |
-| High-resolution text | On/Off | On | Render text at the display scale. |
+| High-resolution text | On/Off | On | Renders text at the display scale. |
 
 Inspector details: Script, Game resolution, Resource archives.
 
@@ -508,7 +508,7 @@ Runtimes tabs: PlayCover.
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| Keyboard and mouse mapping | On/Off | On | Use PlayTools touch controls. Press Cmd-K in the game to open or close its keymap editor. Keymaps are saved automatically for this game. Changes to this setting apply on the next launch. |
+| Keyboard and mouse mapping | On/Off | On | Uses PlayTools touch controls. Press Cmd-K in the game to open or close its keymap editor. Keymaps are saved automatically for this game. Changes to this setting apply on the next launch. |
 | Mouse sensitivity | Number | `50` | 1–1000; default 50. |
 | Pause keymapping during text input | On/Off | On |  |
 | Scroll wheel gestures | On/Off | On |  |
@@ -1123,8 +1123,8 @@ Runtimes tabs: mpv player → Player; mpv player → Plugins.
 
 | Setting | Values | Default | Description |
 | --- | --- | --- | --- |
-| uosc controls | On/Off | On | Use uosc for the playback controls and timeline. When the plugin is missing, Play offers it as an optional download, and Skip continues playback with the standard controls. |
-| Timeline previews | On/Off | On | Generate thumbnail previews while hovering over the timeline with thumbfast. When the plugin is missing, Play offers it as an optional download, and Skip continues playback without previews. Requires uosc or another thumbfast-compatible interface. |
+| uosc controls | On/Off | On | Uses uosc for the playback controls and timeline. When the plugin is missing, Play offers it as an optional download, and Skip continues playback with the standard controls. |
+| Timeline previews | On/Off | On | Generates thumbnail previews while hovering over the timeline with thumbfast. When the plugin is missing, Play offers it as an optional download, and Skip continues playback without previews. Requires uosc or another thumbfast-compatible interface. |
 | Configuration folder | Path (with picker) |  | Optional mpv configuration folder containing mpv.conf, input.conf, scripts, script-opts, fonts and other mpv resources. The selected folder is read directly. |
 | Additional configuration files | List |  | Absolute paths, one per line. Files load in order after the configuration folder. mpv include entries can reference further configuration and resources. |
 | Additional scripts | List |  | Absolute paths to Lua or JavaScript scripts, or mpv script folders, one per line. The original files stay in place and load as they are, and each video can list its own. Plugins from Runtimes → mpv player → Plugins, by contrast, are copies that MacLauncher downloads and updates. |
@@ -1212,13 +1212,13 @@ Runtimes tabs: CrossOver; Sikarugir; WineCX; Graphics → DirectX → Vulkan, Di
 | Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
 | Video codecs | Runtime default or installed codec component | Runtime default | Only the selected plugin folders join the plugin search path, with their dependencies taken from a shared prepared folder, and the runtime keeps its own GStreamer core. Optional plugins that cannot be used are reported separately. |
-| Game temporal integration | On/Off | Off | Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver that accepts forwarded DLSS frames (MacLauncher KosmicKrisp or MoltenVK scene support), a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, whatever this setting says; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
-| DirectDraw compatibility | On/Off | Off | Use CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate. |
+| Game temporal integration | On/Off | Off | Exposes the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26.4 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver that accepts forwarded DLSS frames (MacLauncher KosmicKrisp or MoltenVK scene support), a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, whatever this setting says; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
+| DirectDraw compatibility | On/Off | Off | Uses CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate. |
 | Synchronization | Automatic; MSync; Off | Automatic | Availability depends on the selected Wine version. |
 | Language locale | Text |  | Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. Empty uses the language of macOS. |
 | Windows version | Windows 10; Windows 11; Windows 7; Windows XP | Windows 10 |  |
 | Windows executable (optional) | Text |  | Relative path inside the game folder. Automatic selects the game's executable. |
-| Enable BepInEx winhttp override | On/Off | Off | Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed. |
+| Enable BepInEx winhttp override | On/Off | Off | Loads an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed. |
 | Wine DLL overrides | List |  | One library=order entry per line, such as winhttp=n,b. |
 | Game arguments | List |  | One argument per line. |
 | Wine debug channels (optional) | Text |  | Wine channel filters, such as -all or +seh. |
@@ -1232,12 +1232,12 @@ Runtimes tabs: CrossOver; Sikarugir; WineCX; Graphics → DirectX → Vulkan, Di
 | Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
 | Video codecs | Runtime default or installed codec component | Runtime default | Only the selected plugin folders join the plugin search path, with their dependencies taken from a shared prepared folder, and the runtime keeps its own GStreamer core. Optional plugins that cannot be used are reported separately. |
-| Game temporal integration | On/Off | Off | Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver that accepts forwarded DLSS frames (MacLauncher KosmicKrisp or MoltenVK scene support), a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, whatever this setting says; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
+| Game temporal integration | On/Off | Off | Exposes the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver that accepts forwarded DLSS frames (MacLauncher KosmicKrisp or MoltenVK scene support), a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, whatever this setting says; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
 | Synchronization | Automatic; MSync; ESync (older CrossOver versions); Off | Automatic |  |
 | Language locale | Text |  | Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. Empty uses the language of macOS. |
 | Windows environment | Windows 10 (64-bit); Windows 11 (64-bit); Windows 7 (64-bit); Windows XP (64-bit) | Windows 10 (64-bit) | Changing this option uses a separate Windows environment. Existing saves remain in the previous environment. |
 | Windows executable (optional) | Text |  | Relative path inside the game folder. Automatic selects the game's executable. |
-| Enable BepInEx winhttp override | On/Off | Off | Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed. |
+| Enable BepInEx winhttp override | On/Off | Off | Loads an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed. |
 | Wine DLL overrides | List |  | One library=order entry per line, such as winhttp=n,b. |
 | Game arguments | List |  | One argument per line. |
 | Wine debug channels (optional) | Text |  | Wine channel filters, such as -all or +seh. |
@@ -1251,12 +1251,12 @@ Runtimes tabs: CrossOver; Sikarugir; WineCX; Graphics → DirectX → Vulkan, Di
 | Direct3D 12 | Automatic, Wine vkd3d, D3DMetal and versions installed in Runtimes | Runtime automatic | KosmicKrisp is recommended for vkd3d-proton. |
 | Vulkan driver | Automatic, installed MoltenVK and KosmicKrisp versions | Runtime automatic | [Translator selection](TRANSLATORS.md). |
 | Video codecs | Runtime default or installed codec component | Runtime default | Only the selected plugin folders join the plugin search path, with their dependencies taken from a shared prepared folder, and the runtime keeps its own GStreamer core. Optional plugins that cannot be used are reported separately. |
-| Game temporal integration | On/Off | Off | Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later with a Wine version that supports its game integration, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver that accepts forwarded DLSS frames (MacLauncher KosmicKrisp or MoltenVK scene support), a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, whatever this setting says; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
+| Game temporal integration | On/Off | Off | Exposes the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later with a Wine version that supports its game integration, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver that accepts forwarded DLSS frames (MacLauncher KosmicKrisp or MoltenVK scene support), a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, whatever this setting says; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch. |
 | Synchronization | Automatic; MSync; Off | Automatic | Availability depends on the selected Wine version. |
 | Language locale | Text |  | Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8. Empty uses the language of macOS. |
 | Windows version | Windows 10; Windows 11; Windows 7; Windows XP | Windows 10 |  |
 | Windows executable (optional) | Text |  | Relative path inside the game folder. Automatic selects the game's executable. |
-| Enable BepInEx winhttp override | On/Off | Off | Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed. |
+| Enable BepInEx winhttp override | On/Off | Off | Loads an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed. |
 | Wine DLL overrides | List |  | One library=order entry per line, such as winhttp=n,b. |
 | Game arguments | List |  | One argument per line. |
 | Wine debug channels (optional) | Text |  | Wine channel filters, such as -all or +seh. |

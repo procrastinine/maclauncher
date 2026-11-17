@@ -156,3 +156,28 @@ test('a plugin card reads Installed and Repair needed in the status colours Runt
   assert.match(css, /\.badgeAccent \{\s*color: var\(--text-accent2\);/);
   assert.match(css, /\.pluginStatus\.repair, \.pluginCardIssue \{ color: var\(--text-warn\); \}/);
 });
+
+test('a plugin card shows its source link and its remove control once (GUI 0877 R24)', t => {
+  const { manager, state } = fixture();
+  const catalog = { status: 'success', source: 'https://github.com/tomasklaen/uosc/releases', installable: true,
+    versions: ['5.13.0'], installableVersions: ['5.13.0'], versionRequirements: { '5.13.0': { available: true } } };
+  const uosc = { id: 'uosc', label: 'uosc', supportsDefault: true, defaultVersion: null, defaultSource: 'manager', catalog,
+    plugin: { version: '5.13.0', settingKey: 'uosc', sourceUrl: 'https://github.com/tomasklaen/uosc', description: 'Controls.' },
+    installed: [{ version: '5.13.0', ready: true, source: 'managed' }] };
+  const props = { manager, sections: [{ id: 'uosc', label: 'uosc', managerId: 'mpv-plugins', sectionId: 'uosc', manager, section: uosc }],
+    state, api: { moduleSettingsAction: async () => true }, downloads: [], ui: { remoteOpen: {}, installVersion: {}, installVariant: {}, installedSort: {}, error: null },
+    onInstall: async () => true, onUninstall: async () => true, onRefresh() {}, onSetDefault() {}, onSelect() {} };
+  const h = componentHarness(C.PluginLibrary, props); t.after(() => h.close());
+  const markup = renderToStaticMarkup(h.render());
+  assert.equal((markup.match(/class="runtimeSourceLink"/g) || []).length, 1, 'the Versions rows do not repeat the card\'s Source link');
+  assert.match(markup, /class="runtimeSourceLink" href="https:\/\/github\.com\/tomasklaen\/uosc"[^>]*>Source</);
+  // The card's Remove removes the only installed copy, whose row has no remove button of its own.
+  assert.match(markup, /aria-label="Remove uosc"/);
+  assert.doesNotMatch(markup, /aria-label="Remove uosc v5\.13\.0"/);
+  // With a second copy installed, each copy's row has its remove button.
+  const h2 = componentHarness(C.PluginLibrary, { ...props, sections: [{ ...props.sections[0],
+    section: { ...uosc, installed: [...uosc.installed, { version: '5.12.0', ready: true, source: 'managed' }] } }] });
+  t.after(() => h2.close());
+  const two = renderToStaticMarkup(h2.render());
+  assert.match(two, /aria-label="Remove uosc v5\.13\.0"/); assert.match(two, /aria-label="Remove uosc v5\.12\.0"/);
+});

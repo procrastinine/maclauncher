@@ -1,6 +1,7 @@
 import type { ModuleManifest, RecentGame, RuntimeManagerState } from "../types";
 import { architectureLabel, compareSemver, resolveRuntimeSection, resolveRuntimeSections, resolveRuntimeVersionOverride, runtimeVersionTagger } from "../ui-helpers";
 import { installedRuntimeAvailability } from "../../../../core/runtime-install-availability.mjs";
+import { joinHelpLabels } from "./HelpList";
 
 export function runtimeInspectorStatusAction(moduleInfo: ModuleManifest | null, runtimeId: string, game: RecentGame, sectionId: string | null) {
   return moduleInfo?.runtime?.entries?.[runtimeId]?.statusAction ||
@@ -141,4 +142,26 @@ export function runtimeVersionTagWithout(tag: (version: string) => string, runti
     const text = tag(version);
     return name && text.startsWith(`${name} `) && text.length > name.length + 1 ? text.slice(name.length + 1) : text;
   };
+}
+
+export type InspectorTranslatorRow = { id?: string; label: string; selected: string; used: string; reason?: string | null; reasonCode?: string | null; fallback?: boolean };
+
+/** The inspector's translator rows: a choice that is also what runs reads once,
+ * and neighbouring rows that read the same share one row naming each of them,
+ * as in "Direct3D 8, 9 and 12". When every row reads the same, the one row is
+ * named Translators. A row with a line of its own stays on its own. */
+export function inspectorTranslatorRows(rows: InspectorTranslatorRow[]) {
+  const groups: Array<{ id?: string; value: string; labels: string[]; note: string }> = [];
+  for (const row of rows) {
+    const value = row.selected === row.used ? row.used : `${row.selected} → ${row.used}`;
+    const note = row.reasonCode === "dlss-forwarding" && row.reason ? row.reason : "";
+    const last = groups[groups.length - 1];
+    if (last && !note && !last.note && last.value === value) last.labels.push(row.label);
+    else groups.push({ id: row.id, value, labels: [row.label], note });
+  }
+  return groups.map(group => {
+    const joined = joinHelpLabels(group.labels);
+    return { id: group.id, value: group.value, note: group.note,
+      label: groups.length === 1 && group.labels.length > 2 ? "Translators" : joined, title: group.labels.length > 1 ? joined : undefined };
+  });
 }

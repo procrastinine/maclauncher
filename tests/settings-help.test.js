@@ -146,3 +146,16 @@ test('graphics rows list their explanations in the Graphics heading\'s help inst
   assert.match(effects, /<HelpCollector value=\{collectedHelp\.registry\}>\{editing\}<\/HelpCollector>/);
   assert.match(effects, /\{collectedHelp\.items\.length > 0 && <HelpList items=\{collectedHelp\.items\} \/>\}/);
 });
+
+test('setting explanations describe what a setting does instead of instructing (GUI 0925 V1)', () => {
+  const registry = require('../src/modules/registry'), found = new Set();
+  const instruction = /^(Use|Generate|Expose|Allow|Enable|Disable|Select|Choose|Show|Hide|Render|Load|Set|Turn|Keep|Make|Add|Remove|Run|Start|Skip|Force|Prefer|Apply|Pick|Override|Limit|Pass|Store|Save|Install|Ignore|Treat|Draw|Scale|Map|Send|Replace|Include|Exclude|Emulate|Patch|Restore|Mute|Display|Capture|Reduce|Increase|Clamp|Stretch|Block|Configure|Bypass)\b/;
+  const walk = (value, where) => {
+    if (typeof value === 'string') { if (/\.(description|help)$/.test(where) && instruction.test(value)) found.add(value.slice(0, 60)); }
+    else if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) walk(item, `${where}.${key}`);
+  };
+  for (const info of registry.listModules()) walk(info, info.id);
+  assert.deepEqual([...found], []);
+  const details = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/components/GameDetails.tsx'), 'utf8');
+  assert.match(details, /"Allows Internet and local-network connections for this game\./);
+});

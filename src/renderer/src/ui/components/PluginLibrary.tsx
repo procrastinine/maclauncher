@@ -124,6 +124,9 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
     // Copies MacLauncher installed for this plugin; a plugin added in its place
     // is managed on its own card.
     const versionRows = plugin.custom ? [] : (section.installed || []).filter((item: Record<string, any>) => !item.suppliedBy);
+    // The card's Remove removes the plugin's only installed copy, so that copy's row has no remove button of its own.
+    const cardRemoves = Boolean(ready && installed?.removable !== false);
+    const rowRemovable = (row: Record<string, any>) => row.removable !== false && !(cardRemoves && versionRows.length === 1 && row === installed);
     const versionTag = runtimeVersionTagger(section);
     const supportsDefault = section.supportsDefault !== false && Boolean(onSetDefault);
     // The plugin's default version is one menu in its installed versions' header.
@@ -158,7 +161,7 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
       {!plugin.custom && onRefresh && <details className="pluginVersions">
         <summary>Versions</summary>
         <RuntimeCatalogSources managerId={manager.id} section={section} ui={ui} busy={busy} variant="" identity={name}
-          downloads={download ? [download] : []} onOpenSource={onOpenSource}
+          downloads={download ? [download] : []} onOpenSource={onOpenSource} shownLinks={link ? [link] : []}
           onRefresh={options => onRefresh(manager.id, choice.sectionId, options)}
           onSelect={(key, field, value) => onSelect?.(manager.id, key, field, value)}
           onInstall={value => installVersion(value)} />
@@ -181,7 +184,7 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
               <div className="saveRowActions">
                 {makeDefault && <button type="button" className="btn small" disabled={busy} title={`Make ${name} ${tag} the default`}
                   onClick={() => onSetDefault!(manager.id, choice.sectionId, makeDefault.version)}>Make default</button>}
-                {row.removable !== false && <button type="button" className="btn small iconOnly danger" disabled={busy}
+                {rowRemovable(row) && <button type="button" className="btn small iconOnly danger" disabled={busy}
                   title={`Remove ${name} ${tag}`} aria-label={`Remove ${name} ${tag}`} onClick={() => removeVersion(row)}><TrashIcon /></button>}
               </div>
             </div>;

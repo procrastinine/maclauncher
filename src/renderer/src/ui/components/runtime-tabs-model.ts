@@ -108,9 +108,9 @@ function runtimeLinkTarget(url: string) {
   return [host, ...(CODE_HOSTS.has(host) ? parts.slice(0, 2) : parts)].join("/").toLowerCase();
 }
 // The links shown for a source, in order, without a second link to a target
-// an earlier one already opens.
-export function runtimeDistinctLinks(links: Array<{ url?: string; label?: string }>): Array<{ url: string; label: string }> {
-  const seen = new Set<string>();
+// an earlier one, or a link shown elsewhere in the panel, already opens.
+export function runtimeDistinctLinks(links: Array<{ url?: string; label?: string }>, shown: Array<string | undefined | null> = []): Array<{ url: string; label: string }> {
+  const seen = new Set<string>(shown.flatMap(url => { const target = runtimeSourceUrl(url); return target ? [runtimeLinkTarget(target)] : []; }));
   return links.flatMap(item => {
     const url = runtimeSourceUrl(item?.url);
     if (!url) return [];

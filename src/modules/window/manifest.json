@@ -88,7 +88,7 @@
               "key": "showPointer",
               "type": "boolean",
               "label": "Show pointer in picture",
-              "description": "Show the pointer in scaled output.",
+              "description": "Shows the pointer in scaled output.",
               "default": true
             }
           ]

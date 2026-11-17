@@ -122,7 +122,7 @@
             "capability": "temporal-integration",
             "type": "boolean",
             "label": "Game temporal integration",
-            "description": "Expose the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later with a Wine version that supports its game integration, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver build with a temporal carrier, a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, independent of this setting; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch.",
+            "description": "Exposes the game's DLSS option. With DXMT or D3DMetal, MetalFX Temporal performs it; this requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later with a Wine version that supports its game integration, with matching NVAPI/NGX libraries. With DXVK or vkd3d-proton and a selected Vulkan driver build with a temporal carrier, a 64-bit Windows game's DLSS inputs always go through DXVK-NVAPI and the NGX core to that driver, independent of this setting; Play offers both libraries after consent. A shared temporal upscaler, or a DXMT or D3DMetal version from Runtimes selected for Direct3D 11 or 12, also enables this integration automatically. DLSS must be enabled in the game settings. Changes apply on the next launch.",
             "hiddenWhen": [
               {
                 "key": "graphicsBackend",
@@ -178,7 +178,7 @@
             "key": "cncDdraw",
             "type": "boolean",
             "label": "DirectDraw compatibility",
-            "description": "Use CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate."
+            "description": "Uses CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate."
           },
           {
             "key": "synchronization",
@@ -248,7 +248,7 @@
             "capability": "bepinex",
             "type": "boolean",
             "label": "Enable BepInEx winhttp override",
-            "description": "Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed."
+            "description": "Loads an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed."
           },
           {
             "key": "dllOverrides",

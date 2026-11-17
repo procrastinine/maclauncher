@@ -124,7 +124,7 @@
                   "label": "Vulkan"
                 }
               ],
-              "description": "Select ANGLE's graphics backend for the next launch. Vulkan uses the selected Vulkan implementation."
+              "description": "Selects ANGLE's graphics backend for the next launch. Vulkan uses the selected Vulkan implementation."
             },
             {
               "key": "translatorVulkan",
@@ -138,7 +138,7 @@
                   "label": "Automatic"
                 }
               ],
-              "description": "Select an installed Vulkan implementation for Vulkan apps and ANGLE's Vulkan backend. Graphics → MoltenVK and KosmicKrisp in Runtimes manage downloads.",
+              "description": "Selects an installed Vulkan implementation for Vulkan apps and ANGLE's Vulkan backend. Graphics → MoltenVK and KosmicKrisp in Runtimes manage downloads.",
               "visibleWhen": [
                 {
                   "key": "angleBackend",
@@ -241,14 +241,14 @@
               "key": "allowAds",
               "type": "boolean",
               "label": "Allow ads",
-              "description": "Allow connections to known advertising hosts, including rewarded ads. Off by default. Applies on the next launch; game settings can override the Android default. External web links always require confirmation."
+              "description": "Allows connections to known advertising hosts, including rewarded ads. Off by default. Applies on the next launch; game settings can override the Android default. External web links always require confirmation."
             },
             {
               "key": "googleIntegration",
               "type": "boolean",
               "label": "Use microG",
               "gameOnly": true,
-              "description": "Enable installed Google services for this game without signing in. Restart to apply."
+              "description": "Enables installed Google services for this game without signing in. Restart to apply."
             },
             {
               "key": "googleAccount",
@@ -263,7 +263,7 @@
                   "label": "microG without an account"
                 }
               ],
-              "description": "Use microG anonymously or with a shared account from Settings → Android. Restart to apply.",
+              "description": "Uses microG anonymously or with a shared account from Settings → Android. Restart to apply.",
               "visibleWhen": [
                 {
                   "key": "googleIntegration",
@@ -290,7 +290,7 @@
             {
               "key": "networkIsolation",
               "type": "boolean",
-              "description": "Allow Internet and local-network connections. Restart to apply.",
+              "description": "Allows Internet and local-network connections. Restart to apply.",
               "label": "Network access"
             }
           ]
@@ -353,7 +353,7 @@
               "type": "boolean",
               "label": "Google integration",
               "gameOnly": true,
-              "description": "Enable Google account access for this application. Restart to apply."
+              "description": "Enables Google account access for this application. Restart to apply."
             },
             {
               "key": "googleAccount",
@@ -368,7 +368,7 @@
                   "label": "Without an account"
                 }
               ],
-              "description": "Use Google services anonymously or with an account from Settings → Android. Restart to apply.",
+              "description": "Uses Google services anonymously or with an account from Settings → Android. Restart to apply.",
               "visibleWhen": [
                 {
                   "key": "googleIntegration",
@@ -379,7 +379,7 @@
             {
               "key": "networkIsolation",
               "type": "boolean",
-              "description": "Allow Internet and local-network connections. Restart to apply.",
+              "description": "Allows Internet and local-network connections. Restart to apply.",
               "label": "Network access"
             }
           ]

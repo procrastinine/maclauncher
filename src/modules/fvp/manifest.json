@@ -28,7 +28,7 @@
               { "value": "gbk", "label": "Chinese (GBK)" },
               { "value": "utf8", "label": "Unicode (UTF-8)" }
             ] },
-            { "key": "textHiDpi", "type": "boolean", "label": "High-resolution text", "description": "Render text at the display scale." }
+            { "key": "textHiDpi", "type": "boolean", "label": "High-resolution text", "description": "Renders text at the display scale." }
           ]
         }
       }

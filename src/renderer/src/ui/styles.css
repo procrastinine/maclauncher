@@ -2126,8 +2126,10 @@ select.input:not([multiple]) {
   font-size: var(--font-sm);
 }
 
+/* The last section of Credits ends with its table, without a rule below it. */
 .creditsResources {
   margin-top: 20px;
+  border-bottom: 0;
 }
 
 .ackLink {

@@ -27,7 +27,7 @@ import { moduleToolGroups, presentModuleFields } from "./module-tools-model";
 import { isRuntimeManageable } from "./runtime-tabs-model";
 import { runtimeDescriptionText } from "./RuntimeDescription";
 import { resolveInspectorRuntimeSection, runtimeInspectorInstall, runtimeInspectorRepair, runtimeInspectorSelectedVersion,
-  runtimeInspectorVersions, runtimeInspectorVersionOptions, runtimeInspectorVersionPatch, runtimeVersionTagWithout } from "./runtime-inspector-model";
+  runtimeInspectorVersions, runtimeInspectorVersionOptions, runtimeInspectorVersionPatch, runtimeVersionTagWithout, inspectorTranslatorRows } from "./runtime-inspector-model";
 import { EffectsControls } from "./EffectsControls";
 import { ErrorText } from "./ErrorText";
 import { StatusBadge } from "./StatusBadge";
@@ -449,7 +449,7 @@ export const GameDetails = memo(function GameDetails({
     !toolActionIds.has(moduleActionError.actionId) ? moduleActionError.message : null;
   const networkConfigurable = moduleInfo?.runtime?.entries?.[g.runtimeId]?.networkAccess !== false;
   const networkHelp = networkConfigurable
-    ? "Allow Internet and local-network connections for this game. Changes apply on the next launch. New games start with the default set in Settings."
+    ? "Allows Internet and local-network connections for this game. Changes apply on the next launch. New games start with the default set in Settings."
     : "This runtime runs applications offline.";
   const defaultNetworkAccess = state.launcherSettings?.networkAccess === true;
   const detectionReport = moduleActionResults.explainDetection;
@@ -782,14 +782,11 @@ export const GameDetails = memo(function GameDetails({
             <div className="detailLabel">Translators</div>
             <div className="detailValue dim">Unavailable</div>
           </div>}
-          {translatorRows.map((row, index) => (
+          {inspectorTranslatorRows(translatorRows).map((row, index) => (
             <div className="detailRow textRow" key={`translator:${row.id || index}`}>
-              <div className="detailLabel">{row.label}</div>
-              {/* A choice that is also what runs reads once. The arrow says a
-                  choice falls back; only DLSS forwarding has a line of its own. */}
-              <div className="detailValue">{row.selected === row.used ? row.used : `${row.selected} → ${row.used}`}
-                {row.reasonCode === 'dlss-forwarding' && row.reason && <div className="detailMeta">{row.reason}</div>}
-              </div>
+              <div className="detailLabel" title={row.title}>{row.label}</div>
+              {/* The arrow says a choice falls back; only DLSS forwarding has a line of its own. */}
+              <div className="detailValue">{row.value}{row.note && <div className="detailMeta">{row.note}</div>}</div>
             </div>
           ))}
           {Array.isArray(runtimeStatus?.details) && runtimeStatus.details.filter((row: {label: string}) => !translatorLabels.has(row.label)).map((row: {label: string; value: string; detail?: string}, index: number) => (

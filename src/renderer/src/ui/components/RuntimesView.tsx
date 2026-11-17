@@ -503,9 +503,10 @@ export function RuntimesView({
                         </div>
                       </HelpTip></div>
                     </div>
+                    {/* Small controls keep this header the height of the Versions header. */}
                     {managementPresentation.local && <div className="runtimePanelHeaderActions">
                       <button
-                        className={`btn iconOnly runtimeRefresh${refreshing ? " refreshing" : ""}`}
+                        className={`btn small iconOnly runtimeRefresh${refreshing ? " refreshing" : ""}`}
                         disabled={runtimeBusy}
                         aria-busy={refreshing}
                         onClick={() => {
@@ -528,7 +529,7 @@ export function RuntimesView({
                       </button>
                       {activeRuntimeSupportsLatestOnly && (
                         <button
-                          className="btn"
+                          className="btn small"
                           disabled={runtimeBusy}
                           onClick={() => {
                             updateRuntimeUiSection(
