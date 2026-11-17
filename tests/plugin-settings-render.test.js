@@ -149,3 +149,10 @@ test('Runtimes plugin cards list upstream versions and manage each installed ver
     ['default', 'mpv-plugins', 'uosc', '5.12.0']]);
   assert.equal(settings.length, 0, 'managing versions of an installed plugin keeps its setting');
 });
+
+test('a plugin card reads Installed and Repair needed in the status colours Runtimes uses, not as a link (GUI 0877 R24)', () => {
+  const css = require('node:fs').readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.pluginStatus\.installed \{ color: var\(--text-accent2\); \}/);
+  assert.match(css, /\.badgeAccent \{\s*color: var\(--text-accent2\);/);
+  assert.match(css, /\.pluginStatus\.repair, \.pluginCardIssue \{ color: var\(--text-warn\); \}/);
+});

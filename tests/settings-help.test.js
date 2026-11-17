@@ -111,3 +111,38 @@ test('user-facing module text uses straight apostrophes (GUI 0913 H4)', () => {
   for (const info of registry.listModules()) walk(info, info.id);
   assert.deepEqual(found, []);
 });
+
+test('the Graphics and runtime tab strips in Settings start at the section edge with one spacing (GUI 0877 S10)', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.settingsTabs\.settingsRuntimeTabs, \.graphicsLibrarySettings > \.settingsTabs \{\s*padding: 0;\s*gap: 14px;\s*\}/);
+});
+
+test('graphics rows list their explanations in the Graphics heading\'s help instead of a help button each (GUI 0913 L6)', async t => {
+  const { build } = require('vite');
+  const result = await build({ configFile: false, logLevel: 'silent', build: { ssr: path.join(__dirname, '../src/renderer/src/ui/components/HelpList.tsx'), write: false,
+    rollupOptions: { external: id => /^react(?:-dom)?(?:\/|$)/.test(id), output: { format: 'cjs' } } } });
+  const compiled = new Module(path.join(__dirname, 'help-list.cjs'), module); compiled.paths = module.paths;
+  compiled.require = id => id === 'react' ? react : Module.prototype.require.call(compiled, id);
+  compiled._compile(result.output.find(chunk => chunk.type === 'chunk').code, compiled.id);
+  const { useCollectedHelp, HelpCollector, RowHelp, joinHelpLabels } = compiled.exports;
+  // The collector keeps each row's entry once, in the order rows appeared, and drops a row that leaves.
+  const harness = componentHarness(() => useCollectedHelp(), {}); t.after(() => harness.close());
+  const { registry } = harness.render();
+  registry.set('a', { label: 'Frame pacing', text: 'Pacing.' }); registry.set('b', { label: 'Display sync', text: 'Sync.' });
+  registry.set('a', { label: 'Frame pacing', text: 'Pacing.' }); registry.set('c', { label: 'Drawables', text: 'Sync.' });
+  assert.deepEqual(harness.render().items, [{ label: 'Frame pacing', text: 'Pacing.' }, { label: 'Display sync and Drawables', text: 'Sync.' }]);
+  registry.set('b', null);
+  assert.deepEqual(harness.render().items.map(item => item.label), ['Frame pacing', 'Drawables']);
+  // Inside a collector a row shows no button; outside one it keeps its own.
+  const inside = renderToStaticMarkup(react.createElement(HelpCollector, { value: registry }, react.createElement(RowHelp, { label: 'Frame pacing', text: 'Pacing.' })));
+  assert.equal(inside, '');
+  assert.match(renderToStaticMarkup(react.createElement(RowHelp, { label: 'Frame pacing', text: 'Pacing.' })), /aria-label="About frame pacing"/);
+  assert.equal(joinHelpLabels(['Direct3D 8', 'Direct3D 9', 'Direct3D 12']), 'Direct3D 8, 9 and 12');
+  // Every policy row of the Graphics section uses the row help.
+  const source = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/components/OutputPolicyControls.tsx'), 'utf8');
+  assert.doesNotMatch(source, /<HelpTip/);
+  assert.equal((source.match(/<RowHelp label=/g) || []).length, 11);
+  const effects = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/components/EffectsControls.tsx'), 'utf8');
+  assert.match(effects, /<HelpCollector value=\{collectedHelp\.registry\}>\{editing\}<\/HelpCollector>/);
+  assert.match(effects, /\{collectedHelp\.items\.length > 0 && <HelpList items=\{collectedHelp\.items\} \/>\}/);
+});

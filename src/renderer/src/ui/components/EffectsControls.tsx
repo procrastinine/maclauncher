@@ -4,6 +4,7 @@ import {useGraphicsCatalog} from "../useGraphicsCatalog";
 import {shaderFileDrag} from "../shader-drop";
 import type {EffectsChainTemplate, GraphicsNotice} from "../types";
 import {HelpTip} from "./HelpTip";
+import {HelpCollector, HelpList, useCollectedHelp} from "./HelpList";
 import {MenuButton} from "./Popover";
 import {StatusBadge} from "./StatusBadge";
 import {ErrorText} from "./ErrorText";
@@ -58,6 +59,8 @@ export function EffectsControls({footer, visible = true, warnings = [], children
   const editor = useEffectsEditor({...props, status, active: demanded && !awaitingCatalog});
   // Live editing follows the status owner's launch binding once it is bound.
   const {plan, info, graphics, running, game, view, embedded} = editor, live = graphics.status?.live || (info?.live ?? props.live);
+  // The rows' explanations are listed in the Graphics heading's help; embedded, each row keeps its own button.
+  const collectedHelp = useCollectedHelp();
   const id = useId();
   // Templates are read when the menu opens.
   useEffect(() => {
@@ -103,6 +106,7 @@ export function EffectsControls({footer, visible = true, warnings = [], children
     <ErrorText error={editor.error} inline />
   </>;
   if (embedded) return <section className="effectsControls" aria-label="Ordered graphics effects" {...drop}>{editing}{footer}</section>;
+  const collected = <HelpCollector value={collectedHelp.registry}>{editing}</HelpCollector>;
 
   const summary = graphicsSummary(plan, {running, live, warnings: warnings.length + notices.length + saveNotices.length, unreadable: Boolean(planError)});
   const device = info?.graphicsHardware?.state === "ready" ? info.graphicsHardware.device?.name : undefined;
@@ -118,6 +122,7 @@ export function EffectsControls({footer, visible = true, warnings = [], children
           {running && (live ? " Changes update during play when the loaded graphics adapter supports them." : " The current runtime applies graphics changes on its next launch.")}
           {device && ` The launcher's default graphics device is ${device}; a running game may select another.`}</p>
           <p>{GRAPHICS_VIEWS_HELP}</p>
+          {collectedHelp.items.length > 0 && <HelpList items={collectedHelp.items} />}
         </HelpTip>
       </span>
       {!open && <span className="collapsibleSummary">{summary}</span>}
@@ -145,7 +150,7 @@ export function EffectsControls({footer, visible = true, warnings = [], children
         <StatusBadge tone="warning">Needs attention</StatusBadge> Some graphics settings could not be applied at launch.
         <ul>{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
       </div>}
-      {planError ? <ErrorText error={editor.error} inline /> : editing}
+      {planError ? <ErrorText error={editor.error} inline /> : collected}
       <GraphicsRuntimeStatus game={{...game, effects: plan}} running={running} visible={visible && open} live={live}
         inspectDetails={view === "simple" ? editor.simpleOptions !== null : plan.video.some(node => editor.expandedSteps[node.id])}
         requestKey={`${graphics.status?.desiredRevision || ""}:${graphics.status?.phase || ""}`}

@@ -2365,8 +2365,9 @@ select.input:not([multiple]) {
 .pluginCardFooter { justify-content: space-between; flex-wrap: wrap; }
 .pluginCardIdentity { flex-wrap: wrap; font-size: var(--font-sm); min-width: 0; }
 .pluginStatus { color: var(--muted); }
-.pluginStatus.installed { color: var(--accent); }
-.pluginStatus.repair, .pluginCardIssue { color: var(--warning, var(--muted)); }
+/* Installed and repair read in the colours of Runtimes' Default and warning badges, not as links. */
+.pluginStatus.installed { color: var(--text-accent2); }
+.pluginStatus.repair, .pluginCardIssue { color: var(--text-warn); }
 .pluginVersion { color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .pluginCardIssue { margin: 10px 0 0; font-size: var(--font-sm); line-height: 1.5; }
 .pluginVersions { margin-top: 12px; }
@@ -2399,7 +2400,8 @@ select.input:not([multiple]) {
   border-top: 1px solid var(--border);
 }
 
-.settingsTabs.settingsRuntimeTabs {
+/* Every tab strip in a Settings section starts at the section's content edge with one spacing. */
+.settingsTabs.settingsRuntimeTabs, .graphicsLibrarySettings > .settingsTabs {
   padding: 0;
   gap: 14px;
 }

@@ -34,7 +34,8 @@ The `:root` tokens set typography, corner radii, surfaces, borders and control s
 ### Settings and Runtimes
 
 - Sidebar navigation: `.launcherSidebarLayout`, `.launcherSidebar`, `.launcherSidebarSearch`, `.launcherSidebarChoices` and `.launcherSidebarItem`. Runtimes headings use `.launcherSidebarSection` and `.launcherSidebarHeading`, and a section whose heading would repeat its single entry takes `.unlabeled` and shows a divider line instead. The search field stays above the choices, which scroll on their own, and the content panel keeps its selection and scroll position while the choices are filtered.
-- Settings runtime tabs: `.settingsTabs`, `.settingsTab` and `.settingsView`.
+- Settings runtime tabs: `.settingsTabs`, `.settingsTab` and `.settingsView`. The runtime tabs and the Graphics library tabs start at the section's content edge with one spacing between tabs.
+- Video player plugin cards: `.pluginStatus` uses the Runtimes status colours, with **Installed** in the installed colour and a repair state or `.pluginCardIssue` in the warning colour.
 - Runtime settings forms: `.settingsAdvanced`, with `.settingsAdvancedCount`, for the collapsed Advanced group, and `.settingsRuntimeHeading` for a game type with one runtime.
 - Runtimes subtabs: `.runtimeLineTabs`, inside `.launcherSidebarContent`. An active subtab shares the background of the panel below and keeps its top and side borders. Subtabs scroll horizontally, never vertically, and keep keyboard navigation. While the tabs overflow, `ScrollableTabStrip` adds compact edge controls, and it keeps the scroll position when shared state updates.
 

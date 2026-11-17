@@ -53,6 +53,8 @@ test('Refresh lists the archive of Valve\'s current client that holds both clien
   assert.deepEqual(catalog.installableVersions, [misc.listed.sha1]);
   assert.equal(catalog.versionLabels[misc.listed.sha1], 'Steam client 1792618285');
   assert.equal(catalog.label,'Versions');assert.equal(catalog.sourceLabel,'Valve CDN');
+  // The section's description already says what Valve lists; the source row adds no second line (GUI 0877 R27).
+  assert.equal(catalog.description,undefined);
   assert.equal(catalog.preferInstalled,true);
   // After an installation, archives of the family it came from are read first.
   await ClientFiles.installRuntime({ userDataDir, version: misc.listed.sha1 });

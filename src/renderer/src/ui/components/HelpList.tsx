@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useContext, useEffect, useId, useMemo, useState } from "react";
 import { HelpTip } from "./HelpTip";
 
 // One help button per section: its popover explains each row by name, and each
@@ -36,4 +36,33 @@ export function HelpList({ items }: { items: HelpItem[] }) {
 export function SectionHelp({ label, items, children }: { label: string; items: HelpItem[]; children?: React.ReactNode }) {
   if (!items.length && !children) return null;
   return <HelpTip label={label}>{children}{items.length > 0 && <HelpList items={items} />}</HelpTip>;
+}
+
+// Rows inside a collector list their explanations in the section heading's help
+// instead of showing a help button each; outside one, a row keeps its own button.
+type HelpRegistry = { set(id: string, item: HelpItem | null): void };
+const HelpCollectorContext = React.createContext<HelpRegistry | null>(null);
+export const HelpCollector = HelpCollectorContext.Provider;
+
+/** The explanations the rows inside a HelpCollector report, in the order they appeared. */
+export function useCollectedHelp(): { items: HelpItem[]; registry: HelpRegistry } {
+  const [entries, setEntries] = useState<Array<[string, HelpItem]>>([]);
+  const registry = useMemo<HelpRegistry>(() => ({ set(id, item) {
+    setEntries(current => {
+      const index = current.findIndex(([key]) => key === id);
+      if (!item) return index < 0 ? current : current.filter(([key]) => key !== id);
+      if (index < 0) return [...current, [id, item]];
+      if (current[index][1].label === item.label && current[index][1].text === item.text) return current;
+      const next = current.slice(); next[index] = [id, item]; return next;
+    });
+  } }), []);
+  return { items: helpItems(entries.map(([, item]) => item)), registry };
+}
+
+/** A row's explanation: listed by the enclosing section heading's help, or its own help button outside a collector. */
+export function RowHelp({ label, text }: { label: string; text: string }) {
+  const registry = useContext(HelpCollectorContext), id = useId();
+  useEffect(() => { registry?.set(id, { label, text }); }, [registry, id, label, text]);
+  useEffect(() => () => registry?.set(id, null), [registry, id]);
+  return registry ? null : <HelpTip label={`About ${label.toLowerCase()}`}>{text}</HelpTip>;
 }

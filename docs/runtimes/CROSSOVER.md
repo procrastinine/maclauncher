@@ -18,7 +18,7 @@ Windows API compatibility comes from the selected CrossOver version, and a game'
 
 ## Applications and versions
 
-MacLauncher finds CrossOver at `/Applications/CrossOver.app` and `~/Applications/CrossOver.app` automatically, and **Find installed applications** checks those paths again. Other copies, including previews and copies with updated libraries, are registered with **Runtimes → CrossOver → Add CrossOver**. Every application stays where it is, and **Remove** unregisters its path without deleting anything. Each application's row names the translator versions that it includes, such as its DXMT, DXVK and D3DMetal releases.
+MacLauncher finds CrossOver at `/Applications/CrossOver.app` and `~/Applications/CrossOver.app` automatically, and **Find installed applications** checks those paths again. Other copies, including previews and copies with updated libraries, are registered with **Runtimes → CrossOver → Add CrossOver…**, the list's only registration action. Every application stays where it is, and **Remove** unregisters its path without deleting anything. Each application's row names the translator versions that it includes, such as its DXMT, DXVK and D3DMetal releases.
 
 Each registered application is a separate choice, even when several copies report the same version. Play chooses one in the [usual order](README.md#versions): the game's **Version** selection, then a saved default, then the newest registered application that is ready. The first application added becomes the default when no default is saved yet.
 

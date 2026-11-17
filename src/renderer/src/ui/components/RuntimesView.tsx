@@ -363,7 +363,9 @@ export function RuntimesView({
     // The menu lists versions newest first, whatever order the list below uses.
     ? runtimeDefaultMenu(activeRuntimeSection, sortInstalled(activeRuntimeInstalledSorted, "newest")
       .map(install => installedRows.find(row => row.install === install)!), activeRuntimeVersionTag) : null;
+  // A list of registered applications already has its own registration action, such as Add CrossOver…, so it offers no second one.
   const registerCustom = Boolean(activeRuntimeSection?.customRuntime && onRuntimeRegister &&
+    !(activeRuntimeSection.catalog?.delivery === "local" && activeRuntimeSection.catalog?.importable) &&
     !activeRuntimeSection.catalog?.sources?.some((source: Record<string, any>) => source.delivery === "local-files" && source.registrationLabel));
 
   return (

@@ -363,6 +363,16 @@ test('runtime groups use a searchable sidebar while runtime sub-tabs retain edge
   assert.match(markup, /aria-current="page" aria-controls="runtime-group-panel-one"/);
   assert.match(markup, /role="region" id="runtime-group-panel-one" aria-label="First"/);
 });
+test('a list of registered applications offers its own registration action only (GUI 0877 R29)', () => {
+  const crossover = { ...manager('crossover', { tabLabel: 'CrossOver' }, { status: 'success', delivery: 'local', importable: true,
+    importLabel: 'Add CrossOver…', versions: ['26.0'] }, [{ version: '26.0', ready: true }]), customRuntime: true };
+  const markup = render([crossover], crossover.id, { onRuntimeRegister() {}, onRuntimeImport() {} });
+  assert.match(markup, />Add CrossOver…<\/button>/);
+  assert.doesNotMatch(markup, />Register custom…<\/button>/);
+  // A download list keeps Register custom… beside its versions.
+  const download = { ...manager('download', { tabLabel: 'Download' }, { status: 'success', versions: ['1.0'] }, [{ version: '1.0', ready: true }]), customRuntime: true };
+  assert.match(render([download], download.id, { onRuntimeRegister() {} }), />Register custom…<\/button>/);
+});
 test('empty catalogs expose a labeled Load versions action without a render-time request', () => {
   const runtime = { ...manager('common', { tabLabel: 'Common runtime' }), customRuntime: true };
   const markup = render([runtime], runtime.id, { onRuntimeRegister() {} });

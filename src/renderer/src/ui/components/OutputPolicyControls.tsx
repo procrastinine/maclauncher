@@ -2,7 +2,7 @@ import React from "react";
 import type {GameEffectsInfo, GameEffectsPlan, GameGraphicsSettings} from "../types";
 import type {EffectsEditor} from "../useEffectsEditor";
 import {GraphicsNumber, GraphicsRange} from "./GraphicsNumber";
-import {HelpTip} from "./HelpTip";
+import {RowHelp} from "./HelpList";
 
 // Plan-wide policies shared by both views: the game's source resolution and
 // the presenter's output settings. Each change is one edit operation.
@@ -13,7 +13,7 @@ export function SourceResolutionControls({value, capabilities, onChange}: {value
   const method = value?.method ? {method: value.method} : {};
   return <>
     <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-game-rendering">Game resolution
-      <HelpTip label="About game resolution">Sets the image produced by the game before effects. Percentages use the visible window's pixel size, or the display in fullscreen. The adapter tries game rendering controls, an available virtual window, then GPU downsampling. GPU downsampling changes the image size without reducing the game's rendering work. The visible window keeps its size. {capabilities?.live ? "Updates during play." : "Applies on the next launch."}</HelpTip></label>
+      <RowHelp label="Game resolution" text={`Sets the image produced by the game before effects. Percentages use the visible window's pixel size, or the display in fullscreen. The adapter tries game rendering controls, an available virtual window, then GPU downsampling. GPU downsampling changes the image size without reducing the game's rendering work. The visible window keeps its size. ${capabilities?.live ? "Updates during play." : "Applies on the next launch."}`} /></label>
       <select id="effects-game-rendering" className="input" value={mode} onChange={event => onChange(event.target.value === "percentage" ? {multiplier: 100 / percent, ...method} : event.target.value === "height" ? {height, ...method} : undefined)}>
         <option value="original">Game default</option><option value="percentage">Percentage of window</option><option value="height">Height in pixels</option>
       </select></div>
@@ -36,7 +36,7 @@ export function SourcePolicyControls({editor}: {editor: EffectsEditor}) {
   return <>
     <SourceResolutionControls value={source} capabilities={capabilities} onChange={value => void editor.setSource(value)} />
     {source && methods.length > 0 && <div className="detailRow detailControlRow">
-      <label className="detailLabel" htmlFor="effects-source-filter">Source filter<HelpTip label="About source filtering">Selects the source renderer's scaling filter. Game original retains its existing filter. Shared effects remain separate. {capabilities?.live ? "Updates during play." : "Applies on the next launch."}{temporal && " Source filter choices require temporal stages to be off; Game original remains available."}</HelpTip></label>
+      <label className="detailLabel" htmlFor="effects-source-filter">Source filter<RowHelp label="Source filter" text={`Selects the source renderer's scaling filter. Game original retains its existing filter. Shared effects remain separate. ${capabilities?.live ? "Updates during play." : "Applies on the next launch."}${temporal ? " Source filter choices require temporal stages to be off; Game original remains available." : ""}`} /></label>
       <select id="effects-source-filter" className="input" value={source.method || ""} onChange={event => editor.setSourceFilter(event.target.value)}>
         <option value="">Game original</option>
         {source.method && !methods.includes(source.method) && <option value={source.method} disabled>{source.method} · Unavailable</option>}
@@ -50,7 +50,7 @@ function FramePacingControls({idPrefix, value, adaptive, onChange}: {
 }) {
   return <>
     <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor={`${idPrefix}-pacing`}>Frame pacing
-      <HelpTip label="About frame pacing">Adaptive generation approaches the output target within the selected multiplier and display refresh. Game rendering is not capped.</HelpTip></label>
+      <RowHelp label="Frame pacing" text={"Adaptive generation approaches the output target within the selected multiplier and display refresh. Game rendering is not capped."} /></label>
       <select id={`${idPrefix}-pacing`} className="input" value={value.framePacing || "fixed"} onChange={event => onChange({framePacing: event.target.value as "fixed" | "adaptive"})}>
         <option value="fixed">Fixed</option><option value="adaptive" disabled={!adaptive}>Adaptive{adaptive ? "" : " · Unavailable"}</option>
       </select></div>
@@ -79,7 +79,7 @@ export function OutputPolicyControls({editor}: {editor: EffectsEditor}) {
   return <details className="effectNodeSettings graphicsOutput" open={set || undefined}><summary>Output</summary>
     <div className="graphicsMotion" aria-label="Motion clarity">
       <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-motion-clarity">Motion clarity
-        <HelpTip label="About motion clarity">Automatic follows a selected subframe shader. Black frame insertion and CRT beam scheduling use display subframes, reducing brightness to shorten visible persistence. Frame generation uses the same display clock. Display refresh and actual presentation determine the available benefit.</HelpTip></label>
+        <RowHelp label="Motion clarity" text={"Automatic follows a selected subframe shader. Black frame insertion and CRT beam scheduling use display subframes, reducing brightness to shorten visible persistence. Frame generation uses the same display clock. Display refresh and actual presentation determine the available benefit."} /></label>
         <select id="effects-motion-clarity" className="input" value={output?.motionClarity || "auto"}
           onChange={event => void setOutput(event.target.value === "auto" ? {motionClarity: undefined, subframes: undefined, duty: undefined, brightness: undefined}
             : {motionClarity: event.target.value as "off" | "bfi" | "beam"})}>
@@ -99,13 +99,13 @@ export function OutputPolicyControls({editor}: {editor: EffectsEditor}) {
           <GraphicsRange id="effects-duty" min="0.125" max="1" step="0.025" value={output.duty ?? .5}
             onValue={duty => void setOutput({duty})} /></div>
         <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-beam-brightness">Brightness
-          <HelpTip label="About subframe brightness">Compensates for dark intervals. Higher values can clip highlights; display brightness and refresh constrain the result.</HelpTip></label>
+          <RowHelp label="Brightness" text={"Compensates for dark intervals. Higher values can clip highlights; display brightness and refresh constrain the result."} /></label>
           <GraphicsNumber id="effects-beam-brightness" className="input" min="1" max="8" step="0.1" value={output.brightness ?? 1}
             onValue={brightness => void setOutput({brightness})} /></div>
       </div>}
     </div>
       {(support?.outputColor || output?.toneMapping) && <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-tone-mapping">Tone mapping
-        <HelpTip label="About output tone mapping">Automatic follows the declared source color and display range. None skips highlight compression; required color conversion still applies. Reinhard maps display-referred highlights. PBR Neutral requires declared scene-referred source metadata; otherwise Automatic applies.</HelpTip></label>
+        <RowHelp label="Tone mapping" text={"Automatic follows the declared source color and display range. None skips highlight compression; required color conversion still applies. Reinhard maps display-referred highlights. PBR Neutral requires declared scene-referred source metadata; otherwise Automatic applies."} /></label>
         <select id="effects-tone-mapping" className="input" value={output?.toneMapping || "auto"}
           title={!support?.outputColor ? "The selected graphics processor does not support explicit output tone mapping." : undefined}
           onChange={event => void setOutput({toneMapping: event.target.value === "auto" ? undefined : event.target.value as "preserve" | "reinhard" | "pbr-neutral"})}>
@@ -121,7 +121,7 @@ export function OutputPolicyControls({editor}: {editor: EffectsEditor}) {
         <button className="btn small" onClick={() => void setOutput(current => ({adaptiveQuality: {...current.adaptiveQuality!, enabled: false}}))}>Off</button></div>}
       {(support?.comparison || output?.comparison) && <>
         <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-comparison">Compare
-          <HelpTip label="About image comparison">Source is the real image handed to the presenter, including earlier scene reconstruction. Generated phases use their closing real source. Difference compares RGB in one color encoding, without extra inference.</HelpTip></label>
+          <RowHelp label="Compare" text={"Source is the real image handed to the presenter, including earlier scene reconstruction. Generated phases use their closing real source. Difference compares RGB in one color encoding, without extra inference."} /></label>
           <select id="effects-comparison" className="input" value={output?.comparison?.mode || "off"}
             onChange={event => void setOutput(current => ({comparison: {position: .5, gain: 1, ...current.comparison, mode: event.target.value as "off" | "before" | "wipe" | "difference"}}))}>
             <option value="off">Off</option><option value="before" disabled={!support?.comparison}>Source</option><option value="wipe" disabled={!support?.comparison}>Source / processed</option><option value="difference" disabled={!support?.comparison}>Difference</option>
@@ -144,13 +144,13 @@ function PresentationOptionControls({editor}: {editor: EffectsEditor}) {
   const cap = output?.frameRateCap ?? 0;
   return <>
     {(support?.performanceHud || (output?.hud && output.hud !== "off")) && <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-hud">Performance overlay
-      <HelpTip label="About the performance overlay">Draws frame rates, GPU time, latency, pacing, memory and frame counters over the processed image. Screenshots do not include it. Updates during play.</HelpTip></label>
+      <RowHelp label="Performance overlay" text={"Draws frame rates, GPU time, latency, pacing, memory and frame counters over the processed image. Screenshots do not include it. Updates during play."} /></label>
       <select id="effects-hud" className="input" value={output?.hud || "off"} title={support?.performanceHud ? undefined : pending("performance-overlay")}
         onChange={event => void setOutput({hud: event.target.value === "off" ? undefined : event.target.value as "compact" | "detailed"})}>
         <option value="off">Off</option><option value="compact" disabled={!support?.performanceHud}>Compact</option><option value="detailed" disabled={!support?.performanceHud}>Detailed</option>
       </select></div>}
     {(support?.frameRateCap || cap > 0) && <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-frame-cap">Frame-rate cap
-      <HelpTip label="About the frame-rate cap">Limits how often new source frames are accepted: how often a game renders, or how often a window is captured. The source's own timing applies when the cap is off. Updates during play.</HelpTip></label>
+      <RowHelp label="Frame-rate cap" text={"Limits how often new source frames are accepted: how often a game renders, or how often a window is captured. The source's own timing applies when the cap is off. Updates during play."} /></label>
       <select id="effects-frame-cap" className="input" value={cap > 0 ? "on" : "off"} title={support?.frameRateCap ? undefined : pending("frame-rate-cap")}
         onChange={event => void setOutput({frameRateCap: event.target.value === "on" ? 60 : undefined})}>
         <option value="off">Off</option><option value="on" disabled={!support?.frameRateCap}>Limit</option>
@@ -160,9 +160,9 @@ function PresentationOptionControls({editor}: {editor: EffectsEditor}) {
     {(support?.presentationOptions || output?.displaySync !== undefined || output?.drawableCount) && <>
       <label className="inlineCheck" title={support?.presentationOptions ? undefined : pending("presentation-options")}><input type="checkbox" disabled={!support?.presentationOptions} checked={output?.displaySync ?? true}
         onChange={event => void setOutput({displaySync: event.target.checked ? undefined : false})} />Display sync
-        <HelpTip label="About display sync">Presents processed images at the display refresh. Turning it off can lower latency in fullscreen and can show tearing.</HelpTip></label>
+        <RowHelp label="Display sync" text={"Presents processed images at the display refresh. Turning it off can lower latency in fullscreen and can show tearing."} /></label>
       <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-drawables">Drawables
-        <HelpTip label="About drawable count">Two drawables lower latency; three keep presentation smoother when GPU time varies.</HelpTip></label>
+        <RowHelp label="Drawables" text={"Two drawables lower latency; three keep presentation smoother when GPU time varies."} /></label>
         <select id="effects-drawables" className="input" disabled={!support?.presentationOptions} value={String(output?.drawableCount ?? 3)}
           onChange={event => void setOutput({drawableCount: event.target.value === "3" ? undefined : 2})}>
           <option value="3">3</option><option value="2">2</option>

@@ -71,7 +71,7 @@ function getState({ userDataDir, settings } = {}) {
   const versions = [...new Set([...listed.map(row => row.version), ...rows.map(row => row.version)])];
   const saved = configured(settings).defaultVersion, chosen = choose(null, settings, userDataDir);
   const labels = Object.fromEntries([...listed, ...rows].map(row => [row.version, row.versionLabel || versionLabel(row)]));
-  const catalog = { status: listed.length ? 'success' : 'idle', delivery: 'download', label: 'Versions', sourceLabel: 'Valve CDN', description: 'Current Windows Steam client files; installed copies remain available locally.', preferInstalled: true, versions, versionLabels: labels,
+  const catalog = { status: listed.length ? 'success' : 'idle', delivery: 'download', label: 'Versions', sourceLabel: 'Valve CDN', preferInstalled: true, versions, versionLabels: labels,
     installable: listed.length > 0, installableVersions: listed.map(row => row.version), includedVersions: [], buildableVersions: [],
     versionRequirements: Object.fromEntries(versions.map(version => {
       const row = rows.find(item => item.version === version), offer = listed.find(item => item.version === version);
