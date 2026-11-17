@@ -65,8 +65,11 @@ test("a saved source choice listed under its saved value is that source's option
 });
 
 test("the Vulkan driver row appears when a used Direct3D build renders through Vulkan or a driver choice is saved", () => {
+  // A Wine's included translator renders through Vulkan exactly when its engine's own sources do.
+  const { definitions } = require("../src/modules/shared/runtime/translator-managers");
+  const throughVulkan = engine => (definitions[engine]?.sourceDeclarations || []).some(source => source.vulkan === true);
   for (const source of loadSources()) for (const item of source.included || [])
-    if (item.kind === "d3d-translator") assert.equal(item.vulkan === true, item.engine === "dxvk", `${item.id} marks whether it renders through Vulkan`);
+    if (item.kind === "d3d-translator") assert.equal(item.vulkan === true, throughVulkan(item.engine), `${item.id} marks whether it renders through Vulkan`);
   const wine = { id: "sample", kind: "wine", label: "Sample", included: [
     { id: "sample-dxvk", kind: "d3d-translator", label: "Sample DXVK", engine: "dxvk", vulkan: true, parts: [{ path: "dxvk", name: "dxvk" }] },
     { id: "sample-dxmt", kind: "d3d-translator", label: "Sample DXMT", engine: "dxmt", parts: [{ path: "dxmt", name: "dxmt" }] },
