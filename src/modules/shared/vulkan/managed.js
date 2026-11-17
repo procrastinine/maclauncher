@@ -1,6 +1,8 @@
 const path = require("node:path");
 const execute = require("node:util").promisify(require("node:child_process").execFile);
 const Bundled = require("../runtime/bundled-native");
+const Custom = require("../runtime/custom-runtime");
+const Native = require("../runtime/local-native");
 const { createProjectBuildManager } = require("../runtime/project-build-manager");
 const { withDescription } = require("../runtime/pinned-native-manager");
 const {createSourceBackedManager}=require("../../../runtime-sources/manager");
@@ -16,6 +18,20 @@ const formerIds=source.manager.formerIds;
 const selectionId = "kosmickrisp:maclauncher";
 const prefix = projectId + ":";
 
+function verifyDriverFiles(selected) {
+  const loader = selected.manifest.runtimeFiles?.loader;
+  if (!loader || !selected.executablePath) throw new Error("The MacLauncher KosmicKrisp package has no Vulkan driver or loader.");
+  const driverArchitectures = Native.readMachOArchitectures(selected.executablePath, { allowLibrary: true });
+  const loaderArchitectures = Native.readMachOArchitectures(path.join(selected.payloadRoot, Bundled.relativeFile(loader)), { allowLibrary: true });
+  const declared = selected.arch || selected.manifest.arch;
+  const cpu = declared === "x64" ? "x86_64" : declared === "arm64" ? "arm64" : null;
+  if (cpu && (!driverArchitectures.includes(cpu) || !loaderArchitectures.includes(cpu)) ||
+      !driverArchitectures.some(architecture => loaderArchitectures.includes(architecture)))
+    throw new Error("The KosmicKrisp driver and Vulkan loader must contain the package's CPU architecture.");
+  return { architectures: driverArchitectures,
+    architecture: cpu === "x86_64" ? "x64" : cpu || (driverArchitectures.length === 1 ? driverArchitectures[0] === "x86_64" ? "x64" : driverArchitectures[0] : "universal") };
+}
+
 function createManager(dependencies = {}) {
   const manager = createProjectBuildManager({ projectId, formerIds, versionCompatibility: () => true, // Vulkan versions of this managed driver project are interchangeable; consumers check required capabilities.
     label: source.label, repository, sourceLabel: "Source", upstreamUrl: source.credits.url, nativeLibrary: true,
@@ -28,9 +44,15 @@ function createManager(dependencies = {}) {
         throw new Error("The MacLauncher KosmicKrisp package has no Vulkan driver or loader.");
     },
     async verifyPayload(selected, { signal } = {}) {
+      verifyDriverFiles(selected);
       Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency);
       await Bundled.verifySignatures(selected.root,selected.declaration,{signal});
     }, dependencies });
+  const inspect = manager.customRuntime.inspect;
+  Custom.configure(manager, { inspect(...args) {
+    const selected = inspect(...args);
+    return { ...selected, ...verifyDriverFiles(selected) };
+  } });
   return createSourceBackedManager({source,adapter:driverAdapter,backend:{ ...manager, formerIds, translatorEngine: source.manager.engine, distributionRequired: false,
     ui: { groupId: "vulkan-drivers", sectionLabel: manager.label, memberOrder: 22, management: "managed", hostFeature: "METAL4" } }});
 }
@@ -40,6 +62,7 @@ function createProvider(manager) {
     const result = manager.resolveSelection(null, context.settings, context.userDataDir, { version, verification });
     if (!result.ready || !result.install) return null;
     const install = result.install;
+    verifyDriverFiles(install);
     return { id: prefix + result.version, backend: "kosmickrisp", version: result.version,
       projectId, label: manager.label + " " + result.version, minimumMacOS: install.manifest.minimumMacOS,
       library: path.join(install.payloadRoot, install.manifest.runtimeFiles.loader), driver: install.executablePath,
