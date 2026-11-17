@@ -166,3 +166,29 @@ test("RLVM disk images install the volume's files, wherever the app sits, and al
 });
 
 test("RLVM obtains the adapter from a selected managed package",()=>{assert.equal(Manager.adapterResource,undefined);});
+
+test("RLVM downloads and custom copies require loadable native companions", { skip: process.platform !== "darwin" }, async t => {
+  const { ARM64, X64, image } = require("./fixtures/macho-image");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "rlvm-native-closure-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const executable = path.join(root, "rlvm.app/Contents/MacOS/rlvm");
+  const libraries = path.join(root, "rlvm.app/Contents/Frameworks");
+  fs.mkdirSync(path.dirname(executable), { recursive: true });
+  fs.mkdirSync(libraries);
+  fs.writeFileSync(executable, image({ cpu: ARM64, fileType: 2, installName: null,
+    dependencies: ["@rpath/libcompanion.dylib"], runPaths: ["@loader_path/../Frameworks"] }), { mode: 0o755 });
+  const manager = Manager.createManager(), options = { userDataDir: path.join(root, "profile"), runtimePath: executable };
+  assert.throws(() => Manager.prepareInstall({ unpacked: root }), /RLVM requires/);
+  await assert.rejects(manager.registerCustomRuntime(options), /RLVM requires/);
+  const companion = path.join(libraries, "libcompanion.dylib");
+  fs.writeFileSync(companion, image({ cpu: X64 }));
+  assert.throws(() => Manager.prepareInstall({ unpacked: root }), { code: "MACHO_ARCH" });
+  await assert.rejects(manager.registerCustomRuntime(options), { code: "MACHO_ARCH" });
+  fs.writeFileSync(companion, image({ cpu: ARM64, dependencies: ["@loader_path/libchild.dylib"] }));
+  await assert.rejects(manager.registerCustomRuntime(options), /libchild/);
+  fs.writeFileSync(path.join(libraries, "libchild.dylib"), image({ cpu: ARM64 }));
+  assert.doesNotThrow(() => Manager.prepareInstall({ unpacked: root }));
+  assert.equal((await manager.registerCustomRuntime(options)).ready, true);
+  fs.writeFileSync(companion, image({ cpu: ARM64, fileType: 2, installName: null }));
+  await assert.rejects(manager.registerCustomRuntime(options), /dynamic library/);
+});

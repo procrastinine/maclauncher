@@ -11,8 +11,38 @@ const APP = "rlvm.app/Contents/MacOS/rlvm";
 // A release may move the app into a folder or use another archive format.
 const executable = root => locatePackaged(root, APP) || path.join(root, APP);
 
+function verifyLibraries(executablePath, requestedArchitecture) {
+  const Binary = require("../../shared/runtime/binary-compatibility");
+  const root = MachO.readMachOLoadCommands(executablePath), executable = fs.realpathSync(executablePath);
+  const requested = requestedArchitecture || require("../../shared/runtime/architecture").selectedArchitecture();
+  const preferred = requested === "x64" ? "x86_64" : requested;
+  const architecture = root.architectures.includes(preferred) ? preferred : root.architectures[0];
+  const pending = [{ file: executablePath, runPaths: [] }], visited = new Set();
+  while (pending.length) {
+    const { file, runPaths: inherited } = pending.shift(), canonical = fs.realpathSync(file);
+    if (visited.has(canonical)) continue;
+    if (visited.size >= 256) throw new Error("RLVM native library dependencies exceed the inspection limit.");
+    visited.add(canonical);
+    const image = MachO.readMachOLoadCommands(file, { architecture }).slices[0];
+    if (canonical !== executable && image.fileType !== 6) throw new Error("RLVM requires a Mach-O dynamic library for " + file + ".");
+    const runPaths = Binary.nativeRunPaths(file, image, executablePath, inherited);
+    for (const dependency of image.dependencies) {
+      if (/^\/(?:usr\/lib|System\/Library)\//.test(dependency.path)) continue;
+      const target = Binary.resolveNativeDependency(file, image, dependency.path, { executablePath, runPaths });
+      if (!target && dependency.kind === "weak") continue;
+      if (!target) throw new Error(`RLVM requires ${dependency.path}. Select the complete application with its libraries.`);
+      pending.push({ file: target, runPaths });
+    }
+  }
+  return root;
+}
+function inspectRuntime(options) {
+  const runtime = require("../../shared/runtime/local-native").resolveLocalRuntime(options);
+  verifyLibraries(runtime.executablePath, options.arch || options.requiredArchitecture);
+  return runtime;
+}
 function prepareInstall({ unpacked }) {
-  const image = MachO.readMachOLoadCommands(executable(unpacked));
+  const image = verifyLibraries(executable(unpacked));
   if (!image.architectures.some(arch => ["arm64", "x86_64"].includes(arch))) throw new Error("This RLVM app requires an unsupported CPU.");
 }
 // Retain exact adapter copies already owned by earlier installations.
@@ -47,6 +77,6 @@ function createManager({ dependencies = {} } = {}) {
     // RealLive script data does not link against the RLVM package version.
     versionCompatibility: () => true,
      id: "rlvm", label: "RLVM", sourceUrl: Catalog.RELEASES,
-    upstream: Catalog.source, projectBuilds: Catalog.projectBuilds, resolveExecutable: executable, prepareInstall, dependencies });
+    upstream: Catalog.source, projectBuilds: Catalog.projectBuilds, inspectRuntime, resolveExecutable: executable, prepareInstall, dependencies });
 }
 module.exports = Object.assign(createManager(), { createManager, executable, prepareInstall, resolveAdapter, adapterSelection, resolveForLaunch, adapterManager });
