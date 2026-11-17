@@ -33,7 +33,9 @@ function createManager(dependencies = {}) {
       const measured = Native.readMachOArchitectures(path.join(root, item.path), { allowLibrary: true });
       architectures = architectures.filter(cpu => measured.includes(cpu));
     }
-    if (!architectures.length) throw new Error('Legendary dependencies do not support the included Python CPU.');
+    const launcherCPU = process.arch === 'x64' ? 'x86_64' : process.arch;
+    const executionCPU = native.architectures.includes(launcherCPU) ? launcherCPU : native.architectures[0];
+    if (!architectures.includes(executionCPU)) throw new Error('Legendary dependencies do not support the included Python process CPU.');
     const digest = fileDigest(file, { noFollow: true });
     if (expectedSha256 && digest.sha256 !== expectedSha256) throw new Error('Legendary cli.py changed; register the package again.');
     return { executablePath: file, pythonPath: pythonPath(), packagesPath: root, architectures, needsRosetta: native.needsRosetta,

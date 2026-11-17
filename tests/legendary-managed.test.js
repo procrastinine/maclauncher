@@ -2,7 +2,7 @@ const Harness = require('./helpers/future-upstream.cjs');
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const Quarantine = require('../src/modules/shared/runtime/managed-quarantine'), quarantine = Quarantine.removeManagedRuntimeQuarantine;
 Quarantine.removeManagedRuntimeQuarantine = (install, context) => quarantine(install, context, { execute: (_file, _args, _options, done) => done(null, '') });
-const { image, X64 } = require('./fixtures/macho-image');
+const { image, universal, ARM64, X64 } = require('./fixtures/macho-image');
 const Core = require('../src/core/external-store-downloads'), { createManager } = require('../src/modules/shared/stores/runtime/legendary-manager');
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 function fixture(t) {
@@ -76,6 +76,10 @@ test('Legendary custom cli.py and package folders use the same required closure 
   fs.rmSync(path.join(custom, '.maclauncher-tools.json'));
   fs.writeFileSync(path.join(custom, 'requests/extension.so'), image({ cpu: X64 }));
   await assert.rejects(f.manager.registerCustomRuntime({ ...f.context, runtimePath: custom }), /CPU/);
+  fs.rmSync(path.join(custom, 'requests/extension.so'));
+  fs.writeFileSync(f.pythonPath, universal([{ cpu: ARM64, bytes: image({ cpu: ARM64, fileType: 2 }) }, { cpu: X64, bytes: image({ cpu: X64, fileType: 2 }) }]));
+  fs.writeFileSync(path.join(custom, 'requests/extension.so'), image({ cpu: process.arch === 'arm64' ? X64 : ARM64 }));
+  await assert.rejects(f.manager.registerCustomRuntime({ ...f.context, runtimePath: custom }), /CPU/, 'a fat Python still spawns the launcher CPU, not an arbitrary compatible slice');
   fs.rmSync(path.join(custom, 'requests/extension.so'));
   fs.rmSync(path.join(custom, 'legendary/core.py'));
   await assert.rejects(f.manager.registerCustomRuntime({ ...f.context, runtimePath: custom }), /core.py|ENOENT/);
