@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Binary = require('../../../core/binary-arch');
 const Bundled = require('../../shared/runtime/bundled-native');
+const { requiresRosetta } = require('../../shared/runtime/architecture');
 const { readPeExports } = require('../../shared/runtime/pe-exports');
 const { readMachOLoadCommands } = require('../../shared/runtime/macho-load-commands');
 const { createProjectBuildManager } = require('../../shared/runtime/project-build-manager');
@@ -10,13 +11,25 @@ const { createSourceBackedManager } = require('../../../runtime-sources/manager'
 const source = require('../../../runtime-sources/d3d-translator/maclauncher-dxmt.json');
 const adapter = require('../../../runtime-adapters/d3d-translator');
 
-const PRIMARY = 'wine/aarch64-unix/winemetal.so';
-const REQUIRED = Object.freeze({
-  [PRIMARY]: null,
-  'wine/aarch64-windows/d3d11.dll': 'D3D11CreateDevice',
-  'wine/aarch64-windows/dxgi.dll': 'CreateDXGIFactory1',
-  'wine/aarch64-windows/winemetal.dll': null
+const ABIS = Object.freeze({
+  arm64: { folder: 'aarch64', windows: 'arm64ec', machines: ['arm64ec', 'arm64x'] },
+  x86_64: { folder: 'x86_64', windows: 'x86_64', machines: ['x86_64'] }
 });
+const REQUIRED = Object.freeze({
+  'd3d11.dll': 'D3D11CreateDevice',
+  'dxgi.dll': 'CreateDXGIFactory1',
+  'winemetal.dll': null
+});
+
+function packageAbi(manifest) {
+  const cpu = manifest.nativeArchitecture;
+  const abi = Object.hasOwn(ABIS, cpu) && ABIS[cpu];
+  const primary = abi && `wine/${abi.folder}-unix/winemetal.so`;
+  if (manifest.id !== 'dxmt' || manifest.engine !== 'dxmt' || manifest.platform !== 'darwin' ||
+      !abi || manifest.executableRelative !== primary || manifest.windowsArchitecture !== abi.windows)
+    throw Error('The package does not describe the MacLauncher DXMT renderer.');
+  return { ...abi, cpu, primary };
+}
 
 function packageRoot(file) {
   for (let root = fs.statSync(file).isDirectory() ? file : path.dirname(file), depth = 0; depth < 8; depth += 1) {
@@ -29,32 +42,32 @@ function packageRoot(file) {
 
 function inspect(root) {
   const manifest = JSON.parse(Bundled.readRegular(path.join(root, 'manifest.json'), Bundled.LIMITS.manifestBytes).bytes);
-  if (manifest.id !== 'dxmt' || manifest.engine !== 'dxmt' || manifest.platform !== 'darwin' || manifest.executableRelative !== PRIMARY ||
-      manifest.nativeArchitecture !== 'arm64' || manifest.windowsArchitecture !== 'arm64ec')
-    throw Error('The package does not describe the MacLauncher DXMT renderer.');
-  const files = new Map((manifest.files || []).map(file => [file.path, file]));
-  for (const [relative, requiredExport] of Object.entries(REQUIRED)) {
-    const row = files.get(relative), file = path.join(root, relative);
-    if (!row || !fs.statSync(file).isFile()) throw Error('MacLauncher DXMT is missing a required library: ' + relative);
-    if (relative === PRIMARY) {
-      const facts = Binary.inspectBinary(file);
-      if (facts?.format !== 'macho' || !facts.architectures?.includes('arm64'))
-        throw Error('MacLauncher DXMT requires an arm64 native renderer.');
-      if (!readMachOLoadCommands(file).slices.some(slice => slice.architecture === 'arm64' && slice.fileType === 6))
-        throw Error('MacLauncher DXMT requires a native dynamic library.');
-    } else {
-      const facts = Binary.inspectBinary(file);
-      const architectures = facts?.hybrid?.codeArchitectures || [facts?.machine];
-      if (facts?.format !== 'pe' || !architectures.some(cpu => ['arm64ec', 'arm64x'].includes(cpu)))
-        throw Error('MacLauncher DXMT requires its complete 64-bit Windows library: ' + relative);
-      const exports = readPeExports(file);
-      if (!exports?.isDll) throw Error('MacLauncher DXMT requires a Windows dynamic library: ' + relative);
-      if (requiredExport && !exports.exports.get(requiredExport)?.executable)
-        throw Error('MacLauncher DXMT is missing its Windows API: ' + requiredExport);
-    }
+  const { cpu, folder, primary, machines } = packageAbi(manifest);
+  const files = new Set((manifest.files || []).map(file => file.path));
+  function requiredFile(relative) {
+    const file = path.join(root, relative);
+    if (!files.has(relative) || !fs.statSync(file, { throwIfNoEntry: false })?.isFile())
+      throw Error('MacLauncher DXMT is missing a required library: ' + relative);
+    return file;
+  }
+  const executablePath = requiredFile(primary), native = Binary.inspectBinary(executablePath);
+  if (native?.format !== 'macho' || !native.architectures?.includes(cpu))
+    throw Error(`MacLauncher DXMT requires a ${cpu} native renderer.`);
+  if (!readMachOLoadCommands(executablePath).slices.some(slice => slice.architecture === cpu && slice.fileType === 6))
+    throw Error('MacLauncher DXMT requires a native dynamic library.');
+  for (const [name, requiredExport] of Object.entries(REQUIRED)) {
+    const relative = `wine/${folder}-windows/${name}`, file = requiredFile(relative);
+    const facts = Binary.inspectBinary(file);
+    const architectures = facts?.hybrid?.codeArchitectures || [facts?.machine];
+    if (facts?.format !== 'pe' || !machines.some(machine => architectures.includes(machine)))
+      throw Error('MacLauncher DXMT requires its complete 64-bit Windows library: ' + relative);
+    const exports = readPeExports(file);
+    if (!exports?.isDll) throw Error('MacLauncher DXMT requires a Windows dynamic library: ' + relative);
+    if (requiredExport && !exports.exports.get(requiredExport)?.executable)
+      throw Error('MacLauncher DXMT is missing its Windows API: ' + requiredExport);
   }
   return {
-    executablePath: path.join(root, PRIMARY), architectures: ['arm64'], needsRosetta: false,
+    executablePath, architectures: [cpu], needsRosetta: requiresRosetta(cpu),
     root, payloadRoot: root, translatorRoot: root, baseRoot: path.join(root, 'wine'), runtimeVersion: manifest.version
   };
 }
@@ -63,7 +76,7 @@ function create({ dependencies = {} } = {}) {
   const manager = createProjectBuildManager({
     projectId: 'dxmt', label: 'MacLauncher DXMT', repository: 'procrastinine/maclauncher-builds',
     upstreamUrl: 'https://github.com/3Shain/dxmt', manifestRelative: 'manifest.json', sourceRelative: null,
-    executableRelative: PRIMARY, nativeLibrary: true,
+    executableRelative: manifest => packageAbi(manifest).primary, nativeLibrary: true,
     verifyPayload(selected) { Bundled.verifyPayload(selected.root, selected.declaration, selected.resolveDependency); },
     inspectRuntime({ runtimePath }) { return inspect(packageRoot(runtimePath)); }, dependencies
   });

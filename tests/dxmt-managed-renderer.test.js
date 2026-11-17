@@ -22,23 +22,37 @@ function library(name, { machine = 0xa641, executable = true, forwarded = false 
   if (forwarded) bytes.write('other.entry', 0x340);
   return bytes;
 }
-function fixture(t) {
+function fixture(t, intel = false) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dxmt-renderer-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const folder = intel ? 'x86_64' : 'aarch64', machine = intel ? 0x8664 : 0xa641;
+  const primary = `wine/${folder}-unix/winemetal.so`, windows = `wine/${folder}-windows`;
   const entries = {
-    'wine/aarch64-unix/winemetal.so': image({ installName: '@rpath/winemetal.so' }),
-    'wine/aarch64-windows/d3d11.dll': library('D3D11CreateDevice'),
-    'wine/aarch64-windows/dxgi.dll': library('CreateDXGIFactory1'),
-    'wine/aarch64-windows/winemetal.dll': library('DllMain')
+    [primary]: image({ installName: '@rpath/winemetal.so', ...(intel ? { cpu: X64 } : {}) }),
+    [windows + '/d3d11.dll']: library('D3D11CreateDevice', { machine }),
+    [windows + '/dxgi.dll']: library('CreateDXGIFactory1', { machine }),
+    [windows + '/winemetal.dll']: library('DllMain', { machine })
   };
   const manifest = { schemaVersion: 1, id: 'dxmt', engine: 'dxmt', platform: 'darwin', version: 'fixture',
-    executableRelative: 'wine/aarch64-unix/winemetal.so', nativeArchitecture: 'arm64', windowsArchitecture: 'arm64ec',
+    executableRelative: primary, nativeArchitecture: intel ? 'x86_64' : 'arm64', windowsArchitecture: intel ? 'x86_64' : 'arm64ec',
     files: Object.keys(entries).map(file => ({ path: file })) };
   const put = (file, bytes) => { const target = path.join(root, file); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, bytes); };
   for (const [file, bytes] of Object.entries(entries)) put(file, bytes);
   const save = () => put('manifest.json', JSON.stringify(manifest)); save();
-  return { root, manifest, put, save };
+  return { root, manifest, primary, windows, put, save };
 }
+
+test('the Intel DXMT package requires an Intel Mach-O and x64 Windows libraries', t => {
+  const f = fixture(t, true);
+  const selected = DXMT.inspect(f.root);
+  assert.deepEqual(selected.architectures, ['x86_64']);
+  assert.equal(selected.executablePath, path.join(f.root, f.primary));
+  f.put(f.windows + '/d3d11.dll', library('D3D11CreateDevice'));
+  assert.throws(() => DXMT.inspect(f.root), /64-bit Windows/);
+  f.put(f.windows + '/d3d11.dll', library('D3D11CreateDevice', { machine: 0x8664 }));
+  f.put(f.primary, image({ installName: '@rpath/winemetal.so' }));
+  assert.throws(() => DXMT.inspect(f.root), /x86_64 native renderer/);
+});
 
 test('the native DXMT renderer requires a complete ARM64EC Direct3D pair', t => {
   const f = fixture(t), selected = DXMT.inspect(f.root);
