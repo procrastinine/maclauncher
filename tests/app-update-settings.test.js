@@ -28,7 +28,8 @@ function render(appUpdate, launcherSettings = {}) {
   onSetLauncherSettings: offline, onSetModuleSettings: offline, onAppUpdate: offline }));
 }
 const idle = { currentVersion: '0.5.1', phase: 'idle', version: null, progress: null, error: null, lastCheck: null };
-const launcherSection = markup => markup.slice(markup.indexOf('<div class="settingsTitle">Launcher</div>'));
+// The Launcher heading holds the section's one help button after its name.
+const launcherSection = markup => markup.slice(markup.indexOf('<div class="settingsTitle">Launcher<'));
 
 test('the Launcher section holds Check for Updates, its latest result and the opt-in launch check', () => {
   const markup = launcherSection(render(idle));

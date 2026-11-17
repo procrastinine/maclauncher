@@ -2,7 +2,7 @@ const test = require('node:test'), assert = require('node:assert/strict'), path 
 const Module = require('node:module'), React = require('react'), { renderToStaticMarkup } = require('react-dom/server');
 const { build } = require('vite'), { react, componentHarness } = require('./helpers/renderer-component');
 const { createLibraryFixture } = require('./library-layout-fixture');
-let GameRow, GameDetails, GraphicsShortcutSettings;
+let GameRow, GameDetails, GraphicsShortcutSettings, graphicsShortcutHelp;
 const elements = tree => React.isValidElement(tree) ? [tree, ...React.Children.toArray(tree.props.children).flatMap(elements)] : [];
 test.before(async () => {
   async function load(file) {
@@ -12,7 +12,7 @@ test.before(async () => {
     compiled.require = id => id === 'react' ? react : Module.prototype.require.call(compiled, id);
     compiled._compile(result.output.find(chunk => chunk.type === 'chunk').code, compiled.id);return compiled.exports;
   }
-  ({ GameRow } = await load('GameRow.tsx'));({ GameDetails } = await load('GameDetails.tsx'));({ GraphicsShortcutSettings } = await load('GraphicsShortcutSettings.tsx'));
+  ({ GameRow } = await load('GameRow.tsx'));({ GameDetails } = await load('GameDetails.tsx'));({ GraphicsShortcutSettings, graphicsShortcutHelp } = await load('GraphicsShortcutSettings.tsx'));
 });
 const targets = [{ id: 'w1', label: 'Notes.txt', detail: 'TextEdit' }, { id: 'd1', label: 'Built-in Retina Display', detail: 'Display' }];
 test('session library rows show targets instead of the temporary folder; ordinary paths remain', () => {
@@ -43,12 +43,17 @@ test('inspector keyboard shortcuts sit outside Applied to, with pointer action, 
   nodes = elements(harness.render());shortcut = nodes.find(node => node.type?.name === 'SessionShortcut');markup = renderToStaticMarkup(shortcut);
   assert.match(markup, /<kbd>⌃⌥⌘G<\/kbd>/);assert.match(markup, /<kbd>⌃⌥⌘P<\/kbd>/);assert.doesNotMatch(markup, /title="Assign in Settings…"/);
 });
-test('window shortcut Settings rows expose help for both declared actions', async t => {
+test('window shortcut Settings rows explain both declared actions in their labels\' tooltips', async t => {
   const actions = [{ action: 'windowGraphics', label: 'Toggle graphics for front app', accelerator: null },
     { action: 'windowPointer', label: 'Toggle pointer in window graphics', accelerator: null }];
   const harness = componentHarness(GraphicsShortcutSettings, { settings: {}, api: { getGraphicsShortcuts: async () => actions }, onSetLauncherSettings() {} });
   t.after(() => harness.close());harness.render();await harness.settle();
   const markup = renderToStaticMarkup(harness.render());
-  assert.match(markup, /aria-label="About Toggle graphics for front app"/);assert.match(markup, /aria-label="About Toggle pointer in window graphics"/);
-  assert.match(markup, /drawn pointer/);assert.match(markup, /frontmost app/);
+  // The Launcher heading's one help lists both actions' explanations, and each row's label keeps its own.
+  const listed = Object.fromEntries(graphicsShortcutHelp().map(item => [item.label, item.text]));
+  assert.match(listed['Toggle graphics for front app'], /^Applies graphics to the frontmost app's window/);
+  assert.match(listed['Toggle pointer in window graphics'], /^Shows or hides the drawn pointer/);
+  assert.match(markup, /<div class="settingsLabel" title="Applies graphics to the frontmost app[^"]*">Toggle graphics for front app<\/div>/);
+  assert.match(markup, /<div class="settingsLabel" title="Shows or hides the drawn pointer[^"]*">Toggle pointer in window graphics<\/div>/);
+  assert.doesNotMatch(markup, /helpTipButton/);
 });
