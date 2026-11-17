@@ -532,7 +532,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     },
     async patcher(entry, family, action, options = {}) {
       if (!["cheats", "libs"].includes(family) || !["status", "patch", "unpatch", "updateVisibility"].includes(action)) throw new Error("Unknown patch operation.");
-      entry = entry.gameId ? await refreshedEntry(entry) : { ...entry, ...await registry.detectGameAsync(entry.importPath || entry.gamePath, { workerMode: "inline" }) };
+      entry = entry.gameId ? await refreshedEntry(entry, undefined, { persist: action !== "status" }) : { ...entry, ...await registry.detectGameAsync(entry.importPath || entry.gamePath, { workerMode: "inline" }) };
       const moduleId = resolveModuleId(entry), mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
       const original = entry;
       entry = prepareModuleInput(entry, registry, { ...context(launcher.loadSettings()), readOnly: action === "status" });
