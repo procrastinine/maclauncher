@@ -2779,3 +2779,9 @@ select.input:not([multiple]) {
 .graphicsPlanError { display: flex; align-items: flex-start; gap: 8px; }
 .graphicsPlanError > .btn { flex: none; }
 .effectsPresetSave { margin: 6px 0; }
+
+/* A game being added: its row waits in place for the game's record. */
+.gameItem.pendingImport { cursor: default; }
+.gameItem.pendingImport .gameName { color: var(--muted); }
+.pendingImportActions { display: flex; align-items: center; gap: 8px; }
+.pendingImportActions progress { width: 72px; }

@@ -138,6 +138,9 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
       await gameLifecycle.claim(entry);
       let merged = mergeDetectedEntry(entry, detected, { now: entry.lastPlayedAt || 0 });
       merged.moduleId = resolveModuleId(merged);
+      // The library's row for a new import shows the detected title and game
+      // type while the metadata and icon are read.
+      if (importing) onProgress?.({ phase: "detected", name: detected.name || merged.name, moduleId: merged.moduleId });
       const mod = registry.getModule(merged.moduleId);
       if (typeof mod?.mergeEntry === "function") merged = mod.mergeEntry(existing || (importing ? null : entry), merged, settings, { userDataDir });
       if (importing && !existing && (merged.nativeAppPath || /\.app$/i.test(merged.gamePath || ""))) {

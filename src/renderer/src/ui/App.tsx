@@ -50,6 +50,8 @@ import { GameRow } from "./components/GameRow";
 import { GameDetails, type GameDetailsState } from "./components/GameDetails";
 import { LibrarySearch, LibraryToolbar, type LibraryScope } from "./components/LibraryToolbar";
 import { ImportBatches, useImportBatches, DropGameHint, useLauncherDrop } from "./components/ImportBatch";
+import { PendingGameRow } from "./components/PendingGameRow";
+import { pendingImportRows } from "./pending-imports.mjs";
 import { ErrorText } from "./components/ErrorText";
 import launcherLogo from "./assets/maclauncher.svg";
 import { toggleLibrarySelection } from "../../../core/library-selection.mjs";
@@ -73,6 +75,9 @@ export default function App() {
   const [state, setState] = useState<LauncherState | null>(() => initialState && restoreLauncherState(initialState));
   const utilityView = utilityWindowContext?.view || null;
   const gamePaths = useMemo(() => new Set((state?.recents || []).map(game => game.gamePath)), [state?.recents]);
+  // A game being added has its row at the top of the library at once.
+  const pendingRows = useMemo(() => pendingImportRows(importBatches.batches, state?.importing || [], state?.recents || []),
+    [importBatches.batches, state?.importing, state?.recents]);
   const latestState = useRef(state);
   latestState.current = state;
   const [inspectionRequests] = useState(createInspectionRequests);
@@ -1715,7 +1720,7 @@ export default function App() {
       <ErrorText error={error} onDismiss={() => setError(null)} />
 
       <div className="workspaceToolbar">
-        <ImportBatches {...importBatches} jobs={state?.importing || []} onCancel={input => { api?.cancelImport(input).catch(value => setError(String(value))); }} />
+        <ImportBatches {...importBatches} libraryRows jobs={state?.importing || []} onCancel={input => { api?.cancelImport(input).catch(value => setError(String(value))); }} />
         {/* List controls appear once the library has a game. */}
         {totalGameCount > 0 && <LibraryToolbar sort={librarySort} onSortChange={onSetLibrarySort} scope={libraryScope} onScopeChange={setLibraryScope}
           count={isFiltering ? `${filteredGameCount} of ${totalGameCount} games` : `${totalGameCount} ${totalGameCount === 1 ? "game" : "games"}`}
@@ -1760,7 +1765,7 @@ export default function App() {
       </div>
       <main className={["content libraryLayout", inspectorVisible ? "hasDetails" : ""].filter(Boolean).join(" ")}>
         <section className="card libraryPane" aria-label="Games">
-          {totalGameCount === 0 ? (
+          {totalGameCount === 0 && !pendingRows.length ? (
             <div className="empty">
               <DropGameHint
                 className="dropHintEmpty"
@@ -1769,7 +1774,7 @@ export default function App() {
                 modules={state?.modules || []}
               />
             </div>
-          ) : filteredGameCount === 0 ? (
+          ) : filteredGameCount === 0 && !pendingRows.length ? (
             <div className="empty">
               <div>No games match the search and filters.</div>
               <button className="link" onClick={() => { selectAllGameTypes(); setLibraryScope("all"); }}>Clear search and filters</button>
@@ -1783,6 +1788,9 @@ export default function App() {
               onDrop={onGameListDrop}
             >
               <ul className="gameListItems" aria-label="Games">
+                {pendingRows.map(row => <PendingGameRow key={`pending:${row.inputPath}`} row={row} showIcons={showIcons}
+                  moduleInfo={row.moduleId ? modulesById.get(row.moduleId) || null : null} withHandle={!dragDisabled || selectionMode}
+                  onCancel={input => { api?.cancelImport(input).catch(value => setError(String(value))); }} />)}
                 {visibleGames.map((g, index) => (
                   <React.Fragment key={g.gamePath}>
                     {librarySort.mode === "custom" && visibleFavorites > 0 && (index === 0 || !favorites.has(g.gameId) && favorites.has(visibleGames[index - 1]?.gameId)) && (

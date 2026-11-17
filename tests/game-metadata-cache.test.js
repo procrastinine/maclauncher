@@ -403,6 +403,18 @@ test("an empty or truncated metadata cache or icon receipt, as a power loss leav
   }
 });
 
+test("an import reports the detected title and game type before its metadata and icon are read", async t => {
+  const f = fixture(t), events = [], mod = f.registry.getModule();
+  mod.resolveGameMetadata = async () => { events.push("metadata"); return { name: "Fixture Deluxe" }; };
+  mod.resolveGameIcon = () => { events.push("icon"); return null; };
+  const imported = await f.service.importEntry(f.gamePath, f.settings, { onProgress: progress => events.push(progress) });
+  assert.deepEqual(events, [{ phase: "detected", name: "Fixture", moduleId: "fixture" }, "metadata", "icon"]);
+  assert.equal(imported.name, "Fixture Deluxe");
+  events.length = 0;
+  await f.service.refreshEntry(imported, f.settings, { force: true, onProgress: progress => events.push(progress) });
+  assert.deepEqual(events, ["metadata", "icon"], "a refresh of a library game reports no import progress");
+});
+
 test("metadata waits for asynchronous module icon discovery", async t => {
   const f = fixture(t), icon = path.join(f.gamePath, "artwork.png");
   const png = require("../src/core/icon-utils").encodePngBitmap({ width: 1, height: 1, buffer: Buffer.from([1, 2, 3, 255]) });

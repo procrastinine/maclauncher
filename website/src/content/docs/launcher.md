@@ -14,9 +14,9 @@ MacLauncher opens the library straight away with the details it saved last time,
 
 ### Adding games
 
-**Add game…** opens a file picker for game folders and launchable files such as `.app`, `.exe`, `.jar`, `.swf` and `.love`. You can also drag folders and files onto the window, including Android `.apk` packages and iOS `.ipa` archives. MacLauncher detects what kind of game each one is and adds it to the library.
+**Add game…** opens a file picker for game folders and launchable files such as `.app`, `.exe`, `.jar`, `.swf` and `.love`. You can also drag folders and files onto the window, including Android `.apk` packages and iOS `.ipa` archives. MacLauncher detects what kind of game each one is and adds it to the library. Each one shows up at the top of the library right away under its file or folder name, picks up its title and game type as soon as they're detected, and gets its icon when it's added.
 
-Several games dragged in at once import as one batch, with **Adding N of M** and a progress bar. A failed item doesn't stop the rest. Instead, a summary lists each item that didn't import, with the reason, a **Choose game file…** button and **Retry**.
+Several games dragged in at once import as one batch, three at a time, with **Adding N of M** and a progress bar. A failed item doesn't stop the rest. Instead, a summary lists each item that didn't import, with the reason, a **Choose game file…** button and **Retry**.
 
 You can also drop a folder that isn't a game itself, such as a downloads folder or an archive that unpacked into a few levels of subfolders. When nothing at its top level is a game, or there are several possible games, MacLauncher looks inside, up to three folders deep, and offers the games it finds, so you can add one or all of them.
 

@@ -313,8 +313,10 @@ const backendService = createBackendService({ userDataDir,
       broadcastActivity(); return;
     }
     if (event === "importProgress") {
+      // The detected title and game type stay with the import's later phases.
+      const known = importProgress.get(payload.inputPath);
       if (payload.phase === "done") importProgress.delete(payload.inputPath);
-      else importProgress.set(payload.inputPath, payload);
+      else importProgress.set(payload.inputPath, { ...(known?.name ? { name: known.name, moduleId: known.moduleId } : {}), ...payload });
       broadcastActivity(); return;
     }
     if (event === "entryChanged") {

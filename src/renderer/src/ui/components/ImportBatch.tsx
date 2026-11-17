@@ -54,18 +54,20 @@ export function useImportBatches(api: ImportApi | undefined) {
 }
 
 type Props = Omit<ReturnType<typeof useImportBatches>, "remove" | "reveal"> & Partial<Pick<ReturnType<typeof useImportBatches>, "remove" | "reveal">> &
-  { jobs: ImportJob[]; onCancel(path: string): void };
+  { jobs: ImportJob[]; onCancel(path: string): void; libraryRows?: boolean };
 // Running batches and fully added ones keep their own notices. Every failure of
-// the finished batches is listed in one banner with a single Dismiss.
-export function ImportBatches({ batches, jobs, onCancel, resolve, dismiss, remove = () => {}, reveal = () => {} }: Props) {
+// the finished batches is listed in one banner with a single Dismiss. In the
+// library window each item being added has its own row with its progress
+// (libraryRows), so the notices list no items of their own there.
+export function ImportBatches({ batches, jobs, onCancel, resolve, dismiss, remove = () => {}, reveal = () => {}, libraryRows = false }: Props) {
   // A running batch reports its own inputs; their jobs are not listed again.
   const batchPaths = new Set(batches.flatMap(batch => batch.pendingPaths?.length ? batch.pendingPaths : [batch.currentPath]));
   const failed = batches.filter(batch => !batch.currentPath && batch.failures.length);
   return <div className="importBatches">
     {batches.filter(batch => !failed.includes(batch)).map(batch =>
-      <ImportBatchNotice key={batch.id} batch={batch} jobs={jobs} onCancel={onCancel} resolve={resolve} dismiss={dismiss} />)}
+      <ImportBatchNotice key={batch.id} batch={batch} jobs={libraryRows ? [] : jobs} onCancel={onCancel} resolve={resolve} dismiss={dismiss} />)}
     {failed.length > 0 && <ImportFailures batches={failed} resolve={resolve} dismiss={dismiss} remove={remove} reveal={reveal} />}
-    <ImportProgress jobs={jobs.filter(job => !batchPaths.has(job.inputPath))} onCancel={onCancel} />
+    {!libraryRows && <ImportProgress jobs={jobs.filter(job => !batchPaths.has(job.inputPath))} onCancel={onCancel} />}
   </div>;
 }
 
