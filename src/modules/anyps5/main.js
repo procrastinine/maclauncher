@@ -12,6 +12,9 @@ const Bundled=require("../shared/runtime/bundled-native");
 const Architecture=require("../shared/runtime/architecture");
 const TranslatorEnvironment=require("../shared/runtime/translator-environment-launch");
 const Writable=require("../shared/writable-input");
+const GameIdentity=require("../shared/runtime/game-identity");
+const GameData=require("../shared/game-data");
+const DockIcon=require("../shared/dock-icon");
 
 function cpuRoute(entry,context){
   const selected=manager.resolveSelection(entry,context?.settings,context?.userDataDir);
@@ -29,6 +32,17 @@ function launchEnvironment(entry,context,vulkan,directory,input){
     ...Vulkan.environment(vulkan,directory),...input,ANYPS5_VULKAN_LIBRARY:vulkan.library};
   delete environment.ANYPS5_MOUSE_ROUTING;
   return environment;
+}
+// The start host runs from its version's shared bundle, so the game's name and
+// Dock icon reach it as launch identity, without a per-game application.
+async function gameIdentity(entry,context){
+  let icon=entry.iconPath||"";
+  try {
+    const directory=GameData.resolveGameIconsDir(context.userDataDir,entry.gameId);
+    Writable.assertOwnDirectory(context.userDataDir,directory);
+    icon=await DockIcon.prepare(entry.iconPath||path.join(__dirname,"resources/icon.png"),directory,{signal:context.signal});
+  } catch(error) {context.signal?.throwIfAborted?.();context.logger?.debug?.("[anyps5] Dock icon: "+error.message);}
+  return GameIdentity.environment({...entry,iconPath:icon},{});
 }
 // The start host loads the imported programs in place and sees a staged copy
 // as /app0. Its working folder holds that copy, the PS5 data and save aliases
@@ -70,7 +84,8 @@ module.exports={id:manifest.id,manifest,detectGame,resolveSaveLocations,runtimeM
       const input=Input.prepare(entry,context,selected.install);
       const vulkan=Vulkan.resolve(context,vulkanOptions(route));
       if(!vulkan) throw new Error("A compatible Apple silicon Vulkan runtime is required. Install one in Runtimes.");
-      const environment={...launchEnvironment(entry,context,vulkan,directory,input),ANYPS5_SHADER_CACHE_DIR:path.join(directory,"shader_cache")};
+      const environment={...launchEnvironment(entry,context,vulkan,directory,input),...await gameIdentity(entry,context),
+        ANYPS5_SHADER_CACHE_DIR:path.join(directory,"shader_cache")};
       Object.assign(environment,inputRouting);
       context.onEntryChange?.({defaultSaveDir:entry.defaultSaveDir,moduleData:entry.moduleData});
       return spawnForegroundNativeGame({context,executablePath:selected.install.executablePath,

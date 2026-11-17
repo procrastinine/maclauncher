@@ -13,7 +13,8 @@ function launchFixture(t, {appleSilicon = true, fexReady = true, rosettaReady = 
   const Vulkan = require('../src/modules/shared/vulkan'), Bundled = require('../src/modules/shared/runtime/bundled-native');
   const Input = require('../src/modules/anyps5/input'), Focus = require('../src/modules/shared/runtime/native-focus');
   const Prepare = require('../src/modules/anyps5/prepare');
-  const record = {vulkan: [], launched: [], prepared: 0, rosettaPrompts: 0};
+  const DockIcon = require('../src/modules/shared/dock-icon');
+  const record = {vulkan: [], launched: [], prepared: 0, rosettaPrompts: 0, icons: [], iconError: null};
   const fexRoot = path.join(f.root, 'fex-runtime'), host = path.join(fexRoot, HOST);
   fs.mkdirSync(path.dirname(host), {recursive: true}); fs.writeFileSync(host, 'fixture host');
   const converted = path.join(f.root, 'converted', 'game');
@@ -24,6 +25,11 @@ function launchFixture(t, {appleSilicon = true, fexReady = true, rosettaReady = 
   t.mock.method(Vulkan, 'environment', () => ({}));
   t.mock.method(Vulkan, 'requirements', (_context, value) => [{architecture: value.architecture}]);
   t.mock.method(Focus, 'spawnForegroundNativeGame', async payload => { record.launched.push(payload); return payload; });
+  // The Dock icon drawer is replaced, so no test starts osascript.
+  t.mock.method(DockIcon, 'prepare', async (source, directory) => {
+    if (record.iconError) throw record.iconError;
+    record.icons.push({source, directory}); return path.join(directory, 'dock-icon.png');
+  });
   const original = Architecture.requiresRosetta;
   t.mock.method(Architecture, 'requiresRosetta', architecture => appleSilicon && original(architecture, {platform: 'darwin', hardwareArch: 'arm64'}));
   const modulePath = require.resolve('../src/modules/anyps5/main'); delete require.cache[modulePath];
@@ -71,6 +77,20 @@ test('on Apple silicon the FEX route runs the start host on the imported program
   assert.ok(anyps5.resolveSaveLocations(f.entry, {userDataDir: f.profile}).directories.some(row => row.directory === path.join(folder, '_sd_mem')));
   assert.equal((await anyps5.resolveGraphicsInputs(f.entry, context('auto'))).architecture, 'arm64');
   assert.equal(anyps5.settingsActions.listCpuRoutes, undefined);
+});
+
+test('the FEX start host carries the game name and its prepared Dock icon, without a per-game bundle', async t => {
+  const {f, anyps5, record, context} = launchFixture(t);
+  f.entry.iconPath = path.join(f.root, 'cover.png'); fs.writeFileSync(f.entry.iconPath, 'artwork');
+  const icons = require('../src/modules/shared/game-data').resolveGameIconsDir(f.profile, f.entry.gameId);
+  const launch = await anyps5.launchRuntime('anyps5', f.entry, context());
+  assert.deepEqual(record.icons, [{source: f.entry.iconPath, directory: icons}]);
+  assert.equal(launch.options.env.MACLAUNCHER_GAME_NAME, 'Fixture Game');
+  assert.equal(launch.options.env.MACLAUNCHER_GAME_ICON, path.join(icons, 'dock-icon.png'));
+  record.iconError = new Error('The game Dock icon could not be prepared.');
+  const unprepared = await anyps5.launchRuntime('anyps5', f.entry, context());
+  assert.equal(unprepared.options.env.MACLAUNCHER_GAME_ICON, f.entry.iconPath, 'the game artwork itself when no Dock icon can be prepared');
+  assert.equal(unprepared.options.env.MACLAUNCHER_GAME_NAME, 'Fixture Game');
 });
 
 test('Rosetta stays selectable on Apple silicon with the converted game and Intel Vulkan', async t => {
