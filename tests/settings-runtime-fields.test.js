@@ -65,5 +65,5 @@ test('a module section is headed by its sidebar entry, and Settings menus, statu
   assert.match(css, /\.settingsControl > select\.input:not\(\[multiple\]\) \{ flex: 0 1 auto; width: auto; min-width: 8rem; \}/, 'a menu sizes to its choices');
   assert.match(css, /\.settingsControl > \.input \+ \.btn:not\(\.iconOnly\) \{ min-width: 6\.5rem; \}/, 'Browse… and Add… share one width');
   assert.match(css, /\.settingsUpdateControl \{ flex-wrap: nowrap; \}/);
-  assert.match(css, /\.settingsRow:has\(> \.settingsUpdateControl\) \{ grid-template-columns: minmax\(var\(--field-label\), 15rem\) minmax\(0, 1fr\); \}/);
+  assert.match(css, /\.settingsRow:has\(> \.settingsUpdateControl\) \{ grid-template-columns: minmax\(var\(--field-label\), 18rem\) minmax\(0, 1fr\); \}/);
 });

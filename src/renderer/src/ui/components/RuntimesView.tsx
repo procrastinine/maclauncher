@@ -14,7 +14,7 @@ import {
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
 import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs, runtimeChoiceForQuery, runtimeTabChoice, runtimeRequestPending, runtimeDefaultMenu, runtimeMakeDefaultChoice, runtimeDistinctLinks,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
-  runtimeRemovalPresentation, runtimeMinimumDetail, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
+  runtimeRemovalPresentation, runtimeMinimumDetail, runtimeIncludedParts, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
   managedRuntimeSections, runtimePendingAction, runtimeRefreshPayload, runtimeSourceUiKey,
   translatorInstallBuild, translatorInstallRequirement } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
@@ -710,8 +710,9 @@ export function RuntimesView({
                                 {componentSizeText({ path: inst.installDir, bytes: installSizes[inst.installDir].bytes, sizeComplete: installSizes[inst.installDir].complete })}</div>}
                               {runtimeMinimumDetail(inst.minimumMacOS) && <div className="dim">{runtimeMinimumDetail(inst.minimumMacOS)}</div>}
                               {apis.length > 0 && <div className="dim">{apis.join(", ")}</div>}
-                              {typeof inst.componentSummary === "string" && inst.componentSummary &&
-                                <div className="dim" data-runtime-components="true">Includes {inst.componentSummary}</div>}
+                              {runtimeIncludedParts(inst.componentSummary).length > 0 &&
+                                <div className="dim" data-runtime-components="true">Includes {runtimeIncludedParts(inst.componentSummary).map((part, index) =>
+                                  <React.Fragment key={index}>{index ? " · " : ""}<span className="runtimeIncludedPart">{part}</span></React.Fragment>)}</div>}
                               {inst.error && <div className="dim">{formatUserError(inst.error)}</div>}
                             </div>
                             {!inst.reference && <div className="saveRowActions">

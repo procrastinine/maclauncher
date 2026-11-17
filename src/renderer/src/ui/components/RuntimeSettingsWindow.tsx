@@ -17,9 +17,9 @@ import {
   runtimeVersionOptions
 } from "../ui-helpers";
 
-import { HelpTip } from "./HelpTip";
+import { SectionHelp, helpItems, type HelpItem } from "./HelpList";
 import { RuntimeSettingsDisplay } from "./RuntimeSettingsDisplay";
-import { RuntimeDescription } from "./RuntimeDescription";
+import { RuntimeDescription, runtimeDescriptionParagraphs } from "./RuntimeDescription";
 import { CommitNumberInput, CommitTextArea, CommitTextInput } from "./CommitInput";
 import { ErrorText } from "./ErrorText";
 import { Toggle } from "./FieldRow";
@@ -42,6 +42,8 @@ type RuntimeSettingsWindowProps = {
   renderField?: (field: RuntimeSettingField, control: React.ReactNode, setField: (key: string, value: unknown) => Promise<boolean>) => React.ReactNode;
   showReset?: boolean;
   showDescription?: boolean;
+  /** Settings lists the form's row explanations in its section heading's help; without it the form's own header holds them. */
+  onHelpChange?: (items: HelpItem[]) => void;
   controlled?: { schema: RuntimeSettingsSchema; values: Record<string, unknown>; save: (values: Record<string, unknown>) => Promise<void>; resetLabel?: string };
 };
 
@@ -55,9 +57,11 @@ export function RuntimeSettingsWindow({
   renderField,
   showReset = true,
   showDescription = true,
+  onHelpChange,
   controlled
 }: RuntimeSettingsWindowProps) {
   const [draft, setDraft] = useState<Record<string, any> | null>(null);
+  const [providerHelp, setProviderHelp] = useState<HelpItem[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [liveChoices, setChoices] = useState<Record<string, SettingChoices>>({});
@@ -323,15 +327,23 @@ export function RuntimeSettingsWindow({
   const providerBlock = schema?.provider && (!schema.provider.gameOnly || isGameScope) ? <RuntimeSettingsProvider
     key={JSON.stringify([context.moduleId, context.runtimeId, context.gamePath])}
     api={api} state={state} context={context} provider={schema.provider} resetRef={providerReset} onEditable={setProviderEditable}
-    revision={JSON.stringify([gameEntry?.runtimeData, gameEntry?.moduleData])} /> : null;
+    revision={JSON.stringify([gameEntry?.runtimeData, gameEntry?.moduleData])} onHelpChange={setProviderHelp} /> : null;
   const showsStatic = Boolean(api && state && schema && displaySettings);
+  // Each row's explanation, in row order, followed by the game's own settings.
+  const formHelp = [...helpItems(visibleFields.map(field => field.type === "display" ||
+    (field.optionsAction && !isRoleFieldShown(choices[field.optionsAction], field.key)) ? null
+    : { label: field.label, text: field.description || (field.key === "enableProtections" && displaySettings
+      ? formatProtectionStatus(Boolean((displaySettings as any)[field.key]) === (field.checkedValue !== false)) : "") })), ...providerHelp];
+  const formHelpKey = JSON.stringify(formHelp);
+  useEffect(() => { onHelpChange?.(JSON.parse(formHelpKey)); }, [formHelpKey, onHelpChange]);
 
   return (
     <section className={inline ? "runtimeSettingsInline" : "runtimeSettingsRoot"} aria-label={`${runtimeLabel} settings`}>
       <div className={inline ? "runtimeSettingsInlinePanel" : "runtimeSettingsPanel"}>
         {!inline && <div className="runtimeSettingsHeader">
           <div>
-            <div className="modalTitle">{runtimeLabel} settings <RuntimeDescription moduleInfo={moduleInfo} runtimeId={context.runtimeId} /></div>
+            <div className="modalTitle">{runtimeLabel} settings <SectionHelp label={`About ${runtimeLabel} settings`} items={formHelp}>
+              {runtimeDescriptionParagraphs(moduleInfo, context.runtimeId)}</SectionHelp></div>
             <div className="modalSubtitle">{subtitle}</div>
           </div>
         </div>}
@@ -382,7 +394,7 @@ export function RuntimeSettingsWindow({
                   return <React.Fragment key={field.key}>
                     {typeof notice === "string" && notice && <div className="dim">{notice}</div>}
                     <div className="settingsRow">
-                    <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}
+                    <div className="settingsLabel" title={field.description || undefined}>{field.label}
                       {scope && <div className="dim">{scope}</div>}</div>
                     <div className="settingsControl">
                       <Select className="input" aria-label={field.label} value={selected} disabled={disabled}
@@ -405,7 +417,7 @@ export function RuntimeSettingsWindow({
                 if (field.type === "boolean") {
                   return (
                     <div className="settingsRow" key={field.key}>
-                      <div className="settingsLabel">{field.label}{(field.description || statusText) && <HelpTip label={`About ${field.label}`}>{field.description || statusText}</HelpTip>}</div>
+                      <div className="settingsLabel" title={field.description || statusText || undefined}>{field.label}</div>
                       <div className="settingsControl">
                         <Toggle label={field.label} checked={checked} disabled={!canEdit || fieldsDisabled}
                           onChange={next => onFieldChange(field.key, field.checkedValue === false ? !next : next)} />
@@ -417,7 +429,7 @@ export function RuntimeSettingsWindow({
                   const num = (displaySettings as any)[field.key];
                   return (
                     <div className="settingsRow" key={field.key}>
-                      <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
+                      <div className="settingsLabel" title={field.description || undefined}>{field.label}</div>
                       <div className="settingsControl">
                         <CommitNumberInput aria-label={field.label} value={Number.isFinite(num) ? num : null} min={field.min} max={field.max} step={field.step}
                           onCommit={next => onFieldChange(field.key, next)} disabled={!canEdit || fieldsDisabled} />
@@ -431,7 +443,7 @@ export function RuntimeSettingsWindow({
                   return (
                     <React.Fragment key={field.key}>
                       <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
+                        <div className="settingsLabel" title={field.description || undefined}>{field.label}</div>
                         <div className="settingsControl">
                           <Select
                             className="input"
@@ -457,7 +469,7 @@ export function RuntimeSettingsWindow({
                   return (
                     <React.Fragment key={field.key}>
                       <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
+                        <div className="settingsLabel" title={field.description || undefined}>{field.label}</div>
                         <div className="settingsControl">
                           <CommitTextArea rows={4} aria-label={field.label} value={textValue}
                             onCommit={next => onFieldChange(field.key, next)} disabled={!canEdit || fieldsDisabled} />
@@ -473,7 +485,7 @@ export function RuntimeSettingsWindow({
                 return (
                   <React.Fragment key={field.key}>
                     <div className="settingsRow">
-                      <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
+                      <div className="settingsLabel" title={field.description || undefined}>{field.label}</div>
                       <div className="settingsControl">
                         <CommitTextInput aria-label={field.label} value={String((displaySettings as any)[field.key] || "")} placeholder={field.placeholder}
                           onCommit={next => onFieldChange(field.key, next)} disabled={!canEdit || fieldsDisabled} />
@@ -569,10 +581,11 @@ function providerSettings(value: unknown): ProviderSettings {
   return { schema: { fields: result.schema.fields, defaults: result.schema.defaults }, values: result.values,
     message: typeof result.message === "string" ? result.message.slice(0, 512) : undefined };
 }
-function RuntimeSettingsProvider({ api, state, context, provider, revision, resetRef, onEditable }: {
+function RuntimeSettingsProvider({ api, state, context, provider, revision, resetRef, onEditable, onHelpChange }: {
   api: RuntimeSettingsApi | undefined; state: LauncherState | null; context: RuntimeSettingsContext;
   provider: NonNullable<RuntimeSettingsSchema["provider"]>; revision: string;
   resetRef: React.MutableRefObject<(() => Promise<void>) | null>; onEditable: (editable: boolean) => void;
+  onHelpChange: (items: HelpItem[]) => void;
 }) {
   const [loaded, setLoaded] = useState<ProviderSettings | null>(null), [error, setError] = useState<string | null>(null);
   const scope = useRef(0);
@@ -602,7 +615,7 @@ function RuntimeSettingsProvider({ api, state, context, provider, revision, rese
     <ErrorText error={error} />
     {!loaded && !error && <div className="empty">Loading game settings…</div>}
     {loaded && loaded.schema.fields.length > 0 && <RuntimeSettingsWindow api={api} state={state} context={context}
-      error={null} inline showDescription={false} showReset={false} controlled={{ ...loaded, save }} />}
+      error={null} inline showDescription={false} showReset={false} onHelpChange={onHelpChange} controlled={{ ...loaded, save }} />}
     {loaded?.message && <div className="empty">{loaded.message}</div>}
   </>;
 }

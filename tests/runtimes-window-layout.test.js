@@ -310,3 +310,15 @@ test('a deep link to a runtime whose sections arrive late keeps that runtime ins
   assert.equal(ui.runtimeRequestPending({ managers: [{ id: 'ilspy' }] }, [{ managerId: 'ilspy' }], 'ilspy'), false);
   assert.equal(ui.runtimeRequestPending({ managers: [{ id: 'other' }] }, [], 'ilspy'), false);
 });
+
+test('installed rows read macOS releases as macOS names them and keep each included component on one line (GUI 0904)', () => {
+  const row = render([runtime([{ version: '1.0', ready: true, minimumMacOS: '26.0.0', componentSummary: 'DXMT 0.80 · MoltenVK 1.4.1 · GStreamer 1.26.3' },
+    { version: '0.9', ready: true, minimumMacOS: '26.1.2' }])], 'fixture');
+  assert.match(row, /<div class="dim">Requires macOS 26\.0 or later<\/div>/);
+  assert.match(row, /<div class="dim">Requires macOS 26\.1\.2 or later<\/div>/);
+  assert.match(row, /Includes <span class="runtimeIncludedPart">DXMT 0\.80<\/span> · <span class="runtimeIncludedPart">MoltenVK 1\.4\.1<\/span> · <span class="runtimeIncludedPart">GStreamer 1\.26\.3<\/span>/);
+  assert.deepEqual(ui.runtimeIncludedParts('A 1 · B 2'), ['A 1', 'B 2']);
+  assert.deepEqual(ui.runtimeIncludedParts(null), []);
+  const css = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.runtimeIncludedPart \{ white-space: nowrap; \}/);
+});

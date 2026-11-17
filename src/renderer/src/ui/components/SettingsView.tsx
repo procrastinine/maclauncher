@@ -15,7 +15,7 @@ import {
   settingsSectionModules
 } from "../ui-helpers";
 import { RuntimeSettingsWindow, type RuntimeSettingsApi } from "./RuntimeSettingsWindow";
-import { HelpTip } from "./HelpTip";
+import { SectionHelp, helpItems, type HelpItem } from "./HelpList";
 import { LauncherViewHeader } from "./LauncherViewHeader";
 import { ScrollableTabStrip } from "./ScrollableTabStrip";
 import { ModuleAccountsPanel } from "./ModuleAccountsPanel";
@@ -23,7 +23,7 @@ import { SearchableSidebar } from "./SearchableSidebar";
 import { CommitNumberInput, CommitTextInput } from "./CommitInput";
 import { Toggle } from "./FieldRow";
 import { StatusBadge } from "./StatusBadge";
-import { GraphicsShortcutSettings, type GraphicsShortcutApi } from "./GraphicsShortcutSettings";
+import { GraphicsShortcutSettings, graphicsShortcutHelp, type GraphicsShortcutApi } from "./GraphicsShortcutSettings";
 import { TranslatorEnvironmentSettings } from "./TranslatorEnvironmentEditor";
 import { PluginSettings } from "./PluginLibrary";
 const GraphicsLibrarySettings = React.lazy(() => import("./GraphicsLibrarySettings").then(module => ({default: module.GraphicsLibrarySettings})));
@@ -60,6 +60,19 @@ export function appUpdateStatus(update: AppUpdateState | undefined): { action: A
   return { action: "check", label: "Check for updates…", busy: false, status };
 }
 
+// Row explanations: each section heading's help lists them, and each label shows its own on hover.
+const LAUNCHER_HELP = {
+  networkAccess: "Initial setting for newly imported games. Each game's inspector has its own checkbox. Changes here do not change existing games.",
+  steamClient: "Steam games that use their own macOS Steam API can start the Steam client before launch. Ask requests permission because Steam may connect to the Internet. Don't start launches the game without starting or waiting for Steam.",
+  checkAtLaunch: "Each start asks GitHub for a newer MacLauncher release and shows a dialog when one is available. While this is off, MacLauncher contacts GitHub for updates only through Check for Updates…."
+};
+const TOOLS_BUTTON_HELP = "Tools remain available via Cmd+Shift+T and the menu bar.";
+export function launcherSettingsHelp(): HelpItem[] {
+  return helpItems([{ label: "Network access", text: LAUNCHER_HELP.networkAccess }, { label: "Steam client on Play", text: LAUNCHER_HELP.steamClient },
+    ...graphicsShortcutHelp(), { label: "Check for updates at launch", text: LAUNCHER_HELP.checkAtLaunch }]);
+}
+const sameHelp = (a: HelpItem[] | undefined, b: HelpItem[]) => JSON.stringify(a || []) === JSON.stringify(b);
+
 function AppUpdateRows({ update, checkAtLaunch, onAction, onSetLauncherSettings }: {
   update?: AppUpdateState; checkAtLaunch: boolean; onAction?: (action: AppUpdateAction) => void;
   onSetLauncherSettings: (patch: Record<string, any>) => void;
@@ -74,7 +87,7 @@ function AppUpdateRows({ update, checkAtLaunch, onAction, onSetLauncherSettings 
       </div>
     </div>
     <div className="settingsRow">
-      <div className="settingsLabel">Check for updates at launch<HelpTip label="About checking for updates at launch">Each start asks GitHub for a newer MacLauncher release and shows a dialog when one is available. While this is off, MacLauncher contacts GitHub for updates only through Check for Updates….</HelpTip></div>
+      <div className="settingsLabel" title={LAUNCHER_HELP.checkAtLaunch}>Check for updates at launch</div>
       <div className="settingsControl">
         <Toggle label="Check for updates at launch" checked={checkAtLaunch}
           onChange={checked => onSetLauncherSettings({ checkForUpdatesAtLaunch: checked })} />
@@ -106,6 +119,7 @@ export function SettingsView({
     if (sectionId) setActiveTab(section(sectionId));
   }
   const [activeRuntimes, setActiveRuntimes] = useState<Record<string, string>>({});
+  const [formHelp, setFormHelp] = useState<Record<string, HelpItem[]>>({});
   // Global translator environment variables have a section of their own.
   const environments = api?.setTranslatorEnvironment && state.translatorEnvironments?.length ? state.translatorEnvironments : null;
   const tabs = [{ id: "launcher", label: "Launcher", title: "Launcher" },
@@ -126,7 +140,7 @@ export function SettingsView({
           aria-label={tabs.find(item => item.id === tab)?.title || "Settings"} tabIndex={0}>
           <div className="settingsStack">
             {tab === "launcher" && <div className="settingsSection">
-              <div className="settingsTitle">Launcher</div>
+              <div className="settingsTitle">Launcher<SectionHelp label="About Launcher settings" items={launcherSettingsHelp()} /></div>
               <div className="settingsRow">
                 <label className="settingsLabel" htmlFor="launcher-appearance">Appearance</label>
                 <div className="settingsControl">
@@ -137,14 +151,14 @@ export function SettingsView({
                 </div>
               </div>
               <div className="settingsRow">
-                <div className="settingsLabel">Network access<HelpTip label="About default network access">Initial setting for newly imported games. Each game's inspector has its own checkbox. Changes here do not change existing games.</HelpTip></div>
+                <div className="settingsLabel" title={LAUNCHER_HELP.networkAccess}>Network access</div>
                 <div className="settingsControl">
                   <Toggle label="Network access" checked={state.launcherSettings.networkAccess === true}
                     onChange={checked => onSetLauncherSettings({ networkAccess: checked })} />
                 </div>
               </div>
               <div className="settingsRow">
-                <div className="settingsLabel">Steam client on Play<HelpTip label="About Steam client startup">Steam games that use their own macOS Steam API can start the Steam client before launch. Ask requests permission because Steam may connect to the Internet. Don't start launches the game without starting or waiting for Steam.</HelpTip></div>
+                <div className="settingsLabel" title={LAUNCHER_HELP.steamClient}>Steam client on Play</div>
                 <div className="settingsControl">
                   <select className="input" aria-label="Steam client on Play" value={state.launcherSettings.startSteamClient || "ask"}
                     onChange={event => onSetLauncherSettings({ startSteamClient: event.target.value as "ask" | "automatic" | "never" })}>
@@ -225,11 +239,16 @@ export function SettingsView({
                 || runtimeTabs.find(runtime => runtime.id === defaultRuntime)
                 || runtimeTabs.find(runtime => runtime.id === mod.runtime?.default)
                 || runtimeTabs[0];
+              const moduleName = mod.shortLabel || formatModuleLabel(mod.label, mod.shortLabel, mod.id);
+              // The heading's help lists the shown runtime form's rows.
+              const helpKey = `${mod.id}:${selectedRuntime?.id || ""}`;
               return (
                 <div className="settingsSection" key={mod.id}>
                   {/* The heading repeats the sidebar entry that opened it. */}
                   <div className="settingsTitle">
-                    {mod.shortLabel || formatModuleLabel(mod.label, mod.shortLabel, mod.id)}
+                    {moduleName}
+                    <SectionHelp label={`About ${moduleName} settings`} items={[...(settingKeys.includes("toolsButtonVisible")
+                      ? helpItems([{ label: "Show Tools button", text: TOOLS_BUTTON_HELP }]) : []), ...(formHelp[helpKey] || [])]} />
                   </div>
                   {(runtimeChoices.length > 1 || (defaultRuntime && !runtimeChoices.includes(defaultRuntime))) && (
                     <div className="settingsRow">
@@ -269,7 +288,7 @@ export function SettingsView({
                         const label = key === "toolsButtonVisible" ? "Show Tools button" : formatSettingLabel(key);
                         return (
                           <div className="settingsRow" key={`${mod.id}-${key}`}>
-                            <div className="settingsLabel">{label}{key === "toolsButtonVisible" && <HelpTip label="About the Tools button">Tools remain available via Cmd+Shift+T and the menu bar.</HelpTip>}</div>
+                            <div className="settingsLabel" title={key === "toolsButtonVisible" ? TOOLS_BUTTON_HELP : undefined}>{label}</div>
                             <div className="settingsControl">
                               <Toggle label={label} checked={Boolean(currentValue)}
                                 onChange={checked => onSetModuleSettings(mod.id, { [key]: checked })} />
@@ -342,6 +361,7 @@ export function SettingsView({
                         aria-labelledby={`settings-runtime-${runtimeTabs.length > 1 ? "tab" : "heading"}-${mod.id}-${selectedRuntime.id}`}>
                         <RuntimeSettingsWindow key={`${mod.id}:${selectedRuntime.id}`}
                           api={api} state={state} error={null} inline
+                          onHelpChange={items => setFormHelp(current => sameHelp(current[helpKey], items) ? current : { ...current, [helpKey]: items })}
                           context={{ scope: "module", moduleId: mod.id, runtimeId: selectedRuntime.id }} />
                         <PluginSettings state={state} api={api} moduleId={mod.id} runtimeId={selectedRuntime.id} />
                         {accountDescriptors

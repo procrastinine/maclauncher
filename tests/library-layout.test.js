@@ -353,3 +353,11 @@ test('the Saves folder button ends its row after Change… and Reset, under the 
   assert.deepEqual(order.slice(-1), ['Reveal in Finder']);
   assert.ok(order.indexOf('Change…') < order.indexOf('Reveal in Finder'));
 });
+
+test('the inspector names the game type as the library and Settings do, and its Output disclosure matches the others (GUI 0904)', () => {
+  const state = createLibraryFixture();
+  assert.match(renderDetails(state), /<div class="cardSubtitle">FX/);
+  const css = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.graphicsOutput > summary \{ font-size: var\(--font-sm\); line-height: 1\.4; \}/);
+  assert.match(css, /\.libraryToolbar \.btn:not\(\.iconOnly\) \{ font-size: var\(--font-sm\); \}/, 'Game types reads at the size of All games');
+});

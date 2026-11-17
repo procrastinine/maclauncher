@@ -163,7 +163,8 @@ test('Runtimes names the translator versions of an installed Wine runtime and wh
     onRuntimeRefresh() {}, onRuntimeInstall() {}, onRuntimeSetDefault() {}, onRuntimeUninstall() {}, onCancelDownload() {} }));
   const wine = render('sikarugir', { id: 'default', label: 'Sikarugir', versionLabels: { engine: 'Wine 10.0_8 · Template 1.0.24' },
     installed: [{ version: 'engine', ready: true, componentSummary: 'D3DMetal 4.0b3 · DXVK 1.10.3 async (dxvk)' }], catalog: { versions: [] } });
-  assert.match(wine, /data-runtime-components="true">Includes D3DMetal 4\.0b3 · DXVK 1\.10\.3 async \(dxvk\)</);
+  // Each component stays on one line when the summary wraps (GUI 0904).
+  assert.match(wine, /data-runtime-components="true">Includes <span class="runtimeIncludedPart">D3DMetal 4\.0b3<\/span> · <span class="runtimeIncludedPart">DXVK 1\.10\.3 async \(dxvk\)<\/span><\/div>/);
   const listed = 'template-Template-1.0.27', contents = 'The D3DMetal version in this Template release is known after download.';
   const metal = render('translator-d3dmetal', { id: 'default', label: 'D3DMetal', installed: [], versionLabels: { [listed]: 'Template 1.0.27 · d3dmetal' },
     catalog: { status: 'success', versions: [listed], installableVersions: [listed], installable: true, versionLabels: { [listed]: 'Template 1.0.27 · d3dmetal' },

@@ -708,7 +708,9 @@ test('runtime summaries keep description, requirements, setup and data details t
   const markup = renderToStaticMarkup(React.createElement(components.RuntimeSettingsWindow, {
     api: {}, state, context: { scope: 'module', moduleId: 'fixture', runtimeId: 'managed' }, error: null
   }));
-  assert.equal((markup.match(/aria-label="About this runtime"/g) || []).length, 1);
+  // The window's one help button holds the description with the rows' explanations (GUI 0877 S2).
+  assert.equal((markup.match(/class="helpTipButton"/g) || []).length, 1);
+  assert.match(markup, /aria-label="About [^"]+ settings"/);
   assert.match(markup, /class="helpPopover"><p>Compatible application runtime<\/p><p>macOS 15 or later<\/p><p>Automatic setup details\.<\/p><p>Separate application data\.<\/p><\/div>/);
   assert.doesNotMatch(markup, /<p class="dim">(?:Compatible application|macOS 15|Automatic setup|Separate application)/);
 });

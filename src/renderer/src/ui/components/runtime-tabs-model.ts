@@ -36,8 +36,13 @@ export function runtimeVersionBlocked(catalog: Record<string, any> | null | unde
 
 export function runtimeMinimumNotice(minimum: unknown) {
   const value = typeof minimum === "string" ? minimum.trim() : "";
+  // A release reads as macOS names it: 14.0.0 is macOS 14.0, while 13.5.1 keeps its patch number.
   return value && value.localeCompare(packageInfo.build.mac.minimumSystemVersion, undefined, { numeric: true }) > 0
-    ? `Requires macOS ${value} or later.` : "";
+    ? `Requires macOS ${value.replace(/^(\d+\.\d+)\.0$/, "$1")} or later.` : "";
+}
+/** The parts of an "Includes …" summary, each kept on one line when the line wraps. */
+export function runtimeIncludedParts(summary: unknown) {
+  return typeof summary === "string" ? summary.split(/\s+·\s+/).map(part => part.trim()).filter(Boolean) : [];
 }
 // The same requirement as one of an installed row's detail lines, which carry no sentence period.
 export function runtimeMinimumDetail(minimum: unknown) {

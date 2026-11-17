@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { XIcon } from "../icons";
 import type { LauncherApi, LauncherSettings } from "../types";
-import { fromKeyboardEvent, validate, ACTION_HELP } from "../../../../modules/shared/graphics-shortcuts.mjs";
-import { HelpTip } from "./HelpTip";
+import { fromKeyboardEvent, validate, ACTION_HELP, ACTIONS } from "../../../../modules/shared/graphics-shortcuts.mjs";
+import { helpItems, type HelpItem } from "./HelpList";
 
 type ShortcutStatus = {action: string; label: string; accelerator: string | null; reason?: string};
 export type GraphicsShortcutApi = Partial<Pick<LauncherApi, "getGraphicsShortcuts" | "chooseScreenshotFolder">>;
@@ -11,6 +11,14 @@ export type GraphicsShortcutApi = Partial<Pick<LauncherApi, "getGraphicsShortcut
 const GLYPHS: Record<string, string> = {Control: "⌃", Option: "⌥", Shift: "⇧", Command: "⌘", Return: "↩", Escape: "⎋", Space: "Space", Up: "↑", Down: "↓", Left: "←", Right: "→",
   Backspace: "⌫", Delete: "⌦", Tab: "⇥"};
 const display = (accelerator: string) => accelerator.split("+").map(part => GLYPHS[part] ?? part).join("");
+// What each shortcut does; the Launcher section's help lists them, and each row's label shows its own on hover.
+const SHORTCUT_HELP: Record<string, string> = {
+  bypass: "Turns the frontmost game's graphics off or back on, like the Graphics checkbox.",
+  screenshot: "Saves the frontmost game's final processed image as a PNG file. The performance overlay is not included.",
+  ...(ACTION_HELP as Record<string, string>)};
+export function graphicsShortcutHelp(): HelpItem[] {
+  return helpItems(Object.entries(ACTIONS as Record<string, string>).map(([action, label]) => ({ label, text: SHORTCUT_HELP[action] })));
+}
 
 /** Shortcut recorders for every graphics shortcut action that has a handler, and the screenshot folder. */
 export function GraphicsShortcutSettings({api, settings, onSetLauncherSettings}: {
@@ -49,9 +57,7 @@ export function GraphicsShortcutSettings({api, settings, onSetLauncherSettings}:
   const folder = settings.graphicsScreenshotFolder;
   return <>
     {actions.map(item => <div className="settingsRow" key={item.action}>
-      <div className="settingsLabel">{item.label.replace(/\S+$/, "")}<span className="labelWithHelp">{item.label.match(/\S+$/)?.[0]}{item.action === "bypass" && <HelpTip label="About the bypass shortcut">Turns the frontmost game's graphics off or back on, like the Graphics checkbox.</HelpTip>}
-        {(ACTION_HELP as Record<string, string>)[item.action] && <HelpTip label={"About " + item.label}>{(ACTION_HELP as Record<string, string>)[item.action]}</HelpTip>}
-        {item.action === "screenshot" && <HelpTip label="About the screenshot shortcut">Saves the frontmost game's final processed image as a PNG file. The performance overlay is not included.</HelpTip>}</span></div>
+      <div className="settingsLabel" title={SHORTCUT_HELP[item.action]}>{item.label}</div>
       <div className="settingsControl">
         <button type="button" className="btn small" aria-pressed={recording === item.action}
           onClick={() => {setProblem(null);setRecording(recording === item.action ? null : item.action);}}>

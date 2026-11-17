@@ -560,6 +560,8 @@ body {
   margin-left: auto;
 }
 .libraryToolbar .input { font-size: var(--font-sm); }
+/* Game types reads at the size of the All games and Sort menus beside it. */
+.libraryToolbar .btn:not(.iconOnly) { font-size: var(--font-sm); }
 .libraryCount { color: var(--muted); font-size: var(--font-xs); margin-left: 4px; }
 
 .header { flex-wrap: wrap; gap: 14px; }
@@ -1899,6 +1901,8 @@ input[type="checkbox"], input[type="radio"] {
 /* Several named sources line their controls up in one column. */
 .runtimeSourceRow.named > .runtimeSourceName { min-width: 9rem; }
 .runtimeVersionSelect { width: auto; min-width: 10rem; max-width: min(36rem, 100%); }
+/* A wrapped "Includes …" line breaks between components, never inside one. */
+.runtimeIncludedPart { white-space: nowrap; }
 .runtimeSourceTrail { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: var(--font-xs); }
 .runtimeSourceLinks { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--font-xs); }
 .runtimeAvailability { font-size: var(--font-xs); }
@@ -2286,7 +2290,8 @@ select.input:not([multiple]) {
    every control starts at the same edge and inputs and menus end at the same line. */
 .settingsRow {
   display: grid;
-  grid-template-columns: minmax(var(--field-label), 15rem) minmax(0, 26rem);
+  /* The label column fits the longest label, so labels stay on one line. */
+  grid-template-columns: minmax(var(--field-label), 18rem) minmax(0, 26rem);
   gap: 12px;
   align-items: center;
   /* Every row is as tall as a select row, so checkbox rows keep the same pitch. */
@@ -2323,7 +2328,7 @@ select.input:not([multiple]) {
 .settingsControl > .input + .btn:not(.iconOnly) { min-width: 6.5rem; }
 
 /* The update button keeps its size; the result beside it stays on one line while the window allows. */
-.settingsRow:has(> .settingsUpdateControl) { grid-template-columns: minmax(var(--field-label), 15rem) minmax(0, 1fr); }
+.settingsRow:has(> .settingsUpdateControl) { grid-template-columns: minmax(var(--field-label), 18rem) minmax(0, 1fr); }
 .settingsUpdateControl { flex-wrap: nowrap; }
 .settingsUpdateControl > .btn { flex-shrink: 0; }
 .settingsStatus {
@@ -2416,6 +2421,8 @@ select.input:not([multiple]) {
 
 .detailDisclosure { font-size: var(--font-sm); padding: 9px 0; border-bottom: 1px solid var(--border); }
 .detailDisclosure > summary { line-height: 1.4; }
+/* Output is an inspector disclosure like More tools and Detection. */
+.graphicsOutput > summary { font-size: var(--font-sm); line-height: 1.4; }
 .inspectorGameActions { padding: 0 16px 12px; justify-content: flex-start; flex-wrap: wrap; gap: 6px; }
 .gameLaunchNotice { margin: -4px 16px 12px; }
 .gameUnavailableNotice { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: -4px 16px 12px; }
@@ -2426,6 +2433,12 @@ select.input:not([multiple]) {
 .helpTipButton:hover { color: var(--text); background: var(--surface-3); }
 .helpTipButton:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .inspectorGameActions .btn.iconOnly { width: 28px; height: 28px; }
+/* A section's help names each row it explains. */
+.helpList { margin: 0; }
+.helpList dt { font-weight: 600; }
+.helpList dt:not(:first-child) { margin-top: 8px; }
+.helpList dd { margin: 2px 0 0; }
+.helpPopover > :not(.helpList) + .helpList { margin-top: 10px; }
 .helpPopover { position: fixed; inset: auto; margin: 0; max-width: min(30rem, calc(100vw - 32px)); max-height: calc(100vh - 16px); overflow: auto; padding: 12px; background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; font-size: var(--font-sm); line-height: 1.5; box-shadow: var(--shadow-drop); }
 
 .settingsTabs, .runtimeTabs { scrollbar-width: none; }

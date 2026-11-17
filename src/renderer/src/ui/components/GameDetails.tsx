@@ -461,7 +461,7 @@ export const GameDetails = memo(function GameDetails({
           <GameIcon game={g} inspector />
           <div className="gameDetailsIdentityText">
             <h2 id="game-details-title" className="cardTitle" title={g.name}>{g.name}</h2>
-            <div className="cardSubtitle">{g.moduleLabel || g.moduleShortLabel || g.moduleId}{detection.version ? ` · ${detection.version}` : ""}</div>
+            <div className="cardSubtitle">{g.moduleShortLabel || g.moduleLabel || g.moduleId}{detection.version ? ` · ${detection.version}` : ""}</div>
           </div>
         </div>
         {onClose && <button className="btn small iconOnly" onClick={onClose} title="Close details" aria-label="Close details"><XIcon /></button>}

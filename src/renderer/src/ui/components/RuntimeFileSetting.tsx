@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { XIcon } from "../icons";
 import type { RuntimeSettingField } from "../types";
-import { HelpTip } from "./HelpTip";
 import { ErrorText } from "./ErrorText";
 import { StatusBadge } from "./StatusBadge";
 
@@ -48,7 +47,7 @@ export function RuntimeFileSetting({ field, value, disabled, request, onChange }
   }
 
   return <div className="settingsRow">
-    <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
+    <div className="settingsLabel" title={field.description || undefined}>{field.label}</div>
     <div className="settingsStack" role="group" aria-label={`${field.label} registration`}
       onDragOver={event => { event.preventDefault(); event.stopPropagation(); if (!disabled && !busy) { event.dataTransfer.dropEffect = "link"; setDragging(true); } }}
       onDragLeave={() => setDragging(false)}
