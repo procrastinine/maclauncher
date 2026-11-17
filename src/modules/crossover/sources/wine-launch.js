@@ -275,6 +275,8 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const nativeInputs = [selected.install.executablePath, selected.install.serverPath,
     ...(translatorPlan.layout.unixRoot ? ["ntdll.so", "wine"].map(name => path.join(translatorPlan.layout.unixRoot, name)).filter(file => fs.existsSync(file)) : [])]
     .map(file => ({ path: file, sha256: require("../../shared/runtime/verified-identity").fileDigest(file).sha256 }));
+  // Optional graphics helpers change the view, not the Wine engine that prepared the prefix.
+  const engineIdentity = crypto.createHash("sha256").update(JSON.stringify(nativeInputs)).digest("hex").slice(0, 20);
   nativeInputs.push(...(vulkanSelection?.inputs || []));
   const identity = crypto.createHash("sha256").update(JSON.stringify(nativeInputs)).digest("hex").slice(0, 20);
   const windowsVersion = settings.windowsVersion || "win10";
@@ -296,7 +298,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   Writable.atomicWrite(path.join(viewRoot, "prepared.json"), JSON.stringify({ inputs: [...nativeInputs, { path: path.join(translatorView.root, "prepared.json"), sha256: require("../../shared/runtime/verified-identity").fileDigest(path.join(translatorView.root, "prepared.json")).sha256 }] }) + "\n", { root: viewRoot });
   if (!existingEnvironment) {
     await ensurePrefix(selected.install, Environments.privateEnvironment(context.userDataDir, directory, path.relative(directory, prefixPath)), directory, { ...settings, windowsVersion: environmentVersion }, graphics, context,
-      { source, run: dependencies.run, runtimeIdentity: JSON.stringify([selected.version, identity]) });
+      { source, run: dependencies.run, runtimeIdentity: JSON.stringify([selected.version, engineIdentity]) });
     Steps.detachProfileAliases(prefixPath);
   }
   await TranslatorFiles.applyNativeLibraries(translatorView, prefixPath, { signal: context.signal });

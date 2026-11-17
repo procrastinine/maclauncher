@@ -838,6 +838,45 @@ test("changing Wine finishes the existing prefix update before short registry co
   assert.equal(fs.readFileSync(save, "utf8"), "existing save");
 });
 
+test("WineVulkan helper changes invalidate the view without updating the Wine engine prefix", async t => {
+  const directory = fixture(t), entry = game(directory), install = installation(directory), dependencies = adapters(install);
+  const unix = path.join(install.wineRoot, "lib/wine/x86_64-unix");fs.mkdirSync(unix, {recursive: true});
+  for (const name of ["ntdll.so", "wine"]) fs.writeFileSync(path.join(unix, name), "engine " + name);
+  const context = {userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {windowsVersion: "win10"}};
+  const Graphics = require("../src/modules/crossover/sources/wine-graphics");
+  t.mock.method(require("../src/modules/shared/runtime/host-capabilities"), "getHostCapabilities", () => dependencies.host);
+  t.mock.method(require("../src/modules/shared/runtime/wine-processes"), "runningState", async () => ({running: false}));
+  let selection = null;
+  t.mock.method(Graphics, "prepareWineVulkan", async () => selection);
+  const first = await Launch.prepareLaunch(entry, context, dependencies);
+  const marker = path.join(first.prefixPath, "maclauncher-prefix.json"), original = fs.readFileSync(marker), inode = fs.statSync(marker).ino;
+  const files = ["selection.json", "winevulkan.dll", "winevulkan.so"].map(name => {
+    const file = path.join(directory, name);fs.writeFileSync(file, "helper " + name);return file;
+  });
+  const helperInputs = () => files.map(file => ({path: file, sha256: require("../src/modules/shared/runtime/verified-identity").fileDigest(file).sha256}));
+  selection = {inputs: helperInputs()};dependencies.calls.length = 0;
+  const added = await Launch.prepareLaunch(entry, context, dependencies);
+  assert.notEqual(added.viewRoot, first.viewRoot);
+  assert.deepEqual(fs.readFileSync(marker), original, "adding the helper does not change the engine preparation marker");
+  assert.equal(fs.statSync(marker).ino, inode);
+  assert.equal(dependencies.calls.some(call => call.args[0] === "wineboot.exe"), false);
+  fs.appendFileSync(files[2], " changed");selection = {inputs: helperInputs()};
+  const changed = await Launch.prepareLaunch(entry, context, dependencies);
+  assert.notEqual(changed.viewRoot, added.viewRoot);
+  assert.deepEqual(fs.readFileSync(marker), original);
+  assert.equal(dependencies.calls.some(call => call.args[0] === "wineboot.exe"), false);
+  const prepared = JSON.parse(fs.readFileSync(path.join(changed.viewRoot, "prepared.json")));
+  assert.equal(prepared.inputs.length, 8, "four engine inputs and three helper inputs remain beside the translator descriptor");
+  for (const input of selection.inputs) assert.deepEqual(prepared.inputs.find(file => file.path === input.path), input);
+  assert.equal(dependencies.graphicsCalls.at(-1).vulkanSelection, selection);
+  fs.appendFileSync(install.serverPath, " changed engine");dependencies.calls.length = 0;
+  const upgraded = await Launch.prepareLaunch(entry, context, dependencies);
+  assert.equal(upgraded.prefixPath, first.prefixPath);
+  assert.notEqual(upgraded.viewRoot, changed.viewRoot);
+  assert.notDeepEqual(fs.readFileSync(marker), original, "actual engine bytes still invalidate prefix preparation");
+  assert.deepEqual(dependencies.calls.filter(call => call.args[0] === "wineboot.exe").map(call => call.args), [["wineboot.exe", "--update"]]);
+});
+
 test("MV selects legacy ANGLE D3D9 with WineD3D for missing Win32 sharing, preserving explicit choices", async t => {
   const { peFixture } = require("./helpers/pe-fixture");
   const { image, X64 } = require("./fixtures/macho-image");
