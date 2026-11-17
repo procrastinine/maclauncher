@@ -42,6 +42,8 @@ test('an incompatible companion publishes no FG receipt and preserves an existin
 });
 test('XeSS installation preserves Auto and exact user choices with offline missing-version resolution',async t=>{
  const f=fixture(t),Manager=require('../src/modules/shared/reshade/runtime/xess-manager');
+ // Version resolution is checked on a host whose GPU compute host can use XeSS.
+ t.mock.method(require('../src/modules/shared/reshade/xess'),'state',()=>({available:true}));
  await Library.importRuntime({...f,runtimePath:f.sr});
  const installed=Library.listInstalled(f.userDataDir)[0];
  assert.deepEqual(Manager.updateSettingsAfterInstall({},installed),{defaultVersion:null});

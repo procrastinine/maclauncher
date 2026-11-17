@@ -8,20 +8,41 @@ function requested(context = {}) {
 function missing(message = "Install or import a compatible Intel XeSS SDK.") {
   return Object.assign(Error(message), { code: "GRAPHICS_XESS_RUNTIME_MISSING", managerId: Library.Source.managerId });
 }
+// XeSS SDK files serve the included graphics processor's GPU host. Installing
+// on a host that cannot use them is refused before any release or file download.
+function support(context = {}) {
+  return require("../xess").state(context.root || require("..").runtimeRoot(context.app), context);
+}
+function requireSupport(context = {}) {
+  const host = support(context);
+  if (!host.available) throw Error(host.reason || "A compatible GPU compute host is required.");
+}
+function unavailable(catalog, reason) {
+  return catalog && { ...catalog, installable: false, installableVersions: [], installReason: reason,
+    versionRequirements: Object.fromEntries(Object.entries(catalog.versionRequirements || {}).map(([version, row]) => [version, { ...row, available: false, reason }])) };
+}
 function createManager(dependencies = {}) {
   const manager = Versions.createManager(dependencies), state = manager.getState, remove = manager.uninstallRuntime, install = manager.installRuntime;
   manager.ui = { groupId: "graphics", tabLabel: "Graphics", sectionLabel: "XeSS", order: 0, memberOrder: 6, management: "managed" };
   manager.updateSettingsAfterInstall = settings => manager.normalizeSettings(settings);
   manager.getState = context => {
-    const value = state(context), legacy = Library.legacyListInstalled(context?.userDataDir);
+    let value = state(context);
+    const legacy = Library.legacyListInstalled(context?.userDataDir), host = support(context || {});
+    if (!host.available) {
+      const reason = host.reason || "A compatible GPU compute host is required.";
+      value = { ...value, catalog: unavailable(value.catalog, reason), sections: value.sections.map(section => ({ ...section, catalog: unavailable(section.catalog, reason) })) };
+    }
     if (!legacy.length) return value;
     const installed = [...value.installed, ...legacy];
     return { ...value, installed, sections: value.sections.map(section => section.id === 'default' ? { ...section, installed } : section) };
   };
   manager.uninstallRuntime = context => context.version === Library.Source.version
     ? Library.remove(context) : remove(context);
-  manager.installRuntime = context => context.version === Library.Source.version
-    ? Library.installLegacy({ ...context, confirmRuntimeInstall: require("../../runtime/tool-install").approveDownloads }) : install(context);
+  manager.installRuntime = async context => {
+    requireSupport(context);
+    return context.version === Library.Source.version
+      ? Library.installLegacy({ ...context, confirmRuntimeInstall: require("../../runtime/tool-install").approveDownloads }) : install(context);
+  };
   manager.resolveRuntime = (context = {}) => {
     const selection = manager.resolveSelection(context.entry || {}, context.settings, context.userDataDir, { version: context.version });
     if (!selection.ready) {
@@ -39,6 +60,7 @@ function createManager(dependencies = {}) {
     let selected = manager.resolveSelection(context.entry || {}, context.settings, context.userDataDir, { version: context.version });
     if (selected.ready) return manager.resolveRuntime(context);
     await confirmToolInstall(context, { manager, version: selected.version, requiresDownload: true, detail: "Required for the selected XeSS effect." });
+    requireSupport(context);
     if (!selected.version || selected.discoveryRequired) {
       await manager.refreshCatalog({ ...context, force: false }); context.onRuntimeStateChange?.(); context.signal?.throwIfAborted();
       selected = manager.resolveSelection(context.entry || {}, context.settings, context.userDataDir, { version: context.version });
