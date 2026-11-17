@@ -33,7 +33,7 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
   connection = sceneConnection, catalog } = {}) {
   const base = createProjectBuildManager({ projectId: id, label: 'CrossOver graphics integration',
     repository: 'procrastinine/maclauncher-builds', manifestRelative: 'manifest.json', sourceRelative: 'provenance.json',
-    executableRelative: manifest => manifest.libraries['x86_64-unix'], nativeLibrary: true, supportsDefault: false,
+    executableRelative: manifest => manifest.libraries['x86_64-unix'], nativeLibrary: true, supportsDefault: true,
     validateManifest(manifest) {
       const facts = manifest.capabilities;
       if (facts?.role !== 'crossover-vulkan-driver')
@@ -47,7 +47,9 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
     const selected = base.resolveSelection(null, {}, userDataDir, { ...options, version: row.version, verification: 'status' });
     return selected.ready ? selected.install : null;
   }).filter(Boolean);
-  function installed(installation, list) {
+  function installed(installation, list, context = {}) {
+    const selected = context.userDataDir && base.resolveSelection?.(null, context.settings, context.userDataDir, { ...options, verification: 'status' });
+    if (selected?.ready && matches(selected.install?.manifest?.capabilities?.runtimeProfile, installation)) return selected.install;
     return list.filter(row => matches(row.manifest.capabilities.runtimeProfile, installation))
       .sort((a, b) => compareRuntimeVersions(a.version, b.version))[0] || null;
   }
@@ -71,25 +73,17 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
   // Its Runtimes row is in the CrossOver tab.
   const manager = { ...withDescription(base, 'An optional package matched to one CrossOver release and build. It adds Vulkan external memory, semaphore and fence sharing to CrossOver\'s Mac driver, and Play offers it, after consent, when that release runs a game that forwards DLSS scene frames through a selected vkd3d-proton build of MacLauncher.'),
     ui: { groupId: 'crossover', sectionLabel: 'CrossOver graphics integration', memberOrder: 1, management: 'managed' }, distributionRequired: false };
-  // One package is kept for each registered CrossOver release: the newest
-  // revision. Nothing is inspected while no package is installed.
+  // Only obsolete declined-download markers are removed here. Installed
+  // packages retain the shared manager's explicit deletion and origin policy.
   async function prune(userDataDir) {
-    const list = rows(userDataDir), skipped = skippedReleases(userDataDir);
-    if (!list.length && !skipped.length) return;
+    const skipped = skippedReleases(userDataDir);
+    if (!skipped.length) return;
     const registered = applications(userDataDir);
     // An unavailable registered application has no observable release. Retain
     // its package until that application is available or unregistered.
     if (registered.some(row => row.ready === false)) return;
     const releases = new Set(registered.map(releaseKey));
     if (skipped.some(release => !releases.has(release))) keepSkipped(userDataDir, skipped.filter(release => releases.has(release)));
-    const retained = new Set(registered.map(installation => installed(installation, list)?.version).filter(Boolean));
-    for (const row of list) if (!retained.has(row.version)) {
-      try {
-        await require('../../../core/coordinated-runtime-managers').withRuntimeMutation(
-          { managerId: id, version: row.version, sourcePath: row.installDir },
-          () => manager.uninstallRuntime({ userDataDir, version: row.version, ...options }), { userDataDir });
-      } catch (error) { if (error.code !== 'RUNTIME_IN_USE') throw error; }
-    }
   }
   async function requirements(entry, context) {
     try { await prune(context.userDataDir); }
@@ -97,7 +91,7 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
     if (!ownRoute(context.translatorPlan)) return [];
     const installation = context.wineEnvironment?.install || require('./manager').resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings).install;
     if (!installation?.buildVersion || !connection(entry, context, installation)) return [];
-    if (installed(installation, rows(context.userDataDir)) || skippedReleases(context.userDataDir).includes(releaseKey(installation))) return [];
+    if (installed(installation, rows(context.userDataDir), context) || skippedReleases(context.userDataDir).includes(releaseKey(installation))) return [];
     // Play offers only a listed package. Without one, the launch reports the
     // scene transport unavailable and the game starts without it.
     const pin = (catalog ? catalog(context.userDataDir) : base.core.listDiscoveredCatalog({ userDataDir: context.userDataDir }))
@@ -114,7 +108,7 @@ function create({ dependencies = {}, applications = userDataDir => require('./ma
   async function select(installation, context) {
     try {
       if (!ownRoute(context.translatorPlan) || !context.ngxSceneConnection || context.translatorPlan.layout?.unixName !== 'x86_64-unix') return null;
-      const current = installed(installation, rows(context.userDataDir));
+      const current = installed(installation, rows(context.userDataDir), context);
       if (!current) return null;
       await context.useRuntime?.({ managerId: id, version: current.version, sourcePath: current.installDir });
       return { path: current.executablePath, sha256: current.manifest.files.find(file => file.path === current.manifest.libraries['x86_64-unix'])?.sha256 };

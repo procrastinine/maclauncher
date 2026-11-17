@@ -162,3 +162,27 @@ test('winemac matches the exact CrossOver ABI release without duplicate package 
   assert.equal(manager.matches(profile, { upstreamVersion: '26.4', buildVersion: '39832' }), false);
   assert.equal(manager.matches(profile, { upstreamVersion: '26.3', buildVersion: '39833' }), false);
 });
+
+test('winemac exposes defaults and its consumer uses the selected matching installed package', async t => {
+  const Module=require('node:module'),load=Module._load,profile={product:'CrossOver',version:'26.3',build:'39832'};
+  const images=Object.fromEntries(['1.0','2.0'].map(version=>[version,{version,installDir:'/owned/'+version,executablePath:'/owned/'+version+'/winemac.so',
+    manifest:{capabilities:{runtimeProfile:profile},libraries:{'x86_64-unix':'winemac.so'},files:[{path:'winemac.so',sha256:version==='1.0'?'a'.repeat(64):'b'.repeat(64)}]}}]));
+  let options;const removed=[];
+  t.mock.method(Module,'_load',function(id,...args){
+    if(id==='../../shared/runtime/project-build-manager')return{createProjectBuildManager(value){options=value;return{
+      core:{listInstalled:()=>Object.values(images)},uninstallRuntime:async input=>removed.push(input.version),resolveSelection:(_entry,settings,_root,selection={})=>({ready:true,install:images[selection.version||settings?.runtimes?.['maclauncher-crossover-winemac']?.defaultVersion||'2.0']})};}};
+    return load.call(this,id,...args);
+  });
+  delete require.cache[require.resolve('../src/modules/crossover/runtime/winemac')];
+  const manager=require('../src/modules/crossover/runtime/winemac');t.after(()=>{delete require.cache[require.resolve('../src/modules/crossover/runtime/winemac')];});
+  assert.equal(options.supportsDefault,true);
+  const uses=[],context={userDataDir:'/bounded-profile',settings:{runtimes:{'maclauncher-crossover-winemac':{defaultVersion:'1.0'}}},ngxSceneConnection:{},
+    translatorPlan:{runtime:'crossover',layout:{unixName:'x86_64-unix'},components:{d3d12:{used:{managerId:'vkd3d-proton'}}}},useRuntime:async value=>uses.push(value)};
+  const selected=await manager.select({upstreamVersion:'26.3',buildVersion:'39832'},context);
+  assert.equal(selected.path,images['1.0'].executablePath);assert.equal(uses[0].version,'1.0');
+  assert.equal(await manager.select({upstreamVersion:'26.3',buildVersion:'other'},context),null,'an unmatched Wine keeps its own Mac driver');
+  t.mock.method(require('../src/core/coordinated-runtime-managers'),'withRuntimeMutation',async(_identity,perform)=>perform());
+  const pruning=manager.create({applications:()=>[{upstreamVersion:'26.3',buildVersion:'39832'}]});
+  await pruning.prune('/bounded-profile');assert.deepEqual(removed,[],'unknown settings preserve installed choices');
+  await pruning.prune('/bounded-profile',context.settings);assert.deepEqual(removed,[],'both the default and explicit non-default packages are retained');
+});
