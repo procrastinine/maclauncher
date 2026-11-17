@@ -4016,6 +4016,19 @@ function gameGraphicsLive(entry) {
   const launch = require("../modules/shared/reshade/launch-binding").read(entry, {userDataDir, runningPids});
   return Boolean(launch && (launch.live || launch.effectPlanAPI === 1));
 }
+async function installNeuralModel({ method, sourceVersion, setupActionId, automatic }) {
+  const Setup = require("../modules/shared/reshade/neural/setup");
+  const source = Setup.sourcesFor(method, userDataDir).find(row => row.version === sourceVersion);
+  if (!source) throw new Error("The selected neural model is no longer available. Refresh its versions in Runtimes.");
+  const action = source.files ? "downloadModel:" + source.version : "downloadDlssMac";
+  if (setupActionId !== action) throw new Error("The neural model setup action differs from its selected version.");
+  const settings = loadSettings(), manager = getRuntimeManager("graphics-neural-models");
+  return require("./runtime-setup-install").installSetup({ manager, userDataDir, settings, logger,
+    plan: { ...Setup.downloadPlan(source), automatic: automatic === true && Setup.automaticSelection({ settings }, method),
+      installOptions: { sectionId: "default", variant: require("../modules/shared/reshade/neural/models").variantFor(source) } },
+    install: () => backendService.request("runtime:graphics-neural-models", "runtimeAction", "graphics-neural-models", "setup",
+      { sectionId: "default", setupActionId: action }) });
+}
 async function gameEffectsOptions(entry, settings = loadSettings()) {
   const info = Modules.getModuleInfo(resolveModuleId(entry));
   const Binding = require("../modules/shared/reshade/launch-binding");
@@ -4050,7 +4063,7 @@ async function gameEffectsOptions(entry, settings = loadSettings()) {
   });
   const useRuntime = session ? identity => session.graphicsRuntimeUse.useRuntime(identity) : undefined;
   return { userDataDir, app, settings, downloads: downloadManager, confirmRuntimeInstall: confirmRuntimeInstallation,
-    ensureNeuralModel: ({setupActionId}) => backendService.request('runtime:graphics-neural-models','runtimeAction','graphics-neural-models','setup',{sectionId:'default',setupActionId}),
+    ensureNeuralModel: installNeuralModel,
     ...(graphicsPayload ? {root: graphicsPayload.root} : {}),
     graphicsHost: launch?.graphicsHost || info?.runtime?.entries?.[runtimeId]?.graphicsHost,
     graphicsArchitecture: launch?.graphicsArchitecture || graphicsInputs?.architecture || info?.runtime?.entries?.[runtimeId]?.graphicsArchitecture,
@@ -4078,7 +4091,7 @@ const graphicsModels = {
   active: ({source}) => Boolean(graphicsModelTask(source)),
   async consent({operation, source, gamePaths = [], signal}) {
     const Setup = require("../modules/shared/reshade/neural/setup");
-    const selected = Setup.sourcesFor(operation).find(row => row.version === source.version);
+    const selected = Setup.sourcesFor(operation, userDataDir).find(row => row.version === source.version);
     if (!selected) return false;
     const games = gamePaths.map(gamePath => findGameByPath(gameRecordsCache || [], gamePath)?.name || path.basename(gamePath));
     const bytes = Number.isFinite(source.bytes) ? source.bytes : selected.bytes;
@@ -4095,8 +4108,8 @@ const graphicsModels = {
     const cancel = () => {const task = graphicsModelTask(source);if (task) void backendService.cancelDownload(task.id);};
     graphicsModelProgress.add(progress);signal.addEventListener("abort", cancel, {once: true});
     try {
-      await backendService.request("runtime:graphics-neural-models", "runtimeAction", "graphics-neural-models", "setup",
-        {sectionId: "default", setupActionId: source.setupActionId});
+      await installNeuralModel({ method: operation, sourceVersion: source.version,
+        setupActionId: source.setupActionId, automatic: source.automatic });
       signal.throwIfAborted();
       void refreshRuntimeSnapshots(["graphics-neural-models"]);
       return graphicsModels.installed({operation});
