@@ -1,0 +1,9 @@
+{
+  "id": "maclauncher-dxmt",
+  "kind": "d3d-translator",
+  "label": "MacLauncher DXMT",
+  "order": 0.5,
+  "upstream": {
+    "builds": "dxmt"
+  }
+}

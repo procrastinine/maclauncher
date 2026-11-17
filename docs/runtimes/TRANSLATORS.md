@@ -34,13 +34,15 @@ Upstream DXVK and vkd3d-proton are also the Direct3D translators of Valve's [Pro
 | --- | --- | --- |
 | MoltenVK | KhronosGroup/MoltenVK | Library, folder, archive or installed runtime |
 | KosmicKrisp | LWJGL's KosmicKrisp builds of Mesa; MacLauncher KosmicKrisp from MacLauncher Builds | Driver and loader folder, archive or installed runtime |
-| DXMT | 3Shain/dxmt builtin releases; Sikarugir Template | Folder, archive or installed runtime |
+| DXMT | 3Shain/dxmt builtin releases; Sikarugir Template; MacLauncher DXMT from MacLauncher Builds | Folder, archive or installed runtime |
 | DXVK | DXVK upstream, including historical D8VK/D9VK variants; DXVK-macOS with an async variant; Sikarugir Template components; MacLauncher DXVK from MacLauncher Builds | Folder, archive or installed runtime |
 | Wine vkd3d | Link to the Wine upstream source | Read-only copies included with registered runtimes |
 | vkd3d-proton | HansKristian-Work/vkd3d-proton | Folder or archive |
 | D3DMetal | Sikarugir Template | Apple Game Porting Toolkit disk image or folder; installed runtime |
 | Mullion | dttdrv/mullion | Folder or archive |
 | GStreamer codecs | Official GStreamer macOS runtime packages | Prepared plugin folder together with the libraries its plugins depend on |
+
+MacLauncher DXMT packages its arm64 Metal renderer and ARM64EC Direct3D libraries together. Its managed and custom selections require the complete sealed package, including `manifest.json`, the native `winemetal.so`, and matching `d3d11.dll`, `dxgi.dll` and `winemetal.dll`. Inspection checks actual CPU headers and the executable Direct3D entry points before selecting the package. Refresh, Install, Delete, default selection and custom registration use the shared runtime manager; a ready installed selection works offline.
 
 Every macOS library that Wine loads must contain code for the CPU architecture of Wine's native loader. Sikarugir, WineCX and CrossOver's Intel Wine run as x86-64 processes, also on Apple Silicon through Rosetta, while a CrossOver installation with an ARM64 Wine loader runs as an arm64 process and leaves Windows x86-64 code to FEX. MacLauncher reads the architecture from the selected installation's native Wine loader and lists only translator installations with code for it. Because KosmicKrisp itself requires Apple Silicon, Intel Wine needs an x86-64 build of it: a Sikarugir Template's driver, an installed MacLauncher KosmicKrisp package that includes an Intel (x86-64) build, or a locally registered build with Intel code. LWJGL's KosmicKrisp builds contain only arm64 code, so they can serve ARM64 Wine but never Intel Wine. [KosmicKrisp](KOSMICKRISP.md#cpu-builds-and-consumers) lists the build that each program loads.
 
