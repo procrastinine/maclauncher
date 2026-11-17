@@ -67,7 +67,7 @@ The Unity Mono player is the default runtime.
 
 Play uses the exact detected editor version, including its patch suffix, and never substitutes a newer editor or player. When the catalog has no component metadata for that version, the installation that Play asks consent for first looks up that exact release, so releases older than the recent catalog remain available.
 
-**Set default** in Runtimes saves a player preference that applies when it matches the game's exact detected version. Each game continues to require its matching player component.
+Choosing a version in the **Default** menu in Runtimes saves a player preference that applies when it matches the game's exact detected version. Each game continues to require its matching player component.
 
 #### Playback components
 

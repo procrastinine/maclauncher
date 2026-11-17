@@ -90,6 +90,28 @@ export function runtimeSourceUrl(value: unknown): string | null {
   } catch { return null; }
 }
 
+// The repository or page a link opens: links into one repository on a code
+// host, or to the same page elsewhere, are one link.
+const CODE_HOSTS = new Set(["github.com", "gitlab.com", "codeberg.org", "bitbucket.org"]);
+function runtimeLinkTarget(url: string) {
+  const parsed = new URL(url), host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+  const parts = parsed.pathname.split("/").filter(Boolean);
+  return [host, ...(CODE_HOSTS.has(host) ? parts.slice(0, 2) : parts)].join("/").toLowerCase();
+}
+// The links shown for a source, in order, without a second link to a target
+// an earlier one already opens.
+export function runtimeDistinctLinks(links: Array<{ url?: string; label?: string }>): Array<{ url: string; label: string }> {
+  const seen = new Set<string>();
+  return links.flatMap(item => {
+    const url = runtimeSourceUrl(item?.url);
+    if (!url) return [];
+    const target = runtimeLinkTarget(url);
+    if (seen.has(target)) return [];
+    seen.add(target);
+    return [{ url, label: text(item.label) || new URL(url).hostname.replace(/^www\./, "") }];
+  });
+}
+
 export function runtimeCatalogSources(catalog: Record<string, any> | null | undefined): Array<Record<string, any>> {
   if (!catalog) return [];
   const downloadVersions = (source: Record<string, any>) => [...new Set((Array.isArray(source.versions) ? source.versions : [])
@@ -154,13 +176,15 @@ export function groupRuntimeManagers(managers: RuntimeManagerState[], categories
     rank(a) - rank(b) || (alphabetical(a) ? 0 : a.order - b.order) || a.label.localeCompare(b.label));
 }
 
-// A group whose managers name a host group (Wine) is listed under one heading
-// per CPU its version rows run on, "Wine · Apple Silicon" and "Wine · Intel
-// (Rosetta)", after the block of its declared category. An installed row's CPU
-// is its measured slices, then its stated architecture; a listed version's CPU
-// is the one its list states, then that of its installed row. Each entry keeps
-// the rows of its CPU and every row whose CPU is unknown. A group with no CPU
-// facts stays under its declared heading.
+// The groups whose managers name one host group (Wine) become one sidebar entry
+// per CPU their version rows run on, "Wine · Apple Silicon" and "Wine · Intel",
+// placed where the first of them sorts in their category. Each entry has a tab
+// per source holding that CPU's rows. An installed row's CPU is its measured
+// slices, then its stated architecture; a listed version's CPU is the one its
+// list states, then that of its installed row. A tab keeps the rows of its CPU
+// and every row whose CPU is unknown, and a source with no CPU facts is a tab of
+// every entry. With no CPU facts at all, the sources share one entry named after
+// the host group.
 const HOST_CPUS = ["arm64", "x64"] as const;
 type HostCpu = typeof HOST_CPUS[number];
 function hostCpu(value: unknown): HostCpu | "" {
@@ -192,27 +216,45 @@ function sectionForCpu(section: Record<string, any>, cpu: HostCpu) {
 }
 export function splitRuntimeGroupsByHost(groups: RuntimeTabGroup[],
   resolveSections: (manager: RuntimeManagerState) => Array<Record<string, any>>): RuntimeTabGroup[] {
-  const out: RuntimeTabGroup[] = [];
-  let pending: Array<{ cpu: HostCpu; group: RuntimeTabGroup }> = [];
-  const flush = () => {
-    for (const cpu of HOST_CPUS) out.push(...pending.filter(item => item.cpu === cpu).map(item => item.group));
-    pending = [];
-  };
-  groups.forEach((group, index) => {
+  const hosts = new Map<string, { name: string; first: RuntimeTabGroup; members: RuntimeTabGroup[] }>();
+  const slots: Array<RuntimeTabGroup | string> = [];
+  for (const group of groups) {
     const name = text(group.managers.find(manager => text(manager.ui?.hostGroup))?.ui?.hostGroup);
-    const sections = new Map(group.managers.map(manager => [manager, resolveSections(manager)]));
-    const cpus = new Set([...sections.values()].flatMap(list => list.flatMap(section => [...sectionCpus(section)])));
-    if (!name || !cpus.size) out.push(group);
-    else {
-      const host = [...sections.values()].flat().map(section => section.launcherArchitecture).find(Boolean);
-      for (const cpu of HOST_CPUS) if (cpus.has(cpu)) pending.push({ cpu, group: { ...group, id: `${group.id}:${cpu}`,
-        category: `${group.category || group.id}:${cpu}`, heading: `${name} · ${cpuLabel(cpu, { hostArchitecture: host })}`,
-        managers: group.managers.map(manager => ({ ...manager, sections: sections.get(manager)!.map(section => sectionForCpu(section, cpu)) })) } });
-    }
-    if (groups[index + 1]?.category !== group.category) flush();
+    if (!name) { slots.push(group); continue; }
+    const key = JSON.stringify([group.category || "", name]);
+    const host = hosts.get(key);
+    if (host) host.members.push(group);
+    else { hosts.set(key, { name, first: group, members: [group] }); slots.push(key); }
+  }
+  return slots.flatMap(slot => {
+    if (typeof slot !== "string") return [slot];
+    const { name, first, members } = hosts.get(slot)!;
+    const managers = members.flatMap(group => group.managers);
+    const sections = new Map(managers.map(manager => [manager, resolveSections(manager)]));
+    const cpusOf = (manager: RuntimeManagerState) => new Set(sections.get(manager)!.flatMap(section => [...sectionCpus(section)]));
+    const cpus = HOST_CPUS.filter(cpu => managers.some(manager => cpusOf(manager).has(cpu)));
+    const id = `host:${name.toLowerCase()}`;
+    const entry = (cpu: HostCpu | null): RuntimeTabGroup => ({ ...first, id: cpu ? `${id}:${cpu}` : id,
+      label: cpu ? `${name} · ${cpuLabel(cpu)}` : name, order: Math.min(...members.map(group => group.order)),
+      managers: managers.filter(manager => !cpu || !cpusOf(manager).size || cpusOf(manager).has(cpu)).map(manager => ({ ...manager,
+        // The source is a tab of the entry, named by its own label.
+        ui: { ...manager.ui, sectionLabel: text(manager.ui?.sectionLabel) || text(manager.ui?.tabLabel) || text(manager.label) },
+        sections: cpu ? sections.get(manager)!.map(section => sectionForCpu(section, cpu)) : sections.get(manager)! })) });
+    return cpus.length ? cpus.map(entry) : [entry(null)];
   });
-  flush();
-  return out;
+}
+
+// The first section that a sidebar search names through its tab label, source
+// name or id, so a search for a source opens its entry at that tab. Terms that
+// only the entry's own label holds (such as "Wine") name no particular tab.
+export function runtimeChoiceForQuery(choices: RuntimeTabSection[], query: string, entryLabel = ""): RuntimeTabSection | null {
+  const searchable = (value: string) => value.normalize("NFKD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+  const terms = searchable(query).trim().split(/\s+/).filter(Boolean);
+  const entry = searchable(entryLabel);
+  return choices.find(choice => {
+    const own = searchable([choice.label, choice.managerId, choice.manager.label, choice.section.label].filter(Boolean).join(" "));
+    return terms.every(term => own.includes(term) || entry.includes(term)) && terms.some(term => own.includes(term) && !entry.includes(term));
+  }) || null;
 }
 
 export function runtimeGroupSections(group: RuntimeTabGroup, resolveSections: (manager: RuntimeManagerState) => Array<Record<string, any>>): RuntimeTabSection[] {
@@ -256,6 +298,41 @@ export function resolveRuntimeTabSelection(groups: RuntimeTabGroup[], managerId:
   const section = sections.find(item => item.managerId === managerId && item.sectionId === sectionId) ||
     sections.find(item => item.managerId === managerId) || sections[0] || null;
   return { group, section, sections };
+}
+
+// The Installed header's Default menu. Automatic is named with the version it
+// resolves to while nothing is saved; every usable installed row is a choice of
+// its own, its variant and CPU included. A saved default without a usable
+// installed row stays shown as the selection, marked, and cannot be chosen again.
+export type RuntimeDefaultChoice = { value: string; label: string; version: string | null; variant?: string; architecture?: string; disabled?: boolean };
+export type RuntimeDefaultRow = { install: Record<string, any>; label: string; isDefault: boolean };
+export function runtimeDefaultMenu(section: Record<string, any> | null | undefined, rows: RuntimeDefaultRow[],
+  versionTag: (version: string) => string = version => version): { choices: RuntimeDefaultChoice[]; selected: string } {
+  const saved = section?.defaultSource === "saved";
+  const defaultVersion = text(section?.defaultVersion);
+  const current = rows.find(row => row.isDefault);
+  const usable = rows.filter(({ install }) => install.ready !== false && !install.reference && install.supportsDefault !== false);
+  const value = (install: Record<string, any>) => JSON.stringify([install.version, text(install.variant), text(install.architecture)]);
+  const labels = new Map<string, number>();
+  for (const row of usable) labels.set(row.label, (labels.get(row.label) || 0) + 1);
+  const place = (install: Record<string, any>) => {
+    const folder = text(install.installDir).split("/").filter(Boolean).at(-1);
+    return folder ? ` · ${folder}` : "";
+  };
+  const choices: RuntimeDefaultChoice[] = [{ value: "", version: null,
+    label: !saved && defaultVersion ? `Automatic (${current?.label || versionTag(defaultVersion)})` : "Automatic" }];
+  for (const row of usable) choices.push({ value: value(row.install), version: row.install.version,
+    label: (labels.get(row.label) || 0) > 1 ? row.label + place(row.install) : row.label,
+    ...(text(row.install.variant) ? { variant: text(row.install.variant) } : {}),
+    ...(text(row.install.architecture) ? { architecture: text(row.install.architecture) } : {}) });
+  let selected = "";
+  if (saved && current && usable.includes(current)) selected = value(current.install);
+  else if (saved && defaultVersion) {
+    selected = "saved";
+    choices.push({ value: selected, version: defaultVersion, disabled: true,
+      label: current ? `${current.label} (unavailable)` : `${versionTag(defaultVersion)} (not installed)` });
+  }
+  return { choices, selected };
 }
 
 export function runtimeTabMovement(key: string, index: number, count: number): number | null {

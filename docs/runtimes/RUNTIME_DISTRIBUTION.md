@@ -89,7 +89,7 @@ The launcher learns what MacLauncher Builds offers from its catalogs. Each proje
 
 A package version names both the upstream version it is based on and MacLauncher's revision of it. When the upstream project has tagged versions, the package is versioned `<upstream-version>-MCLvN`, and the revision starts at one for each new upstream version. When the upstream has only commits, the package is versioned `MCLvN-MMDD`: its revision number keeps increasing across commits and calendar years, and the date comes from the selected upstream commit. In both cases, the package metadata keeps the exact commit and full date. Components that MacLauncher itself develops use their own version. The package revision is also separate from the version embedded in the upstream program, which stays unchanged.
 
-A project can list several versions, including several revisions of one upstream version. Each of them is a separate download and installation, so installing a later revision leaves earlier ones installed. Every compatible version appears in its source's version selector, and every installed version has its own **Uninstall** and **Set default** actions. Play chooses among them as described in [Versions](README.md#versions).
+A project can list several versions, including several revisions of one upstream version. Each of them is a separate download and installation, so installing a later revision leaves earlier ones installed. Every compatible version appears in its source's version selector, every installed version has its own **Uninstall** action, and each one is a choice in the **Default** menu. Play chooses among them as described in [Versions](README.md#versions).
 
 ### Catalog records
 

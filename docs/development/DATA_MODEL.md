@@ -169,7 +169,7 @@ Three other kinds of data have limits of their own. When graphics are prepared f
 
 Upkeep works only inside `userData` and never follows symbolic links. It never touches game records, saves, save snapshots, settings, imported or downloaded games, games' Wine bottles and prefixes, browser profiles or [private game folders from earlier MacLauncher versions](../library/GAME_PREPARATION.md#earlier-private-game-folders), such as earlier FNA overlays. Missing game files, such as those on a disconnected drive, never make a game's data removable either; that data stays while the game is in the library.
 
-Installed runtime versions are removed only through the same removal as **Uninstall** in Runtimes. Apart from removal by the user, this happens only for a version that Play installed as the runtime's own default, which is recorded in `runtimes/automatic-installs.json`. Such a version is removed once the section's current default is a newer usable installed version and nothing names or resolves to the recorded one, as [Runtimes](../runtimes/README.md) describes. An explicit **Install**, **Set default** or removal clears a version's record.
+Installed runtime versions are removed only through the same removal as **Uninstall** in Runtimes. Apart from removal by the user, this happens only for a version that Play installed as the runtime's own default, which is recorded in `runtimes/automatic-installs.json`. Such a version is removed once the section's current default is a newer usable installed version and nothing names or resolves to the recorded one, as [Runtimes](../runtimes/README.md) describes. An explicit **Install**, a choice in the **Default** menu or removal clears a version's record.
 
 ## settings.json
 

@@ -36,7 +36,8 @@ test('an empty source loads only on its labeled action and preserves latest-only
     assert.deepEqual(f.refreshed, []);
     assert.match(html, />Load versions<\/button>/);
     assert.doesNotMatch(html, /<select|No versions loaded|iconOnly runtimeRefresh/);
-    assert.match(html, /Development builds from the project/);
+    // No description is made up from the URL (R2).
+    assert.doesNotMatch(html, /Development builds from the project|runtimeAvailability/);
     elements(tree).find(node => node.type === 'button' && node.props.children === 'Load versions').props.onClick();
     elements(tree).find(node => node.type === 'button' && node.props.children === 'All versions').props.onClick();
     assert.deepEqual(f.refreshed, [{ latestOnly: true }, { latestOnly: false }]);
@@ -65,7 +66,7 @@ test('populated catalogs preserve saved exact choices and normal install and ref
   f.props.ui.installVersion.default = '1.0';
   try {
     const tree = f.harness.render(), html = renderToStaticMarkup(tree);
-    assert.match(html, /Releases published by the runtime project/);
+    assert.doesNotMatch(html, /Releases published by the runtime project/);
     assert.match(html, /aria-label="Reload versions"/);
     assert.doesNotMatch(html, />Load versions<\/button>/);
     const menu = elements(tree).find(node => node.props?.['aria-label'] === 'Version' && node.props.onChange);

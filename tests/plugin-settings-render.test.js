@@ -123,15 +123,16 @@ test('Runtimes plugin cards list upstream versions and manage each installed ver
   sources('thumbfast').props.onRefresh({});
   assert.equal(sources('Added script'), undefined, 'an added plugin is versioned by its own source');
 
-  // Default and removal of each installed version.
-  assert.match(markup, /aria-label="Set uosc v5\.12\.0 as default"/);
-  assert.doesNotMatch(markup, /aria-label="Set uosc v5\.13\.0 as default"/, 'the default version is marked, not offered');
-  // Owner, 11-17: clearing a saved default adds no row under Versions; it sits on the default's own row.
-  assert.doesNotMatch(markup, /pluginVersionDefault/, 'no row of its own under Versions');
-  assert.match(markup, /v5\.13\.0(?:(?!saveRow")[\s\S])*aria-label="Use the automatic uosc version"/, 'on the v5.13.0 row');
-  inCard('uosc', 'Set uosc v5.12.0 as default').props.onClick();
+  // Default and removal of each installed version: one Default menu in the installed versions' header.
+  assert.doesNotMatch(markup, /Set uosc|Use the automatic uosc version|pluginVersionDefault/);
+  assert.match(markup, /<div class="pluginInstalledHeader"><span>Installed<\/span><span class="runtimeDefaultControl"><label for="plugin-default-[^"]+">Default<\/label><select[^>]*aria-label="Default uosc version"/);
+  const menu = nodes(card('uosc').props.children).find(node => node.props?.menu && typeof node.props.onChoose === 'function');
+  assert.deepEqual(menu.props.menu.choices.map(choice => choice.label), ['Automatic', 'v5.13.0', 'v5.12.0']);
+  assert.equal(menu.props.menu.selected, JSON.stringify(['5.13.0', '', '']), 'the saved default is selected');
+  assert.match(markup, /v5\.13\.0<span class="badge badgeAccent">Default<\/span>/, 'the default version keeps its badge');
+  menu.props.onChoose(menu.props.menu.choices[2]);
   await inCard('uosc', 'Remove uosc v5.12.0').props.onClick();
-  inCard('uosc', 'Use the automatic uosc version').props.onClick();
+  menu.props.onChoose(menu.props.menu.choices[0]);
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(calls.map(call => call.slice(0, 4)), [
     ['refresh', 'mpv-plugins', 'uosc', {}],

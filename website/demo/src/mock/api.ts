@@ -36,7 +36,7 @@ const resolved = <T,>(value: T) => Promise.resolve(value);
 const unsubscribe = () => () => {};
 const DEMO_ROOT = "/Users/Shared/MacLauncher Demo";
 
-// Example versions offered after Refresh, so Install and Set default have
+// Example versions offered after Refresh, so Install and the Default menu have
 // something to act on. Any manager not listed here offers one example version.
 const EXAMPLE_VERSIONS: Record<string, string[]> = {
   sdk: ["8.4.1", "8.3.7", "7.8.7"], godot: ["4.5.1", "4.4.1", "3.6.1"], love: ["11.5", "11.4"],

@@ -81,7 +81,7 @@ function getState({ userDataDir, settings } = {}) {
     importable: false, sourceUrl: Components.MANIFEST, source: Components.MANIFEST, refreshLabel: 'Refresh Valve versions', supportsLatestOnly: false,
     fetchedAt: listed[0]?.fetchedAt || null, error: null, latestInstalledVersion: rows.find(row => row.ready)?.version || null,
     latestAvailableVersion: listed[0]?.version || null, updateAvailable: false };
-  const section = { id: 'default', label, managementTitle: label, supportsDefault: true, defaultVersion: saved || chosen.version || null,
+  const section = { id: 'default', label, supportsDefault: true, defaultVersion: saved || chosen.version || null,
     defaultSource: saved ? 'saved' : 'manager', installed: rows, variants: [], installing: null, catalog,
     sourceLinks: [{ label: 'Valve Steam client', url: 'https://store.steampowered.com/about/' }],
     description: "steamclient.dll and steamclient64.dll from Valve's Steam client download, checked against its content address. The Steam client bridge passes them to Windows Steam games. Valve lists only its current client; earlier versions stay listed while they are installed." };

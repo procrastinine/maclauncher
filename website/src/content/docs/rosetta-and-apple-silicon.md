@@ -55,6 +55,6 @@ The table lists every part of MacLauncher with Intel code today, the route to ru
 
 A game that runs only on an older Intel Ren'Py SDK, or on an Intel Java because it ships Intel-only native libraries of its own, still uses Rosetta.
 
-Each Apple Silicon route is added next to the existing Intel one as another choice in the same menus, rather than replacing it. **Runtimes** already lists the WINE runtimes under **Wine · Apple Silicon** and **Wine · Intel (Rosetta)**, sorted by the processor of their actual files rather than their names.
+Each Apple Silicon route is added next to the existing Intel one as another choice in the same menus, rather than replacing it. **Runtimes** already has two WINE entries, **Wine · Apple Silicon** and **Wine · Intel**, with a tab for each WINE source, and sorts the versions between them by the processor of their actual files rather than their names.
 
 Further reading: [Macs and macOS versions](/maclauncher/macs-and-macos/) for which features need which Mac, [CrossOver, Sikarugir and WineCX](/maclauncher/windows/crossover-and-sikarugir/) for the WINE runtimes, the [Rosetta](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/ROSETTA.md) reference page for how MacLauncher installs Rosetta, and the [FEX project](https://github.com/FEX-Emu/FEX) for more about FEX.

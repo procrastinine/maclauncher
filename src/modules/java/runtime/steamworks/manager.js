@@ -121,7 +121,8 @@ function createManager({ dependencies = {}, upstream = createSource() } = {}) {
     if (!selected.version) throw new Error("No matching Steamworks4j JNI download is available.");
     return install({ ...options, version: selected.version });
   };
-  manager.ui = { category: "tools", tabLabel: "Steamworks4j", sectionLabel: "Steamworks4j", order: 235, management: "managed" };
+  // The Steam API library for Java games sits beside the Steam client bridge.
+  manager.ui = { category: "compatibility", tabLabel: "Steamworks4j", sectionLabel: "Steamworks4j", order: 204, management: "managed" };
   return manager;
 }
 module.exports = createManager();

@@ -22,7 +22,7 @@ The Windows APIs come from the selected Wine version and graphics backend, while
 
 ## Versions
 
-**Runtimes → Sikarugir** lists the downloadable and installed versions and sets the global preferred version, which the inspector's **Version** selector can override for one game. [Release catalogs](RUNTIME_CATALOGS.md#sikarugir) describes how Refresh reads the publisher's versions.
+**Runtimes → Wine · Intel → Sikarugir** lists the downloadable and installed versions and sets the global preferred version, which the inspector's **Version** selector can override for one game. [Release catalogs](RUNTIME_CATALOGS.md#sikarugir) describes how Refresh reads the publisher's versions.
 
 Each version pairs a Wine engine with a Template. MacLauncher records the engine and Template versions separately, together with the exact downloaded files and their checksums, so the Wine version never comes from the publisher's rolling release tag, and each installed engine stays selectable on its own. During installation, MacLauncher finds the Wine bundle by its `bin/wine` and `bin/wineserver` files and the Template application by its `Contents/Frameworks` folder, so an archive that places them inside another folder still installs in the same layout.
 

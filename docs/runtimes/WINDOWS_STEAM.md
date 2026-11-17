@@ -19,7 +19,7 @@ Once the bridge is installed, later Plays use it without a dialog while Steam is
 
 ## Runtimes and inspector
 
-**Runtimes → Steam client bridge**, under the Compatibility heading, has two sections, **Steam client bridge** and **Windows Steam client files**. Each lists its installed and downloadable versions with the usual install, uninstall, **Set default** and **Register custom…** actions. Play uses the game's own **Version** choice, then the saved default, then the newest installed version or registered folder.
+**Runtimes → Steam client bridge**, under the Compatibility heading, has two sections, **Steam client bridge** and **Windows Steam client files**. Each lists its installed and downloadable versions with the usual install, uninstall, **Default** menu and **Register custom…** controls. Play uses the game's own **Version** choice, then the saved default, then the newest installed version or registered folder.
 
 The bridge section lists the bridge packages from MacLauncher Builds. Each installed package is checked against the loader paths that the running MacLauncher uses, whatever its version number. An incompatible package stays listed with the reason and is not used; Play offers a replacement through the same download consent and resumes once the replacement is installed. **Register custom…** accepts a bridge package folder in its published layout, a payload folder whose `manifest.json` names the bridge's parts in its `steamBridge` entry together with the package record beside it, or a file inside that folder. A folder of an installed version qualifies. The same loader-path check applies, and every part that the manifest names must be a file in the folder.
 

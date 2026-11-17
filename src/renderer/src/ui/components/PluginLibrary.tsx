@@ -4,7 +4,8 @@ import { availabilityLabel, buildRuntimeSettingsDefaults, formatDownloadPercent,
   resolveRuntimeSections, resolveRuntimeSettingsSchema, runtimeSettingsEqual, runtimeVersionTagger } from "../ui-helpers";
 import type { RuntimeSettingsApi } from "./RuntimeSettingsWindow";
 import type { RuntimeTabSection } from "./runtime-tabs-model";
-import { runtimeSourceUrl } from "./runtime-tabs-model";
+import { runtimeDefaultMenu, runtimeSourceUrl } from "./runtime-tabs-model";
+import { RuntimeDefaultMenu } from "./RuntimeDefaultMenu";
 import { ErrorText } from "./ErrorText";
 import { Toggle } from "./FieldRow";
 import { RuntimeCatalogSources } from "./RuntimeCatalogSources";
@@ -125,11 +126,11 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
     const versionRows = plugin.custom ? [] : (section.installed || []).filter((item: Record<string, any>) => !item.suppliedBy);
     const versionTag = runtimeVersionTagger(section);
     const supportsDefault = section.supportsDefault !== false && Boolean(onSetDefault);
-    // A saved default is cleared on its own version row, never in a row of its own under Versions.
-    const clearDefault = supportsDefault && section.defaultSource === "saved" ? <button type="button" className="btn small" disabled={busy}
-      aria-label={`Use the automatic ${name} version`}
-      title={section.defaultVersion ? `${versionTag(section.defaultVersion)} is the chosen default. MacLauncher chooses one automatically again.` : undefined}
-      onClick={() => onSetDefault!(manager.id, choice.sectionId, null)}>Use automatic default</button> : null;
+    // The plugin's default version is one menu in its installed versions' header.
+    const defaultRows = versionRows.map((row: Record<string, any>) => ({ install: row, label: versionTag(row.version),
+      isDefault: row.version === section.defaultVersion }));
+    const defaultMenu = supportsDefault && (versionRows.some((row: Record<string, any>) => row.ready !== false) || section.defaultSource === "saved")
+      ? runtimeDefaultMenu(section, defaultRows, versionTag) : null;
     return <article className="pluginCard" key={choice.id} aria-label={name}>
       <div className="pluginCardTitle">{name}</div>
       {plugin.description && <p className="pluginCardDescription">{plugin.description}</p>}
@@ -156,11 +157,18 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
       {updateResults[choice.sectionId] && <p className="detailMeta" role="status">{updateResults[choice.sectionId]}</p>}
       {!plugin.custom && onRefresh && <details className="pluginVersions">
         <summary>Versions</summary>
-        <RuntimeCatalogSources managerId={manager.id} section={section} ui={ui} busy={busy} variant=""
+        <RuntimeCatalogSources managerId={manager.id} section={section} ui={ui} busy={busy} variant="" identity={name}
           downloads={download ? [download] : []} onOpenSource={onOpenSource}
           onRefresh={options => onRefresh(manager.id, choice.sectionId, options)}
           onSelect={(key, field, value) => onSelect?.(manager.id, key, field, value)}
           onInstall={value => installVersion(value)} />
+        {/* Installed versions have one header, holding the Default menu as in the Runtimes window. */}
+        {(versionRows.length > 0 || defaultMenu) && <div className="pluginInstalledHeader">
+          <span>Installed</span>
+          {defaultMenu && <RuntimeDefaultMenu id={`plugin-default-${encodeURIComponent(manager.id)}-${encodeURIComponent(choice.sectionId)}`}
+            ariaLabel={`Default ${name} version`} menu={defaultMenu} disabled={busy}
+            onChoose={value => onSetDefault!(manager.id, choice.sectionId, value.version)} />}
+        </div>}
         {versionRows.length > 0 && <div className="saveList" aria-label={`Installed ${name} versions`}>
           {versionRows.map((row: Record<string, any>) => {
             const tag = versionTag(row.version), isDefault = supportsDefault && row.version === section.defaultVersion;
@@ -170,17 +178,12 @@ export function PluginLibrary({ manager, sections, state, api, ui, downloads, on
                 {row.ready === false && <StatusBadge tone="warning">{availabilityLabel("needsRepair")}</StatusBadge>}
               </div></div>
               <div className="saveRowActions">
-                {isDefault && clearDefault}
-                {!isDefault && row.ready !== false && supportsDefault && <button type="button" className="btn small" disabled={busy}
-                  aria-label={`Set ${name} ${tag} as default`} onClick={() => onSetDefault!(manager.id, choice.sectionId, row.version)}>Set default</button>}
-                {row.removable !== false && <button type="button" className="btn iconOnly danger" disabled={busy}
+                {row.removable !== false && <button type="button" className="btn small iconOnly danger" disabled={busy}
                   title={`Remove ${name} ${tag}`} aria-label={`Remove ${name} ${tag}`} onClick={() => removeVersion(row)}><TrashIcon /></button>}
               </div>
             </div>;
           })}
         </div>}
-        {clearDefault && !versionRows.some((row: Record<string, any>) => row.version === section.defaultVersion) &&
-          <div className="pluginCardActions pluginVersionDefault">{clearDefault}</div>}
       </details>}
     </article>;
   };

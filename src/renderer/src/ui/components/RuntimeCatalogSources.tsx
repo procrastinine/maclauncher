@@ -6,7 +6,7 @@ import { installedRuntimeAvailability } from "../../../../core/runtime-install-a
 import { ErrorText } from "./ErrorText";
 import { RefreshIcon } from "../icons";
 import { Select } from "./Select";
-import { isRuntimeIncluded, runtimeInstallVersion, runtimeCatalogPresentation, runtimeCatalogSources, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey,
+import { isRuntimeIncluded, runtimeInstallVersion, runtimeCatalogPresentation, runtimeCatalogSources, runtimeDistinctLinks, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey,
   runtimeVersionBlocked, translatorVersionBuild } from "./runtime-tabs-model";
 
 type Props = {
@@ -25,22 +25,18 @@ type Props = {
   /** Translator views name a version's CPU build when it differs from the chosen
    * build, and keep the Build menu under Additional sources. */
   cpuBuildLabels?: boolean;
+  /** The panel's own name (its title or tab), which a single source does not repeat. */
+  identity?: string;
+  /** Links the section itself declares, shown with its source's links. */
+  links?: Array<{ label?: string; url?: string }>;
 };
 
-function sourceDescription(source: Record<string, any>, url: string | null) {
-  if (typeof source.description === "string" && source.description.trim()) return source.description;
-  if (!url) return "Available downloads from this source.";
-  const parsed = new URL(url);
-  if (parsed.hostname === "github.com") {
-    if (/\/actions(?:\/|$)/.test(parsed.pathname)) return "Development builds from the project's automated workflow.";
-    if (/\/releases(?:\/|$)/.test(parsed.pathname)) return "Releases published by the runtime project.";
-  }
-  if (parsed.hostname === "procrastinine.github.io" && parsed.pathname.startsWith("/maclauncher-builds/"))
-    return "Runtime packages published for MacLauncher.";
-  return `Runtime downloads from ${parsed.hostname}.`;
+// A source's own description; nothing is written for it from its URL.
+function sourceDescription(source: Record<string, any>) {
+  return typeof source.description === "string" ? source.description.trim() : "";
 }
 
-export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource, onRegister, pathForFile, cpuBuildLabels = false }: Props) {
+export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, downloads, onSelect, onInstall, onRefresh, onOpenSource, onRegister, pathForFile, cpuBuildLabels = false, identity = "", links: sectionLinks = [] }: Props) {
   // The automatic CPU is the one Play uses: the launcher's own, or another CPU
   // this Mac runs when the launcher's CPU has no build.
   const defaultArchitecture = section.automaticArchitecture || section.launcherArchitecture || section.catalog?.architecture;
@@ -90,6 +86,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
     return <a className="runtimeSourceLink" href={url} title={url}
       onClick={event => { if (onOpenSource) { event.preventDefault(); onOpenSource(url); } }}>{label}</a>;
   }
+  const primary = sources.filter(source => !source.secondary);
   const renderSource = (group: Record<string, any>) => {
       const groupKey = runtimeSourceUiKey(section.id, group.explicit ? group.id : undefined);
       const sourceVariants: Array<Record<string, any>> = Array.isArray(group.variants) ? group.variants : [];
@@ -121,12 +118,20 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       const recommendedInstalled = recommended && isRuntimeVersionInstalled(readyInstalled, recommended, selectedVariant, hasVariants);
       const recommendedDownloading = recommended && downloads.some(task => task.version === recommended && (!hasVariants || task.variant === selectedVariant));
       const url = runtimeSourceUrl(source.source || source.url);
-      const sourceLinks = sources.length === 1 && Array.isArray(section.catalog?.sourceLinks)
-        ? section.catalog.sourceLinks.flatMap((item: any) => {
-          const href = runtimeSourceUrl(item?.url);
-          return href ? [{ href, label: item.label || "upstream code" }] : [];
-        }) : [];
       const label = source.label || (url ? "Upstream" : "Versions");
+      // One source in a panel is not named again: the panel's title or tab names
+      // it, and its link carries a name that differs from it, such as MacLauncher
+      // Builds, or else the site.
+      const named = primary.length > 1;
+      const distinctName = source.explicit && label && !["Upstream", "Versions"].includes(label) &&
+        label.toLocaleLowerCase() !== identity.toLocaleLowerCase() ? label : "";
+      const linkLabel = source.sourceLabel || (named ? source.explicit ? "Releases" : presentation.sourceLabel || "Source"
+        : distinctName || presentation.sourceLabel || "Source");
+      // The section's links and the catalog's code links follow the source link;
+      // a link into the same repository as an earlier one is left out.
+      const extraLinks = [...(primary[0] === group ? sectionLinks : []),
+        ...(sources.length === 1 && Array.isArray(section.catalog?.sourceLinks) ? section.catalog.sourceLinks : [])];
+      const links = runtimeDistinctLinks([...(url ? [{ url, label: linkLabel }] : []), ...extraLinks]);
       const pending = ui.pendingActions?.[key];
       const refreshing = pending === "refreshCatalog" || source.status === "loading";
       const sourceBusy = busy || Boolean(pending) || refreshing;
@@ -141,6 +146,10 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       const reload = (latestOnly?: boolean) => onRefresh({ ...(source.explicit ? { sourceId: source.id } : {}),
         ...(latestOnly === undefined ? {} : { latestOnly }) });
       const fieldId = `runtime-version-${encodeURIComponent(managerId)}-${encodeURIComponent(section.id)}-${encodeURIComponent(source.id)}`;
+      const description = sourceDescription(source);
+      const linkList = links.length > 0 && <span className="runtimeSourceLinks">
+        {links.map(item => <React.Fragment key={item.url}>{link(item.url, item.label)}</React.Fragment>)}
+      </span>;
       // A file or folder dropped on a local-files card is registered like a chosen one.
       const registerDrop = !sourceBusy && onRegister ? (event: React.DragEvent) => {
         const file = event.dataTransfer.files?.[0] as (File & { path?: string }) | undefined;
@@ -151,12 +160,12 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       if (source.delivery === "local-files") return <div className="runtimeSource" data-runtime-source={source.id} key={source.id}
         onDragOver={registerDrop ? event => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } } : undefined}
         onDrop={registerDrop}>
-        <div className="runtimeSourceHeader"><div className="runtimeSourceHeading">
-          <span className="runtimeSourceName">{label}</span>{url && link(url, source.sourceLabel || "Source")}
-        </div></div>
-        <div className="dim runtimeAvailability">{sourceDescription(source, url)}</div>
-        <div className="runtimeRemote"><button className="btn primary" disabled={sourceBusy || !onRegister}
-          onClick={() => onRegister?.()}>{source.registrationLabel || "Register custom…"}</button></div>
+        <div className="runtimeSourceRow">
+          {named && <span className="runtimeSourceName">{label}</span>}
+          <button className="btn small" disabled={sourceBusy || !onRegister} title={description || undefined}
+            onClick={() => onRegister?.()}>{source.registrationLabel || "Register custom…"}</button>
+          <span className="runtimeSourceTrail">{linkList}</span>
+        </div>
       </div>;
       // A blocking reason explains the disabled button; otherwise the reason is a requirement note.
       const pendingInstall = Boolean(version) && !isInstalled && !included;
@@ -164,37 +173,21 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       const reason = blocked ? presentation.installReason || "No compatible macOS download is available." : pendingInstall ? presentation.installReason || "" : "";
       // What a version holds, such as its component versions or that they are known after download.
       const contents = pendingInstall && typeof source.versionRequirements?.[version]?.contents === "string" ? source.versionRequirements[version].contents : "";
+      const variantChoices = (sourceVariants.length ? availableVariants : variants);
       return <div className="runtimeSource" data-runtime-source={source.id} key={source.id}>
-        <div className="runtimeSourceHeader">
-          <div className="runtimeSourceHeading">
-            <span className="runtimeSourceName">{label}</span>
-            {url && <span>{link(url, source.sourceLabel || (source.explicit ? "Releases" : presentation.sourceLabel || "Source"))}</span>}
-            {sourceLinks.map((item: any) => <span key={item.href} className="runtimeUpstreamCode">({link(item.href, item.label)})</span>)}
-          </div>
-          <div className="runtimeSourceRefreshActions">
-            {(versions.length > 0 || loaded) && <button type="button" className={`btn iconOnly runtimeRefresh${refreshing ? " refreshing" : ""}`}
-              disabled={sourceBusy} aria-busy={refreshing} title={refreshLabel} aria-label={refreshLabel}
+        <div className="runtimeSourceRow">
+          {/* Several sources are each named; one source's menu is simply Version. */}
+          {versions.length > 0 ? <label className="runtimeSourceName" htmlFor={fieldId}>{named ? label : "Version"}</label>
+            : named && <span className="runtimeSourceName">{label}</span>}
+          {versions.length === 0 ? loaded ? <span className="dim runtimeAvailability">No downloadable versions found at this source.</span>
+            : <button type="button" className="btn small primary" disabled={sourceBusy} aria-busy={refreshing}
+              aria-label={source.explicit ? `Load ${label} versions` : "Load versions"}
               onClick={() => reload(source.supportsLatestOnly ? true : undefined)}>
-              <RefreshIcon />
-            </button>}
-            {source.supportsLatestOnly && <button type="button" className="btn" disabled={sourceBusy}
-              title={`Reload all ${label} versions`} aria-label={`Reload all ${label} versions`}
-              onClick={() => reload(false)}>All versions</button>}
-          </div>
-        </div>
-        <div className="dim runtimeAvailability">{sourceDescription(source, url)}</div>
-        <div className="runtimeRemote">
-          {versions.length === 0 ? loaded ? null : <button type="button" className="btn primary" disabled={sourceBusy} aria-busy={refreshing}
-            aria-label={source.explicit ? `Load ${label} versions` : "Load versions"}
-            onClick={() => reload(source.supportsLatestOnly ? true : undefined)}>
-            {refreshing ? "Loading versions…" : "Load versions"}
-          </button> : <div className="runtimeRemoteField">
-            <label className="fieldLabel" htmlFor={fieldId}>Version</label>
-            <Select id={fieldId} className="input" aria-label={source.explicit ? `${label} version` : "Version"}
-              value={version} disabled={versions.length === 0}
-              onChange={event => onSelect(key, "installVersion", event.target.value)}>
-              {versions.length > 0 && <option value="" disabled>Choose version</option>}
-              {versions.length ? versions.map(value => {
+              {refreshing ? "Loading versions…" : "Load versions"}
+            </button> : <Select id={fieldId} className="input inputSmall runtimeVersionSelect" aria-label={source.explicit ? `${label} version` : "Version"}
+              value={version} onChange={event => onSelect(key, "installVersion", event.target.value)}>
+              <option value="" disabled>Choose version</option>
+              {versions.map(value => {
                 const ready = isRuntimeVersionInstalled(readyInstalled, value, selectedVariant, hasVariants);
                 const incomplete=isRuntimeVersionInstalled(incompleteInstalled,value,selectedVariant,hasVariants);
                 const unusable = !ready&&!incomplete ? unusableState(value) || (runtimeVersionBlocked(source, value) ? "unavailable" : null) : null;
@@ -207,31 +200,38 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
                   {withAvailability(differs ? `${versionTag(value)} · ${differs}` : versionTag(value), ready ? includedVersion ? "included" : "installed"
                     : incomplete ? "downloadNeeded" : unusable)}
                 </option>;
-              }) : <option value="">No versions loaded</option>}
-            </Select>
-          </div>}
-          {versions.length > 0 && (sourceVariants.length ? availableVariants : variants).length > 1 && <div className="runtimeRemoteField">
-            <label className="fieldLabel" htmlFor={`${fieldId}-variant`}>Variant</label>
-            <select id={`${fieldId}-variant`} className="input" aria-label={`${source.explicit ? label + " " : ""}variant`}
-              value={sourceVariants.length ? sourceVariant?.id : selectedVariant} onChange={event => onSelect(sourceVariants.length ? key : section.id, "installVariant", event.target.value)}>
-              {(sourceVariants.length ? availableVariants : variants).map((item: any) => <option key={item.id} value={item.id}>{item.label || item.id}</option>)}
-            </select>
-          </div>}
+              })}
+            </Select>}
+          {versions.length > 0 && variantChoices.length > 1 && <select id={`${fieldId}-variant`} className="input inputSmall runtimeVersionSelect"
+            aria-label={`${source.explicit ? label + " " : ""}variant`}
+            value={sourceVariants.length ? sourceVariant?.id : selectedVariant} onChange={event => onSelect(sourceVariants.length ? key : section.id, "installVariant", event.target.value)}>
+            {variantChoices.map((item: any) => <option key={item.id} value={item.id}>{item.label || item.id}</option>)}
+          </select>}
           {/* The version menu tags an installed version; the button is only an action. */}
-          {versions.length > 0 && !included && (!isInstalled || downloading) && <button className="btn primary"
+          {versions.length > 0 && !included && (!isInstalled || downloading) && <button className="btn small primary"
             disabled={!canInstall || !version || sourceBusy || downloading}
             title={blocked ? reason : undefined}
             aria-describedby={blocked ? `${fieldId}-reason` : undefined}
             onClick={() => architecture ? onInstall(version, section.architectureVariants ? architecture : selectedVariant || undefined, architecture) : onInstall(version, selectedVariant || undefined)}>
             {downloading ? "Installing…" : needsRepair ? "Reinstall" : presentation.installLabel}
           </button>}
-          {recommended && !recommendedInstalled && !recommendedPresentation?.included && <button className="btn"
+          {recommended && !recommendedInstalled && !recommendedPresentation?.included && <button className="btn small"
             disabled={sourceBusy || !canInstallVersion(recommended) || Boolean(recommendedDownloading)}
             title={recommendedPresentation?.installReason || `Install ${recommended}`}
             onClick={() => architecture ? onInstall(recommended, section.architectureVariants ? architecture : selectedVariant || undefined, architecture) : onInstall(recommended, selectedVariant || undefined)}>Install recommended version</button>}
+          <span className="runtimeSourceTrail">
+            {linkList}
+            {(versions.length > 0 || loaded) && <button type="button" className={`btn small iconOnly runtimeRefresh${refreshing ? " refreshing" : ""}`}
+              disabled={sourceBusy} aria-busy={refreshing} title={refreshLabel} aria-label={refreshLabel}
+              onClick={() => reload(source.supportsLatestOnly ? true : undefined)}>
+              <RefreshIcon />
+            </button>}
+            {source.supportsLatestOnly && <button type="button" className="btn small" disabled={sourceBusy}
+              title={`Reload all ${label} versions`} aria-label={`Reload all ${label} versions`}
+              onClick={() => reload(false)}>All versions</button>}
+          </span>
         </div>
-        {versions.length === 0 && !refreshing && source.status === "success" && !error &&
-          <div className="dim runtimeAvailability">No downloadable versions found at this source.</div>}
+        {description && <div className="dim runtimeAvailability">{description}</div>}
         {reason && <div className="dim runtimeAvailability" id={`${fieldId}-reason`}>{reason}</div>}
         {contents && <div className="dim runtimeAvailability" data-runtime-contents="true">{contents}</div>}
         {refreshing && <div className="dim runtimeActionStatus" role="status">Refreshing versions…</div>}
@@ -243,9 +243,9 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
   // Play chooses the build a game needs. The Build menu reads Automatic (the
   // CPU Play uses) and each other CPU this Mac runs, Intel code on Apple
   // Silicon as Intel (Rosetta); translator views keep it under Additional sources.
-  const buildField = offersBuilds && <div className="runtimeRemoteField runtimeBuildField">
-    <label className="fieldLabel" htmlFor={`runtime-architecture-${managerId}-${section.id}`}>Build</label>
-    <select id={`runtime-architecture-${managerId}-${section.id}`} className="input inputSmall"
+  const buildField = offersBuilds && <div className="runtimeSourceRow runtimeBuildField">
+    <label className="runtimeSourceName" htmlFor={`runtime-architecture-${managerId}-${section.id}`}>Build</label>
+    <select id={`runtime-architecture-${managerId}-${section.id}`} className="input inputSmall runtimeVersionSelect"
       value={overrides.includes(architecture) ? architecture : ""}
       aria-label="Build architecture" onChange={event => onSelect(section.id, "installArchitecture", event.target.value)}>
       <option value="">Automatic ({cpuLabel(defaultArchitecture, { hostArchitecture: defaultArchitecture })})</option>
@@ -255,7 +255,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
   const additional = sources.filter(source => source.secondary);
   return <div className="runtimeSources">
     {!cpuBuildLabels && buildField}
-    {sources.filter(source => !source.secondary).map(renderSource)}
+    {primary.map(renderSource)}
     {(additional.length > 0 || cpuBuildLabels && buildField) && <details className="runtimeAdditionalSources">
       <summary>Additional sources</summary>
       {cpuBuildLabels && buildField}

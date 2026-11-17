@@ -12,7 +12,8 @@ type SearchableSidebarProps = {
   selectionKey?: string;
   // A control shown at the end of the search row, at the field's height.
   accessory?: React.ReactNode;
-  onSelect: (id: string) => void;
+  /** Receives the search text too, so a match on one of the entry's tabs can open that tab. */
+  onSelect: (id: string, query: string) => void;
 };
 
 export function SearchableSidebar({ label, searchLabel, items, selectedId, panelId, selectionKey = selectedId || "", accessory, onSelect }: SearchableSidebarProps) {
@@ -34,7 +35,19 @@ export function SearchableSidebar({ label, searchLabel, items, selectedId, panel
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-  useEffect(() => { buttons.current.get(selectedId || "")?.scrollIntoView({ block: "nearest" }); }, [selectedId, query, selectionKey, visible.length]);
+  // The selected entry is revealed when it changes, again once the panel beside
+  // it has laid out, and when a prepared window is shown.
+  useEffect(() => {
+    const reveal = () => buttons.current.get(selectedId || "")?.scrollIntoView({ block: "nearest" });
+    reveal();
+    const frame = typeof requestAnimationFrame === "function" ? requestAnimationFrame(reveal) : null;
+    const shown = () => { if (document.visibilityState === "visible") reveal(); };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", shown);
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", shown);
+    };
+  }, [selectedId, query, selectionKey, visible.length]);
   useEffect(() => {
     if (previousSelection.current !== selectionKey && query && !visible.some(item => item.id === selectedId)) setQuery("");
     previousSelection.current = selectionKey;
@@ -43,7 +56,7 @@ export function SearchableSidebar({ label, searchLabel, items, selectedId, panel
   const focusItem = (index: number, select = false) => {
     const item = visible[index];
     if (!item) return;
-    if (select) onSelect(item.id);
+    if (select) onSelect(item.id, query);
     buttons.current.get(item.id)?.focus();
   };
 
@@ -52,7 +65,7 @@ export function SearchableSidebar({ label, searchLabel, items, selectedId, panel
       className={`launcherSidebarItem${item.id === selectedId ? " active" : ""}`}
       aria-current={item.id === selectedId ? "page" : undefined}
       aria-controls={item.id === selectedId ? panelId : undefined} title={item.title || item.label}
-      tabIndex={item.id === tabStop ? 0 : -1} onClick={() => onSelect(item.id)}
+      tabIndex={item.id === tabStop ? 0 : -1} onClick={() => onSelect(item.id, query)}
       onKeyDown={event => {
         const next = sidebarMovement(event.key, index, visible.length);
         if (next === null) return;

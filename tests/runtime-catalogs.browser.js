@@ -63,7 +63,7 @@ module.exports = async function runtimeCatalogBrowserTests(page, fixture) {
   await page.evaluate(() => window.__runtimeTest.finish());
   await group.getByRole("button", { name: "AliceSoft", exact: true }).click();
   assert(await page.getByRole("link", { name: "Setup instructions", exact: true }).count() === 0, "Bundled AliceSoft installation needs no setup instructions");
-  const versions = await page.locator(".runtimeRemote select").first().locator("option").allTextContents();
+  const versions = await page.locator(".runtimeSource select.runtimeVersionSelect").first().locator("option").allTextContents();
   assert(new Set(versions).size === versions.length, "Available versions must be unique");
   await page.getByRole("button", { name: "Close", exact: true }).click();
   return { passed: true, ordinaryRefreshFull: true, refreshFeedback: true, gameMakerGrouped: true, globalImport: true, explicitIgorVersion: true, noAliceSetupLinks: true };

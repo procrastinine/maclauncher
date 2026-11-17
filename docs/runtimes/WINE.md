@@ -1,6 +1,6 @@
 # Wine runtimes
 
-MacLauncher runs [Windows games](../game-types/WINDOWS.md), and the compatible Windows executables of other game types, through Wine. Each Wine source is a separate choice in the game's runtime selector with its own tab in **Runtimes**:
+MacLauncher runs [Windows games](../game-types/WINDOWS.md), and the compatible Windows executables of other game types, through Wine. Each Wine source is a separate choice in the game's runtime selector and has a tab in **Runtimes** under **Wine · Apple Silicon**, **Wine · Intel** or both, according to the processor its versions run on:
 
 | Source | Runtime selector | Origin | Delivery |
 | --- | --- | --- | --- |

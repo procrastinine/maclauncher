@@ -36,7 +36,7 @@ A per-game choice takes precedence over the configured default. Automatic
 selection uses the shared version resolver and prefers the native CPU, while
 builds for the other CPU remain available in the **Build** menu. Refresh does not
 change saved choices, and installing a version leaves the other installed
-versions in place. Managers offer **Set default** unless they declare
+versions in place. Managers offer the **Default** menu unless they declare
 `supportsDefault: false`.
 
 Installation verifies the SHA-256 of the whole archive against the catalog,

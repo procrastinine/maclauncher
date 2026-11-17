@@ -10,7 +10,7 @@ The Wine tree is Intel (x86-64) code and needs Rosetta on Apple Silicon. Play th
 
 ## Versions
 
-**Runtimes → WineCX** lists the downloadable and installed versions and sets the global preferred version, which the inspector's **Version** selector can override for one game. Refresh reads every release that the publisher lists, newest first, and automatic selection uses the newest listed version. Installed versions remain selectable after a refresh, and a version chosen for a single game is used exactly as chosen.
+**Runtimes → Wine · Intel → WineCX** lists the downloadable and installed versions and sets the global preferred version, which the inspector's **Version** selector can override for one game. Refresh reads every release that the publisher lists, newest first, and automatic selection uses the newest listed version. Installed versions remain selectable after a refresh, and a version chosen for a single game is used exactly as chosen.
 
 A release counts as a runtime when it offers exactly one archive together with a checksum file named after it, such as `Libraries.tar.gz` and `Libraries.tar.gz.sha256`. The version number comes from the release tag, such as `runtime-v4.8.1`. Because asset names, versions and checksums are read from each release, new releases need no MacLauncher update. Each download is checked against the SHA-256 that GitHub lists and against the publisher's checksum file. [Release catalogs](RUNTIME_CATALOGS.md#winecx) describes the catalog.
 

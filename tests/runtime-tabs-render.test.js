@@ -61,7 +61,7 @@ test('an installed provider version is not described as an unavailable download'
   const markup = render([runtime]);
   // The menu tags the installed version, and no install button repeats it.
   assert.match(markup, /<option value="1\.0-MCLv1" selected="">[^<]*Installed<\/option>/);
-  assert.doesNotMatch(markup, /class="btn primary"[^>]*>Install/);
+  assert.doesNotMatch(markup, /class="btn small primary"[^>]*>Install/);
   assert.doesNotMatch(markup, /No compatible download|No compatible macOS/);
 });
 test('download controls replace an unavailable saved variant with the section variant', () => {
@@ -71,7 +71,7 @@ test('download controls replace an unavailable saved variant with the section va
   const markup = render([runtime], runtime.id, { runtimeUi: { [runtime.id]: {
     remoteOpen: {}, installedSort: {}, installVersion: {}, installVariant: { default: 'mono' }, pendingActions: {}, messages: {}, sourceErrors: {}
   } } });
-  assert.match(markup, /<button class="btn primary">Install<\/button>/);
+  assert.match(markup, /<button class="btn small primary">Install<\/button>/);
   assert.doesNotMatch(markup, /No compatible macOS download/);
 });
 function render(managers, selected = managers[0]?.id, overrides = {}) {
@@ -202,11 +202,14 @@ test('included shaders do not register a runtime manager or shader-pack navigati
   const markup = render([manager('other', { tabLabel: 'Other' })]);
   assert.doesNotMatch(markup, /ReShade ·|Shader packs|runtime-panel-reshade-shaders/);
 });
-// Set default belongs to each ready row that is not already the default, when
-// its manager offers defaults and the row does not decline them.
-const setDefaultActions = markup => (markup.match(/>\s*Set default\s*</g) || []).length;
-const offeredDefaults = (state, rows) => state.supportsDefault ? rows.filter(row => row.ready !== false &&
-  row.supportsDefault !== false && row.version !== state.defaultVersion).length : 0;
+// The Installed header's Default menu offers each ready row, when its manager
+// offers defaults and the row does not decline them; Included references are not choices.
+const setDefaultActions = markup => {
+  const menu = /<select[^>]*runtimeDefaultSelect[^>]*>([\s\S]*?)<\/select>/.exec(markup)?.[1];
+  return menu ? (menu.match(/<option value="\[/g) || []).length : 0;
+};
+const offeredDefaults = (state, rows) => state.supportsDefault ? rows.filter(row => row.ready !== false && !row.reference &&
+  row.supportsDefault !== false).length : 0;
 test('CrossOver and Sikarugir manage one shared DXMT support download under DirectX to Metal', () => {
   const registry = require('../src/modules/registry');
   const source = require('../src/modules/crossover/temporal/support-manager');
@@ -222,10 +225,11 @@ test('CrossOver and Sikarugir manage one shared DXMT support download under Dire
   assert.deepEqual(engines.map(engine => engine.id), ['crossover', 'sikarugir']);
   assert.equal(bridge.id, 'sikarugir-graphics-bridge');
   const markup = render([...engines, bridge], bridge.id);
-  for (const label of ['CrossOver', 'Sikarugir', 'DirectX → Metal']) assert.match(markup, new RegExp(`class="launcherSidebarItem[^>]*>${label}</button>`));
+  // Without CPU facts the Wine sources share one Wine entry.
+  for (const label of ['Wine', 'DirectX → Metal']) assert.match(markup, new RegExp(`class="launcherSidebarItem[^>]*>${label}</button>`));
   assert.match(markup, /class="runtimePanelTitle">DXMT<\/div>/);
   assert.match(markup, /id="runtime-group-panel-directx-metal"/);
-  assert.doesNotMatch(markup, /class="btn primary"[^>]*>Install/);
+  assert.doesNotMatch(markup, /class="btn small primary"[^>]*>Install/);
   // Whether the installed DXMT version can become the default follows the manager; games may still choose their own.
   assert.equal(setDefaultActions(markup), offeredDefaults(bridge.sections[0], [install]));
   assert.equal(markup.match(/class="runtimePanelTitle">DXMT<\/div>/g).length, 1);
@@ -349,31 +353,31 @@ test('runtime groups use a searchable sidebar while runtime sub-tabs retain edge
 test('empty catalogs expose a labeled Load versions action without a render-time request', () => {
   const runtime = { ...manager('common', { tabLabel: 'Common runtime' }), customRuntime: true };
   const markup = render([runtime], runtime.id, { onRuntimeRegister() {} });
-  assert.match(markup, /<button[^>]*class="btn primary"[^>]*aria-label="Load versions"[^>]*>Load versions<\/button>/);
+  assert.match(markup, /<button[^>]*class="btn small primary"[^>]*aria-label="Load versions"[^>]*>Load versions<\/button>/);
   assert.doesNotMatch(markup, /No versions loaded|iconOnly runtimeRefresh|<select[^>]*aria-label="Version"/);
   assert.ok(markup.indexOf('>Load versions</button>') < markup.indexOf('>Installed</span>'));
   assert.ok(markup.indexOf('>Installed</span>') < markup.indexOf('>Register custom…</button>'));
   assert.equal((markup.match(/class="saveSectionTitle runtimeInstalledHeader"/g) || []).length, 2);
 });
-test('all source refresh controls stay above their own selectors without a shared remote refresh', () => {
+test('each source row ends with its own refresh control and no remote refresh is shared', () => {
   const runtime = manager('split', {}, { versions: ['mac-v1', 'stock-v1'], supportsLatestOnly: true,
     sources: [{ id: 'builds', label: 'MacLauncher Builds', source: 'https://example.org/builds', versions: ['mac-v1'], supportsLatestOnly: false },
       { id: 'upstream', label: 'Upstream', source: 'https://example.com/releases', versions: ['stock-v1'], supportsLatestOnly: true }] });
   const markup = render([runtime]);
   const sharedHeader = markup.split('class="saveSectionTitle runtimeInstalledHeader"')[1].split('class="runtimeSectionBody"')[0];
   assert.doesNotMatch(sharedHeader, /runtimeRefresh|All versions/);
-  assert.equal((markup.match(/class="runtimeSourceHeader"/g) || []).length, 2);
-  assert.equal((markup.match(/class="btn iconOnly runtimeRefresh"/g) || []).length, 2);
+  assert.equal((markup.match(/class="runtimeSourceRow"/g) || []).length, 2);
+  assert.equal((markup.match(/class="btn small iconOnly runtimeRefresh"/g) || []).length, 2);
   assert.equal((markup.match(/>All versions<\/button>/g) || []).length, 1);
   for (const id of ['builds', 'upstream']) {
     const row = markup.split(`data-runtime-source="${id}"`)[1].split('data-runtime-source=')[0];
-    assert.ok(row.indexOf('runtimeRefresh') < row.indexOf('<select'));
-    const selectors = row.split('class="runtimeRemote"')[1];
-    assert.doesNotMatch(selectors, /runtimeRefresh|All versions/);
+    // Name, menu and Install first; links and reload at the row's end.
+    assert.ok(row.indexOf('<select') < row.indexOf('class="runtimeSourceTrail"'));
+    assert.ok(row.indexOf('class="runtimeSourceTrail"') < row.indexOf('runtimeRefresh'));
   }
   const legacy = render([manager('single', {}, { versions: ['v1'], source: 'https://example.com/releases' })]);
-  assert.ok(legacy.indexOf('class="runtimeSourceHeader"') < legacy.indexOf('class="runtimeRemote"'));
-  assert.equal((legacy.match(/class="btn iconOnly runtimeRefresh"/g) || []).length, 1);
+  assert.equal((legacy.match(/class="runtimeSourceRow"/g) || []).length, 1);
+  assert.equal((legacy.match(/class="btn small iconOnly runtimeRefresh"/g) || []).length, 1);
 });
 test('concise runtime tabs retain the actual runtime name visibly inside the panel', () => {
   const wine = { ...manager('sikarugir', { tabLabel: 'Wine', management: 'managed' }), label: 'Sikarugir Wine' };
@@ -406,14 +410,18 @@ test('the Runtimes sidebar heads category sections and a visible tab names its p
   assert.match(markup, /role="tab" aria-selected="true"[^>]*title="Backend reader"[^>]*>Reader<\/button>/);
   assert.doesNotMatch(markup, /class="runtimePanelTitle"/);
 });
-test('the Runtimes sidebar lists Wine sources under Apple Silicon and Intel headings by their measured CPU', () => {
+test('the Runtimes sidebar lists one Wine entry per measured CPU, opened at the chosen source', () => {
   const wine = (id, architectures) => ({ ...manager(id, { groupId: id, tabLabel: id, category: 'compatibility', hostGroup: 'Wine' },
     { versions: ['1'] }, [{ version: '1', ready: true, architecture: 'arm64', architectures }]), launcherArchitecture: 'arm64' });
   const markup = render([wine('Intel Wine', ['x86_64']), wine('Apple Wine', ['arm64'])], 'Intel Wine');
   const sidebar = markup.match(/<nav class="launcherSidebarChoices"[^>]*>([\s\S]*?)<\/nav>/)[1];
   const order = [...sidebar.matchAll(/<h2 class="launcherSidebarHeading"[^>]*>([^<]+)<\/h2>|class="launcherSidebarItem[^>]*>([^<]+)<\/button>/g)]
     .map(match => match[1] ? `# ${match[1]}` : match[2]);
-  assert.deepEqual(order, ['# Wine · Apple Silicon', 'Apple Wine', '# Wine · Intel (Rosetta)', 'Intel Wine']);
+  assert.deepEqual(order, ['# Compatibility', 'Wine · Apple Silicon', 'Wine · Intel']);
+  assert.match(sidebar, /class="launcherSidebarItem active" aria-current="page"[^>]*>Wine · Intel<\/button>/);
+  // An entry with one source shows that source's panel without a tab strip.
+  assert.doesNotMatch(markup, /role="tablist"/);
+  assert.match(markup, /<option value="1"/);
 });
 test('fixed built-ins expose no management tab or setup control while managed included fallbacks remain visible', () => {
   const fixed = manager('fixed', { tabLabel: 'Fixed runtime', management: 'built-in' }, { versions: ['fixed-v1'] });
@@ -432,7 +440,7 @@ test('refresh feedback remains visible while waiting and after an unchanged cata
   const runtime = manager('release', { tabLabel: 'Releases' }, { versions: ['1.16', '1.15', '1.14'], supportsLatestOnly: false });
   const busy = render([runtime], runtime.id, { runtimeUi: { release: { remoteOpen: {}, installVersion: {}, installVariant: {}, installedSort: {}, error: null,
     pendingActions: { default: 'refreshCatalog' } } } });
-  assert.match(busy, /class="btn iconOnly runtimeRefresh refreshing" disabled="" aria-busy="true"/);
+  assert.match(busy, /class="btn small iconOnly runtimeRefresh refreshing" disabled="" aria-busy="true"/);
   assert.match(busy, /Refreshing versions…/);
   const completed = render([runtime], runtime.id, { runtimeUi: { release: { remoteOpen: {}, installVersion: {}, installVariant: {}, installedSort: {}, error: null,
     messages: { default: 'Versions updated at 10:42:00' } } } });
@@ -463,13 +471,14 @@ test('local application versions show paths and independent defaults without dow
   assert.match(markup, /2 applications/);
   assert.match(markup, /Registered applications/);
   assert.match(markup, /26.0 · Player</);
-  assert.match(markup, /26.0 · Player Beta<span class="badge badgeAccent">Default/);
+  assert.match(markup, /26.0 · Player Beta<\/span><span class="badge badgeAccent">Default/);
   assert.match(markup, /\/Applications\/Player Beta\.app/);
   assert.match(markup, /aria-label="Find installed applications"/);
   assert.match(markup, />Add application…<\/button>/);
   assert.equal((markup.match(/aria-label="Remove"/g) || []).length, 2);
-  assert.equal((markup.match(/>Set default<\/button>/g) || []).length, 1);
-  assert.doesNotMatch(markup, /Uninstall|class="btn primary"|Latest available|Latest installed|runtimeRemote/);
+  // Each application is its own Default choice.
+  assert.equal(setDefaultActions(markup), 2);
+  assert.doesNotMatch(markup, /Uninstall|class="btn small primary"|Latest available|Latest installed|runtimeRemote/);
   const empty = render([{ ...runtime, installed: [], catalog: { ...runtime.catalog, versions: [] } }], runtime.id, { onRuntimeImport() {} });
   assert.match(empty, /No applications registered\./);
   assert.match(empty, />Add application…<\/button>/);
@@ -544,10 +553,10 @@ test('included runtime versions stay selectable without install, removal or repe
       installDir: '/application/resources/native-runtime' }]);
   const markup = render([runtime]);
   assert.match(markup, /v1.2.3 · Included/);
-  assert.match(markup, />Included<\/span>/); assert.match(markup, />Set default<\/button>/);
+  assert.match(markup, />Included<\/span>/); assert.equal(setDefaultActions(markup), 1);
   assert.match(markup, /class="runtimeSectionTitle">Versions/);
   assert.match(markup, /runtimeInstalledHeader"><span>Included<\/span>/);
-  assert.doesNotMatch(markup, /Available versions|Latest available|Latest installed|class="btn primary"|aria-label="Uninstall"|\/application\/resources\/native-runtime/);
+  assert.doesNotMatch(markup, /Available versions|Latest available|Latest installed|class="btn small primary"|aria-label="Uninstall"|\/application\/resources\/native-runtime/);
   const registration = { ...runtime, installed: [{ version: '1.2.3', source: 'local', installDir: '/registered/runtime' }],
     catalog: { ...runtime.catalog, includedVersions: [], versionRequirements: { '1.2.3': { included: false } } } };
   assert.match(render([registration]), /aria-label="Uninstall"/); assert.match(render([registration]), /\/registered\/runtime/);
@@ -569,7 +578,7 @@ test('included resources needing a private execution copy stay ready without an 
   const included = render([runtime]);
   assert.match(included, /v1.2.3 · Included/);
   assert.match(included, /runtimeInstalledHeader"><span>Included<\/span>/);
-  assert.doesNotMatch(included, /class="btn primary"|aria-label="Uninstall"|\/application\/resources\/runtime/);
+  assert.doesNotMatch(included, /class="btn small primary"|aria-label="Uninstall"|\/application\/resources\/runtime/);
   const managed = render([{ ...runtime, installed: [{ version: '1.2.3', source: 'download', ready: true,
     installDir: '/managed/runtime' }] }]);
   assert.match(managed, /v1.2.3 · Installed/);
@@ -584,11 +593,11 @@ test('switching architecture never hides installation behind another architectur
         installReason: 'This release has no Intel package.' }
     } } } }, [{ version: '1.2.3', variant: 'arm64', ready: true, bundledExecution: 'direct', removable: false }]),
     defaultVariant: 'arm64', variants: [{ id: 'arm64', label: 'Apple Silicon' }, { id: 'x64', label: 'Intel' }] };
-  assert.doesNotMatch(render([runtime]), /class="btn primary"/);
+  assert.doesNotMatch(render([runtime]), /class="btn small primary"/);
   const markup = render([runtime], runtime.id, { runtimeUi: { architectures: { remoteOpen: {}, installVersion: {},
     installVariant: { default: 'x64' }, installedSort: {}, error: null } } });
   assert.match(markup, /<option value="x64" selected="">Intel<\/option>/);
-  assert.match(markup, /class="btn primary" disabled="" title="This release has no Intel package\."/);
+  assert.match(markup, /class="btn small primary" disabled="" title="This release has no Intel package\."/);
   assert.doesNotMatch(markup, /v1.2.3 · Included/);
 });
 test('the Build override defaults to the launcher CPU and lists only CPUs with their own builds', () => {
@@ -648,7 +657,7 @@ test('a refreshed catalog names each listed version in the Version menu beside a
     assert.deepEqual(options.map(([value]) => value), ['MCLv8', 'MCLv9'], build || 'automatic build');
     // The visible text names the version itself, not a generic or relative description.
     for (const [value, text] of options) assert.ok(text.includes(value), `${value} reads "${text}"`);
-    assert.match(markup, /class="saveName">MCLv9</);
+    assert.match(markup, /class="saveName"><span[^>]*>MCLv9</);
   }
 });
 test('an Intel-only build installed on Apple Silicon is installed and can be the default', () => {
@@ -657,7 +666,7 @@ test('an Intel-only build installed on Apple Silicon is installed and can be the
     [{ version: '1.0', architecture: 'x64', ready: true, removable: true }]), launcherArchitecture: 'arm64', defaultVersion: '1.0' };
   const markup = render([runtime], runtime.id);
   assert.match(markup, /<span class="badge badgeAccent"[^>]*>Default<\/span>/);
-  assert.doesNotMatch(markup, /<button[^>]*class="btn primary"[^>]*>Install<\/button>/);
+  assert.doesNotMatch(markup, /<button[^>]*class="btn small primary"[^>]*>Install<\/button>/);
 });
 test('installed builds are tagged by the CPU they were published for, and a missing default is stated', () => {
   // Both build choices hold x86_64 Wine; only the other build choice is tagged, and the Apple Silicon build is the default.
@@ -680,7 +689,7 @@ test('installed builds are tagged by the CPU they were published for, and a miss
   const library = { ...manager('library', {}, { versions: ['1.0'], versionRequirements: { '1.0': { architecture: 'arm64' } } },
     [{ version: '1.0', architecture: 'x64', ready: true }]), launcherArchitecture: 'arm64', defaultVersion: '1.0' };
   assert.doesNotMatch(render([library], library.id), /class="badge">Intel</);
-  assert.doesNotMatch(render([library], library.id), /<button[^>]*class="btn primary"[^>]*>Install<\/button>/);
+  assert.doesNotMatch(render([library], library.id), /<button[^>]*class="btn small primary"[^>]*>Install<\/button>/);
   // Declared host CPUs win over file inspection: Apple-Silicon-only packages and
   // packages for every Mac carry no tag; a declared Intel build keeps its tag.
   const tagged = (requirement, architecture = 'x64') => {
@@ -717,14 +726,14 @@ test('cached source build choices display compact source/help links and explicit
     installReason: 'Requires CMake and SDL2.', installHelpUrl: 'https://example.com/setup' });
   const markup = render([runtime]);
   assert.match(markup, /<option value="1.2.3" selected="">v1.2.3<\/option>/);
-  assert.match(markup, /<button class="btn primary">Build<\/button>/);
+  assert.match(markup, /<button class="btn small primary">Build<\/button>/);
   assert.match(markup, /href="https:\/\/github.com\/example\/runtime\/tree\/revision"[^>]*>github.com<\/a>/);
   assert.match(markup, /href="https:\/\/example.com\/setup"[^>]*>Setup instructions<\/a>/);
   assert.match(markup, /Requires CMake and SDL2\./);
   assert.doesNotMatch(markup, /Reviewed pinned catalog|docs\/NATIVE_TOOL_SETUP/);
   assert.match(render([runtime], runtime.id, { downloadTasks: [{ id: 'build', managerId: runtime.id,
-    sectionId: 'default', version: '1.2.3', downloaded: 0, total: null }] }), /<button class="btn primary" disabled="">Installing…<\/button>/);
-  assert.doesNotMatch(render([{ ...runtime, installed: [{ version: '1.2.3' }] }]), /class="btn primary"[^>]*>Install/);
+    sectionId: 'default', version: '1.2.3', downloaded: 0, total: null }] }), /<button class="btn small primary" disabled="">Installing…<\/button>/);
+  assert.doesNotMatch(render([{ ...runtime, installed: [{ version: '1.2.3' }] }]), /class="btn small primary"[^>]*>Install/);
 });
 test('direct grouped backend selection renders the correct tab and its version without sibling leakage', () => {
   const older = manager('opaque-a', { groupId: 'alice', tabLabel: 'AliceSoft', order: 110,
@@ -816,25 +825,27 @@ test('native local imports require a visible matching version while application 
   const markup = render([runtime], runtime.id, { onRuntimeImport() {}, runtimeUi: { 'local-native': {
     remoteOpen: {}, installVersion: { default: '1.1' }, installVariant: {}, installedSort: {} } } });
   assert.match(markup, /<option value="1.1" selected="">/);
-  assert.match(markup, /<button class="btn">Import local build…<\/button>/);
+  assert.match(markup, /<button class="btn small">Import local build…<\/button>/);
   const unavailable = render([{ ...runtime, catalog: { ...runtime.catalog, versions: [] } }], runtime.id, { onRuntimeImport() {} });
-  assert.match(unavailable, /<button class="btn" disabled="">Import local build…<\/button>/);
+  assert.match(unavailable, /<button class="btn small" disabled="">Import local build…<\/button>/);
   const detected = render([manager('local-app', {}, { importable: true, managementKind: 'local-applications' })], 'local-app', { onRuntimeImport() {} });
-  assert.match(detected, /<button class="btn">Import runtime…<\/button>/);
+  assert.match(detected, /<button class="btn small">Import runtime…<\/button>/);
 });
 
-test('Sikarugir downloads and local CrossOver applications retain separate sidebar groups', () => {
+test('Sikarugir downloads and local CrossOver applications are separate tabs of one Wine entry', () => {
   const metadata = require('../src/modules/crossover/sources/settings').withSources(require('../src/modules/crossover/manifest.json')).runtime.managerUi;
   const wine = manager('sikarugir', metadata.sikarugir, { versions: ['11.0'] });
   const crossover = manager('crossover', metadata.crossover, { versions: [], importable: true,
     managementKind: 'local-applications', importLabel: 'Add application…' });
   const first = render([wine, crossover], 'sikarugir', { onRuntimeImport() {} });
-  assert.match(first, /class="launcherSidebarItem[^>]*>Sikarugir<\/button>/);
-  assert.match(first, /class="launcherSidebarItem[^>]*>CrossOver<\/button>/);
-  assert.doesNotMatch(first, /aria-label="Wine sections"/);
+  assert.equal((first.match(/class="launcherSidebarItem[^>]*>Wine<\/button>/g) || []).length, 1);
+  assert.doesNotMatch(first, /class="launcherSidebarItem[^>]*>(?:Sikarugir|CrossOver)<\/button>/);
+  assert.match(first, /role="tab" aria-selected="true"[^>]*>Sikarugir<\/button>/);
+  assert.match(first, /role="tab" aria-selected="false"[^>]*>CrossOver<\/button>/);
   assert.match(first, /option value="11.0"/);
   assert.doesNotMatch(first, /Add application…/);
   const second = render([wine, crossover], 'crossover', { onRuntimeImport() {} });
+  assert.match(second, /role="tab" aria-selected="true"[^>]*>CrossOver<\/button>/);
   assert.match(second, /Add application…/);
   assert.doesNotMatch(second, /option value="11.0"/);
 });
@@ -911,8 +922,8 @@ test('translator source links use one caption with explicit project and Template
   for(const owner of require('../src/modules/shared/vulkan/libraries').managers) {
     const markup=render([{...owner.getState({}),id:owner.id,label:owner.label,ui:owner.ui}],owner.id);
     assert.match(markup,/class="runtimeSourceLink"[^>]*>Source<\/a>/);
-    assert.ok(markup.includes('class="runtimeSourceName">'+(owner.backend==='moltenvk'?'MoltenVK':'KosmicKrisp (LWJGL build)')+'</span>'));
-    assert.doesNotMatch(markup,/class="runtimeSourceName">Source<\/span>|Releases published by the runtime project/);
+    // The panel's only source is not named again; its description says who publishes it.
+    assert.doesNotMatch(markup,/class="runtimeSourceName"[^>]*>(?:Source|MoltenVK|KosmicKrisp)|Releases published by the runtime project/);
     if(owner.backend==='moltenvk')assert.match(markup,/MoltenVK releases published by KhronosGroup\/MoltenVK/);
     else assert.match(markup,/KosmicKrisp Vulkan drivers published by LWJGL/);
   }
@@ -1154,7 +1165,7 @@ test('Installed ordering compares component releases before host releases and pr
   const localRows=[...custom,plainRow,managedTemplate],mixed={...included,installed:localRows,versionLabels:{...included.versionLabels,...Object.fromEntries(localRows.map(row=>[row.version,row.versionLabel]))}};
   for(const sort of ['newest','oldest']){
     const markup=render([mixed],mixed.id,{runtimeUi:{[mixed.id]:{remoteOpen:{},installedSort:{default:sort},installVersion:{},installVariant:{},pendingActions:{},messages:{},sourceErrors:{}}}});
-    const labels=markup.split('class="saveRow"').slice(1).map(row=>/<div class="saveName">([^<]+)/.exec(row)?.[1]);
+    const labels=markup.split('class="saveRow"').slice(1).map(row=>/<div class="saveName"><span[^>]*>([^<]+)/.exec(row)?.[1]);
     const unknown=[reference(templates[2]).versionLabel,...custom.slice(2).map(row=>row.versionLabel)].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
     assert.deepEqual(labels.slice(-unknown.length),unknown,'unknown components follow every known release, in visible-label order');
     assert.ok(sort==='oldest'?labels.indexOf(custom[1].versionLabel)<labels.indexOf(custom[0].versionLabel):labels.indexOf(custom[0].versionLabel)<labels.indexOf(custom[1].versionLabel));
@@ -1334,7 +1345,7 @@ test('translator rows offer defaults as their manager does while Included refere
   assert.equal(setDefaultActions(render([runtime([custom,reference])],translator.id)),offeredDefaults({...state,defaultVersion:'not-installed'},[custom,reference]));
   const driver=manager('vulkan-driver',{groupId:'vulkan-drivers'}, {versions:['1.4.2']},[{version:'1.4.1',ready:true}]);
   driver.supportsDefault=true;driver.defaultVersion='1.4.2';
-  assert.match(render([driver]),/Set default/);
+  assert.equal(setDefaultActions(render([driver])),1);
   for(const owner of require('../src/modules/shared/vulkan/libraries').managers)assert.equal(owner.getState({}).supportsDefault,true);
 });
 
@@ -1588,7 +1599,8 @@ test('an installed version this launcher cannot use reads as incompatible and is
   const markup=render([runtime]);
   assert.match(markup, /<option value="old" selected="">/);
   assert.doesNotMatch(markup, />Install<\/button>/);
-  assert.match(markup, /runtimeSourceName">Versions/);
+  assert.match(markup, /runtimeSourceName" for="[^"]+">Version</);
+  assert.match(markup, /class="runtimeSourceLink"[^>]*>Valve CDN<\/a>/);
   assert.equal(runtimeInstallVersion({...runtime,catalog:{versions:['new']}},'old'),'old');
  });
  test('Windows PE translator rows carry no Mac CPU badge',()=>{

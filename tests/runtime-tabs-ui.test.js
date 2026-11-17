@@ -47,7 +47,9 @@ test('shared settings and runtimes keep static detail in help while preserving c
     onRuntimeRefresh() {}, onRuntimeInstall() {}, onRuntimeSetDefault() {}, onRuntimeUninstall() {}, onCancelDownload() {} });
   assert.match(runtimes, /popover="auto" class="helpPopover">Component explanation\./);
   assert.match(runtimes, /class="runtimeCatalogDetails"><p>Catalog explanation\.<\/p>/);
-  assert.match(runtimes, /popover="auto" class="helpPopover"><p>mac-arm64<\/p><p>Requires macOS 14\.0 or later\.<\/p>/);
+  // A row's static detail is its name's tooltip; its macOS requirement stays visible.
+  assert.match(runtimes, /<span title="mac-arm64\nInstallation detail\.\nGraphics library 1\.0\n\/Runtimes\/2\.0">v2\.0<\/span>/);
+  assert.match(runtimes, /<div class="dim">Requires macOS 14\.0 or later\.<\/div>/);
   assert.doesNotMatch(runtimes, /class="runtimePanelSubtitle"|class="dim mono ellipsis runtimePath"|<div class="dim">Installation detail\./);
   assert.doesNotMatch(runtimes, /class="runtimeSectionHint"/);
   // The install reason is shown once, beside the install control.
@@ -83,7 +85,7 @@ function modelTest(body) {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 
-test('Wine runtimes are listed by the CPU of their version rows, and a source with both CPUs appears under both headings', () => modelTest(`
+test('Wine sources become one entry per CPU of their version rows, and a source with both CPUs is a tab of both', () => modelTest(`
   const categories = [{ id: 'compatibility', label: 'Compatibility' }, { id: 'graphics', label: 'Graphics' }];
   const wine = (id, label, installed, catalog = { versions: installed.map(row => row.version) }) => ({ id, label,
     ui: { groupId: id, tabLabel: label, category: 'compatibility', hostGroup: 'Wine' },
@@ -97,24 +99,26 @@ test('Wine runtimes are listed by the CPU of their version rows, and a source wi
   const dos = manager('dosbox', 'DOSBox', { groupId: 'dosbox', tabLabel: 'DOSBox', category: 'compatibility' });
   const effects = manager('effects', 'Effects', { groupId: 'graphics', tabLabel: 'Effects', category: 'graphics' });
   const groups = splitRuntimeGroupsByHost(groupRuntimeManagers([effects, both, unknown, dos, apple, intel], categories), sections);
-  // A source without CPU facts keeps its heading; the Wine headings follow it, Apple Silicon first.
+  // The two entries sit where the first Wine source sorts, Apple Silicon first, under the category heading.
   assert.deepEqual(groups.map(group => [group.heading, group.label]), [
-    ['Compatibility', 'DOSBox'], ['Compatibility', 'Unknown Wine'],
-    ['Wine · Apple Silicon', 'Apple Wine'], ['Wine · Apple Silicon', 'Both Wine'],
-    ['Wine · Intel (Rosetta)', 'Both Wine'], ['Wine · Intel (Rosetta)', 'Intel Wine'],
-    ['Graphics', 'Effects']]);
-  const rows = (group, key) => group.managers[0].sections[0][key];
-  const [appleBoth, intelBoth] = groups.filter(group => group.label === 'Both Wine');
-  assert.notEqual(appleBoth.id, intelBoth.id);
-  assert.deepEqual(rows(appleBoth, 'installed').map(row => row.version), ['b']);
-  assert.deepEqual(rows(intelBoth, 'installed').map(row => row.version), ['a']);
+    ['Compatibility', 'Wine · Apple Silicon'], ['Compatibility', 'Wine · Intel'], ['Compatibility', 'DOSBox'], ['Graphics', 'Effects']]);
+  const [appleEntry, intelEntry] = groups;
+  // Each source is a tab named by its label; a source with no CPU facts is a tab of both entries.
+  assert.deepEqual(runtimeGroupSections(appleEntry, sections).map(tab => tab.label), ['Apple Wine', 'Both Wine', 'Unknown Wine']);
+  assert.deepEqual(runtimeGroupSections(intelEntry, sections).map(tab => tab.label), ['Both Wine', 'Intel Wine', 'Unknown Wine']);
+  const member = (entry, id) => entry.managers.find(manager => manager.id === id);
+  const rows = (entry, key) => member(entry, 'both-wine').sections[0][key];
+  assert.deepEqual(rows(appleEntry, 'installed').map(row => row.version), ['b']);
+  assert.deepEqual(rows(intelEntry, 'installed').map(row => row.version), ['a']);
   // A listed version without a stated CPU stays in both entries.
-  assert.deepEqual(rows(appleBoth, 'catalog').versions, ['b', 'c', 'd']);
-  assert.deepEqual(rows(intelBoth, 'catalog').versions, ['a', 'd']);
-  assert.equal(appleBoth.managers[0].id, 'both-wine', 'actions keep the source manager id');
-  assert.equal(resolveRuntimeTabSelection(groups, 'both-wine', 'default', sections, intelBoth.id).group.id, intelBoth.id);
-  assert.equal(resolveRuntimeTabSelection(groups, 'both-wine', 'default', sections).group.id, appleBoth.id);
-  assert.equal(groups.find(group => group.label === 'Unknown Wine').managers[0], unknown, 'a source with no CPU facts is unchanged');
+  assert.deepEqual(rows(appleEntry, 'catalog').versions, ['b', 'c', 'd']);
+  assert.deepEqual(rows(intelEntry, 'catalog').versions, ['a', 'd']);
+  assert.equal(member(appleEntry, 'both-wine').id, 'both-wine', 'actions keep the source manager id');
+  assert.equal(resolveRuntimeTabSelection(groups, 'both-wine', 'default', sections, intelEntry.id).group.id, intelEntry.id);
+  assert.equal(resolveRuntimeTabSelection(groups, 'both-wine', 'default', sections).group.id, appleEntry.id);
+  assert.deepEqual(member(appleEntry, 'unknown-wine').sections, unknown.sections, 'a source with no CPU facts keeps its rows');
+  // Without any CPU facts the sources share one entry named after the host group.
+  assert.deepEqual(splitRuntimeGroupsByHost(groupRuntimeManagers([unknown, dos], categories), sections).map(group => group.label), ['DOSBox', 'Wine']);
 `));
 
 test('shader collections retain exact action targets beneath one stable Graphics tab', () => modelTest(`
@@ -320,7 +324,7 @@ test('registry metadata exposes manageable production groups while exposing mana
       ['PS5 (AnyPS5)', 'Prosper', 'Switch / Switch 2 (nxnative)', 'MacLauncher Android', 'Mac.apk', 'AIM', 'PlayCover']);
     // One family group holds the nxnative runtime and its native tools for Switch and Switch 2 games.
     assert.deepEqual(['nxnative', 'nxnative-tools'].map(id => section(id).label), ['Switch / Switch 2 (nxnative)', 'Switch / Switch 2 (nxnative)']);
-    assert.deepEqual(groups.filter(group => group.category === 'compatibility').map(group => group.label), ['CrossOver', 'Sikarugir', 'WineCX', 'Highball Wine', 'MetalSharp Wine', 'Steam client bridge', 'DOSBox', '32-bit Mac']);
+    assert.deepEqual(groups.filter(group => group.category === 'compatibility').map(group => group.label), ['CrossOver', 'Sikarugir', 'WineCX', 'Highball Wine', 'MetalSharp Wine', 'Steam client bridge', 'Steamworks4j', 'DOSBox', '32-bit Mac']);
     // The Wine runtimes share the Steam client bridge, with Valve's Windows Steam client files as its second managed row.
     assert.deepEqual(runtimeGroupSections(section('maclauncher-steam-bridge'), sections).map(choice => [choice.label, choice.managerId]),
       [['Steam client bridge', 'maclauncher-steam-bridge'], ['Windows Steam client files', 'steam-client-components']]);
@@ -458,7 +462,7 @@ test('runtime tab keys wrap correctly and catalog actions expose build labels an
   assert.equal(runtimeCatalogPresentation({ source: 'Reviewed pinned catalog (offline)' }).sourceLabel, '');
 `));
 
-test('effective manager defaults remain visible when installed and only saved defaults can be cleared', async () => {
+test('effective manager defaults remain visible when installed and the Default menu clears only a saved default', async () => {
   const { build } = require('vite'), Module = require('node:module'), React = require('react');
   const { renderToStaticMarkup } = require('react-dom/server');
   const { react, componentHarness } = require('./helpers/renderer-component');
@@ -483,14 +487,14 @@ test('effective manager defaults remain visible when installed and only saved de
       const tree=h.render(),markup=renderToStaticMarkup(tree);
       assert.match(markup,/Default v2\.0/,'the effective default is named even when already installed');
       assert.match(markup,/badge badgeAccent[^>]*>Default<\/span>/,'the installed default keeps its marker');
-      const clear=elements(tree).find(node=>node.type==='button'&&node.props.children==='Use automatic default');
-      assert.equal(Boolean(clear),defaultSource==='saved');
-      // Owner, 11-17: the action must not add a row above Versions; it sits on the default's own row.
-      if(clear){
-        assert(!elements(tree).some(node=>node.props?.className==='runtimePanelHeader'&&elements(node).some(n=>n.props===clear.props)),'not in a header row above Versions');
-        assert(elements(tree).some(node=>node.props?.className==='saveRow'&&elements(node).some(n=>n.props===clear.props)),'on the default version row');
-      }
-      if(clear){clear.props.onClick();assert.deepEqual(calls,[['fixture','default',null]]);}
+      assert.doesNotMatch(markup,/Use automatic default|>Set default</);
+      const menu=elements(tree).find(node=>node.props?.menu&&typeof node.props.onChoose==='function');
+      // No row above Versions and no per-row action: the one control sits in the Installed header.
+      assert(elements(tree).some(node=>node.props?.className==='saveSectionTitle runtimeInstalledHeader'&&elements(node).some(n=>n.props===menu.props)),'in the Installed header');
+      const [automatic]=menu.props.menu.choices;
+      assert.equal(automatic.label,defaultSource==='saved'?'Automatic':'Automatic (v2.0)');
+      assert.equal(menu.props.menu.selected,defaultSource==='saved'?JSON.stringify(['2.0','','']):'');
+      if(defaultSource==='saved'){menu.props.onChoose(automatic);assert.deepEqual(calls,[['fixture','default',null,undefined,undefined,undefined]]);}
       else assert.deepEqual(calls,[]);
     } finally {h.close();}
   }

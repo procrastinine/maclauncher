@@ -231,7 +231,7 @@ body {
   margin: 0; padding: 6px 10px 2px; color: var(--muted); font-size: var(--font-xs); font-weight: 600; line-height: 1.4;
 }
 .launcherSidebarItem {
-  display: block; width: 100%; margin: 2px 0; padding: 8px 10px; border: 0;
+  display: block; width: 100%; margin: 1px 0; padding: 5px 10px; border: 0;
   border-radius: var(--radius-sm); background: transparent; color: var(--muted); font: inherit;
   text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
 }
@@ -1577,8 +1577,23 @@ input[type="checkbox"], input[type="radio"] {
 .runtimePanel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
+
+/* Versions and Installed share one header: the same height (a small menu's),
+   the same rule under it, and rows inset 12 px below it. */
+.runtimePanel .runtimeSectionCard { border-bottom: 0; overflow: visible; }
+.runtimePanel .runtimeInstalledHeader { min-height: 28px; padding: 0 0 6px; box-sizing: content-box; }
+.runtimePanel .runtimeSectionBody { padding: 10px 12px 0; gap: 8px; }
+.runtimePanel .saveSection.runtimeSection { border-top: 0; }
+.runtimePanel .runtimeSection .saveRow { padding: 10px 12px; gap: 16px; }
+.runtimePanel .runtimeSection .saveRowMain { gap: 3px; }
+.runtimePanel .runtimeSection .saveRowActions { gap: 8px; }
+.runtimeInstalledFooter { display: flex; gap: 8px; align-items: center; padding: 10px 12px 0; border-top: 1px solid var(--border); }
+.runtimePanel .runtimeImport { padding: 0; }
+.runtimePanel .runtimeSection > .empty { padding: 10px 12px; }
+.runtimeDefaultControl { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-weight: 400; font-size: var(--font-sm); color: var(--muted); }
+.runtimeDefaultSelect { width: auto; max-width: min(22rem, 48vw); color: var(--text); }
 
 .runtimePanelHeader {
   display: flex;
@@ -1867,37 +1882,21 @@ input[type="checkbox"], input[type="radio"] {
   .runtimeRefresh.refreshing svg { animation: none; }
 }
 
-.runtimeRemote {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 8px 0;
-}
-
-.runtimeRemoteField {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 220px;
-}
-
 .runtimeSources { display: flex; flex-direction: column; gap: 8px; }
 .runtimeSource + .runtimeSource { border-top: 1px solid var(--border); padding-top: 8px; }
-.runtimeSourceHeading { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.runtimeSourceHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.runtimeSourceHeading > .runtimeSourceName { font-weight: 600; font-size: inherit; }
-.runtimeSourceHeading > span { font-weight: 400; font-size: var(--font-xs); }
-.runtimeSource .runtimeRemoteField:first-child { flex: 1; min-width: min(220px, 100%); }
+/* A source is one row: its name or Version, a menu sized to its entries, the
+   install action, then its links and reload control at the end. */
+.runtimeSource { display: flex; flex-direction: column; gap: 4px; }
+.runtimeSourceRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 28px; }
+.runtimeSourceRow > .runtimeSourceName { min-width: 4.5rem; font-size: var(--font-sm); font-weight: 400; color: var(--muted); }
+.runtimeVersionSelect { width: auto; min-width: 10rem; max-width: min(26rem, 100%); }
+.runtimeSourceTrail { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: var(--font-xs); }
+.runtimeSourceLinks { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--font-xs); }
 .runtimeAvailability { font-size: var(--font-xs); }
-/* Under the Installed rule, inset like the installed rows and the empty state. */
-.runtimeDefaultMissing { padding: 10px 16px 0; }
-.runtimeDefaultMissing .btn { margin-left: 8px; }
-.runtimeSourceRefreshActions { display: flex; align-items: center; gap: 8px; }
-/* The processor override is one compact menu beside its label, above the version lists. */
-.runtimeBuildField { flex-direction: row; align-items: center; align-self: flex-start; gap: 8px; min-width: 0; }
-/* A loaded source with nothing for this processor shows only its note. */
-.runtimeRemote:empty { display: none; }
+/* Under the Installed rule, inset like the installed rows. */
+.runtimeDefaultMissing { padding: 10px 12px 0; }
+/* The processor override is a row like a source's, above the version lists. */
+.runtimeBuildField { min-width: 0; }
 
 .runtimePanel .saveSection {
   margin-top: 0;
@@ -2341,7 +2340,9 @@ select.input:not([multiple]) {
 .pluginVersions { margin-top: 12px; }
 .pluginVersions > summary { cursor: pointer; color: var(--muted); font-size: var(--font-sm); }
 .pluginVersions[open] > summary { margin-bottom: 10px; }
-.pluginVersions .saveList, .pluginVersionDefault { margin-top: 10px; }
+.pluginVersions .saveList { margin-top: 6px; }
+.pluginInstalledHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; margin-top: 10px;
+  font-size: var(--font-sm); color: var(--muted); }
 
 .settingsDisplayRow { align-items: start; }
 .settingsDisplayTable { width: 100%; border-collapse: collapse; font-size: var(--font-sm); }
