@@ -8,13 +8,14 @@ const Catalog = require("./catalog");
 const Package = require("./package");
 const { VERSION } = require("../detect");
 const Custom = require("../../shared/runtime/custom-runtime");
+const { selectRuntimeVersion } = require("../../shared/runtime/version-choices");
 
 function createManager({ dependencies = {} } = {}) {
-  // A game runs only on its exact player version, so there is no default.
+  // A saved preference applies only to the game's exact player version.
   const core = createPinnedNativeManager({
     // SerializedFile metadata records the full Unity player version; launch.validateSelection rejects a different version.
     versionCompatibility: "exact",
-     id: "unity", label: "Unity Mono", supportsDefault: false,
+     id: "unity", label: "Unity Mono", supportsDefault: true,
     upstream: Catalog.source, sourceUrl: Catalog.SOURCE,
     verifyArtifact: args => Package.verifyArtifact(args, dependencies), prepareInstall: args => Package.prepareInstall(args, dependencies),
     resolveExecutable: root => path.join(root, "player", "UnityPlayer.app", "Contents", "MacOS", "UnityPlayer"),
@@ -43,9 +44,10 @@ function createManager({ dependencies = {} } = {}) {
       return result;
     } catch { return null; }
   }
-  function resolveSelection(entry, _settings, userDataDir) {
+  function resolveSelection(entry, settings, userDataDir) {
     const detected = entry?.moduleData?.detectedVersion, override = entry?.runtimeData?.unity?.version;
-    const version = override || detected;
+    const saved = core.normalizeSettings(settings?.runtimes?.unity).defaultVersion;
+    const { version } = selectRuntimeVersion({ manual: override, defaultVersion: detected && saved === detected ? saved : null, fallback: detected });
     if (!VERSION.test(version || "")) return { version: null, ready: false, install: null, reason: "The game does not report an exact Unity player version." };
     if (detected && version !== detected) return { version, ready: false, install: null, reason: `This game needs Unity ${detected}. A different player version is not automatically substituted.` };
     const install = core.core.resolveInstalled({ userDataDir, version }), profile = readProfile(install);
@@ -103,6 +105,7 @@ function createManager({ dependencies = {} } = {}) {
     return { ...state, installed, catalog, sections: [{ ...state.sections[0], label: "Mono player", installed, catalog }] };
   }
   const manager = { ...core, id: "unity", label: "Unity Mono", resolveSelection, getState, installRuntime, importRuntime, ensureCatalogVersion, readProfile,
+    updateSettingsAfterInstall: () => undefined, updateSettingsAfterUninstall: () => undefined,
     refreshCatalog: async options => { statusCache.clear(); return core.refreshCatalog(options); },
     uninstallRuntime: options => { statusCache.clear(); return core.uninstallRuntime(options); },
     __test: { createManager, statusCache } };

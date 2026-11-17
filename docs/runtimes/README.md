@@ -256,7 +256,7 @@ Each game keeps a separate version choice for each runtime, so switching runtime
 
 A damaged or incomplete installation stays in the menu as **Needs repair**. When it is the version the game uses, **Repair** beside the menu removes the damaged copy and installs that version again, through the same installation, consent and download task as **Reinstall** in **Runtimes**.
 
-The installation controls in **Runtimes** download the selected version. When no default is saved, installing the first version from **Runtimes** saves it as the default, although merely choosing a version in a download list saves no preference.
+The installation controls in **Runtimes** download the selected version. When no default is saved, installing the first version from **Runtimes** saves it as the default, although merely choosing a version in a download list saves no preference. Translator copies and exact-version Unity players keep their preferences unchanged during installation and removal; **Set default** saves their default explicitly.
 
 Runtime status reads the same saved preferences as Play, including the versions of separately selected dependencies, so changing a default refreshes the status of every runtime that depends on it.
 
