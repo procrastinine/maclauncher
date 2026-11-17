@@ -262,14 +262,23 @@ test('declarative categories head runtime groups in order, alphabetize label-sor
   assert.deepEqual(runtimeGroupSections(groupRuntimeManagers([channels, extra])[0], sections).map(choice => choice.label), ['Engine 11', 'Engine · Upstream', 'Extra']);
 `));
 
-test('KosmicKrisp products keep distinct translator tabs and compact version labels', () => {
+test('KosmicKrisp products keep distinct translator tabs and compact version labels', t => {
+  const fs = require('node:fs');
+  const root = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'kosmickrisp-tabs-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const header = Buffer.alloc(32);
+  header.writeUInt32LE(0xfeedfacf, 0); // 64-bit little-endian Mach-O.
+  header.writeUInt32LE(0x0100000c, 4); // ARM64.
+  header.writeUInt32LE(6, 12); // MH_DYLIB, no load commands.
+  header.writeUInt32LE(0x80, 24); // MH_TWOLEVEL.
+  for (const name of ['driver.dylib', 'libvulkan.1.dylib']) fs.writeFileSync(path.join(root, name), header);
   const adapted = require('../src/modules/shared/vulkan/managed');
   const stock = require('../src/modules/shared/vulkan/libraries').managers.find(manager => manager.id === 'vulkan-kosmickrisp');
   assert.equal(adapted.manager.label, 'MacLauncher KosmicKrisp');
   const version = '27.0.0-devel-MCLv11';
   const provider = adapted.createProvider({ label: adapted.manager.label, resolveSelection: () => ({ ready: true, version,
-    install: { payloadRoot: '/runtime', executablePath: '/runtime/driver.dylib', manifest: {
-      minimumMacOS: '26.0', runtimeFiles: { loader: 'libvulkan.1.dylib' }, files: [] } } }) });
+    install: { payloadRoot: root, executablePath: path.join(root, 'driver.dylib'), manifest: {
+      arch: 'arm64', minimumMacOS: '26.0', runtimeFiles: { loader: 'libvulkan.1.dylib' }, files: [] } } }) });
   assert.equal(provider.resolve({ version }, {}).label, adapted.manager.label + ' ' + version);
   const states = [stock, adapted.manager].map(manager => ({ id: manager.id, label: manager.label, ui: manager.ui,
     sections: [{ id: 'default', label: 'Versions' }] }));
