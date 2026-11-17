@@ -285,11 +285,24 @@ async function ensureRuntime(entry, context) {
   if (normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) !== RUNTIME_ID) return null;
   const selection = resolveRuntimeSelection(entry, context);
   if (selection.reason) throw new Error(selection.reason);
-  if (selection.ready && selection.install?.appPath) return null;
+  const explicitlySelected = (channel, version) => {
+    const cfg = LoveRuntimeManager.normalizeSettings(context.settings?.runtimes?.love);
+    return Boolean(selectRuntimeVersion({ manual: resolveRuntimeData(entry).version }).version ||
+      cfg[channel]?.defaultVersion && cfg[channel].defaultVersion === version);
+  };
+  if (selection.ready && selection.install?.appPath) {
+    const channel = selection.install.channel === CHANNEL_NIGHTLY ? CHANNEL_NIGHTLY : CHANNEL_STABLE;
+    const identity = { managerId: LoveRuntimeManager.id, version: selection.install.version,
+      sectionId: selection.resolvedSection || LoveRuntimeManager.sectionIdForVersion(channel, selection.install.version),
+      ...(selection.install.variant ? { variant: selection.install.variant } : {}),
+      sourcePath: selection.install.installDir || selection.install.appPath };
+    if (explicitlySelected(channel, selection.install.version)) require("../../core/runtime-install-origins").clearRecord(context.userDataDir, identity);
+    context.recordRuntimeUse?.(identity);
+    return null;
+  }
   const request = plan => {
-    const cfg = LoveRuntimeManager.normalizeSettings(context.settings?.runtimes?.love), channel = plan.installOptions?.sectionId === CHANNEL_NIGHTLY ? CHANNEL_NIGHTLY : CHANNEL_STABLE;
-    const explicit = selectRuntimeVersion({ manual: resolveRuntimeData(entry).version, defaultVersion: cfg[channel]?.defaultVersion }).version;
-    return { ...plan, ...(!explicit ? { automatic: true } : {}) };
+    const channel = plan.installOptions?.sectionId === CHANNEL_NIGHTLY ? CHANNEL_NIGHTLY : CHANNEL_STABLE;
+    return { ...plan, ...(!explicitlySelected(channel, plan.version) ? { automatic: true } : {}) };
   };
   const sections = resolveManagerSections(context.settings, context.userDataDir);
   const detected = normalizeLoveVersion(selection.requiredVersion);

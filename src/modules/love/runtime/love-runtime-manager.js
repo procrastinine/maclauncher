@@ -341,7 +341,7 @@ async function installRuntime({
         entriesByVersion: stableCatalogEntriesByVersion
       }),
     { onProgress }
-  );
+  ).then(installed => ({ ...installed, sectionId: sectionIdForVersion(SECTION_STABLE, installed.version) }));
 }
 
 function uninstallRuntime({ userDataDir, version, installDir, sectionId } = {}) {

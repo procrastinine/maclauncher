@@ -555,6 +555,9 @@ test("LÖVE release lines: Automatic names the detected line and a chosen channe
   assert.deepEqual(LoveModule.runtimeRecommendation(automatic, context), { version: "0.10.2", sectionId: "stable" });
   assert.deepEqual(await LoveModule.ensureRuntime(game(), { ...context, runtimeId: "love" }),
     { managerId: "love", version: "0.10.2", automatic: true, installOptions: { sectionId: "stable" } });
+  assert.equal((await LoveModule.ensureRuntime(game(), { ...context, runtimeId: "love",
+    settings: { runtimes: { love: { stable: { defaultVersion: "11.5" } } } } })).automatic, true,
+  "a format recommendation does not become an explicit choice because another line has a saved default");
 
   // The LÖVE 11 channel keeps to its line, while Automatic still names the detected line.
   const chosen = game({ channel: "stable" });
@@ -568,6 +571,26 @@ test("LÖVE release lines: Automatic names the detected line and a chosen channe
   const pinned = game({ version: "0.9.2" });
   LoveModule.actions.runtimeStatus(pinned, {}, context);
   assert.equal(label(pinned.moduleData.resolvedSection), "LÖVE 0.9");
+});
+
+test("ready LÖVE Play records its release line and explicit use clears automatic ownership", async t => {
+  const root = makeTempDir("love-runtime-use-");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const userDataDir = path.join(root, "data"), installed = createRuntimeInstall(userDataDir, "stable", "0.10.2");
+  const Origins = require("../src/core/runtime-install-origins"), uses = [];
+  const entry = { moduleData: { detectedVersion: "0.10.2" }, runtimeData: {} };
+  const context = { runtimeId: "love", userDataDir, settings: {}, recordRuntimeUse: row => uses.push(row) };
+  Origins.recordPlayInstall({ userDataDir, manager: LoveManager,
+    plan: { automatic: true, version: "0.10.2", installOptions: { sectionId: "stable-0-10" } },
+    result: { version: "0.10.2" }, settings: {} });
+  assert.equal(await LoveModule.ensureRuntime(entry, context), null);
+  assert.equal(uses.at(-1).version, "0.10.2");
+  assert.equal(uses.at(-1).sectionId, "stable-0-10");
+  assert.equal(uses.at(-1).sourcePath, installed.installDir);
+  assert.equal(Origins.read(userDataDir).length, 1);
+  entry.runtimeData.love = { version: "0.10.2" };
+  assert.equal(await LoveModule.ensureRuntime(entry, context), null);
+  assert.equal(Origins.read(userDataDir).length, 0);
 });
 
 test("choosing a LÖVE version in the inspector selects the channel of its line", async t => {
