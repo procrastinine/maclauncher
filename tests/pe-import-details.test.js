@@ -4,7 +4,7 @@ const PE = require('../src/modules/shared/runtime/pe-exports');
 const { peFixture } = require('./helpers/pe-fixture');
 const denyExecution = () => assert.fail('PE table inspection must not execute a child or use the network');
 for (const name of ['spawn','spawnSync','exec','execSync','execFile','execFileSync','fork']) require('node:child_process')[name] = denyExecution;
-for (const id of ['http','https']) for (const name of ['request','get']) require('node:' + id)[name] = denyExecution;
+for (const mod of [require('node:http'), require('node:https')]) for (const name of ['request','get']) mod[name] = denyExecution;
 globalThis.fetch = denyExecution;
 
 // Authored PE tables only; these fixtures are read as data and never executed.
