@@ -4454,12 +4454,16 @@ function refreshShaderSelections(presetIds) {
 // a running game's editor reads its live session here.
 const EFFECTS_INFO_OPTIONS = ["settings", "root", "graphicsHost", "graphicsArchitecture", "running", "runningPids", "launchBinding",
   "graphicsInputs", "graphicsHardware", "inventoryRevision"];
+// The inspector's read of a game being removed waits for the removal and is
+// cancelled once the game is gone; its editor has closed, so it gets no answer.
+const cancelledRead = (read, value) => read.catch(error => { if (isAbortError(error)) return value; throw error; });
 ipcMain.handle("launcher:getGameEffects", async (_event, gamePath) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
   if (!entry) throw new Error("Game not found in library.");
   const options = await gameEffectsOptions(entry);
-  const info = options.running ? EffectsRuntime.info(entry, options) : await backendService.request("inspector", "gameEffectsInfo", entry,
-    Object.fromEntries(EFFECTS_INFO_OPTIONS.filter(key => options[key] !== undefined).map(key => [key, options[key]])));
+  const info = options.running ? EffectsRuntime.info(entry, options) : await cancelledRead(backendService.request("inspector", "gameEffectsInfo", entry,
+    Object.fromEntries(EFFECTS_INFO_OPTIONS.filter(key => options[key] !== undefined).map(key => [key, options[key]]))), null);
+  if (!info) return null;
   adoptGraphicsStatus(entry);
   // Notices from the one-time upgrade, then parts the read left out (GraphicsNotice).
   const notices = [...entry.effectsNotices?.length ? entry.effectsNotices : [], ...info.notices || []];
@@ -4471,8 +4475,8 @@ ipcMain.handle("launcher:getGameEffectTemplates", async (_event, gamePath) => {
   if (!entry) throw new Error("Game not found in library.");
   const options = await gameEffectsOptions(entry);
   // As with discovery, a game that is not running reads them in the inspector's worker.
-  return options.running ? EffectsRuntime.templates(entry, options) : backendService.request("inspector", "gameEffectTemplates", entry,
-    Object.fromEntries(EFFECTS_INFO_OPTIONS.filter(key => options[key] !== undefined).map(key => [key, options[key]])));
+  return options.running ? EffectsRuntime.templates(entry, options) : cancelledRead(backendService.request("inspector", "gameEffectTemplates", entry,
+    Object.fromEntries(EFFECTS_INFO_OPTIONS.filter(key => options[key] !== undefined).map(key => [key, options[key]]))), []);
 });
 ipcMain.handle("launcher:getGraphicsStatus", (_event, gamePath) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);

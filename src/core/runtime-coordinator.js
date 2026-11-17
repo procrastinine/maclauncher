@@ -56,7 +56,7 @@ async function isRuntimeProcessAlive(pid) {
 /** Pure Node host. Only bookkeeping and short JSON commits run here; jobs stay in workers. */
 function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProcessAlive, orphanPollMs = 1000 } = {}) {
   const active = new Map(), pending = [], closedOwners = new WeakSet();
-  const gameActivity = new Map(), removedGames = new Set(), pendingRemovals = [];
+  const gameActivity = new Map(), removedGames = new Set(), pendingRemovals = [], waitingUses = [];
   let orphanTimer;
   const overlap = (a, b) => a.identities.some(left => b.identities.some(right => conflicts(left, right)));
   const ownPreparationUse = (request, lease) => lease.kind === "use" && lease.owner === request.owner &&
@@ -102,11 +102,14 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
       active.set(token, { ...request, token, pids: new Set() });
       request.resolve(token);
     }
-    drainRemovals();
+    drainRemovals(); drainWaitingUses();
   }
   // A game that runs, is being prepared to run or is being removed refuses
   // removal. Its other work, such as the library's reads of a game it just
-  // added, finishes first, and new work is refused while the removal waits.
+  // added, finishes first. New work is refused while the removal waits or
+  // runs, except reads from a client that only reads games (the inspector's):
+  // they wait for the removal, then are cancelled once the game is gone or
+  // run as usual when the removal fails.
   const runningGame = lease => lease.kind === "remove" || lease.launch === true || lease.pids.size > 0;
   const gameLeases = gameId => [...gameActivity.values()].filter(lease => lease.gameId === gameId);
   function grantGame(owner, kind, identity, launch = false) {
@@ -123,6 +126,19 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
       pendingRemovals.splice(index, 1);
       if (refusal) request.reject(refusal);
       else request.resolve(grantGame(request.owner, "remove", request.identity));
+    }
+  }
+  const removalOf = gameId => pendingRemovals.some(request => request.identity.gameId === gameId) ||
+    gameLeases(gameId).some(lease => lease.kind === "remove");
+  function drainWaitingUses() {
+    for (let index = 0; index < waitingUses.length;) {
+      const request = waitingUses[index], gameId = request.identity.gameId;
+      const refusal = closedOwners.has(request.owner) ? coordinationError("RUNTIME_OWNER_CLOSED", "The backend operation was closed.")
+        : removedGames.has(gameId) ? Object.assign(coordinationError("GAME_REMOVED", "This game was removed from the library."), { name: "AbortError" }) : null;
+      if (!refusal && removalOf(gameId)) { index++; continue; }
+      waitingUses.splice(index, 1);
+      if (refusal) request.reject(refusal);
+      else request.resolve(grantGame(request.owner, "use", request.identity));
     }
   }
   function acquire(owner, kind, identities, allowedUses = [], allowedMutations = []) {
@@ -151,6 +167,8 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
     if (closedOwners.has(owner)) throw coordinationError("RUNTIME_OWNER_CLOSED", "The backend operation was closed.");
     const leases = gameLeases(identity.gameId), removing = pendingRemovals.some(request => request.identity.gameId === identity.gameId);
     if (kind === "use" && removedGames.has(identity.gameId)) throw coordinationError("GAME_REMOVED", "This game was removed from the library. Add it again before using it.");
+    if (kind === "use" && value.read === true && value.launch !== true && removalOf(identity.gameId))
+      return new Promise((resolve, reject) => waitingUses.push({ owner, identity, resolve, reject }));
     if (removing || (kind === "remove" ? leases.some(runningGame) : leases.some(lease => lease.kind === "remove"))) {
       throw coordinationError("GAME_IN_USE", kind === "remove"
         ? "Stop the game or wait for its current action to finish."
@@ -186,14 +204,14 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
     if (next && typeof next === "object" && next.runtimes) next.runtimes = withoutClearedDefaults(next.runtimes);
     writeJsonAtomic(file, next); return next;
   }
-  function client(owner = randomUUID()) {
+  function client(owner = randomUUID(), { reads = false } = {}) {
     // Closed clients reject late callbacks without accumulating tombstone IDs
     // for every worker ever created. Live and orphan leases retain their owner.
     owner = { id: owner };
     return {
       acquireMutation: (identity, allowedUses) => acquire(owner, "mutation", identity, allowedUses),
       acquireUse: (identities, allowedMutations) => acquire(owner, "use", identities, [], allowedMutations),
-      acquireGameUse: value => acquireGame(owner, "use", value),
+      acquireGameUse: value => acquireGame(owner, "use", reads && value && typeof value === "object" ? { ...value, read: true } : value),
       acquireGameRemoval: value => acquireGame(owner, "remove", value),
       completeGameRemoval: token => {
         const lease = owned(owner, token);

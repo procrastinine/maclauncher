@@ -244,6 +244,9 @@ const PERSISTENT = new Set(["state", "inspector"]);
 // The inspector lane keeps its reads of installed runtimes until a runtime
 // inventory change; see runtime-inventory-revision.js.
 const RETAINED_READS = new Set(["inspector"]);
+// The inspector lane only reads games. Its reads of a game being removed wait
+// for the removal instead of failing; see runtime-coordinator.js.
+const GAME_READS = new Set(["inspector"]);
 // A game's or an import's first request otherwise waits for a new worker to
 // load every module. One spare worker loads them in advance and becomes the
 // next such lane; another starts shortly after. When the user starts choosing
@@ -278,7 +281,7 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
     timer.unref(); timers.set(lane, timer);
   }
   function create(lane) {
-    const coordination = coordinator.client();
+    const coordination = coordinator.client(undefined, { reads: GAME_READS.has(lane) });
     const coordinationCallbacks = Object.fromEntries(["acquireMutation", "extendMutation", "acquireUse", "acquireGameUse", "acquireGameRemoval", "completeGameRemoval", "release", "bindUse", "applySettings"].map(method =>
       [`runtimeCoordinator.${method}`, (...args) => coordination[method](...args)]));
     const client = new BackendWorkerClient({ workerPath, workerData: { userDataDir, appInfo, lane, running: currentRunning, retainReads: RETAINED_READS.has(lane) },

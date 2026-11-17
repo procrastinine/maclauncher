@@ -44,7 +44,9 @@ function fixture(t, options = {}) {
   const operations = createBackendOperations({ userDataDir, registry, runtimeCoordinator: coordinator.client(),
     callHost: options.callHost || (async () => { throw new Error("Unexpected host callback"); }), getRunning: options.getRunning });
   t.after(() => { for (const child of children) { child.exitCode = 0; child.emit("exit", 0); } });
-  return { root, userDataDir, entry, gamePath, saved, mod, registry, coordinator, operations, children, cleanupCalls: () => cleanupCalls };
+  // Operations as the inspector's lane runs them: its client only reads games.
+  const inspector = () => createBackendOperations({ userDataDir, registry, runtimeCoordinator: coordinator.client(undefined, { reads: true }) });
+  return { root, userDataDir, entry, gamePath, saved, mod, registry, coordinator, operations, inspector, children, cleanupCalls: () => cleanupCalls };
 }
 
 test("running game removal is refused by the backend even without UI running state", async t => {
@@ -75,16 +77,21 @@ test("removal refuses the no-PID preparation interval and direct Node launch sha
 
 // The library selects a game it just added and reads it at once, so Forget
 // right after an import meets those reads.
-test("removal waits for the game's reads and other actions without a process, refusing new work meanwhile", async t => {
+test("removal waits for the game's reads and other actions without a process; work asked for meanwhile waits for the removal", async t => {
   const gates = [deferred(), deferred()], entered = [deferred(), deferred()];
   let calls = 0;
   const f = fixture(t, { mod: { actions: { inspect: async () => { const call = calls++; entered[call].resolve(); await gates[call].promise; return {}; } } } });
   const read = f.operations.moduleAction(f.entry, "inspect", {}, {});await entered[0].promise;
   const removal = f.operations.removeGameData(f.entry);
+  // The inspector's next read of the game, such as its graphics editor's,
+  // waits instead of failing with an error. Other work is refused.
+  const later = f.inspector().moduleAction(f.entry, "inspect", {}, {});
   await assert.rejects(f.operations.moduleAction(f.entry, "inspect", {}, {}), { code: "GAME_IN_USE", message: /removal is in progress/ });
   await assert.rejects(f.operations.launchEntry(f.entry), { code: "GAME_IN_USE" });
   assert.equal(f.cleanupCalls(), 0, "nothing is removed while the read runs");
   gates[0].resolve();await read;await removal;
+  await assert.rejects(later, { name: "AbortError", code: "GAME_REMOVED" }, "once the game is gone, the waiting read is cancelled");
+  assert.equal(calls, 1, "and never ran");
   assert.equal(Store.readGameRecord(f.userDataDir, f.entry.gameId), null);
   assert.equal(fs.existsSync(Data.resolveGameDir(f.userDataDir, f.entry.gameId)), false);
   assert.equal(f.children.length, 0);assert.equal(f.coordinator.snapshot().games.length, 0);
@@ -113,6 +120,21 @@ test("removal winning the race rejects concurrent and stale launches before muta
   await assert.rejects(direct.launchEntry(f.entry), { code: "GAME_REMOVED" });
   await assert.rejects(f.operations.launchEntry(f.entry), { code: "GAME_REMOVED" });
   assert.equal(f.children.length, 0); assert.equal(fs.existsSync(Data.resolveGameDir(f.userDataDir, f.entry.gameId)), false);
+});
+
+test("work asked for while a removal waits runs as usual when the removal fails", async t => {
+  const gate = deferred(), entered = deferred();
+  let calls = 0;
+  const f = fixture(t, { callHost: async () => { throw new Error("Trash failed"); },
+    mod: { actions: { inspect: async () => { const call = ++calls; if (call === 1) { entered.resolve(); await gate.promise; } return { call }; } } } });
+  const read = f.operations.moduleAction(f.entry, "inspect", {}, {});await entered.promise;
+  const removal = f.operations.removeGameData(f.entry, { trash: true });
+  const later = f.inspector().moduleAction(f.entry, "inspect", {}, {});
+  gate.resolve();await read;
+  await assert.rejects(removal, /Trash failed/);
+  assert.deepEqual(await later, { call: 2 });
+  assert.equal(fs.readFileSync(f.saved, "utf8"), "player state");
+  await waitFor(() => f.coordinator.snapshot().games.length === 0);
 });
 
 test("failed Trash leaves game data intact and releases removal admission", async t => {
@@ -217,6 +239,16 @@ test("host running state is checked again after an asynchronous Trash callback",
     callHost: async () => { running = true; } });
   await assert.rejects(f.operations.removeGameData(f.entry, { trash: true }), { code: "GAME_IN_USE" });
   assert.equal(fs.readFileSync(f.saved, "utf8"), "player state"); assert.equal(f.cleanupCalls(), 0);
+});
+
+test("only the inspector's lane reads games, so only its reads wait for a removal", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-removal-lanes-")), userDataDir = path.join(root, "data");
+  const real = createRuntimeCoordinator({ userDataDir }), made = new Map();
+  const coordinator = { ...real, client: (owner, options) => { made.set(made.size, options?.reads === true); return real.client(owner, options); } };
+  const service = createBackendService({ userDataDir, runtimeCoordinator: coordinator, workerPath: path.join(__dirname, "fixtures/coordinated-backend-worker.cjs") });
+  t.after(async () => { await service.close(); fs.rmSync(root, { recursive: true, force: true }); });
+  for (const lane of ["inspector", "game:one"]) await service.request(lane, "noSuchMethod").catch(() => {});
+  assert.deepEqual([...made.values()], [true, false]);
 });
 
 test("slow synchronous module cleanup stays in its worker while host timers and another game respond", async t => {

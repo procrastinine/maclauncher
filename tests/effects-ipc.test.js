@@ -20,6 +20,7 @@ function fixture(t, {live = false} = {}) {
       return published ? {revision: published.documentRevision, launchId: binding.launchId} : null;
     } };
   const context = { AbortController, EffectsRuntime, EffectsPlan: Plan, StoredPlan, ReShade,
+    isAbortError: require("../src/modules/shared/runtime/download-utils").isAbortError,
     graphicsShortcuts: require("../src/main/graphics-shortcuts").create({globalShortcut: {}, readAssignments: () => ({})}),
     ReShadeFilters: require("../src/modules/shared/reshade/filter-library"),
     fs, userDataDir, app: {}, logger: {warn() {}}, downloadManager: {}, confirmRuntimeInstallation: () => assert.fail("No download in IPC fixture"),
@@ -109,6 +110,16 @@ test("plan IPC saves intent, reports a failed rendering publication and Clear ef
   assert.ok(f.calls.some(row => row[0] === "simple"));
   assert.equal(f.context.graphicsStatus.status(f.entry.gamePath).desiredRevision, StoredPlan.read({effects: null}).revision);
 });
+test("the graphics editor's reads of a game removed while they waited answer without an error", async t => {
+  const f = fixture(t), request = f.context.backendService.request;
+  // The inspector's read waited for Forget and was cancelled once the game was gone.
+  f.context.backendService.request = async (lane, method, ...args) => ["gameEffectsInfo", "gameEffectTemplates"].includes(method)
+    ? Promise.reject(Object.assign(new Error("This game was removed from the library."), { name: "AbortError", code: "GAME_REMOVED" }))
+    : request(lane, method, ...args);
+  assert.equal(await f.invoke("getGameEffects", f.entry.gamePath), null);
+  assert.equal(JSON.stringify(await f.invoke("getGameEffectTemplates", f.entry.gamePath)), "[]", "an empty template list from main's realm");
+});
+
 test("a running game without a current launch binding saves edits for the next launch", async t => {
   const f = fixture(t), draft = shaderPlan();
   f.context.runningGameSessions.set(f.entry.gamePath, new Map([["session", {id: "session", pid: 4242}]]));

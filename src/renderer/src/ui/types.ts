@@ -805,7 +805,7 @@ declare global {
         getEffectsPresetEditor(plan?: GameEffectsPlan): Promise<GameEffectsInfo>;
         getEffectsPresetParameters(nodeId: string, plan: GameEffectsPlan): Promise<ShaderParameterSchema & { key: string }>;
         pickEffectsPresetFile(kind?: "neural-model",expectedOperation?:string): Promise<string | null>;
-        getGameEffects(gamePath: string): Promise<GameEffectsInfo>;
+        getGameEffects(gamePath: string): Promise<GameEffectsInfo | null>;
         getGameEffectTemplates?(gamePath: string): Promise<EffectsChainTemplate[]>;
         requestGraphicsCatalog?(request: { open: boolean; revision?: number | null }): Promise<GraphicsCatalogEvent>;
         onGraphicsCatalog?(listener: (event: GraphicsCatalogEvent) => void): () => void;

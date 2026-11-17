@@ -144,7 +144,8 @@ export function useEffectsEditor({game, status, graphicsHost, running, live, onM
       if (!api) throw new Error("Effects controls are unavailable.");
       return api.getGameEffects(game.gamePath);
     }).then(result => {
-      if (token !== request.current) return;
+      // No answer: the game was removed while the read waited.
+      if (token !== request.current || !result) return;
       loadedKey.current = loadKey;setInfo(result);
       // Selected-source metadata is descriptive. A late read must not replace
       // a newer desired plan.
