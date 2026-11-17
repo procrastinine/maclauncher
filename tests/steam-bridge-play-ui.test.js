@@ -251,6 +251,8 @@ test('an incompatible installed bridge is marked unusable and consent replaces i
   const row = bridge.getState({ userDataDir }).sections[0].installed.find(row => row.version === '1.0.0');
   assert.equal(row.ready, false); assert.equal(row.status, 'incompatible');
   assert.match(row.error, /managed loader paths.*needs replacement/);
+  const { installedRuntimeAvailability, installedRuntimeReplaceable } = await import('../src/core/runtime-install-availability.mjs');
+  assert.equal(installedRuntimeAvailability(row), 'incompatible'); assert.equal(installedRuntimeReplaceable(row), true, 'a different listed package of the version can replace it');
   const [plan] = await bridge.requirements({ name: 'Fixture' }, { userDataDir });
   assert.equal(plan.version, item.record.version); assert.equal(plan.silentFallback, undefined);
   assert.match(plan.detail, /Installed bridge 1\.0\.0 cannot be used:.*needs replacement/);
@@ -261,6 +263,31 @@ test('an incompatible installed bridge is marked unusable and consent replaces i
   assert.equal(requests.length, 2, 'one explicit catalog read and the consented package acquisition');
   assert.deepEqual(await bridge.requirements({ name: 'Fixture' }, { userDataDir }), []);
   assert.deepEqual(fs.readFileSync(path.join(retained, 'payload/manifest.json')), protectedBytes);
+});
+
+test('a listed bridge package identical to an installed copy this launcher cannot use reads as incompatible and is not offered again', async t => {
+  const root = scratch(t), userDataDir = path.join(root, 'data');
+  const { installedRuntimeAvailability, installedRuntimeReplaceable } = await import('../src/core/runtime-install-availability.mjs');
+  const older = bridgePackage(path.join(root, 'older'), '1.0.0', false);
+  const bridge = Bridge.create({ identifyGame: () => ({ appId: '480' }), discoverClient: () => '/client', isRunning: () => false, dependencies: {
+    systemVersionSync: () => '26.0',
+    fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from(JSON.stringify({ schemaVersion: 2, projectId: id, updatePolicy: 'manual', packages: [older.record] })) }) } });
+  const retained = path.join(userDataDir, 'runtimes', id, 'universal', older.record.version);
+  fs.mkdirSync(retained, { recursive: true }); fs.cpSync(older.payload, path.join(retained, 'payload'), { recursive: true });
+  fs.writeFileSync(path.join(retained, 'project-package.json'), JSON.stringify(older.wrapper));
+  fs.writeFileSync(path.join(retained, 'runtime.json'), JSON.stringify({ version: older.record.version, architecture: 'universal',
+    upstreamRevision: older.record.asset.sha256, archiveSha256: older.record.asset.sha256,
+    binarySha256: sha(fs.readFileSync(path.join(older.payload, 'steam.exe'))), executableRelative: 'payload/steam.exe',
+    source: 'download', catalogEntry: { version: older.record.version, upstreamRevision: older.record.asset.sha256,
+      architecture: 'universal', hostArchitectures: ['arm64', 'x64'], localBuild: false, projectPackage: older.record, asset: older.record.asset } }));
+  await bridge.refreshCatalog({ userDataDir, force: true });
+  const section = bridge.getState({ userDataDir }).sections[0], row = section.installed.find(row => row.version === '1.0.0');
+  assert.equal(row.ready, false); assert.equal(row.status, 'unsupported-package');
+  assert.equal(installedRuntimeAvailability(row), 'incompatible', 'An installed copy this launcher cannot use reads as incompatible');
+  assert.equal(installedRuntimeReplaceable(row), false, 'Installing the listed package again would give the same copy');
+  const requirement = section.catalog.versionRequirements['1.0.0'];
+  assert.equal(requirement.installable, false); assert.match(requirement.installReason, /managed loader paths/);
+  assert.deepEqual(section.catalog.installableVersions, []);
 });
 
 test('consented bridge failures surface their actual error without launching or saving a refusal', async t => {

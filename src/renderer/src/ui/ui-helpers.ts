@@ -22,10 +22,10 @@ import type {
 
 // One vocabulary for install and availability states. Option labels carry only
 // the state word; the reason belongs in a title or help popover.
-export type Availability = "installed" | "included" | "notInstalled" | "downloadNeeded" | "unavailable" | "needsRepair";
+export type Availability = "installed" | "included" | "notInstalled" | "downloadNeeded" | "unavailable" | "needsRepair" | "incompatible";
 const AVAILABILITY_LABELS: Readonly<Record<Availability, string>> = Object.freeze({
   installed: "Installed", included: "Included", notInstalled: "Not installed",
-  downloadNeeded: "Download needed", unavailable: "Unavailable", needsRepair: "Needs repair"
+  downloadNeeded: "Download needed", unavailable: "Unavailable", needsRepair: "Needs repair", incompatible: "Incompatible"
 });
 export function availabilityLabel(state: Availability): string {
   return AVAILABILITY_LABELS[state];

@@ -13,6 +13,7 @@ function versionChoices(manager, { userDataDir, selectedVersion } = {}) {
     const copies = rows.filter(row => row.version === version), label = state.versionLabels?.[version] || version;
     const status = copies.some(row => installedRuntimeAvailability(row) === "installed") ? ""
       : copies.some(row => installedRuntimeAvailability(row) === "needsRepair") ? " · Needs repair"
+      : copies.some(row => installedRuntimeAvailability(row) === "incompatible") ? " · Incompatible"
       : copies.length ? " · Unavailable" : " (not installed)";
     return { value: version, label: label + status };
   });

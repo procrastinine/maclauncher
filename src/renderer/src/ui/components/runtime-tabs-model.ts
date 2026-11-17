@@ -10,9 +10,13 @@ export function runtimeInstallVersion(section: Record<string, any> | null | unde
   const versions: string[] = Array.isArray(section?.catalog?.versions)
     ? section.catalog.versions.filter((value: unknown) => typeof value === "string" && value.trim()) : [];
   if (requested && versions.includes(requested)) return requested;
-  const stable = versions.find(value => !isPrereleaseVersion(value, section));
-  if (typeof recommended === "string" && versions.includes(recommended) && (!stable || !isPrereleaseVersion(recommended, section))) return recommended;
-  return stable || versions[0] || "";
+  // A version whose installed copies are all unusable is chosen only on request,
+  // so a newer listed version is the offer and a damaged one is never preselected.
+  const rows: any[] = Array.isArray(section?.installed) ? section.installed : [];
+  const offered = versions.filter(value => !rows.some(row => row?.version === value) || rows.some(row => row?.version === value && row.ready !== false));
+  const stable = offered.find(value => !isPrereleaseVersion(value, section));
+  if (typeof recommended === "string" && offered.includes(recommended) && (!stable || !isPrereleaseVersion(recommended, section))) return recommended;
+  return stable || offered[0] || "";
 }
 
 export function runtimeMinimumNotice(minimum: unknown) {

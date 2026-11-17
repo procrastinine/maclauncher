@@ -90,12 +90,13 @@ export function runtimeInspectorVersionOptions(section: Record<string, any> | nu
 }
 
 /** The installation of one version, of the given variant when one is given: a
- * usable one first, then one that needs repair, then one this Mac cannot run. */
+ * usable one first, then one that needs repair, then an incompatible one, then
+ * one this Mac cannot run. */
 export function runtimeInspectorInstall(section: Record<string, any> | null, version: string, variant = "", architecture = "") {
   const rows = (Array.isArray(section?.installed) ? section.installed : [])
     .filter((row: any) => version && row?.version === version && (!variant || row.variant === variant) &&
       (!architecture || installedArchitecture(row) === architecture || installedArchitecture(row) === "universal"));
-  for (const availability of ["installed", "needsRepair", "unavailable"] as const) {
+  for (const availability of ["installed", "needsRepair", "incompatible", "unavailable"] as const) {
     const install = rows.find((row: any) => installedRuntimeAvailability(row) === availability);
     if (install) return { availability, install: install as Record<string, any> };
   }

@@ -662,7 +662,7 @@ export function RuntimesView({
                                 {isDefault && (
                                   <span className="badge badgeAccent" title={defaultFor.length ? `Automatic for ${defaultFor.join(", ")}` : undefined}>Default</span>
                                 )}
-                                {inst.ready === false && <StatusBadge tone="warning">{availabilityLabel(installedRuntimeAvailability(inst) === "unavailable" ? "unavailable" : "needsRepair")}</StatusBadge>}
+                                {inst.ready === false && <StatusBadge tone="warning">{availabilityLabel(installedRuntimeAvailability(inst) || "needsRepair")}</StatusBadge>}
                                 {isRuntimeIncluded(inst) && <StatusBadge>{availabilityLabel("included")}</StatusBadge>}
                                 {inst.custom && <span className="badge">Custom</span>}
                                 {activeRuntimeHasMultipleVariants && inst.variant && (

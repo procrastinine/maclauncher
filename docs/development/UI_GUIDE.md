@@ -394,6 +394,8 @@ Each subtab lists the versions its sources offer for download and the versions a
 - A version that cannot be installed shows the reason supplied for it.
 - An installed version reads **Installed** in the version menu, and no Install button is shown while it is selected.
 - A version whose installation is damaged or incomplete reads **Needs repair** in the version menu, and its Install button reads **Reinstall**, which installs the version again. As in any installation of a damaged version, the first step of its download task removes the damaged copy.
+- An installed version that this MacLauncher cannot use reads **Incompatible**. When the catalog lists a different package for that version, Install reads **Reinstall** and replaces the installed copy; when it lists the same package, the version is not offered and the menu selects a usable version, or **Choose version** when none is listed.
+- The menu never preselects a version whose installed copy needs repair or is incompatible.
 
 The local list tells Included versions from Installed ones. Included versions ship with the app and cannot be changed, so they show Included, without Install or Remove, although their versions and variants stay selectable. Download and copy paths show no source-build setup links. Each installed version, on the other hand, has install and uninstall actions and can be set as the default version, and as the default variant where variants exist. A version installed inside the MacLauncher data folder shows its size on disk under its name, measured while its panel is shown. Default and latest-version summaries leave out values that the selector or a Default badge already shows.
 

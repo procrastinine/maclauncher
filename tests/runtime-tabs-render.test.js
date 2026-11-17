@@ -1443,6 +1443,11 @@ test('fresh runtime UI initialization and source controls use the same stable ch
   ui.installVersion.default='unknown-prior-choice';initialize();assert.equal(ui.installVersion.default,'unknown-prior-choice','initialization never guesses a migration for prior UI values');
   assert.equal(runtimeInstallVersion({catalog:{versions:['1.29.2-universal'],versionRequirements:{'1.29.2-universal':{prerelease:true}}}}),'1.29.2-universal','a development-only catalog remains usable');
   assert.equal(runtimeInstallVersion({catalog:{versions:[null,17,'', '1.28.8-universal'],recommendedVersion:{unknown:true}}}),'1.28.8-universal','malformed optional choices cannot suppress usable siblings');
+  const unusable={installed:[{version:'1.0.0',ready:false,status:'unsupported-package'},{version:'1.0.3',ready:true}],catalog:{versions:['1.0.0']}};
+  assert.equal(runtimeInstallVersion(unusable),'','an installed copy that cannot be used is never preselected');
+  assert.equal(runtimeInstallVersion(unusable,'1.0.0'),'1.0.0','it stays choosable on request');
+  assert.equal(runtimeInstallVersion({...unusable,catalog:{versions:['1.0.0','1.0.4']}}),'1.0.4','a newer listed version is the offer');
+  assert.equal(runtimeInstallVersion({...unusable,catalog:{versions:['1.0.0','1.0.4'],recommendedVersion:'1.0.0'}}),'1.0.4','even over a recommendation');
 });
 
 test('per-game version menus use only the selected runtime recommendation and preserve scoped pins', () => {
@@ -1537,4 +1542,16 @@ test('per-game version menus use only the selected runtime recommendation and pr
   assert.match(renderGame(engine), /<div class="detailActions menuWithButtons"><select aria-label="[^"]* version"/);
   assert.match(renderGame(engine), /<div class="detailActions menuWithIcon"><select aria-label="Runtime"/);
   assert.deepEqual(original, before);
+});
+
+test('an installed version this launcher cannot use reads as incompatible and is not preselected or offered for reinstall', () => {
+  const reason = 'The Steam bridge package lacks the managed loader paths required by this launcher and needs replacement.';
+  const runtime = manager('bridge-fixture', {}, { status: 'success', source: 'https://github.com/example/bridge/releases', versions: ['1.0.0'],
+    installableVersions: [], versionRequirements: { '1.0.0': { available: false, installable: false, installReason: reason, requiresDownload: true } } },
+  [{ version: '1.0.3', ready: true, status: 'ready' }, { version: '1.0.0', ready: false, status: 'unsupported-package', error: reason }]);
+  const markup = render([{ ...runtime, defaultVersion: '1.0.3' }], runtime.id);
+  assert.match(markup, /v1\.0\.0 · Incompatible/, 'the version chooser names the copy incompatible');
+  assert.doesNotMatch(markup, /Needs repair|Reinstall/, 'nothing offers to repair the copy by installing it again');
+  assert.doesNotMatch(markup, /value="1\.0\.0" selected/, 'the unusable version is not preselected');
+  assert.match(markup, /<option value="" disabled="" selected="">Choose version<\/option>/);
 });

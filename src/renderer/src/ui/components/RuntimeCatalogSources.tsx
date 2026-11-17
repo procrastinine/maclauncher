@@ -2,6 +2,7 @@ import React from "react";
 import type { DownloadTask, RuntimeRefreshOptions, RuntimeUiState } from "../types";
 import { isRuntimeVersionInstalled, runtimeVersionTagger, withAvailability } from "../ui-helpers";
 import { cpuLabel } from "../../../../core/cpu-labels.mjs";
+import { installedRuntimeAvailability } from "../../../../core/runtime-install-availability.mjs";
 import { ErrorText } from "./ErrorText";
 import { RefreshIcon } from "../icons";
 import { Select } from "./Select";
@@ -73,6 +74,14 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
     item.architecture === selectedCatalog?.versionRequirements?.[item.version]?.architecture);
   const incompleteInstalled = installed.filter((item:any)=>item.ready!==false&&Array.isArray(item.missingComponents)&&item.missingComponents.length>0);
   const readyInstalled = installed.filter((item: any) => item.ready !== false&&!incompleteInstalled.includes(item));
+  // A copy that installing its version again repairs, or replaces with the different package its version lists.
+  const repairableInstalled = installed.filter((item: any) => installedRuntimeAvailability(item) === "needsRepair" || item.status === "incompatible");
+  // The reading of a version's unusable copy: needs repair, incompatible or unavailable.
+  const unusableState = (value: string) => {
+    const states = installed.filter((item: any) => isRuntimeVersionInstalled([item], value, selectedVariant, hasVariants))
+      .map((item: any) => installedRuntimeAvailability(item));
+    return (["needsRepair", "incompatible", "unavailable"] as const).find(state => states.includes(state)) || null;
+  };
   const variants = !section.architectureVariants && Array.isArray(section.variants) ? section.variants : [];
   const hasVariants = variants.length > 0;
   const selectedVariant = hasVariants ? [variant, section.defaultVariant, variants[0]?.id]
@@ -102,7 +111,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
       const canInstall = canInstallVersion(version);
       const isInstalled = isRuntimeVersionInstalled(readyInstalled, version, selectedVariant, hasVariants);
       const needsCompletion=isRuntimeVersionInstalled(incompleteInstalled,version,selectedVariant,hasVariants);
-      const needsRepair = !isInstalled&&!needsCompletion&&isRuntimeVersionInstalled(installed, version, selectedVariant, hasVariants);
+      const needsRepair = !isInstalled&&!needsCompletion&&isRuntimeVersionInstalled(repairableInstalled, version, selectedVariant, hasVariants);
       const included = presentation.included || installed.some((item: any) => item.version === version && isRuntimeIncluded(item) &&
         (!hasVariants || item.variant === selectedVariant));
       const downloading = downloads.some(task => task.version === version && (!hasVariants || task.variant === selectedVariant));
@@ -187,7 +196,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
               {versions.length ? versions.map(value => {
                 const ready = isRuntimeVersionInstalled(readyInstalled, value, selectedVariant, hasVariants);
                 const incomplete=isRuntimeVersionInstalled(incompleteInstalled,value,selectedVariant,hasVariants);
-                const damaged = !ready&&!incomplete&&isRuntimeVersionInstalled(installed, value, selectedVariant, hasVariants);
+                const unusable = !ready&&!incomplete ? unusableState(value) : null;
                 const includedVersion = ready && installed.some((item: any) => item.version === value && isRuntimeIncluded(item) &&
                   (!hasVariants || item.variant === selectedVariant));
                 const build = cpuBuildLabels ? translatorVersionBuild(value, source, installed) : "";
@@ -195,7 +204,7 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
                 const differs = build && build !== architecture && build !== "universal" ? cpuLabel(build) : "";
                 return <option key={value} value={value}>
                   {withAvailability(differs ? `${versionTag(value)} · ${differs}` : versionTag(value), ready ? includedVersion ? "included" : "installed"
-                    : incomplete ? "downloadNeeded" : damaged ? "needsRepair" : null)}
+                    : incomplete ? "downloadNeeded" : unusable)}
                 </option>;
               }) : <option value="">No versions loaded</option>}
             </Select>

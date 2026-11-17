@@ -252,16 +252,26 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
   function stateForArchitecture(options) {
     const { all } = includedPackages(options), state = core.getState(options), present = all.filter(item => item.present),
       versions = new Set(present.map(item => item.version));
+    let published;
     state.installed = [...present.map(item => {
       const { manifest, declaration, payloadRoot, present: includedPresent, ...display } = item;
       return { ...display, status: item.ready ? "ready" : item.error ? "damaged-bundled" : "unsupported-host" };
     }), ...state.installed.filter(row => !versions.has(row.version)).map(row => {
       if (row.ready === false || !validateManifest) return row;
       const selected = resolveSelection(null, {}, options.userDataDir, { version: row.version, verification: 'status' });
-      return selected.ready ? row : { ...row, ready: false, status: 'incompatible', error: selected.reason };
+      if (selected.ready) return row;
+      // When the listed package of this version is the copy already installed,
+      // installing it again gives the same unusable copy.
+      published ||= core.core.listDiscoveredCatalog({ userDataDir: options.userDataDir });
+      const listed = published.find(pin => pin.version === row.version)?.projectPackage?.manifestSha256;
+      const same = typeof listed === "string" && listed === row.catalogEntry?.projectPackage?.manifestSha256;
+      return { ...row, ready: false, status: same ? 'unsupported-package' : 'incompatible', error: selected.reason };
     })];
     for (const row of state.installed) if (row.ready === false && state.catalog.versionRequirements[row.version])
-      state.catalog.versionRequirements[row.version].available = false;
+      state.catalog.versionRequirements[row.version] = { ...state.catalog.versionRequirements[row.version], available: false,
+        ...(row.status === 'unsupported-package' ? { installable: false, installReason: row.error } : {}) };
+    const unusable = new Set(state.installed.filter(row => row.status === 'unsupported-package').map(row => row.version));
+    if (unusable.size) state.catalog.installableVersions = state.catalog.installableVersions.filter(version => !unusable.has(version));
     state.catalog.includedVersions = [...versions];
     const saved = core.normalizeSettings(options.settings).defaultVersion;
     state.defaultVersion = saved || managerDefaultVersion({
