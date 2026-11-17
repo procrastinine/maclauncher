@@ -98,6 +98,7 @@ test('ordinary managed codec installation persists compact placement facts and r
   assert.equal(sourceStrong.slices[0].imports.length, 1024); assert.equal(sourceStrong.slices[0].importsComplete, true);
   const projected = Description.installationDescription(full);
   assert.deepEqual(full, before, 'the persistence projection leaves complete in-memory facts untouched');
+  assert.deepEqual(projected, JSON.parse(JSON.stringify(projected)), 'ordinary PE facts remain losslessly serializable installation metadata');
   const stored = await installFixture(t, f), persisted = stored.record.installationMetadata.translator;
   assert.equal(stored.text.trimEnd(), JSON.stringify(stored.record), 'ordinary runtime.json publication is compact JSON');
   assert.deepEqual(new Set(persisted.files.map(file => file.relative)), new Set(full.files.map(file => file.relative)));

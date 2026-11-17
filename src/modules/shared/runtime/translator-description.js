@@ -52,8 +52,8 @@ function description(input) {
 // Installation metadata retains placement facts; imports are inspected again
 // from the selected files before preparation, rather than persisted per symbol.
 function installationDescription(input) {
-  const { root: _root, id: _id, ...value } = description(input);
-  return { ...value, files: value.files.map(({ realPath: _realPath, ...file }) => ({ ...file, path: file.relative,
+  const { root: _root, id: _id, source, ...value } = description(input);
+  return { ...value, ...(source === undefined ? {} : { source }), files: value.files.map(({ realPath: _realPath, ...file }) => ({ ...file, path: file.relative,
     ...(file.format === 'macho' && Array.isArray(file.slices) ? { slices: file.slices.map(({ imports: _imports, ...slice }) =>
       ({ ...slice, importsComplete: false })) } : {}) })) };
 }
