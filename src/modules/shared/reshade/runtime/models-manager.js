@@ -72,14 +72,10 @@ module.exports = {
     if (["downloadSteam", "downloadSteamCMD"].includes(context.setupActionId)) return require("../steam-models").downloadFromSteam(context);
     throw new Error("Unknown graphics model action.");
   },
-  updateSettingsAfterSetup: (settings, installed) => normalizeSettings(settings).defaultVersion
-    ? normalizeSettings(settings) : normalizeSettings({ defaultVersion: installed.version }),
   refreshCatalog: async context => getState(context).catalog,
   uninstallRuntime: ({ userDataDir, version }) => Models.removeModel(userDataDir, version),
   applySettingsUpdate: (action, payload, settings) => action === "setDefault"
     ? normalizeSettings({ defaultVersion: payload?.version }) : normalizeSettings(settings),
-  updateSettingsAfterInstall: (settings, installed) => normalizeSettings(settings).defaultVersion
-    ? normalizeSettings(settings) : { defaultVersion: installed.version },
   updateSettingsAfterUninstall: (settings, _payload, { userDataDir } = {}) => {
     const current = normalizeSettings(settings);
     return Models.listInstalled(userDataDir).some(item => item.version === current.defaultVersion) ? current : { defaultVersion: null };

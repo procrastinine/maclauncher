@@ -94,10 +94,6 @@ module.exports = {
     if(!payload?.version)for(const [method,version]of Object.entries(defaults))if(version===previous)delete defaults[method];
     return {...settings,defaultVersions:defaults};
   },
-  updateSettingsAfterInstall: (settings, installed) => normalizeSettings(settings).defaultVersion
-    ? normalizeSettings(settings) : normalizeSettings({...settings, defaultVersion: installed.version }),
-  updateSettingsAfterSetup: (settings, installed) => normalizeSettings(settings).defaultVersion
-    ? normalizeSettings(settings) : normalizeSettings({...settings, defaultVersion: installed.version }),
   updateSettingsAfterUninstall: (settings, _payload, { userDataDir } = {}) => {
     const current = normalizeSettings(settings);
     const versions=new Set(Models.listInstalled(userDataDir).map(item=>item.version));

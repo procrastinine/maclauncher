@@ -12,6 +12,8 @@ RGB frames reach the provider through retained IOSurfaces. The model's operators
 
 A model's input size is set by the ordered downsample or upscale row before it, and its output keeps its intrinsic size until a later explicit fitting or downsample row. That intrinsic output size comes from the selected model and is the same in both editor views, in native preparation and in export, and the provider must declare that exact architecture. The default for each operation and an explicit selection for one effect are independent of each other.
 
+Downloading or importing a model keeps automatic selection automatic. Only an explicit default action saves a model preference; existing saved defaults are preserved.
+
 The image models below need no depth or motion from the game engine. RIFE reads a chronological pair of images, and the shared presenter sets the timestamps of the images it generates and schedules their display.
 
 ## Restoration and interpolation models

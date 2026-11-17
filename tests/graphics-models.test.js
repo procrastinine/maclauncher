@@ -65,7 +65,7 @@ test("shared model management imports locally, reloads without network and remov
   const { options, original } = fixture(t);
   t.mock.method(globalThis, "fetch", () => assert.fail("local model management must not fetch"));
   const installed = await Manager.importRuntime(options);
-  let settings = Manager.updateSettingsAfterInstall({}, installed);
+  let settings = Manager.applySettingsUpdate("setDefault", { version: installed.version }, {});
   assert.equal(settings.defaultVersion, installed.version);
   const state = Manager.getState({ ...options, settings });
   assert.equal(state.sections[0].installed.length, 1);
