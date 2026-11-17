@@ -73,6 +73,34 @@ test("removal refuses the no-PID preparation interval and direct Node launch sha
   assert.equal(f.cleanupCalls(), 0); assert.equal(fs.readFileSync(f.saved, "utf8"), "player state");
 });
 
+// The library selects a game it just added and reads it at once, so Forget
+// right after an import meets those reads.
+test("removal waits for the game's reads and other actions without a process, refusing new work meanwhile", async t => {
+  const gates = [deferred(), deferred()], entered = [deferred(), deferred()];
+  let calls = 0;
+  const f = fixture(t, { mod: { actions: { inspect: async () => { const call = calls++; entered[call].resolve(); await gates[call].promise; return {}; } } } });
+  const read = f.operations.moduleAction(f.entry, "inspect", {}, {});await entered[0].promise;
+  const removal = f.operations.removeGameData(f.entry);
+  await assert.rejects(f.operations.moduleAction(f.entry, "inspect", {}, {}), { code: "GAME_IN_USE", message: /removal is in progress/ });
+  await assert.rejects(f.operations.launchEntry(f.entry), { code: "GAME_IN_USE" });
+  assert.equal(f.cleanupCalls(), 0, "nothing is removed while the read runs");
+  gates[0].resolve();await read;await removal;
+  assert.equal(Store.readGameRecord(f.userDataDir, f.entry.gameId), null);
+  assert.equal(fs.existsSync(Data.resolveGameDir(f.userDataDir, f.entry.gameId)), false);
+  assert.equal(f.children.length, 0);assert.equal(f.coordinator.snapshot().games.length, 0);
+
+  // An action that starts a process while the removal waits refuses it, as a running game does.
+  const g = fixture(t, { mod: { actions: { inspect: async () => { entered[1].resolve(); await gates[1].promise;
+    return { child: Object.assign(new EventEmitter(), { pid: 123499, exitCode: null, signalCode: null }) }; } } } });
+  const tool = g.operations.moduleAction(g.entry, "inspect", {}, {});await entered[1].promise;
+  const refused = g.operations.removeGameData(g.entry);
+  gates[1].resolve();const { child } = await tool;
+  await assert.rejects(refused, { code: "GAME_IN_USE", message: /Stop the game/ });
+  assert.equal(fs.readFileSync(g.saved, "utf8"), "player state");
+  child.exitCode = 0;child.emit("exit", 0);
+  await waitFor(() => g.coordinator.snapshot().games.length === 0);
+});
+
 test("removal winning the race rejects concurrent and stale launches before mutation or spawning", async t => {
   const gate = deferred(), entered = deferred();
   const f = fixture(t, { cleanup: async () => { entered.resolve(); await gate.promise; } });

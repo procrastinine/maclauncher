@@ -35,13 +35,14 @@ function createGameLifecycle({ userDataDir, coordinator }) {
     if (Number.isSafeInteger(target.pid) && target.pid > 0) await Promise.all([...scope.games.values()].map(token => coordinator.bindUse(token, target.pid)));
     if (target.exitCode != null || target.signalCode != null || target.isDestroyed?.()) finish();
   }
-  async function use(entry, work) {
+  // A launch's use refuses removal from its start, before its process exists.
+  async function use(entry, work, { launch = false } = {}) {
     if (!entry?.gameId) return work();
     const current = matching(entry);
     if (current) {
       const result = await work(); await retain(current, result); return result;
     }
-    const token = await coordinator.acquireGameUse(identity(entry));
+    const token = await coordinator.acquireGameUse({ ...identity(entry), ...(launch ? { launch: true } : {}) });
     const scope = { root, coordinator, games: new Map([[entry.gameId, token]]), targets: new Set(), finished: false };
     try {
       return await activity.run(scope, async () => {
@@ -53,6 +54,8 @@ function createGameLifecycle({ userDataDir, coordinator }) {
     }
   }
   async function remove(entry, work) {
+    // Removal waits for the game's other work, so work for the same game never removes it.
+    if (matching(entry)) throw Object.assign(new Error("Stop the game or wait for its current action to finish."), { code: "GAME_IN_USE" });
     const token = await coordinator.acquireGameRemoval(identity(entry));
     try {
       const result = await work();

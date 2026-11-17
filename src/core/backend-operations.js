@@ -586,7 +586,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
   };
   for (const method of ["launchEntry", "refreshSaveLocations", "saveInfo", "selectSaveLocation", "save", "patcher"]) {
     const operation = operations[method];
-    operations[method] = (entry, ...args) => gameLifecycle.use(entry, () => operation(entry, ...args));
+    operations[method] = (entry, ...args) => gameLifecycle.use(entry, () => operation(entry, ...args), { launch: method === "launchEntry" });
   }
   return operations;
 }

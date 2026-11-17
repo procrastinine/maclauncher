@@ -56,7 +56,7 @@ async function isRuntimeProcessAlive(pid) {
 /** Pure Node host. Only bookkeeping and short JSON commits run here; jobs stay in workers. */
 function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProcessAlive, orphanPollMs = 1000 } = {}) {
   const active = new Map(), pending = [], closedOwners = new WeakSet();
-  const gameActivity = new Map(), removedGames = new Set();
+  const gameActivity = new Map(), removedGames = new Set(), pendingRemovals = [];
   let orphanTimer;
   const overlap = (a, b) => a.identities.some(left => b.identities.some(right => conflicts(left, right)));
   const ownPreparationUse = (request, lease) => lease.kind === "use" && lease.owner === request.owner &&
@@ -102,6 +102,28 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
       active.set(token, { ...request, token, pids: new Set() });
       request.resolve(token);
     }
+    drainRemovals();
+  }
+  // A game that runs, is being prepared to run or is being removed refuses
+  // removal. Its other work, such as the library's reads of a game it just
+  // added, finishes first, and new work is refused while the removal waits.
+  const runningGame = lease => lease.kind === "remove" || lease.launch === true || lease.pids.size > 0;
+  const gameLeases = gameId => [...gameActivity.values()].filter(lease => lease.gameId === gameId);
+  function grantGame(owner, kind, identity, launch = false) {
+    const token = randomUUID();
+    gameActivity.set(token, { ...identity, owner, kind, token, pids: new Set(), ...(launch ? { launch } : {}) });
+    return token;
+  }
+  function drainRemovals() {
+    for (let index = 0; index < pendingRemovals.length;) {
+      const request = pendingRemovals[index], leases = gameLeases(request.identity.gameId);
+      const refusal = closedOwners.has(request.owner) ? coordinationError("RUNTIME_OWNER_CLOSED", "The backend operation was closed.")
+        : leases.some(runningGame) ? coordinationError("GAME_IN_USE", "Stop the game or wait for its current action to finish.") : null;
+      if (!refusal && leases.length) { index++; continue; }
+      pendingRemovals.splice(index, 1);
+      if (refusal) request.reject(refusal);
+      else request.resolve(grantGame(request.owner, "remove", request.identity));
+    }
   }
   function acquire(owner, kind, identities, allowedUses = [], allowedMutations = []) {
     const values = (Array.isArray(identities) ? identities : [identities]).map(runtimeIdentity);
@@ -127,16 +149,15 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
   function acquireGame(owner, kind, value) {
     const identity = gameIdentity(value);
     if (closedOwners.has(owner)) throw coordinationError("RUNTIME_OWNER_CLOSED", "The backend operation was closed.");
-    const leases = [...gameActivity.values()].filter(lease => lease.gameId === identity.gameId);
+    const leases = gameLeases(identity.gameId), removing = pendingRemovals.some(request => request.identity.gameId === identity.gameId);
     if (kind === "use" && removedGames.has(identity.gameId)) throw coordinationError("GAME_REMOVED", "This game was removed from the library. Add it again before using it.");
-    if (kind === "remove" ? leases.length : leases.some(lease => lease.kind === "remove")) {
+    if (removing || (kind === "remove" ? leases.some(runningGame) : leases.some(lease => lease.kind === "remove"))) {
       throw coordinationError("GAME_IN_USE", kind === "remove"
         ? "Stop the game or wait for its current action to finish."
         : "Game removal is in progress. Try again when it finishes.");
     }
-    const token = randomUUID();
-    gameActivity.set(token, { ...identity, owner, kind, token, pids: new Set() });
-    return token;
+    if (kind === "remove" && leases.length) return new Promise((resolve, reject) => pendingRemovals.push({ owner, identity, resolve, reject }));
+    return grantGame(owner, kind, identity, kind === "use" && value.launch === true);
   }
   function closeOwner(owner) {
     closedOwners.add(owner);

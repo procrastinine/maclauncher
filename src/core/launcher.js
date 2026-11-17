@@ -711,7 +711,7 @@ function createLauncher({
         // Resolve the module's actual selection afresh once, rather than launch stale files.
         return launchEntryOnce(entry, options);
       }
-    }))).catch(error => {
+    }), { launch: true })).catch(error => {
       if (isAbortError(error)) return { kind: "cancelled", runtimeId: options.runtimeId || entry.runtimeId };
       throw error;
     });
