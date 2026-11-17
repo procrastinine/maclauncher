@@ -28,17 +28,4 @@ module.exports = [
     directories: ({ userDataDir }) => [path.join(userDataDir, "runtimes")],
     match: require("./storage-maintenance").TRASH
   },
-  {
-    // Earlier Legendary copies that no longer provide the selected manifest APIs.
-    id: "external-download-helpers",
-    directories: ({ userDataDir }) => [path.join(userDataDir, "external", "tools")],
-    match: /^legendary-[\w.+-]+-[0-9a-f]{12}$/,
-    async keep(directory) {
-      const legendary = require("./external-store-downloads").installedLegendary(directory);
-      const name = item => path.basename(item.packagesPath);
-      const listed = new Set(legendary.map(name));
-      const kept = new Set([legendary[0], legendary.find(item => item.confirmsBuilds)].filter(Boolean).map(name));
-      return entry => !listed.has(entry) || kept.has(entry);
-    }
-  }
 ];

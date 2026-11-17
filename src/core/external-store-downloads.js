@@ -59,14 +59,14 @@ if request['mode']=='select':
     for release in request['releases']:
         try: version=Version(release['version'])
         except Exception: continue
-        if version.is_prerelease or version not in wanted: continue
+        if version.is_prerelease and not request.get('allowPrereleases') or not wanted.contains(version,prereleases=True if request.get('allowPrereleases') else None): continue
         for item in release['files']:
             try:
                 ranks=[tags[str(tag)] for tag in parse_wheel_filename(item['name'])[3] if str(tag) in tags]
                 if not ranks or item.get('requiresPython') and python not in SpecifierSet(item['requiresPython']): continue
             except Exception: continue
             key=(version,-min(ranks))
-            if best is None or key>best[0]: best=(key,{'version':release['version'],'name':item['name']})
+            if best is None or key>best[0]: best=(key,{'version':release['version'],'name':item['name'],'prerelease':version.is_prerelease})
     print(json.dumps(best and best[1]))
 elif request['mode']=='requires':
     archive=zipfile.ZipFile(request['wheel'])
@@ -151,7 +151,7 @@ function launch(command, args, { input, env, cwd, signal, onLine, captureOutput 
     child.stdin.on("error", () => {}); child.stdin.end(input || "");
   });
 }
-// Legendary and its dependencies come from PyPI: Legendary's newest release,
+// Legendary and its dependencies come from PyPI: the selected release,
 // then for each requirement its wheel names, the newest release that
 // satisfies it with a wheel the included Python accepts. PyPI's SHA-256
 // verifies each wheel, and the installation records every package. Installed
@@ -175,50 +175,8 @@ function installedLegendary(parent) {
     return { packagesPath, version: legendaryVersion(receipt), confirmsBuilds: receipt?.confirmsBuilds !== false };
   }).filter(item => item.version && fs.existsSync(path.join(item.packagesPath, "legendary", "cli.py"))).sort((a, b) => newerVersion(a.version, b.version));
 }
-const prepared = new Map(), provisionTasks = new Map();
-async function ensureLegendary({ userDataDir, signal, onProgress, execute = launch, pythonPath, logger } = {}) {
-  const embedded = pythonPath || Python.resolveEmbeddedPythonBinary(Python.resolveEmbeddedPythonRoot());
-  if (!embedded || !path.isAbsolute(embedded)) throw publicError("The included game download helper is unavailable. Reinstall MacLauncher.");
-  const parent = path.join(userDataDir, "external", "tools");
-  // PyPI is asked once per session; later store actions reuse the answer.
-  if (prepared.has(parent)) return { pythonPath: embedded, packagesPath: prepared.get(parent) };
-  if (provisionTasks.has(parent)) return provisionTasks.get(parent);
-  const task = (async () => {
-    const installed = installedLegendary(parent), usable = installed.find(item => item.confirmsBuilds) || installed[0];
-    const settle = packagesPath => { prepared.set(parent, packagesPath); return { pythonPath: embedded, packagesPath }; };
-    let row;
-    try {
-      onProgress?.("Checking Epic download support");
-      row = await newestRelease(LEGENDARY, "", { signal, python: wheelTool(embedded, execute, signal) });
-    } catch (error) {
-      signal?.throwIfAborted();
-      if (usable) return settle(usable.packagesPath);
-      throw publicError(`The Epic download helper is unavailable: ${error.externalPublic ? error.message : "PyPI could not be reached."}`);
-    }
-    if (!row) {
-      if (usable) return settle(usable.packagesPath);
-      throw publicError("PyPI lists no Legendary release for the included Python.");
-    }
-    const current = installed.find(item => item.version === row.version);
-    if (current && (current.confirmsBuilds || !usable?.confirmsBuilds)) return settle(current.packagesPath);
-    if (current) return settle(usable.packagesPath);
-    let added;
-    try { added = await installLegendary({ parent, embedded, execute, signal, onProgress, first: row }); }
-    catch (error) {
-      signal?.throwIfAborted();
-      if (!usable) throw error;
-      logger?.warn?.(`[external] Legendary ${row.version} could not be installed: ${error.message || error}`);
-      onProgress?.(`Using Legendary ${usable.version}; Legendary ${row.version} could not be installed`);
-      return settle(usable.packagesPath);
-    }
-    if (!added.confirmsBuilds && usable?.confirmsBuilds) {
-      logger?.warn?.(`[external] Legendary ${row.version} has no manifest lookups to confirm Epic builds; using Legendary ${usable.version}.`);
-      onProgress?.(`Using Legendary ${usable.version}; Legendary ${row.version} cannot confirm Epic builds`);
-      return settle(usable.packagesPath);
-    }
-    return settle(added.packagesPath);
-  })();
-  provisionTasks.set(parent, task); try { return await task; } finally { provisionTasks.delete(parent); }
+async function ensureLegendary(options = {}) {
+  return require('../modules/shared/stores/runtime/legendary-manager').ensure(options);
 }
 function wheelTool(embedded, execute, signal) {
   return async request => JSON.parse((await execute(embedded, ["-I", "-c", WHEELS], { input: JSON.stringify(request), signal,
@@ -234,11 +192,25 @@ async function newestRelease(source, specifier, { signal, python }) {
   const listed = row?.files.find(item => item.name === choice.name);
   return listed ? { version: row.version, file: listed, source } : null;
 }
-async function installLegendary({ parent, embedded, execute, signal, onProgress, first }) {
+// Immutable package files, excluding the generated manager and wheel receipts.
+function legendaryFiles(root) {
+  const files = [], digest = require('../modules/shared/runtime/verified-identity').fileDigest;
+  function visit(directory) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name), relative = path.relative(root, file);
+      if (['runtime.json', RECEIPT].includes(relative)) continue;
+      if (entry.isSymbolicLink() || !entry.isDirectory() && !entry.isFile()) throw publicError('Legendary package files must be regular files.');
+      if (entry.isDirectory()) visit(file);
+      else { const value = digest(file, { noFollow: true }); files.push({ path: relative, size: value.size, sha256: value.sha256 }); }
+    }
+  }
+  visit(root); return files.sort((a, b) => a.path.localeCompare(b.path));
+}
+async function installLegendary({ parent, embedded, execute, signal, onProgress, first, firstArchive, destination }) {
   fs.mkdirSync(parent, { recursive: true, mode: 0o700 }); const stage = fs.mkdtempSync(path.join(parent, ".legendary-setup-"));
   const python = wheelTool(embedded, execute, signal);
   try {
-    const packageRoot = path.join(stage, "packages"); fs.mkdirSync(packageRoot);
+    const packageRoot = destination || path.join(stage, "packages"); fs.mkdirSync(packageRoot, { recursive: true });
     const wanted = new Map([["legendary-gl", []]]), resolved = new Map(), packages = [];
     for (const [name, specifiers] of wanted) {
       if (resolved.has(name)) continue;
@@ -247,7 +219,10 @@ async function installLegendary({ parent, embedded, execute, signal, onProgress,
       const release = name === "legendary-gl" ? first : await newestRelease(Upstream.pypi({ project: name, recognize: pypiWheels }), specifiers.join(","), { signal, python });
       if (!release) throw publicError(`PyPI lists no ${name} release that Legendary can use with the included Python.`);
       resolved.set(name, release.version);
-      const archive = path.join(stage, release.file.name), downloaded = await release.source.download(release.file, archive, { signal });
+      const archive = name === 'legendary-gl' && firstArchive ? firstArchive : path.join(stage, release.file.name);
+      const downloaded = name === 'legendary-gl' && firstArchive
+        ? { sha256: require('../modules/shared/runtime/pinned-native-manager').hashFile(archive), integrity: 'publisher-sha256' }
+        : await release.source.download(release.file, archive, { signal });
       for (const requirement of await python({ mode: "requires", wheel: archive })) {
         if (!wanted.has(requirement.name)) wanted.set(requirement.name, []);
         if (requirement.specifier) wanted.get(requirement.name).push(requirement.specifier);
@@ -258,11 +233,12 @@ async function installLegendary({ parent, embedded, execute, signal, onProgress,
     }
     const lines = [];
     const result = await execute(embedded, ["-c", LEGENDARY_CHECK], { signal, onLine: line => lines.push(line),
-      env: { ...process.env, PYTHONPATH: packageRoot, PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" } })
+      env: { ...process.env, PYTHONPATH: packageRoot, PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1", LEGENDARY_CONFIG_PATH: path.join(stage, "verification") } })
       .catch(() => { signal?.throwIfAborted(); throw publicError(`Legendary ${first.version} does not run with the included Python${lines.length ? `: ${lines.at(-1)}` : "."}`); });
     const confirmsBuilds = /^true\b/.test(String(result.stdout || "").trim());
     const identity = crypto.createHash("sha256").update(JSON.stringify(packages.map(({ name, version, sha256 }) => [name, version, sha256]))).digest("hex");
-    writeJson(path.join(packageRoot, RECEIPT), { identity, legendaryVersion: first.version, confirmsBuilds, source: "https://pypi.org/project/legendary-gl/", packages });
+    writeJson(path.join(packageRoot, RECEIPT), { identity, legendaryVersion: first.version, confirmsBuilds, source: "https://pypi.org/project/legendary-gl/", packages, files: legendaryFiles(packageRoot) });
+    if (destination) return { packagesPath: destination, version: first.version, confirmsBuilds };
     const target = path.join(parent, `legendary-${first.version}-${identity.slice(0, 12)}`);
     if (fs.existsSync(target)) fs.rmSync(target, { recursive: true }); fs.renameSync(packageRoot, target);
     return { packagesPath: target, version: first.version, confirmsBuilds };
@@ -353,7 +329,8 @@ function createExternalStoreDownloads(options = {}) {
   async function legendary(args, { signal, code, onLine, expectedVersion, expectedManifestBuildId } = {}) {
     signal ||= sessionController.signal;
     const expectedGeneration = generation;
-    const support = await (options.ensureLegendary || ensureLegendary)({ userDataDir: options.userDataDir, signal, logger: options.logger,
+    const support = await (options.ensureLegendary || ensureLegendary)({ ...helperContext(), signal, logger: options.logger || helperContext().logger,
+      requiresConfirmedBuilds: Boolean(expectedVersion || expectedManifestBuildId),
       onProgress: detail => { state.connection.detail = detail; emit(); }, execute: options.execute, pythonPath: options.pythonPath });
     if (disposed || generation !== expectedGeneration) throw publicError("The store account changed.");
     runtimeDir ||= fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-epic-session-")); fs.chmodSync(runtimeDir, 0o700);
@@ -362,9 +339,10 @@ function createExternalStoreDownloads(options = {}) {
     authLeases++; if (session && !fs.existsSync(userFile)) writeJson(userFile, session);
     try {
       const actual = code ? ["-y", "auth", "--code", code, "--disable-webview"] : ["-y", ...args];
-      const result = await (options.execute || launch)(support.pythonPath, ["-c", LEGENDARY_ENTRY], {
+      const result = await require('./coordinated-runtime-managers').withRuntimeUse({ managerId: support.managerId || 'legendary', version: support.version,
+        sourcePath: support.installDir || support.packagesPath }, () => (options.execute || launch)(support.pythonPath, ["-c", LEGENDARY_ENTRY], {
         input: JSON.stringify({ args: actual, expectedVersion, expectedManifestBuildId, recordPath }), signal, onLine, cwd: runtimeDir,
-        env: { ...process.env, LEGENDARY_CONFIG_PATH: runtimeDir, PYTHONPATH: support.packagesPath, PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1", PYTHONUNBUFFERED: "1" } });
+        env: { ...process.env, LEGENDARY_CONFIG_PATH: runtimeDir, PYTHONPATH: support.packagesPath, PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1", PYTHONUNBUFFERED: "1" } }), { userDataDir: options.userDataDir, coordinator: helperContext().runtimeCoordinator });
       if (disposed || generation !== expectedGeneration) throw publicError("The store account changed.");
       const updated = readJson(userFile); if (updated?.refresh_token) { session = updated; await persist(); }
       return ["list", "info", "status"].includes(args[0]) && result.stdout.trim() ? JSON.parse(result.stdout) : recordPath ? readJson(recordPath) : null;
@@ -612,4 +590,4 @@ function createExternalStoreDownloads(options = {}) {
   return { snapshot, connect, submitAuth, loadLibrary, getVersions, download, cancel, markImported, disconnect, dispose };
 }
 
-module.exports = { createExternalStoreDownloads, ensureLegendary, installedLegendary, normalizeEpicLibrary, normalizeGogVersions, codeFromInput, findSession, launch, AUTH_URLS, LEGENDARY };
+module.exports = { createExternalStoreDownloads, ensureLegendary, installedLegendary, normalizeEpicLibrary, normalizeGogVersions, codeFromInput, findSession, launch, AUTH_URLS, LEGENDARY, installLegendary, wheelTool, newestRelease, legendaryFiles, LEGENDARY_CHECK };

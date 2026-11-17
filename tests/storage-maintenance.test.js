@@ -116,7 +116,7 @@ test("MKXP-Z upkeep keeps the newest sessions of each version and every other pe
   assert.equal(fs.readFileSync(path.join(root, "games", "game1", "modules", "rgss", "saves", "Save01.rvdata2"), "utf8"), "save");
 });
 
-test("legacy helper upkeep preserves GOG copies governed by managed runtime origins", async t => {
+test("legacy download helpers without automatic origins remain until explicit removal", async t => {
   const root = profile(t), tools = path.join(root, "external", "tools");
   const legendary = (version, confirmsBuilds) => {
     const directory = path.join(tools, `legendary-${version}-${sha(version).slice(0, 12)}`);
@@ -131,8 +131,8 @@ test("legacy helper upkeep preserves GOG copies governed by managed runtime orig
     write(path.join(directory, "source.json"), JSON.stringify({ version, sha256: sum, size: bytes.length }));
     return folder(directory);
   };
-  const kept = [legendary("0.21.1", false), legendary("0.20.0", true), gogdl("1.4.0"), gogdl("1.3.0")];
-  const removed = [legendary("0.19.0", true)];
+  const kept = [legendary("0.21.1", false), legendary("0.20.0", true), legendary("0.19.0", true), gogdl("1.4.0"), gogdl("1.3.0")];
+  const removed = [];
   const partial = folder(path.join(tools, "legendary-0.18.0-incomplete"));
   await pass({ userDataDir: root, stores: coreStores, now: NOW });
   for (const directory of [...kept, partial]) assert.ok(exists(directory), directory);
@@ -144,7 +144,7 @@ test("the registry lists every declared derived store with its owner", () => {
   const owners = Object.fromEntries(stores.map(store => [store.id, store.owner]));
   assert.equal(owners["graphics-launch-files"], "shared/reshade");
   assert.equal(owners["mkxpz-sessions"], "rgss");
-  assert.ok(require("../src/core/storage-maintenance").listStores().some(store => store.id === "external-download-helpers"));
+  assert.equal(require("../src/core/storage-maintenance").listStores().some(store => store.id === "external-download-helpers"), false);
 });
 
 test("a pass writes nothing of its own and a repeated pass finds nothing left", async t => {

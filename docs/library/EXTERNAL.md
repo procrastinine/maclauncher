@@ -66,7 +66,7 @@ A remembered manual sign-in is stored as an encrypted refresh token protected by
 
 ## Epic, GOG and itch.io accounts
 
-Epic and GOG can reuse supported local sign-ins from Heroic, Legendary or the store's own tools without changing their configuration. Manual sign-in opens the store's authorization page in the browser and accepts the code it returns. Epic downloads use a Legendary helper and GOG Galaxy builds a native GOGdl helper, and both helpers are downloaded automatically when a download needs them. **Runtimes → Tools → GOGdl** lists live upstream releases and installed versions, with Install, Delete, Set default and a custom executable or folder. A usable installed or custom GOGdl is reused offline. A missing helper downloads after consent; ordinary GOG use requires no manual setup. GOG also offers offline installers with their version, platform and language metadata. Each installer file is checked against the size and MD5 in the checksum record that GOG publishes for it, and it keeps the file name given in that record.
+Epic and GOG can reuse supported local sign-ins from Heroic, Legendary or the store's own tools without changing their configuration. Manual sign-in opens the store's authorization page in the browser and accepts the code it returns. Epic downloads use a Legendary helper and GOG Galaxy builds a native GOGdl helper, and both helpers are downloaded automatically when a download needs them. **Runtimes → Tools** has **GOGdl** and **Legendary** entries with live upstream releases, Install, Delete, Set default and custom versions. GOGdl accepts a custom executable or folder; Legendary accepts its complete package folder or its `legendary/cli.py` file. Native CPUs and required package files are checked. A usable installed or custom helper is reused offline, and a missing helper downloads after consent. Ordinary store use requires no manual setup. A later automatic acquisition replaces an unused earlier automatic copy; explicit installs, defaults, custom paths and active helpers remain. GOG also offers offline installers with their version, platform and language metadata. Each installer file is checked against the size and MD5 in the checksum record that GOG publishes for it, and it keeps the file name given in that record.
 
 itch.io starts in **Public games** mode, where pasting the URL of a public itch.io game adds its downloadable uploads without an API key. Free and pay-what-you-want files remain subject to the publisher's access and pricing settings. Public pages offer upload editions, while earlier build archives need whatever access itch.io grants. A selected upload is never silently replaced with another edition. Added game links are cached locally, and the circular arrow reloads those pages only on request.
 
@@ -88,7 +88,9 @@ The Android tab searches Google Play, F-Droid and IzzyOnDroid and shows each sou
 | `steam/installations.json` | Completed Steam downloads, including custom locations |
 | `external/downloads/<store>/` | Downloaded versions for Steam, Epic, GOG, itch.io, Google Play, F-Droid and IzzyOnDroid, each in its own folder |
 | `external/installations.json` | Completed external downloads, including custom locations |
-| `external/tools/` | Shared, versioned download helpers |
+| `runtimes/gogdl/<cpu>/<version>/` | Managed GOGdl downloads |
+| `runtimes/legendary/<cpu>/<version>/` | Managed Legendary packages and their wheel dependencies |
+| `external/tools/` | Earlier helper downloads, registered in the same Tools managers |
 | `external/<store>/session.enc` | Optional encrypted store session or API key |
 | `external/itch/public/library.json` | Cached public itch.io game links and metadata |
 

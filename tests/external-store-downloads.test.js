@@ -72,9 +72,16 @@ test("GOG rejects a version for the wrong platform instead of downloading anothe
   const result = await until(() => service.snapshot().downloads.find(row => row.id === job.id && row.status === "error")); assert.match(result.error, /no GOG installer/); assert.equal(downloads.length, 0);
 });
 test("Epic reuses credentials read-only and sends the selected historical manifest to Legendary", async t => {
+  const coordinator = require('../src/core/runtime-coordinator').createRuntimeCoordinator(), client = coordinator.client();
+  t.after(() => client.close());
+  const helperSettings = { runtimes: { legendary: { defaultVersion: '0.21.2' } } }, consent = async () => true;
   const commands = [], original = { access_token: "epic-fixture-access", refresh_token: "epic-fixture-refresh", displayName: "sample" };
-  const { root, service } = fixture(t, "epic", { findSession: () => original, ensureLegendary: async () => ({ pythonPath: "/fixture/python", packagesPath: "/fixture/packages" }),
+  const { root, service } = fixture(t, "epic", { findSession: () => original,
+    getHelperContext: () => ({ settings: helperSettings, confirmRuntimeInstall: consent, runtimeCoordinator: client }),
+    ensureLegendary: async context => { assert.equal(context.settings, helperSettings); assert.equal(context.confirmRuntimeInstall, consent);
+      return { pythonPath: "/fixture/python", packagesPath: "/fixture/packages", version: '0.21.2' }; },
     execute: async (_command, _args, options) => {
+      assert.ok(coordinator.snapshot().active.some(lease => lease.kind === 'use' && lease.identities.some(row => row.managerId === 'legendary' && row.version === '0.21.2')));
       const args = JSON.parse(options.input).args; commands.push(args);
       if (args.includes("list")) return { stdout: JSON.stringify([{ app_name: "SampleGame", app_title: "Sample game", asset_infos: { Windows: { build_version: "build-2" }, Mac: { build_version: "build-1" } } }]) };
       if (args.includes("info")) return { stdout: JSON.stringify({ manifest: { build_version: args.at(-1) === "Mac" ? "build-1" : "build-2", download_size: 22 } }) };
@@ -88,6 +95,7 @@ test("Epic reuses credentials read-only and sends the selected historical manife
   assert.equal(result.status, "completed", result.error); const command = commands.find(args => args.includes("install"));
   assert.equal(command[command.indexOf("--manifest") + 1], "https://epicgames-download1.akamaized.net/previous.manifest"); assert.ok(command.includes("--download-only"));
   assert.equal(original.refresh_token, "epic-fixture-refresh"); assert.equal(fs.existsSync(path.join(root, "external/epic/user.json")), false);
+  assert.equal(coordinator.snapshot().active.length, 0);
 });
 test("GOG sessions are discovered without modifying Heroic or gog-cli files", t => {
   const { root } = fixture(t, "gog"), auth = path.join(root, "Library/Application Support/heroic/gog_store/auth.json"); fs.mkdirSync(path.dirname(auth), { recursive: true });
@@ -217,7 +225,7 @@ function freshModule() {
   delete require.cache[require.resolve("../src/core/external-store-downloads")];
   return require("../src/core/external-store-downloads");
 }
-test("Legendary follows PyPI's newest release, resolves its own requirements to compatible wheels and keeps working offline", { skip: !PYTHON && 'Requires the embedded Python in src/resources/python (npm run test:setup)' }, async t => {
+test("Legendary installs its selected PyPI release and dependency wheels and keeps usable copies offline", { skip: !PYTHON && 'Requires the embedded Python in src/resources/python (npm run test:setup)' }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "legendary-pypi-test-")), wheels = path.join(root, "wheels"); fs.mkdirSync(wheels);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const userDataDir = path.join(root, "profile"), pkg = name => ({ [`${name}/__init__.py`]: "" });
@@ -228,9 +236,9 @@ test("Legendary follows PyPI's newest release, resolves its own requirements to 
       { version: "5.0.0", wheels: [wheel(wheels, "filelock", "5.0.0", pkg("filelock"), [], "cp399-cp399-win_amd64")] }]),
     ...pypi("idna", [{ version: "3.20", wheels: [wheel(wheels, "idna", "3.20", pkg("idna"))] }])
   };
-  const ensure = async (module, routes) => {
+  const ensure = async (module, routes, extra = {}) => {
     const start = Harness.network.requests.length; Harness.network.routes = routes;
-    try { return { ...(await module.ensureLegendary({ userDataDir, pythonPath: PYTHON })), requests: Harness.network.requests.slice(start) }; }
+    try { return { ...(await module.ensureLegendary({ userDataDir, pythonPath: PYTHON, confirmRuntimeInstall: async () => true, ...extra })), requests: Harness.network.requests.slice(start) }; }
     finally { Harness.network.routes = null; }
   };
   const first = await ensure(freshModule(), { ...dependencies, ...pypi("legendary-gl", [{ version: "0.21.1", wheels: [legendaryWheel(wheels, "0.21.1")] },
@@ -241,20 +249,26 @@ test("Legendary follows PyPI's newest release, resolves its own requirements to 
   assert.ok(receipt.packages.every(item => item.integrity === "publisher-sha256" && /^[a-f0-9]{64}$/.test(item.sha256)));
   assert.equal(first.requests.some(url => /pywebview|pysocks/i.test(url)), false, "optional extras are not installed");
   assert.ok(fs.existsSync(path.join(first.packagesPath, "idna", "__init__.py")));
-  // The same session asks PyPI once; a later session without a connection keeps the installation.
+  // Installed copies are reused without asking PyPI, including after restart.
   const module = freshModule();
   assert.equal((await ensure(module, {})).packagesPath, first.packagesPath);
   assert.equal((await ensure(module, {})).requests.length, 0);
-  // A newer release without the manifest lookups yields to the installed one that has them.
-  const later = await ensure(freshModule(), { ...dependencies, ...pypi("legendary-gl", [{ version: "0.21.2", wheels: [legendaryWheel(wheels, "0.21.2")] },
-    { version: "0.22.0", wheels: [legendaryWheel(wheels, "0.22.0", { hooks: false })] }]) });
+  // Explicit management can install a newer release; exact-build actions retain
+  // the installed compatible copy while no explicit default overrides it.
+  const manager = require('../src/modules/shared/stores/runtime/legendary-manager');
+  const laterRoutes = { ...dependencies, ...pypi("legendary-gl", [{ version: "0.21.2", wheels: [legendaryWheel(wheels, "0.21.2")] },
+    { version: "0.22.0", wheels: [legendaryWheel(wheels, "0.22.0", { hooks: false })] }]) };
+  Harness.network.routes = laterRoutes;
+  await manager.refreshCatalog({ userDataDir, force: true });
+  const added = await manager.installRuntime({ userDataDir, version: '0.22.0' });
+  const later = await ensure(freshModule(), laterRoutes, { requiresConfirmedBuilds: true });
   assert.equal(later.packagesPath, first.packagesPath);
-  const added = fs.readdirSync(path.join(userDataDir, "external", "tools")).find(name => name.startsWith("legendary-0.22.0-"));
-  assert.equal(JSON.parse(fs.readFileSync(path.join(userDataDir, "external", "tools", added, ".maclauncher-tools.json"), "utf8")).confirmsBuilds, false);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(added.packagesPath, '.maclauncher-tools.json'))).confirmsBuilds, false);
   // A wheel whose bytes differ from PyPI's SHA-256 is not installed.
   const changed = { ...dependencies, ...pypi("legendary-gl", [{ version: "0.23.0", wheels: [legendaryWheel(wheels, "0.23.0")] }]) };
   changed[Object.keys(changed).find(url => url.endsWith("legendary_gl-0.23.0-py3-none-any.whl"))] = Buffer.from("changed");
-  fs.rmSync(path.join(userDataDir, "external", "tools"), { recursive: true });
-  await assert.rejects(ensure(freshModule(), changed), /size|checksum/);
-  assert.deepEqual(fs.readdirSync(path.join(userDataDir, "external", "tools")), []);
+  const refusedRoot = path.join(root, 'refused-profile'); Harness.network.routes = changed;
+  await manager.refreshCatalog({ userDataDir: refusedRoot, force: true });
+  await assert.rejects(manager.installRuntime({ userDataDir: refusedRoot, version: '0.23.0' }), /size|checksum|SHA-256/);
+  assert.deepEqual(manager.getState({ userDataDir: refusedRoot }).installed, []);
 });

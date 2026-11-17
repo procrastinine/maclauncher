@@ -38,12 +38,16 @@ test('an existing verified GOG helper is honored offline before discovery or con
   fs.writeFileSync(path.join(directory, 'source.json'), JSON.stringify({ version: '1.3.1', sha256: digest(bytes), size: bytes.length }));
   let prompts = 0; const start = Harness.network.requests.length; Harness.network.routes = {};
   t.after(() => { Harness.network.routes = null; });
+  const invalid = path.join(root, 'external/tools/gogdl-0.1.0-arm64-' + 'b'.repeat(12)), invalidBytes = Buffer.from('old unsupported helper');
+  fs.mkdirSync(invalid); fs.writeFileSync(path.join(invalid, 'gogdl'), invalidBytes, { mode: 0o755 });
+  fs.writeFileSync(path.join(invalid, 'source.json'), JSON.stringify({ version: '0.1.0', sha256: digest(invalidBytes), size: invalidBytes.length }));
   const selected = await Core.ensureGogdl({ userDataDir: root, arch: 'arm64', platform: 'darwin', confirmRuntimeInstall: () => { prompts++; throw new Error('already installed'); } });
   assert.equal(selected.version, '1.3.1'); assert.equal(selected.executablePath, path.join(directory, 'gogdl'));
   assert.equal(Harness.network.requests.length - start, 0); assert.equal(prompts, 0); assert.deepEqual(selected.architectures, ['arm64']);
   assert.deepEqual(fs.readFileSync(selected.executablePath), bytes);
   await require('../src/modules/shared/stores/runtime/gogdl-manager').uninstallRuntime({ userDataDir: root, version: selected.version, architecture: 'arm64' });
   assert.equal(fs.existsSync(selected.executablePath), false, 'deleting the migrated download removes its owned original bytes');
+  assert.ok(fs.existsSync(path.join(invalid, 'gogdl')), 'an unsupported earlier helper is preserved');
 });
 
 test('GOGdl is a managed Tools row with live releases, exact installs, measured custom paths and saved defaults', async t => {

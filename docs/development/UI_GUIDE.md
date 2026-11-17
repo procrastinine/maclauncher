@@ -411,7 +411,7 @@ For custom files, **Register custom…** follows the Installed list and opens a 
 
 #### Downloaded files
 
-**Downloaded files**, the last subtab of **Tools**, lists every installed downloaded file that has no runtime manager of its own, largest first. Examples are shared assets, store download helpers, the Android system image, microG, shared libraries and caches. Every runtime manager, by contrast, has its own entry in Runtimes, including small packages that other runtimes load. Nothing in the library, the inspector or Play links to this tab.
+**Downloaded files**, the last subtab of **Tools**, lists every installed downloaded file that has no runtime manager of its own, largest first. Examples are shared assets, the Android system image, microG, shared libraries and caches. Every runtime manager, by contrast, has its own entry in Runtimes, including small packages that other runtimes load. Nothing in the library, the inspector or Play links to this tab.
 
 The tab's header holds the title with a **?** that explains the tab, **Add from file…**, **Delete unused** and an icon-only reload button. **Add from file…** opens the native file chooser, reads **Adding…** while it runs and adds the file to the download it matches. **Delete unused** is disabled while every file is in use.
 
@@ -424,7 +424,7 @@ When the tab opens, it shows the list it last read, which is kept in the launche
 - on the first row of a download whose versions come from a catalog, an icon-only **Refresh** button that reads the catalog and reports the newest release in the status line
 - an icon-only **Show in Finder** button and an icon-only **Delete** button; Delete is disabled, with the reason as its tooltip, for a file that is still required
 
-With nothing installed, the tab reads **No downloaded files.** Delete asks for confirmation in a native dialog that names the file's users, notes a running game and states that MacLauncher asks before downloading the file again; for a cache, the dialog states instead that MacLauncher fills it again. **Delete unused** asks once and lists every file it deletes. After either action, the list is read again and a status line confirms the result, such as **Deleted gogdl 1.4.0.** A rejected file or failed removal appears as an inline error with its reason. All controls are native buttons in reading order, reachable with Tab.
+With nothing installed, the tab reads **No downloaded files.** Delete asks for confirmation in a native dialog that names the file's users, notes a running game and states that MacLauncher asks before downloading the file again; for a cache, the dialog states instead that MacLauncher fills it again. **Delete unused** asks once and lists every file it deletes. After either action, the list is read again and a status line confirms the result, with **Deleted** followed by the selected item’s name. A rejected file or failed removal appears as an inline error with its reason. All controls are native buttons in reading order, reachable with Tab.
 
 #### Effects
 

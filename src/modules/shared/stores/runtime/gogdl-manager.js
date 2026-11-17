@@ -19,9 +19,14 @@ function createManager(dependencies = {}) {
     await prepare?.call(this, options);
     for (const architecture of ['arm64', 'x64']) for (const row of await Core.installed(path.join(options.userDataDir, 'external/tools'), architecture)) {
       options.signal?.throwIfAborted();
-      if (!manager.core.resolveInstalled({ userDataDir: options.userDataDir, version: row.version, architecture }) &&
-        !fs.existsSync(path.join(manager.core.getInstallDir({ userDataDir: options.userDataDir, version: row.version, architecture }), 'runtime.json')))
-        manager.core.registerLocal({ userDataDir: options.userDataDir, version: row.version, runtimePath: row.executablePath, architecture });
+      try {
+        if (!manager.core.resolveInstalled({ userDataDir: options.userDataDir, version: row.version, architecture }) &&
+          !fs.existsSync(path.join(manager.core.getInstallDir({ userDataDir: options.userDataDir, version: row.version, architecture }), 'runtime.json')))
+          manager.core.registerLocal({ userDataDir: options.userDataDir, version: row.version, runtimePath: row.executablePath, architecture });
+      } catch (error) {
+        options.signal?.throwIfAborted();
+        options.logger?.warn?.(`[external] Earlier GOGdl ${row.version} is unavailable: ${error.message}`);
+      }
     }
   };
   const removeLegacy = remove => async function(options = {}) {
