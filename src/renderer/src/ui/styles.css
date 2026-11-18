@@ -267,15 +267,14 @@ body {
 .filterLibraryNameControl > .input { flex: 1; min-width: 0; }
 .filterLibrarySource td { padding: 4px 0 10px; }
 .runtimeModelTable td:first-child { overflow-wrap: anywhere; }
-/* Columns sized to their contents: names and Input → output take the room, so the operation and its default fit one line. */
-.runtimeModelTable th:first-child { width: 33%; }
-.runtimeModelTable th:nth-child(2) { width: 24%; }
-.runtimeModelTable th:nth-child(3) { width: 11%; }
-.runtimeModelTable th:nth-child(4) { width: 22%; }
+/* Columns sized to their contents: an operation with its Default badge or Make default button fits one line. */
+.runtimeModelTable th:first-child { width: 29%; }
+.runtimeModelTable th:nth-child(2) { width: 21%; }
+.runtimeModelTable th:nth-child(3) { width: 10%; }
+.runtimeModelTable th:nth-child(4) { width: 30%; }
 .runtimeModelTable th:nth-child(5) { width: 10%; }
-/* A Default for choice reads on the row's baseline, with its radio centred on the text. */
-.runtimeModelTable .runtimeModelDefault { display: flex; align-items: baseline; }
-.runtimeModelTable .runtimeModelDefault > input { align-self: center; }
+/* Each operation in Default for reads on the row's baseline, followed by its Default badge or Make default button. */
+.runtimeModelTable .runtimeModelDefault { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .runtimeModelDefault + .runtimeModelDefault { margin-top: 4px; }
 .filterLibraryTable .filterLibraryInput { width: 100%; min-width: 0; font-size: inherit; text-overflow: ellipsis; }
 /* A name reads as text; an editable name shows its field while hovered or edited. */

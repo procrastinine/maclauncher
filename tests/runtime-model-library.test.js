@@ -37,9 +37,11 @@ test('registered sources share installed/default state and partially default pac
  assert.equal(state.setupActions[0].installed,true);assert.equal(state.defaultSelections.find(row=>row.id==='mlx-dlss').version,external);
  assert.deepEqual(state.defaultSelections.find(row=>row.id==='mlx-sr-scene').compatibleVersions,[a,b]);
  const render=section=>renderToStaticMarkup(React.createElement(RuntimesView,{runtimeManagers:[{id:manager.id,label:manager.label,ui:manager.ui,sections:[{...section,installed:managed.slice(0,2)}]}],runtimeManagerId:manager.id,runtimeSectionId:'default',runtimeUi:{},downloadTasks:[],downloadsOpen:false,setDownloadsOpen(){},setRuntimeManagerId(){},setRuntimeSectionId(){},updateRuntimeUiSection(){},onRuntimeRefresh(){},onRuntimeInstall(){},onRuntimeSetDefault(){},onRuntimeUninstall(){},onCancelDownload(){}}));
- assert.equal((render(state.sections[0]).match(/type="radio"/g)||[]).length,4,'both packages expose one radio for each compatible operation');
+ const entries=markup=>(markup.match(/<div class="runtimeModelDefault">/g)||[]).length,defaultsOf=markup=>(markup.match(/<span class="badge badgeAccent">Default<\/span>/g)||[]).length;
+ assert.equal(entries(render(state.sections[0])),4,'both packages list each compatible operation');
  const next=manager.updateSettingsAfterDefault(manager.applySettingsUpdate('setDefault',{version:a},previous),{version:a},{previousSettings:previous});assert.equal(next.defaultVersions['mlx-sr-image'],a);assert.equal(next.defaultVersions['mlx-sr-scene'],a);assert.equal(next.defaultVersions['mlx-dlss'],external);
- const updated=manager.getState({settings:next});assert.equal((render(updated.sections[0]).match(/checked=""/g)||[]).length,2,'exactly one package is selected per compatible operation');
+ const updated=manager.getState({settings:next});assert.equal(defaultsOf(render(updated.sections[0])),2,'exactly one package is the default per compatible operation');
+ assert.equal((render(updated.sections[0]).match(/>Make default<\/button>/g)||[]).length,2,'the other package offers Make default for both');
 });
 test('download source selection follows imports and removal without reviving a stale source or mislabeling another action',async()=>{
  const first={id:'a',label:'A',buttonLabel:'Download model…',available:true},second={id:'b',label:'B',buttonLabel:'Download model…',available:true},props={id:'source',actions:[first,second],label:'Download',busy:false,onAction(){assert.fail('Browsing must not acquire a model');}},h=componentHarness(RuntimeSetupSelector,props);
@@ -65,11 +67,15 @@ test('operation grouping filters installed and downloadable models together and 
  const unavailable=xessManager.getState({});assert.equal(unavailable.catalog.installable,false);assert.match(unavailable.catalog.installReason,/GPU compute host unavailable/);
  assert.ok(unavailable.sections.every(section=>section.catalog.installable===false));
 });
-test('model default radios forward the exact operation scope without changing another default',()=>{
+// Owner, 11-17 7:24 PM: every row offers Make default; the table reads Default or Make default per operation.
+test('model rows offer Make default per operation, forwarding the exact operation scope without changing another default',()=>{
  const defaults=[],a={version:'a',operation:'mlx-sr-image',compatibleMethods:['mlx-sr-image','mlx-sr-scene'],ready:true},b={...a,version:'b'},section={id:'default',setupPresentation:{mode:'table'},installed:[a,b],setupActions:[],catalog:{delivery:'local-files',versions:[],installable:false},defaultSelections:[{id:'mlx-sr-image',label:'DLSS SR image',version:'a',compatibleVersions:['a','b']},{id:'mlx-sr-scene',label:'DLSS SR scene',version:'b',compatibleVersions:['a','b']}]},manager={id:'models',label:'Models',ui:{groupId:'graphics',tabLabel:'Graphics'},sections:[section]},props={runtimeManagers:[manager],runtimeManagerId:'models',runtimeSectionId:'default',runtimeUi:{},downloadTasks:[],downloadsOpen:false,setDownloadsOpen(){},setRuntimeManagerId(){},setRuntimeSectionId(){},updateRuntimeUiSection(){},onRuntimeRefresh(){},onRuntimeInstall(){},onRuntimeSetDefault:(...args)=>defaults.push(args),onRuntimeUninstall(){},onCancelDownload(){}};
  const h=componentHarness(RuntimesView,props);try{const table=elements(h.render()).find(n=>n.props.onInstall&&n.props.onDefault&&n.props.installed),rows=componentHarness(table.type,table.props);
-  try{const radios=elements(rows.render()).filter(n=>n.type==='input'&&n.props.type==='radio');assert.equal(radios.length,4);assert.equal(radios.filter(n=>n.props.checked).length,2);assert.equal(new Set(radios.map(n=>n.props.name)).size,2);
-   radios.find(n=>n.props['aria-label']==='Use a for DLSS SR scene').props.onChange();assert.deepEqual(defaults,[['models','default','a',undefined,'mlx-sr-scene']]);assert.equal(section.defaultSelections[0].version,'a');
+  try{const tree=rows.render(),markup=renderToStaticMarkup(tree);assert.doesNotMatch(markup,/type="radio"/);
+   const buttons=elements(tree).filter(n=>n.type==='button'&&n.props.children==='Make default');
+   assert.deepEqual(buttons.map(n=>n.props['aria-label']).sort(),['Make a the default for DLSS SR scene','Make b the default for DLSS SR image']);
+   assert.equal((markup.match(/<div class="runtimeModelDefault"><span>DLSS SR (image|scene)<\/span><span class="badge badgeAccent">Default<\/span><\/div>/g)||[]).length,2,'each operation\'s default reads Default');
+   buttons.find(n=>n.props['aria-label']==='Make a the default for DLSS SR scene').props.onClick();assert.deepEqual(defaults,[['models','default','a',undefined,'mlx-sr-scene']]);assert.equal(section.defaultSelections[0].version,'a');
   }finally{rows.close();}
  }finally{h.close();}
 });
@@ -89,7 +95,7 @@ test('the model table names a model without a help button, sizes its columns and
   }finally{rows.close();}
  }finally{h.close();}
  const css=require('node:fs').readFileSync(path.join(__dirname,'../src/renderer/src/ui/styles.css'),'utf8');
- for(const [n,w] of [[2,'24%'],[3,'11%'],[4,'22%'],[5,'10%']])assert.ok(css.includes(`.runtimeModelTable th:nth-child(${n}) { width: ${w}; }`),`column ${n}`);
+ for(const [n,w] of [['first-child','29%'],['nth-child(2)','21%'],['nth-child(3)','10%'],['nth-child(4)','30%'],['nth-child(5)','10%']])assert.ok(css.includes(`.runtimeModelTable th:${n} { width: ${w}; }`),`column ${n}`);
  // The library tables keep their header visible and the Actions heading over its buttons (GUI 0877 R26, S8).
  assert.match(css,/\.filterLibraryTable thead th \{ position: sticky;/);
  assert.match(css,/\.filterLibraryTable th:last-child \{ text-align: right; \}/);
@@ -111,10 +117,9 @@ test('the Operation menu reads as the Version row, Default choices share the row
  const row=[{tag:'div',classes:['runtimeSectionBody']},{tag:'div',classes:['runtimeSourceRow','runtimeItemGroupRow']}],menu=[...row,{tag:'select',classes:['input','inputSmall','runtimeVersionSelect','runtimeItemGroup'],id:'runtime-item-group'}];
  assert.equal(computedValue(css,row,'display')?.value,'flex','the menu keeps its own width instead of filling a grid cell');
  assert.equal(computedValue(css,menu,'width')?.value,'auto');
- const choice=[{tag:'table',classes:['filterLibraryTable','runtimeModelTable']},{tag:'tbody'},{tag:'tr'},{tag:'td'},{tag:'label',classes:['inlineCheck','runtimeModelDefault']}];
+ const choice=[{tag:'table',classes:['filterLibraryTable','runtimeModelTable']},{tag:'tbody'},{tag:'tr'},{tag:'td'},{tag:'div',classes:['runtimeModelDefault']}];
  assert.equal(computedValue(css,choice,'align-items')?.value,'baseline','the choice\'s text gives the cell its baseline');
- assert.equal(computedValue(css,[...choice,{tag:'input',attributes:{type:'radio'}}],'align-self')?.value,'center','the radio is centred on the text');
- assert.equal(computedValue(css,choice,'font-size')?.value,'var(--font-sm)');
+ assert.equal(computedValue(css,choice,'flex-wrap')?.value,'wrap','a narrow column keeps the button below its operation');
  for(const [body,padding] of [[['launcherViewBody','runtimeViewBody'],'12px'],[['launcherViewBody','settingsViewBody'],'16px']]){
   const view={tag:'div',classes:body};
   assert.equal(computedValue(css,[view],'--view-padding-top')?.value,padding,body.join(' '));

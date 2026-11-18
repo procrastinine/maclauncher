@@ -139,10 +139,32 @@ test('every usable installed row that is not the default has a Make default butt
     assert.deepEqual(calls, [['fixture', 'default', '1.0', 'mono', undefined, 'x64']]);
   } finally { harness.close(); }
   assert.doesNotMatch(render([runtime(rows.slice(0, 2), { supportsDefault: false })], 'fixture'), />Make default</);
-  assert.doesNotMatch(render([runtime(rows.slice(0, 2), { defaultVersion: '2.0', defaultSelections: [{ id: 'op', label: 'Operation', version: '2.0' }] })], 'fixture'), />Make default</);
   assert.equal(ui.runtimeMakeDefaultChoice({ install: { version: '1.0', ready: true }, label: 'v1.0', isDefault: true }), null);
   assert.deepEqual(ui.runtimeMakeDefaultChoice({ install: { version: '1.0', variant: 'mono', architecture: 'arm64' }, label: 'v1.0', isDefault: false }),
     { value: JSON.stringify(['1.0', 'mono', 'arm64']), version: '1.0', label: 'v1.0', variant: 'mono', architecture: 'arm64' });
+});
+
+// Owner, 11-17 7:24 PM: "There should be make default on every row in compatibility/graphics, not just select from
+// dropdown." A runtime with a default per operation offers Make default for each operation a usable row serves.
+test('rows of a runtime with a default per operation offer Make default for each operation they serve', () => {
+  const rows = [{ version: '2.0', ready: true }, { version: '1.0', variant: 'mono', architecture: 'x64', ready: true }, { version: '0.9', ready: false }];
+  const selections = [{ id: 'op', label: 'Operation', version: '2.0', compatibleVersions: ['2.0', '1.0', '0.9'] },
+    { id: 'other', label: 'Other', version: '1.0', compatibleVersions: ['2.0', '1.0'] }];
+  const calls = [], overrides = { onRuntimeSetDefault: (...args) => calls.push(args) };
+  const harness = componentHarness(ui.RuntimesView, props([runtime(rows, { defaultVersion: '2.0', defaultSelections: selections })], 'fixture', overrides));
+  try {
+    const tree = harness.render(), markup = renderToStaticMarkup(tree);
+    const buttons = treeElements(tree).filter(node => node.type === 'button' && /^Make default/.test([].concat(node.props.children).join('')));
+    assert.deepEqual(buttons.map(node => [].concat(node.props.children).join('')), ['Make default for Other', 'Make default for Operation'],
+      'v2.0 serves Other, v1.0 serves Operation; the row that is not ready offers none');
+    assert.match(markup, /title="Make v2\.0 the default for Other">Make default for Other<\/button>/);
+    buttons[1].props.onClick();
+    assert.deepEqual(calls, [['fixture', 'default', '1.0', 'mono', 'op']]);
+  } finally { harness.close(); }
+  assert.deepEqual(ui.runtimeOperationDefaults({ version: '1.0', ready: true }, selections),
+    [{ id: 'op', label: 'Operation', isDefault: false, makeDefault: true }, { id: 'other', label: 'Other', isDefault: true, makeDefault: false }]);
+  assert.deepEqual(ui.runtimeOperationDefaults({ version: '0.9', ready: false }, selections), [{ id: 'op', label: 'Operation', isDefault: false, makeDefault: false }]);
+  assert.deepEqual(ui.runtimeOperationDefaults({ version: '1.0', reference: true }, selections).map(row => row.makeDefault), [false, false]);
 });
 
 test('choosing in the Default menu passes the version, variant and CPU; Automatic clears the saved default', () => {

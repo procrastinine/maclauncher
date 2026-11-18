@@ -34,21 +34,16 @@ export function RefreshIcon({ size = "1em" }: { size?: IconSize }) {
   );
 }
 
+// An arrow onto a tray, drawn on the 18 px icon box with one 1.5 px stroke, the weight
+// the rest of the set has at 18 px. Straight edges sit on half pixels, which are
+// whole device pixels at 2x, and the drawing is centred in the box: vertically
+// exactly, horizontally within the quarter pixel that a 1.5 px shaft on device
+// pixels allows. At 36 px every edge is a whole pixel.
 export function DownloadIcon({ size = "1em" }: { size?: IconSize }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        fill="currentColor"
-        d="M5 21h14v-2H5v2zm7-18v10.17l3.59-3.58L17 11l-5 5-5-5 1.41-1.41L11 13.17V3h1z"
-      />
-    </svg>
-  );
+  return <svg viewBox="0 0 18 18" width={size} height={size} aria-hidden="true" focusable="false" data-icon="download">
+    <path d="M9.25 2.5V10.5M5 6.25l4.25 4.25 4.25-4.25M3.5 14.75H15" fill="none" stroke="currentColor"
+      strokeWidth="1.5" strokeLinecap="butt" strokeLinejoin="miter" />
+  </svg>;
 }
 
 export function SettingsIcon({ size = "1em" }: { size?: IconSize }) {

@@ -162,11 +162,11 @@ export function iconLoading(url: string): { loading?: "lazy"; decoding: "sync" |
 
 function StoreIcon({ url }: { url?: string | null }) {
   const [failed, setFailed] = useState<string | null>(null);
-  return <span className="steamGameIcon" aria-hidden="true">{url && failed !== url ? <img src={url} alt="" {...iconLoading(url)} onError={() => setFailed(url)} /> : <DownloadIcon size="21" />}</span>;
+  return <span className="steamGameIcon" aria-hidden="true">{url && failed !== url ? <img src={url} alt="" {...iconLoading(url)} onError={() => setFailed(url)} /> : <DownloadIcon size="18" />}</span>;
 }
 function ErrorNotice({ text }: { text: string }) { return <div className="steamNotice error" role="alert">{formatUserError(text)}</div>; }
 function StoreEmpty({ title, description }: { title: string; description: string }) {
-  return <div className="steamEmpty"><DownloadIcon size="28" /><strong>{title}</strong><p>{description}</p></div>;
+  return <div className="steamEmpty"><DownloadIcon size="36" /><strong>{title}</strong><p>{description}</p></div>;
 }
 function bytes(value: number) {
   if (!(value > 0)) return "0 B";

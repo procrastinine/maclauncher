@@ -12,7 +12,7 @@ import {
   sortInstalled
 } from "../ui-helpers";
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
-import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs, runtimeChoiceForQuery, runtimeTabChoice, runtimeRequestPending, runtimeDefaultMenu, runtimeMakeDefaultChoice, runtimeDistinctLinks,
+import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs, runtimeChoiceForQuery, runtimeTabChoice, runtimeRequestPending, runtimeDefaultMenu, runtimeMakeDefaultChoice, runtimeOperationDefaults, runtimeDistinctLinks,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
   runtimeRemovalPresentation, runtimeMinimumDetail, runtimeIncludedParts, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
   managedRuntimeSections, runtimePendingAction, runtimeRefreshPayload, runtimeSourceUiKey,
@@ -690,6 +690,9 @@ export function RuntimesView({
                         // Make default beside each usable row keeps the Default menu's choice one click away.
                         const makeDefault = runtimeMakeDefaultChoice({ install: inst, isDefault, label },
                           { supportsDefault: activeRuntimeSupportsDefault, perOperation: Boolean(defaultSelections) });
+                        // A runtime with a default per operation offers Make default for each operation the row serves.
+                        const operationDefaults = activeRuntimeSupportsDefault && defaultSelections
+                          ? runtimeOperationDefaults(inst, defaultSelections).filter(scope => scope.makeDefault) : [];
                         const installDetail = typeof inst.detail === "string" && inst.detail.trim() ? inst.detail.trim() : "";
                         const apis = (Array.isArray(inst.apis) ? inst.apis : Array.isArray(inst.translator?.apis) ? inst.translator.apis : [])
                           .filter((api: unknown): api is string => typeof api === "string").sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
@@ -731,6 +734,10 @@ export function RuntimesView({
                               {makeDefault && <button type="button" className="btn small" disabled={runtimeBusy} title={`Make ${makeDefault.label} the default`}
                                 onClick={() => onRuntimeSetDefault(activeRuntimeManager.id, activeRuntimeSection.id, makeDefault.version,
                                   makeDefault.variant, undefined, makeDefault.architecture)}>Make default</button>}
+                              {operationDefaults.map(scope => <button type="button" className="btn small" key={scope.id} disabled={runtimeBusy}
+                                title={`Make ${label} the default for ${scope.label}`}
+                                onClick={() => onRuntimeSetDefault(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, inst.variant, scope.id)}>
+                                Make default for {scope.label}</button>)}
                               {onRuntimeInstalledAction && (inst.actions || []).filter((action: any) => action.available !== false).map((action: any) =>
                                 <button className="btn small" key={action.id} disabled={runtimeBusy}
                                   onClick={() => onRuntimeInstalledAction(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, action.id, inst.architecture)}>

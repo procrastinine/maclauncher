@@ -399,6 +399,21 @@ export function runtimeMakeDefaultChoice(row: RuntimeDefaultRow, { supportsDefau
     ...(text(install.architecture) ? { architecture: text(install.architecture) } : {}) };
 }
 
+/** A row's per-operation defaults: each operation the row can serve, whether
+ * the row is that operation's default, and whether it offers Make default for
+ * it. A row that is not ready, a reference or a row without defaults offers
+ * none. */
+export type RuntimeOperationDefault = { id: string; label: string; isDefault: boolean; makeDefault: boolean };
+export function runtimeOperationDefaults(install: Record<string, any> | null | undefined, selections: unknown): RuntimeOperationDefault[] {
+  const version = text(install?.version);
+  if (!install || !version || !Array.isArray(selections)) return [];
+  const usable = install.ready !== false && !install.reference && install.supportsDefault !== false;
+  return selections.filter((selection: any) => selection && (Array.isArray(selection.compatibleVersions)
+    ? selection.compatibleVersions.includes(version) : selection.version === version))
+    .map((selection: any) => ({ id: String(selection.id), label: text(selection.label) || String(selection.id),
+      isDefault: selection.version === version, makeDefault: usable && selection.version !== version }));
+}
+
 export function runtimeTabMovement(key: string, index: number, count: number): number | null {
   if (count < 1) return null;
   if (key === "ArrowRight") return (index + 1) % count;
