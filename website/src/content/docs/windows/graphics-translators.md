@@ -153,7 +153,7 @@ Each game's **Runtime Settings** have a translator control for each graphics API
 | Control | What it picks |
 | --- | --- |
 | Default Direct3D engine | The translator for every Direct3D version that has no choice of its own: one included with your WINE runtime, or a DXMT, DXVK or D3DMetal version installed in Runtimes. |
-| Direct3D 8, 9, 10 / 10.1 and 11 | A translator for that one Direct3D version, from the installed ones that include it. Choices that share files are linked and change together. |
+| Direct3D 8, 9, 10 / 10.1 and 11 | A translator for that one Direct3D version, from the installed ones that include it; a translator only ever places its files for the Direct3D versions it actually implements. Choices that share files are linked and change together. |
 | Direct3D 12 | WINE's own vkd3d, D3DMetal or vkd3d-proton. |
 | Vulkan driver | MoltenVK or KosmicKrisp, for Vulkan translators and Vulkan games. |
 | Video codecs | WINE's defaults, or a GStreamer codec folder you registered. |
@@ -171,5 +171,3 @@ When one of those checks fails, the game still starts. It uses the copy of the s
 The inspector always shows the translators a game actually used, so you can check what ran even when nothing went wrong.
 
 Further reading: the [graphics translator reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/TRANSLATORS.md) and [How games run on a Mac](/maclauncher/background/how-games-run/#compatibility-layers-translate-the-conversation).
-
-A Direct3D choice places files only for APIs whose entry points the selected component supplies. A component without a Direct3D 8 entry point does not place its Direct3D 9 or 11 libraries for that role.

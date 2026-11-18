@@ -49,10 +49,13 @@ const READERS: Record<string, Reader> = {
   external: (_state, { tab }) => ({ kind: "section", id: "external", detail: after(tab, "steam-").replace(/-tab$/, "") })
 };
 
+// A utility window keeps its other views mounted and hidden, so only the
+// shown view's selection counts.
+const shown = (selector: string) => [...document.querySelectorAll(selector)].find(element => !element.closest("[hidden]"));
 function readSelection(): Selection {
   return {
-    section: document.querySelector('.launcherSidebarItem[aria-current="page"]')?.getAttribute("aria-controls") || "",
-    tab: document.querySelector('[role="tablist"] > [role="tab"][aria-selected="true"]')?.id || ""
+    section: shown('.launcherSidebarItem[aria-current="page"]')?.getAttribute("aria-controls") || "",
+    tab: shown('[role="tablist"] > [role="tab"][aria-selected="true"]')?.id || ""
   };
 }
 

@@ -32,15 +32,19 @@ const EXTERNAL_DRIVE = { moduleId: "unity", folder: "/Volumes/Games" };
 // Example installations. ScummVM has an older version that is ready and the
 // default version with damaged files, which Runtimes marks Needs repair and
 // the example game's inspector offers to repair; the demo's Refresh lists the
-// same versions. The graphics translators are the versions that
-// docs/runtimes/TRANSLATORS.md names, each described by the Direct3D
-// libraries it places, so a Windows game's Runtime Settings lists them as
-// choices through the launcher's own option lists.
+// same versions. Two Wine versions, an Apple Silicon MetalSharp Wine and an
+// Intel WineCX, each named as the launcher names a Wine by its files, give
+// Runtimes its Wine entry for each processor. The graphics translators are
+// the versions that docs/runtimes/TRANSLATORS.md names, each described by the
+// Direct3D libraries it places, so a Windows game's Runtime Settings lists
+// them as choices through the launcher's own option lists.
 const TEMPLATE = { kind: "template", label: "Sikarugir Template 1.0.24" };
 const ready = version => [{ version, ready: true, status: "ready" }];
 const EXAMPLE_INSTALLS = [
   { managerId: "scummvm", defaultVersion: "2.9.1", installs: [
     { version: "2.9.1", ready: false, status: "damaged" }, { version: "2.9.0", ready: true, status: "ready" }] },
+  { managerId: "metalsharp-wine", defaultVersion: "7.0", installs: ready("7.0"), architecture: "arm64", label: "MetalSharp Wine 7.0 · Wine 11.20" },
+  { managerId: "winecx", defaultVersion: "4.8.1", installs: ready("4.8.1"), architecture: "x64", label: "WineCX 4.8.1 · Wine 11.19" },
   { managerId: "dxvk", defaultVersion: "3.1.1", installs: ready("3.1.1"), translator: { engine: "dxvk", component: "d3d-renderer",
     source: { kind: "builds", label: "MacLauncher DXVK" }, files: ["d3d8.dll", "d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll"] } },
   { managerId: "translator-vkd3d-proton", defaultVersion: "3.1", installs: ready("3.1"), translator: { engine: "vkd3d-proton", component: "d3d12",
@@ -312,10 +316,11 @@ async function main() {
   for (const example of EXAMPLE_INSTALLS) {
     const owner = runtimeManagers[example.managerId];
     if (!owner) throw new Error(`The example installations need the ${example.managerId} runtime manager.`);
-    const label = example.translator && Description.label(translatorChoice(example));
+    const label = example.label || example.translator && Description.label(translatorChoice(example));
     const installs = section => example.installs.map(install => ({ ...install,
       installDir: path.join(profile, "runtimes", owner.id, install.version), source: "download",
-      ...(cpu(section) ? { architecture: cpu(section), variant: `architecture:${cpu(section)}` } : {}) }));
+      ...(example.architecture ? { architecture: example.architecture }
+        : cpu(section) ? { architecture: cpu(section), variant: `architecture:${cpu(section)}` } : {}) }));
     const install = section => ({ ...section, defaultVersion: example.defaultVersion, installed: installs(section),
       ...(label ? { versionLabels: { ...section.versionLabels, [example.defaultVersion]: label } } : {}) });
     runtimeManagers[owner.id] = { ...install(owner), ...(Array.isArray(owner.sections) ? { sections: owner.sections.map(install) } : {}) };
@@ -360,11 +365,20 @@ async function main() {
     catch (error) { settingsActions[key] = { error: String(error?.message || error) }; }
     finally { clearTimeout(timer); }
   }
+  // A game's own choices (an existing bottle or wrapper, a capture device, an
+  // account) list what the runtime finds on the Mac. The example Mac has none,
+  // so each such field offers its own declared choices.
+  function recordGameChoices(moduleId, field, runtimeId) {
+    const key = [moduleId, field.optionsAction, runtimeId].join(":");
+    const answer = settingsActions[key]?.result || {};
+    settingsActions[key] = { result: Array.isArray(field.options) ? { ...answer, [field.optionsKey || field.key]: field.options } : answer };
+  }
   for (const info of modules) {
     for (const [runtimeId, entry] of Object.entries(info.runtime?.entries || {})) {
       const settings = entry?.settings;
       for (const field of settings?.fields || []) {
-        if (field.optionsAction) await record(info.id, field.optionsAction, { runtimeId });
+        if (field.optionsAction && field.gameOnly) recordGameChoices(info.id, field, runtimeId);
+        else if (field.optionsAction) await record(info.id, field.optionsAction, { runtimeId });
         if (field.fileStatusAction) await record(info.id, field.fileStatusAction, { runtimeId, filePath: settings.defaults?.[field.key] ?? "" });
       }
       if (settings?.provider?.readAction) await record(info.id, settings.provider.readAction, { runtimeId });

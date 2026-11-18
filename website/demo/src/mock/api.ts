@@ -93,6 +93,7 @@ const sameBuild = (row: Section, build: Section) => row.version === build.versio
 export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, settingsActions: DemoSettingsActions,
   gameActions: DemoGameActions, components: DemoComponents, picker: DemoPicker): LauncherApi {
   let downloaded = components;
+  const automaticDefaults = new Map<string, string | null>();
   const external = createExternalStores();
   const answered = (answer: Answer | undefined) =>
     !answer ? null : "error" in answer ? Promise.reject(new Error(answer.error)) : resolved(answer.result);
@@ -194,6 +195,12 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
 
   const handlers: Handlers = {
     getState: () => resolved(store.snapshot()),
+    // A launcher window starts from the state it is given at once; the demo's
+    // windows share the page's state.
+    initialState: () => store.snapshot(),
+    initialStateReady: () => resolved(store.snapshot()),
+    utilityShellReady: () => null,
+    utilityWindowDrawn: () => {},
     prioritizeGame: () => resolved(true),
     onState: callback => store.subscribe(callback),
     onActivity: unsubscribe,
@@ -412,9 +419,14 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
                 source: "download", ready: true, status: "ready" }] };
         });
       } else if (action === "setDefault") {
+        // A chosen version is saved; choosing Automatic again returns the
+        // version the manager picks on its own.
         updateManager(managerId, sectionId, section => {
+          const key = `${managerId}:${sectionId}`;
+          if (section.defaultSource !== "saved" && !automaticDefaults.has(key)) automaticDefaults.set(key, section.defaultVersion ?? null);
+          if (!version) return { ...section, defaultVersion: automaticDefaults.get(key) ?? null, defaultSource: "manager" };
           otherCpu = Boolean(choice && section.automaticArchitecture && choice !== section.automaticArchitecture);
-          return { ...section, defaultVersion: version, ...(variant && !variant.startsWith("architecture:") ? { defaultVariant: variant } : {}),
+          return { ...section, defaultVersion: version, defaultSource: "saved", ...(variant && !variant.startsWith("architecture:") ? { defaultVariant: variant } : {}),
             ...(choice ? { defaultArchitecture: choice } : {}) };
         });
       } else if (action === "uninstall" && version) {

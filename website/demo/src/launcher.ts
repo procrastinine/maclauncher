@@ -54,5 +54,10 @@ window.prompt = () => null;
 
 const store = sharedStore();
 window.MacLauncher = { launcher: createLauncherApi(store, data.graphics, data.settingsActions, data.gameActions, data.components, data.picker) };
-followNavigation(store, new URLSearchParams(window.location.search).get("view") || "");
-await import("../../../src/renderer/src/main");
+const view = new URLSearchParams(window.location.search).get("view") || "";
+followNavigation(store, view);
+// Settings, Runtimes and Credits load the launcher's utility window entry, as
+// the app loads utility.html for them; the library, External and app action
+// pickers load its main entry.
+if (["settings", "runtimes", "credits"].includes(view)) await import("./utility-entry");
+else await import("../../../src/renderer/src/main");
