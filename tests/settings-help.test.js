@@ -176,3 +176,13 @@ test('setting explanations describe what a setting does instead of instructing (
     assert.ok(ui(file).includes(after), file + ': ' + after);
   }
 });
+
+// GUI 0945 H6: help paragraphs kept the browser's 1 em margins, a blank line above the first and a double gap between.
+test('help popover paragraphs start at its padding and stand 8 px apart (GUI 0945 H6)', () => {
+  const { computedValue } = require('./helpers/css-cascade.cjs');
+  const css = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  const paragraph = [{ tag: 'div', classes: ['helpPopover'], attributes: { popover: 'auto' } }, { tag: 'p' }];
+  assert.equal(computedValue(css, paragraph, 'margin-top')?.value, '0');
+  assert.equal(computedValue(css, paragraph, 'margin-bottom')?.value, '8px');
+  assert.match(css, /\.helpPopover > p:last-child \{ margin-bottom: 0; \}/);
+});

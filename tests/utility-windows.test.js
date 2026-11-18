@@ -922,7 +922,9 @@ test('the Credits shell reserves the real table layout at the top without a visi
   const html=fs.readFileSync(path.join(__dirname,'../src/renderer/utility.html'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'../src/renderer/src/ui/styles.css'),'utf8');
   const rule=(source,selector)=>{const start=source.indexOf(selector+'{')>=0?source.indexOf(selector+'{'):source.indexOf(selector+' {');assert.ok(start>=0,'Missing '+selector);return source.slice(source.indexOf('{',start)+1,source.indexOf('}',start)).replace(/\s+/g,'');};
-  const body=rule(html,'.shell-body'),realBody=rule(styles,'.launcherViewBody');
+  // The view body names its top padding, which sticky table headers offset by (GUI 0945 S11).
+  const body=rule(html,'.shell-body'),viewBody=rule(styles,'.launcherViewBody'),top=/--view-padding-top:([^;]+);/.exec(viewBody)?.[1];
+  const realBody=viewBody.split('var(--view-padding-top)').join(top);
   assert.ok(body.includes('padding:16px18px')&&realBody.includes('padding:16px18px'),'The table starts at the same content inset');
   const row=rule(html,'.shell-row'),realRow=rule(styles,'.ackRow');
   for(const property of ['grid-template-columns:minmax(180px,1fr)minmax(0,1fr)','gap:12px','padding:5px12px'])assert.ok(row.includes(property)&&realRow.includes(property),property);

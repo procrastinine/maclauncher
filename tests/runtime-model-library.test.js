@@ -90,9 +90,36 @@ test('the model table names a model without a help button, sizes its columns and
  }finally{h.close();}
  const css=require('node:fs').readFileSync(path.join(__dirname,'../src/renderer/src/ui/styles.css'),'utf8');
  for(const [n,w] of [[2,'24%'],[3,'11%'],[4,'22%'],[5,'10%']])assert.ok(css.includes(`.runtimeModelTable th:nth-child(${n}) { width: ${w}; }`),`column ${n}`);
- assert.match(css,/\.runtimeItemGroup \{ width: auto; max-width: 100%; \}/,'the Operation menu is as wide as its choices');
  // The library tables keep their header visible and the Actions heading over its buttons (GUI 0877 R26, S8).
- assert.match(css,/\.filterLibraryTable thead th \{ position: sticky; top: 0;/);
+ assert.match(css,/\.filterLibraryTable thead th \{ position: sticky;/);
  assert.match(css,/\.filterLibraryTable th:last-child \{ text-align: right; \}/);
  assert.match(css,/\.filterLibraryScroll \{ min-width: 0; overflow-x: clip; overflow-y: visible; \}/);
+});
+
+// GUI 0945 R26b: the Operation menu stretched across the pane under its own label column, unlike the Version row below it.
+// R31: a Default for choice sat above the row's baseline, aligned by its radio. S11: the sticky header stopped at the
+// view's top padding, so rows scrolled through the gap above it.
+test('the Operation menu reads as the Version row, Default choices share the row baseline and the header meets the view top (GUI 0945 R26b, R31, S11)',()=>{
+ const {computedValue}=require('./helpers/css-cascade.cjs'),css=require('node:fs').readFileSync(path.join(__dirname,'../src/renderer/src/ui/styles.css'),'utf8');
+ const a={version:'a',operation:'mlx-sr-image',compatibleMethods:['mlx-sr-image'],ready:true,itemGroup:'upscaling'};
+ const section={id:'default',setupPresentation:{mode:'table'},installed:[a],setupActions:[],itemGroups:[{id:'upscaling',label:'Upscaling',operations:['mlx-sr-image']}],
+  catalog:{delivery:'local-files',versions:[],installable:false},defaultSelections:[{id:'mlx-sr-image',label:'DLSS SR image',version:'a',compatibleVersions:['a']}]};
+ const manager={id:'models',label:'Models',ui:{groupId:'graphics',tabLabel:'Graphics'},sections:[section]};
+ const markup=renderToStaticMarkup(React.createElement(RuntimesView,{runtimeManagers:[manager],runtimeManagerId:'models',runtimeSectionId:'default',runtimeUi:{},downloadTasks:[],downloadsOpen:false,
+  setDownloadsOpen(){},setRuntimeManagerId(){},setRuntimeSectionId(){},updateRuntimeUiSection(){},onRuntimeRefresh(){},onRuntimeInstall(){},onRuntimeSetDefault(){},onRuntimeUninstall(){},onCancelDownload(){}}));
+ assert.match(markup,/<div class="runtimeSourceRow runtimeItemGroupRow"><label for="runtime-item-group" class="runtimeSourceName">Operation<\/label><select id="runtime-item-group" class="input inputSmall runtimeVersionSelect runtimeItemGroup"/);
+ const row=[{tag:'div',classes:['runtimeSectionBody']},{tag:'div',classes:['runtimeSourceRow','runtimeItemGroupRow']}],menu=[...row,{tag:'select',classes:['input','inputSmall','runtimeVersionSelect','runtimeItemGroup'],id:'runtime-item-group'}];
+ assert.equal(computedValue(css,row,'display')?.value,'flex','the menu keeps its own width instead of filling a grid cell');
+ assert.equal(computedValue(css,menu,'width')?.value,'auto');
+ const choice=[{tag:'table',classes:['filterLibraryTable','runtimeModelTable']},{tag:'tbody'},{tag:'tr'},{tag:'td'},{tag:'label',classes:['inlineCheck','runtimeModelDefault']}];
+ assert.equal(computedValue(css,choice,'align-items')?.value,'baseline','the choice\'s text gives the cell its baseline');
+ assert.equal(computedValue(css,[...choice,{tag:'input',attributes:{type:'radio'}}],'align-self')?.value,'center','the radio is centred on the text');
+ assert.equal(computedValue(css,choice,'font-size')?.value,'var(--font-sm)');
+ for(const [body,padding] of [[['launcherViewBody','runtimeViewBody'],'12px'],[['launcherViewBody','settingsViewBody'],'16px']]){
+  const view={tag:'div',classes:body};
+  assert.equal(computedValue(css,[view],'--view-padding-top')?.value,padding,body.join(' '));
+  assert.equal(computedValue(css,[view],'padding-top')?.value,'var(--view-padding-top)',body.join(' '));
+  const heading=[view,{tag:'div',classes:['filterLibraryScroll']},{tag:'table',classes:['filterLibraryTable']},{tag:'thead'},{tag:'tr'},{tag:'th'}];
+  assert.equal(computedValue(css,heading,'top')?.value,'calc(-1 * var(--view-padding-top, 0px))','the header row sticks at the view\'s top edge');
+ }
 });

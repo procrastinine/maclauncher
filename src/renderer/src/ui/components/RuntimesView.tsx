@@ -562,8 +562,9 @@ export function RuntimesView({
                   </div>
 
                   <div className="runtimeSectionBody">
-                    {itemGroups.length > 0 && <div className="detailRow detailControlRow"><label htmlFor="runtime-item-group" className="detailLabel">Operation</label>
-                      <select id="runtime-item-group" className="input runtimeItemGroup" value={selectedItemGroup}
+                    {/* The Operation menu is laid out as the Version row below it: a muted label and a small menu sized to its choices. */}
+                    {itemGroups.length > 0 && <div className="runtimeSourceRow runtimeItemGroupRow"><label htmlFor="runtime-item-group" className="runtimeSourceName">Operation</label>
+                      <select id="runtime-item-group" className="input inputSmall runtimeVersionSelect runtimeItemGroup" value={selectedItemGroup}
                         onChange={event=>setItemGroup({section:groupKey,id:event.target.value})}>
                         <option value="all">All operations</option>{itemGroups.map((group:Record<string,any>)=><option key={group.id} value={group.id}>{group.label}</option>)}
                       </select></div>}

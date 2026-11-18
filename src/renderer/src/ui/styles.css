@@ -183,10 +183,11 @@ body {
 .visuallyHidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .launcherViewActions { display: flex; justify-content: flex-end; align-items: center; min-width: 0; }
 .launcherViewBody {
+  --view-padding-top: 16px;
   flex: 1;
   min-width: 0;
   min-height: 0;
-  padding: 16px 18px;
+  padding: var(--view-padding-top) 18px;
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -242,13 +243,15 @@ body {
 .filterLibraryToolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .filterLibraryToolbar .settingsTitle { margin: 0; }
 .filterLibraryError { margin: 0; }
-/* The library tables (shaders, neural models) scroll with the pane, so their header row stays visible at its top. */
+/* The library tables (shaders, neural models) scroll with the pane, so their header row stays visible at its top.
+   Chromium places a sticky box inside the scroller's padding, so the header row moves up by the view's top padding
+   to meet the top edge, leaving no gap for rows to scroll through above it. */
 .filterLibraryScroll { min-width: 0; overflow-x: clip; overflow-y: visible; }
 .filterLibraryTable { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--font-sm); }
 .filterLibraryTable th { text-align: left; color: var(--muted); font-weight: 600; }
 /* Every cell's first line shares the name's baseline. */
 .filterLibraryTable th, .filterLibraryTable td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: baseline; }
-.filterLibraryTable thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); border-bottom: 0; box-shadow: inset 0 -1px 0 var(--border); }
+.filterLibraryTable thead th { position: sticky; top: calc(-1 * var(--view-padding-top, 0px)); z-index: 1; background: var(--panel); border-bottom: 0; box-shadow: inset 0 -1px 0 var(--border); }
 /* The Actions heading sits over its right-aligned buttons. */
 .filterLibraryTable th:last-child { text-align: right; }
 .filterLibraryTable th:first-child, .filterLibraryTable td:first-child { padding-left: 0; }
@@ -270,9 +273,10 @@ body {
 .runtimeModelTable th:nth-child(3) { width: 11%; }
 .runtimeModelTable th:nth-child(4) { width: 22%; }
 .runtimeModelTable th:nth-child(5) { width: 10%; }
-/* The Operation menu is as wide as its choices, as a native pop-up button is. */
-.runtimeItemGroup { width: auto; max-width: 100%; }
-.runtimeModelDefault { display: flex; align-items: flex-start; margin-bottom: 4px; font-size: var(--font-xs); }
+/* A Default for choice reads on the row's baseline, with its radio centred on the text. */
+.runtimeModelTable .runtimeModelDefault { display: flex; align-items: baseline; }
+.runtimeModelTable .runtimeModelDefault > input { align-self: center; }
+.runtimeModelDefault + .runtimeModelDefault { margin-top: 4px; }
 .filterLibraryTable .filterLibraryInput { width: 100%; min-width: 0; font-size: inherit; text-overflow: ellipsis; }
 /* A name reads as text; an editable name shows its field while hovered or edited. */
 .filterLibraryNameControl .filterLibraryInput[readonly], .filterLibraryNameControl .filterLibraryInput:not(:hover):not(:focus) { border-color: transparent; background: transparent; }
@@ -1826,7 +1830,8 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .runtimeViewBody {
-  padding-top: 12px;
+  --view-padding-top: 12px;
+  padding-top: var(--view-padding-top);
 }
 
 .shaderLibraryFamily > .scrollableTabStrip { margin-bottom: 12px; }
@@ -1895,7 +1900,7 @@ input[type="checkbox"], input[type="radio"] {
 .runtimeSetupSelector > .input { min-width: 0; }
 /* Component rows span the panel like installed rows, with their contents inset 12 px. */
 .runtimeComponents { margin: 0; padding: 0; }
-.runtimeComponent { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 1fr); gap: 16px; padding: 8px 12px; align-items: center; }
+.runtimeComponent { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 1fr); gap: 16px; padding: 8px 0 8px 12px; align-items: center; }
 .runtimeComponent + .runtimeComponent { border-top: 1px solid var(--border); }
 .runtimeComponent dt, .runtimeComponent dd { margin: 0; min-width: 0; }
 .runtimeComponent dd { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
@@ -2479,6 +2484,9 @@ select.input:not([multiple]) {
 .helpList dt:not(:first-child) { margin-top: 8px; }
 .helpList dd { margin: 2px 0 0; white-space: pre-line; }
 .helpPopover > :not(.helpList) + .helpList { margin-top: 10px; }
+/* Paragraphs start at the popover's padding and stand 8 px apart. */
+.helpPopover > p { margin: 0 0 8px; }
+.helpPopover > p:last-child { margin-bottom: 0; }
 .helpPopover { position: fixed; inset: auto; margin: 0; max-width: min(30rem, calc(100vw - 32px)); max-height: calc(100vh - 16px); overflow: auto; padding: 12px; background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; font-size: var(--font-sm); font-weight: 400; line-height: 1.5; letter-spacing: normal; text-transform: none; text-align: left; white-space: normal; box-shadow: var(--shadow-drop); }
 
 .settingsTabs, .runtimeTabs { scrollbar-width: none; }

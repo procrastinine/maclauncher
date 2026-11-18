@@ -7,7 +7,7 @@ import { ErrorText } from "./ErrorText";
 import { RefreshIcon } from "../icons";
 import { Select } from "./Select";
 import { isRuntimeIncluded, runtimeInstallVersion, runtimeCatalogPresentation, runtimeCatalogSources, runtimeDistinctLinks, runtimeRefreshFailure, runtimeSourceUrl, runtimeSourceUiKey,
-  runtimeSourceInstalledVersions, runtimeVersionBlocked, translatorVersionBuild } from "./runtime-tabs-model";
+  runtimeSharedInstallReason, runtimeSourceInstalledVersions, runtimeVersionBlocked, translatorVersionBuild } from "./runtime-tabs-model";
 
 type Props = {
   managerId: string;
@@ -170,6 +170,28 @@ export function RuntimeCatalogSources({ managerId, section, ui, busy, variant, d
             onClick={() => onRegister?.()}>{source.registrationLabel || "Register custom…"}</button>
           <span className="runtimeSourceTrail">{linkList}</span>
         </div>
+      </div>;
+      // When one reason keeps every version from installing, such as an application
+      // the builds run through that is not installed, it reads once for the
+      // source, without a menu of unavailable versions or a disabled Install.
+      const sharedReason = runtimeSharedInstallReason(source, versions, installed.map((item: any) => item.version));
+      if (sharedReason) return <div className="runtimeSource" data-runtime-source={source.id} key={source.id}>
+        <div className={`runtimeSourceRow${named ? " named" : ""}`}>
+          {named && <span className="runtimeSourceName">{label}</span>}
+          <span className="dim runtimeAvailability" data-runtime-shared-reason="true">{sharedReason}</span>
+          <span className="runtimeSourceTrail">
+            {linkList}
+            <button type="button" className={`btn small iconOnly runtimeRefresh${refreshing ? " refreshing" : ""}`}
+              disabled={sourceBusy} aria-busy={refreshing} title={refreshLabel} aria-label={refreshLabel}
+              onClick={() => reload(source.supportsLatestOnly ? true : undefined)}>
+              <RefreshIcon />
+            </button>
+          </span>
+        </div>
+        {description && <div className="dim runtimeAvailability">{description}</div>}
+        {refreshing && <div className="dim runtimeActionStatus" role="status">Refreshing versions…</div>}
+        {!refreshing && error && <div className="dim runtimeAvailability">{runtimeRefreshFailure(source.status === "error" ? source : null)}</div>}
+        {!refreshing && <ErrorText error={error} inline className="runtimeAvailability" />}
       </div>;
       // A blocking reason explains the disabled button; otherwise the reason is a requirement note.
       const pendingInstall = Boolean(version) && !isInstalled && !included;

@@ -3,14 +3,17 @@ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {spawn,spawnSync}=require('node:child_process');
 const {setTimeout:delay}=require('node:timers/promises');
 const {denied}=require('./helpers/environment.cjs');
+const {cachedBinary}=require('./helpers/native-binary-cache.cjs');
 
 test('native clipboard helper observes activation and released shortcuts before authenticated IPC', {timeout:20000},async t=>{
  if(process.platform!=='darwin')return t.skip('Requires macOS');
  const pasteboard=denied('pasteboard');if(pasteboard)return t.skip(pasteboard);
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-clipboard-helper-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- const binary=path.join(root,'helper'),state=path.join(root,'input');fs.writeFileSync(state,'0 0');
- const compilation=spawnSync('clang++',['-std=c++20','-fobjc-arc','-mmacosx-version-min=13.0','-Isrc/modules/android/native','tests/fixtures/android-clipboard/HelperProbe.mm','-framework','AppKit','-framework','Carbon','-framework','CoreGraphics','-o',binary],{encoding:'utf8'});
- assert.equal(compilation.status,0,compilation.stderr);
+ const state=path.join(root,'input');fs.writeFileSync(state,'0 0');
+ // The AppKit probe links once per source and flags, outside the deadline, which times its run alone.
+ const native='src/modules/android/native',probe='tests/fixtures/android-clipboard/HelperProbe.mm';
+ const {binary,error}=cachedBinary('android-clipboard-helper-probe','clang++',['-std=c++20','-fobjc-arc','-mmacosx-version-min=13.0','-I'+path.resolve(native),path.resolve(probe),'-framework','AppKit','-framework','Carbon','-framework','CoreGraphics'],[probe,path.join(native,'clipboard-gesture.mm'),path.join(native,'clipboard-gesture.h')]);
+ assert.ok(binary,error);
  const contract=spawnSync(binary,[state+'.sample-contract','sample-contract'],{encoding:'utf8',timeout:3000});
  assert.equal(contract.status,0,`one observer sample keeps its flags/key snapshot when the publisher advances: signal=${contract.signal} error=${contract.error?.code} `+contract.stderr);
  // Keep the real broker API (one executable, no input flags) while supplying a

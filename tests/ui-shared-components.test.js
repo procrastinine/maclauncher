@@ -256,7 +256,11 @@ test('Graphics providers list Lossless Scaling model families beside their compo
   assert.doesNotMatch(header, /background/, 'a component header has no tinted band');
   assert.match(header, /padding: 0 0 6px;/);
   assert.match(css, /\.runtimeComponents \{ margin: 0; padding: 0; \}/);
-  assert.match(css, /\.runtimeComponent \{[^}]*padding: 8px 12px;/);
+  // Component rows keep the Runtimes rows' 12 px left inset and end at the header's right edge (GUI 0945 R32).
+  const { computedValue } = require('./helpers/css-cascade.cjs');
+  const row = [{ tag: 'dl', classes: ['runtimeComponents'] }, { tag: 'div', classes: ['runtimeComponent'] }];
+  assert.equal(computedValue(css, row, 'padding-left')?.value, '12px');
+  assert.equal(computedValue(css, row, 'padding-right')?.value, '0', 'a component row ends at the header edge');
   assert.match(css, /\.runtimeComponentStatus \{[^}]*font-weight: 400;/);
 });
 

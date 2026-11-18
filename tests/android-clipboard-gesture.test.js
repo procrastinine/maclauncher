@@ -4,6 +4,7 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const {spawnSync}=require('node:child_process');
+const {cachedBinary}=require('./helpers/native-binary-cache.cjs');
 
 test('clipboard gestures survive IPC latency once, with exact foreground and process lifetime',t=>{
  if(process.platform!=='darwin')return t.skip('Requires macOS');
@@ -28,8 +29,10 @@ int main(){
 `);
  let result=spawnSync('clang++',['-std=c++20',source,'-o',binary],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
  result=spawnSync(binary,[],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
- const helper=path.join(root,'android-clipboard');
- result=spawnSync('clang++',['-std=c++20','-fobjc-arc','-mmacosx-version-min=13.0',path.resolve('src/modules/android/native/clipboard-gesture.mm'),'-framework','AppKit','-framework','Carbon','-framework','CoreGraphics','-o',helper],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+ // The AppKit helper links once per source and flags, outside the deadline, which times its run alone.
+ const native='src/modules/android/native';
+ const {binary:helper,error}=cachedBinary('android-clipboard','clang++',['-std=c++20','-fobjc-arc','-mmacosx-version-min=13.0',path.resolve(native,'clipboard-gesture.mm'),'-framework','AppKit','-framework','Carbon','-framework','CoreGraphics'],[path.join(native,'clipboard-gesture.mm'),path.join(native,'clipboard-gesture.h')]);
+ assert.ok(helper,error);
  const requests=[{op:'enroll',pid:2147483647},{op:'transfer',id:'1',pid:2147483647,operation:'paste'},{op:'transfer',id:'2',pid:0,operation:'copy',text:'fixture'},{op:'retire',pid:2147483647},{op:'transfer',id:'3',pid:2147483647,operation:'paste'}];
  result=spawnSync(helper,[],{input:requests.map(JSON.stringify).join('\n')+'\n',encoding:'utf8',timeout:3000});assert.equal(result.status,0,`signal=${result.signal} error=${result.error?.code} `+result.stderr);
  assert.deepEqual(result.stdout.trim().split('\n').map(JSON.parse),['1','2','3'].map(id=>({id,allowed:false})));

@@ -34,6 +34,23 @@ export function runtimeVersionBlocked(catalog: Record<string, any> | null | unde
     Array.isArray(catalog?.installableVersions) && !catalog.installableVersions.includes(version);
 }
 
+// One reason that keeps every listed version of a source from installing, such
+// as an application its builds run through that is not installed, read once
+// for the source with the version left out. Null when a version can install or
+// has an installed copy, or when the versions' reasons differ.
+export function runtimeSharedInstallReason(catalog: Record<string, any> | null | undefined, versions: string[], installedVersions: string[] = []) {
+  if (!versions.length || versions.some(version => installedVersions.includes(version))) return null;
+  const reasons = new Set<string>();
+  for (const version of versions) {
+    const reason = text(catalog?.versionRequirements?.[version]?.installReason);
+    if (!reason || !runtimeVersionBlocked(catalog, version)) return null;
+    // The version is left out where it stands as a word of its own, never inside another word.
+    const versionWord = new RegExp(`(^|\\s)${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=[\\s.,;:)]|$)`, "g");
+    reasons.add(sanitizeErrorMessage(reason.replace(versionWord, "$1").replace(/\s{2,}/g, " ").trim()));
+  }
+  return reasons.size === 1 ? [...reasons][0] : null;
+}
+
 export function runtimeMinimumNotice(minimum: unknown) {
   const value = typeof minimum === "string" ? minimum.trim() : "";
   // A release reads as macOS names it: 14.0.0 is macOS 14.0, while 13.5.1 keeps its patch number.
