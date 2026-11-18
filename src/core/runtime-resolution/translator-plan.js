@@ -4,7 +4,6 @@ const UNAVAILABLE_CHOICE_LABEL = 'Saved selection (unavailable)';
 const Roles = require('../../modules/shared/runtime/translator-roles');
 const Pairing = require('./translator-pairing');
 const Policy = require('./graphics-policy');
-const { compareRuntimeVersions } = require('../../modules/shared/runtime/pinned-native-manager');
 const fs = require('node:fs'), path = require('node:path');
 const { fileDigest } = require('../../modules/shared/runtime/verified-identity');
 const VulkanFeatures = require('../../modules/shared/runtime/vulkan-features');
@@ -58,13 +57,13 @@ function selectorBackend(plan, selections, included) {
   return Roles.DIRECT3D_ROLES.every(role => role.id === 'd3d12' || [undefined, '', AUTOMATIC, INHERIT].includes(selections[role.id])) ? backend : null;
 }
 const serves = (description, role) => !description?.apis?.length || description.apis.some(api => role.apis.includes(api));
-// A source choice uses its compatible saved preference, then its newest version.
+// A source choice uses its compatible saved preference, then its newest
+// version, in the order a pairing partner is chosen (Pairing.compareTranslatorChoices).
 const findChoice = (choices, value, usable = () => true) => {
   const id=String(value||'').replace(/^build:/,'');
   if(String(value||'').startsWith('source:')){const source=value.slice(7);
     const builds=choices.filter(item=>item.sourceId===source||item.embedId===source||item.managerId===source||item.engine===source||item.source===source||item.source?.id===source||item.source?.kind===source)
-      .sort((a,b)=>usable(b)-usable(a)||(a.sourceOrder??Number.MAX_SAFE_INTEGER)-(b.sourceOrder??Number.MAX_SAFE_INTEGER)||
-        Number(b.preferred===true)-Number(a.preferred===true)||compareRuntimeVersions(a.version||'',b.version||''));
+      .sort((a,b)=>Pairing.compareTranslatorChoices(a,b,usable));
     return builds[0]||null;}
   return choices.find(item => item.id === id) || choices.find(item => item.aliases?.includes(id)) || null;
 };

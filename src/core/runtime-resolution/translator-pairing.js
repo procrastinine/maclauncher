@@ -4,6 +4,16 @@ const { label } = require('../../modules/shared/runtime/translator-description')
 const { compareRuntimeVersions } = require('../../modules/shared/runtime/pinned-native-manager');
 
 const isDxgi = file => file.format === 'pe' && path.basename(file.path).toLowerCase() === 'dxgi.dll';
+// The one order in which Play takes a translator among its installed copies,
+// for a game's source choice and for a pairing partner alike: a usable copy;
+// declared sources in their declared order (copies of no declared source,
+// such as those other Wines include, follow); within a source its saved
+// default (a manager's own default, or an included copy made the default,
+// both marked preferred); then the newest version. Install order never decides.
+function compareTranslatorChoices(a, b, usable = () => true) {
+  return Number(Boolean(usable(b))) - Number(Boolean(usable(a))) || (a.sourceOrder ?? Number.MAX_SAFE_INTEGER) - (b.sourceOrder ?? Number.MAX_SAFE_INTEGER) ||
+    Number(b.preferred === true) - Number(a.preferred === true) || compareRuntimeVersions(a.version || '', b.version || '');
+}
 const explicit = row => row?.selected && !row.projected && !['automatic', 'inherit'].includes(row.value);
 function dxgiFiles(description) {
   const files = description?.files || [], wanted = new Set(files.filter(isDxgi));
@@ -52,11 +62,9 @@ function resolvePairing(plan, { choices = [], included = [], compatibility = {},
   // An explicit API owns its exact DXGI/Unix closure, not another version of
   // the same engine. Proton and Wine vkd3d have separately supplied DXGI.
   const ownDxgi = family === owner.engine;
-  // Installed providers are ranked by what they are, never by the order they
-  // were installed in: declared sources in their declared order, the newest
-  // version of a source first, then components that other runtimes include.
-  const ranked = [...candidates].sort((a, b) => (a.sourceOrder ?? Infinity) - (b.sourceOrder ?? Infinity) ||
-    compareRuntimeVersions(a.version || '', b.version || '') || String(a.id).localeCompare(String(b.id)));
+  // Installed providers are ranked as a game's source choice ranks them
+  // (compareTranslatorChoices), so a saved default is the partner it can be.
+  const ranked = [...candidates].sort((a, b) => compareTranslatorChoices(a, b) || String(a.id).localeCompare(String(b.id)));
   const ordered = ownDxgi ? [...candidates.filter(item => item.id === owner.id || item.root && item.root === owner.root), owner] :
     [rows.d3d11?.used, rows.d3d10?.used, rows['d3d-renderer'].used, ...ranked];
   // A declared DXGI need admits only that engine from that version on: vkd3d-proton
@@ -132,4 +140,4 @@ function completeSets(description) {
   if (!incomplete.length) return description;
   return { ...description, files: files.filter(file => file.format !== 'pe' || !file.machine || complete.has(file.machine)), incompleteMachines: incomplete };
 }
-module.exports = { resolvePairing, isDxgi, completeMachines, completeSets };
+module.exports = { resolvePairing, compareTranslatorChoices, isDxgi, completeMachines, completeSets };

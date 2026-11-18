@@ -57,3 +57,45 @@ test("with DXVK-macOS 1.10.3 installed beside DXVK 3.1.1, automatic DXGI for vkd
   // MacLauncher DXVK 3.1.1 alone serves.
   assert.equal(dx12Plan(["macos", "maclauncher"]).dxgi, "dxvk:3.1.1-MCLv1");
 });
+
+// Lead, 11-17 8:1x PM (3j): a Make default that Play ignores is a broken button. The pairing partner for vkd3d-proton is
+// ranked as a game's source choice ranks copies (declared source order, then the saved default, then the newest), so a
+// saved DXVK default, a manager's own or an included copy made the default, is the DXGI it pairs with in its source.
+test("vkd3d-proton pairs with the saved DXVK default, a managed version or an included copy, ahead of a newer one", () => {
+  const Wine = require("../src/modules/shared/runtime/wine-translators");
+  const older = ["upstream-dxvk-2.7", dxvk("dxvk-upstream-27", "2.7", { kind: "upstream", id: "upstream", label: "DXVK" })];
+  const proton = ["3.1-MCLv2", { component: "d3d12", engine: "vkd3d-proton", version: "3.1", source: { kind: "builds", label: "MacLauncher Builds" }, form: "native", apis: [],
+    files: pe("vkd3d-proton", ["d3d12", "d3d12core"]) }];
+  const declarations = require("../src/runtime-sources").loadSources();
+  // A manager whose selection follows the saved default, as the real managers' do.
+  const saved = (id, engine, sourceIds, rows) => ({ id, translatorEngine: engine, referenceManagerIds: ["sikarugir"],
+    sources: sourceIds.map(source => declarations.find(item => item.id === source)),
+    getState: () => ({ installed: rows.map(([version]) => ({ version })) }),
+    resolveSelection: (_entry, settings, _userDataDir, { version } = {}) => {
+      const chosen = version || settings?.runtimes?.[id]?.defaultVersion || rows[0][0], row = rows.find(item => item[0] === chosen);
+      return row ? { ready: true, version: chosen, install: { version: chosen, installDir: "/fixture/" + chosen, translator: row[1] } } : { ready: false };
+    } });
+  const managers = [saved("translator-dxvk", "dxvk", ["dxvk-upstream", "dxvk-macos"], [installs.upstream, older]),
+    saved("vkd3d-proton", "vkd3d-proton", ["maclauncher-ngx"], [proton])];
+  const included = (version, wine) => ({ ...dxvk("sikarugir-dxvk-" + version, version, { kind: "sikarugir", runtime: "sikarugir", label: "Sikarugir" }),
+    id: `reference:["sikarugir","/W${wine}","dxvk","/W${wine}/dxvk"]`, sourceId: "sikarugir-dxvk", embedId: "sikarugir-dxvk", included: false,
+    managerId: "sikarugir", runtimeVersion: wine, root: "/fixture/sikarugir-dxvk-" + version });
+  const copy = included("2.6", "10.0"), newer = included("3.1.1", "11.0");
+  // With only DXVK-macOS 1.10.3 managed, which vkd3d-proton cannot present through, the partner is an included copy.
+  const legacy = [saved("translator-dxvk", "dxvk", ["dxvk-upstream", "dxvk-macos"], [installs.macos]), managers[1]];
+  const partner = (settings, extra = [], from = managers) => {
+    const context = { userDataDir: "/state", settings: { runtimes: settings }, runtimeSettings: {} };
+    const choices = [...Wine.managedTranslators(context, "crossover", from, "x86_64"), ...extra];
+    const facts = Wine.inventory(null, "crossover", context, { managers: from, choices, includedInventory: { included: [], warnings: [], layout: { architecture: "x86_64" } } });
+    const input = { runtime: "crossover", choices: facts.choices, included: [], environment: null, selections: {}, layout: { architecture: "x86_64" } };
+    const plan = Wine.optionsPlan(input, { runtimeSettings: { translatorD3D12: "vkd3d-proton:3.1-MCLv2" } });
+    assert.equal(plan.components.d3d12.used?.id, "vkd3d-proton:3.1-MCLv2");
+    return plan.dxgiBinding?.description?.id || null;
+  };
+  assert.equal(partner({}), "translator-dxvk:upstream-dxvk-3.1.1", "with no saved default the newest DXVK serves");
+  assert.equal(partner({ "translator-dxvk": { defaultVersion: "upstream-dxvk-2.7" } }), "translator-dxvk:upstream-dxvk-2.7", "the saved managed default is the partner");
+  assert.equal(partner({ "translator-dxvk": { referenceDefault: copy.id } }, [copy]), "translator-dxvk:upstream-dxvk-3.1.1",
+    "an included copy follows the declared sources, as in a game's source choice");
+  assert.equal(partner({}, [copy, newer], legacy), newer.id, "among included copies the newest serves");
+  assert.equal(partner({ "translator-dxvk": { referenceDefault: copy.id } }, [copy, newer], legacy), copy.id, "an included copy made the default is the partner");
+});
