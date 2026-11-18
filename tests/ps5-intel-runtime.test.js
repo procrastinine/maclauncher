@@ -47,6 +47,31 @@ test('AnyPS5 dual-CPU catalogs choose the shared native build and enforce the pa
     assert.equal(ready.install.manifest.gameArchitecture, 'x86_64');
     offline = true; assert.equal(create('26.0').resolveSelection({}, {}, userDataDir).ready, true);
     assert.equal(create('25.9').resolveSelection({}, {}, userDataDir).ready, false); offline = false;
+    if (architecture === 'arm64') {
+      const version = ready.version;
+      const {DownloadManager} = require('../src/modules/shared/runtime/download-manager');
+      await manager.installRuntime({userDataDir, version, architecture: 'x64', downloads: new DownloadManager()});
+      const installed = manager.getState({userDataDir}).installed.filter(row => row.version === version);
+      assert.equal(installed.filter(row => row.ready).length, 2, 'both builds of this version are installed');
+      const bareVersion = {runtimeData: {anyps5: {version}}};
+      const gameBuild = {runtimeData: {anyps5: {version, architecture: 'x64'}}};
+      const defaultBuild = {runtimes: {anyps5: {defaultVersion: version, defaultArchitecture: 'x64'}}};
+      const choices = [
+        ['explicit build', null, {}, {version, architecture: 'x64'}, 'x64'],
+        ['saved game build', gameBuild, {}, {}, 'x64'],
+        ['saved default build', null, defaultBuild, {}, 'x64'],
+        ['bare version', bareVersion, {}, {}, 'arm64'],
+      ];
+      offline = true;
+      for (const [name, entry, settings, options, expected] of choices) await t.test(name, () => {
+        const result = manager.resolveSelection(entry, settings, userDataDir, options);
+        assert.equal(result.ready, true, result.reason);
+        assert.equal(result.version, version);
+        assert.equal(result.install.manifest.arch, expected);
+        assert.equal(result.executionArchitecture, 'x64', 'both packages run the converted Intel game');
+      });
+      offline = false;
+    }
   });
 });
 
