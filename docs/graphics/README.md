@@ -227,7 +227,7 @@ Which history controls appear depends on the model's operation, and image-only r
 Model packages are managed in Runtimes → Effects → **Neural models**. Its table lists the supported download sources and compatible imports with their input and output category, scale, installed state and a help button. Installed models come first, and while any model is installed, the sources not yet installed are listed under **More downloads**.
 
 - **Install** and **Download model…** download a listed model.
-- **Default for** makes an installed model the preferred one for a named operation. Setting a default for an image model leaves the scene-reconstruction and frame-generation preferences unchanged.
+- **Default for** names the operations an installed model serves. **Make default** beside an operation makes the model the preferred one for it, and the current preference reads **Default**. Setting a default for an image model leaves the scene-reconstruction and frame-generation preferences unchanged.
 - **Use existing package…** uses a prepared package from its current location.
 - **Import model…** copies a package into MacLauncher's model storage, or converts compatible raw weights.
 

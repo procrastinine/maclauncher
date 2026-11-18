@@ -75,7 +75,7 @@ Icon sizes:
 
 - Every icon button, small or regular, draws its glyph in one box whose size is set by the `:root` token `--icon-size`. Because icon-only buttons have no text padding, the glyph keeps that size.
 - Button sizes come from the `--icon-button-size*` tokens and the `.btn.iconOnly svg` rule, although icon buttons in the inspector take their button size from the `.detailActions` override.
-- The shared SVGs in `src/renderer/src/ui/icons.tsx` default to `1em` and are centered on 12,12 in their 24-unit view box.
+- The shared SVGs in `src/renderer/src/ui/icons.tsx` default to `1em` and are centered in their view box, most of them on 12,12 in a 24-unit box. The download icon, an arrow onto a tray, is drawn on an 18-unit box with one 1.5-unit stroke, the set's weight at 18 px, so its straight edges fall on whole device pixels at 2× and every edge is a whole pixel at 36 px, the size of the store windows' empty-state icon.
 - Reload and Refresh actions use `RefreshIcon` with `iconOnly`, and keep the full action name in both `title` and `aria-label`.
 
 ## Components and source files
