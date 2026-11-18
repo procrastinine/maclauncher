@@ -267,12 +267,11 @@ Runtime status reads the same saved preferences as Play, including the versions 
 Some downloads belong to no runtime manager. **Runtimes → Tools → Downloaded files**, the last subtab of the Tools entry, manages all of them. Play and the inspector never open this tab, because each file downloads by itself, after consent, when something needs it. The tab opens with the list it last read and then reads the files again in a backend worker; deleting waits until that read finishes. It covers:
 
 - shared assets, such as the fallback font of NScripter games and the MIDI soundfont and RPG Maker run-time packages that MKXP-Z uses
-- the GOG and Epic Games Store download helpers
-- the Android system image that AIM attaches and the microG packages of the shared Google account service
+- the microG packages of the shared Google account service
 - the shared libraries that installed runtime packages declare
 - caches that MacLauncher fills, such as the Steam game version lists, the F-Droid and IzzyOnDroid indexes, translator descriptions and neural model source archives
 
-The Steam client bridge and Valve's Steam client files are not part of this tab; they are handled in the bridge's own **Runtimes** entry. Games downloaded through the store windows are handled in the library.
+The Steam client bridge and Valve's Steam client files are not part of this tab; they are handled in the bridge's own **Runtimes** entry. The GOG and Epic Games Store download helpers (GOGdl and Legendary), the Android system images and the Android image reader have their own subtabs in **Tools**. Games downloaded through the store windows are handled in the library.
 
 The tab lists installed files only, largest first. A download whose versions come from a catalog, such as the store download helpers and microG, has an icon-only **Refresh** control on its first row. Refresh reads the catalog and names the newest release, which the next store download or Google sign-in installs, and downloads nothing else. Each row names the file and its version, the CPU architecture in the terms of [Processor builds](#processor-builds), the size on disk, the source (the host it was downloaded from, **Added manually**, or **Created by MacLauncher** for a cache) and the runtimes or games that use it, by their names in **Runtimes**. The tooltip of the name shows the file's content checksum. With nothing installed, the tab reads **No downloaded files.** The list reads only local files, and the reload button reads them again.
 
