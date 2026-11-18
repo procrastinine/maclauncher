@@ -557,6 +557,12 @@ test('the Settings sidebar lists the launcher\'s own sections, then every module
   const at = label => shown.indexOf(label);
   assert.ok(at('AI5WIN') < at('Mac') && at('Flash') < at('FVP') && at('Ikemen GO') < at('Minori') && at('Minori') < at('Nintendo Switch'),
     'Mac follows AI5WIN, FVP follows Flash, Ikemen GO precedes Minori');
+  // GUI 0977, owner 11-17 8:32 PM: the window-capture game type read "Window" beside Windows (Wine). It is named
+  // "Window capture" wherever it shows; its id, game type and runtime ids stay "window" and "capture".
+  const capture = modules.find(mod => mod.id === 'window');
+  assert.deepEqual([capture.label, capture.shortLabel, capture.gameType, capture.runtime.default], ['Window capture', 'Window capture', 'window', 'capture']);
+  assert.ok(labels.includes('Window capture') && !labels.includes('Window'), 'the sidebar names Window capture');
+  assert.equal(at('Window capture') + 1, at('Windows'));
 });
 test('every game type offers its playable runtimes as the default and gives each offered runtime a settings tab', () => {
   const { SettingsView, defaultRuntimeChoices } = components;

@@ -1,7 +1,7 @@
 {
   "id": "window",
-  "label": "Window",
-  "shortLabel": "Window",
+  "label": "Window capture",
+  "shortLabel": "Window capture",
   "family": "native",
   "gameType": "window",
   "icon": {
