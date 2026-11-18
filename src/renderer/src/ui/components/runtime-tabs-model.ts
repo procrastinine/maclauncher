@@ -1,7 +1,7 @@
 import type { RuntimeManagerState, RuntimeRefreshOptions } from "../types";
 import { sanitizeErrorMessage } from "../../../../core/runtime-errors.mjs";
 import packageInfo from "../../../../../package.json";
-import { isPrereleaseVersion } from "../ui-helpers";
+import { compareDisplayLabels, isPrereleaseVersion } from "../ui-helpers";
 import { cpuId, cpuLabel } from "../../../../core/cpu-labels.mjs";
 
 // Shared by initial UI state and the source/import controls. An explicit
@@ -206,7 +206,7 @@ export function groupRuntimeManagers(managers: RuntimeManagerState[], categories
   };
   const alphabetical = (group: RuntimeTabGroup) => categories[rank(group)]?.sort === "label";
   return [...groups.values()].sort((a, b) => Number(a.position === "last") - Number(b.position === "last") ||
-    rank(a) - rank(b) || (alphabetical(a) ? 0 : a.order - b.order) || a.label.localeCompare(b.label));
+    rank(a) - rank(b) || (alphabetical(a) ? 0 : a.order - b.order) || compareDisplayLabels(a.label, b.label) || a.id.localeCompare(b.id));
 }
 
 // The groups whose managers name one host group (Wine) become one sidebar entry
@@ -358,12 +358,18 @@ export function resolveRuntimeTabSelection(groups: RuntimeTabGroup[], managerId:
 // installed row stays shown as the selection, marked, and cannot be chosen again.
 export type RuntimeDefaultChoice = { value: string; label: string; version: string | null; variant?: string; architecture?: string; disabled?: boolean };
 export type RuntimeDefaultRow = { install: Record<string, any>; label: string; isDefault: boolean };
+/** A row can be a default when it is ready and does not decline one. A copy
+ * that another runtime includes can be one only where its manager marks it
+ * selectable (supportsDefault: true): Play then picks it among its source's copies. */
+export function runtimeRowDefaultable(install: Record<string, any> | null | undefined): boolean {
+  return Boolean(install) && install!.ready !== false && install!.supportsDefault !== false && (!install!.reference || install!.supportsDefault === true);
+}
 export function runtimeDefaultMenu(section: Record<string, any> | null | undefined, rows: RuntimeDefaultRow[],
   versionTag: (version: string) => string = version => version): { choices: RuntimeDefaultChoice[]; selected: string } {
   const saved = section?.defaultSource === "saved";
   const defaultVersion = text(section?.defaultVersion);
   const current = rows.find(row => row.isDefault);
-  const usable = rows.filter(({ install }) => install.ready !== false && !install.reference && install.supportsDefault !== false);
+  const usable = rows.filter(({ install }) => runtimeRowDefaultable(install));
   const value = (install: Record<string, any>) => JSON.stringify([install.version, text(install.variant), text(install.architecture)]);
   const labels = new Map<string, number>();
   for (const row of usable) labels.set(row.label, (labels.get(row.label) || 0) + 1);
@@ -389,11 +395,11 @@ export function runtimeDefaultMenu(section: Record<string, any> | null | undefin
 
 /** A row's Make default choice: every usable installed row that is not the
  * current default, with the variant and CPU the Default menu passes. None where
- * the runtime has no default, keeps a default per operation, or for a reference
- * or a row that is not ready. */
+ * the runtime has no default, keeps a default per operation, or for a row that
+ * cannot be a default (runtimeRowDefaultable). */
 export function runtimeMakeDefaultChoice(row: RuntimeDefaultRow, { supportsDefault = true, perOperation = false }: { supportsDefault?: boolean; perOperation?: boolean } = {}): RuntimeDefaultChoice | null {
   const { install } = row;
-  if (!supportsDefault || perOperation || row.isDefault || install.ready === false || install.reference || install.supportsDefault === false || !text(install.version)) return null;
+  if (!supportsDefault || perOperation || row.isDefault || !runtimeRowDefaultable(install) || !text(install.version)) return null;
   return { value: JSON.stringify([install.version, text(install.variant), text(install.architecture)]), version: install.version, label: row.label,
     ...(text(install.variant) ? { variant: text(install.variant) } : {}),
     ...(text(install.architecture) ? { architecture: text(install.architecture) } : {}) };
@@ -407,7 +413,7 @@ export type RuntimeOperationDefault = { id: string; label: string; isDefault: bo
 export function runtimeOperationDefaults(install: Record<string, any> | null | undefined, selections: unknown): RuntimeOperationDefault[] {
   const version = text(install?.version);
   if (!install || !version || !Array.isArray(selections)) return [];
-  const usable = install.ready !== false && !install.reference && install.supportsDefault !== false;
+  const usable = runtimeRowDefaultable(install);
   return selections.filter((selection: any) => selection && (Array.isArray(selection.compatibleVersions)
     ? selection.compatibleVersions.includes(version) : selection.version === version))
     .map((selection: any) => ({ id: String(selection.id), label: text(selection.label) || String(selection.id),

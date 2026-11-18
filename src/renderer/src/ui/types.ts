@@ -77,7 +77,6 @@ export type ModuleEntrySelector = {
 };
 
 export type ModuleUi = {
-  settingsOrder?: number;
   accounts?: ModuleAccountProvider;
   accountProviders?: ModuleAccountProvider[];
   detection?: { showVersion?: boolean };

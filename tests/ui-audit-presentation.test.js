@@ -539,6 +539,25 @@ test('Settings lists every game type once and no runtime provider beside the gam
     assert.ok(!(mod.runtime?.supported || []).length || (mod.runtime.supported).some(id => !served.has(id)), `${mod.id} repeats runtime tabs of other sections`);
   assert.equal(ids.size, sections.length);
 });
+// Lead, 11-17 8:03 PM, from docs-pass's demo: Mac came before AI5WIN, FVP before Flash, and Ikemen GO sat between Minori
+// and Nintendo Switch. The launcher's own sections stay first; every module section follows by the label it shows,
+// ignoring case, with numbers in numeric order.
+test('the Settings sidebar lists the launcher\'s own sections, then every module by the label it shows', () => {
+  const { SettingsView, settingsSectionModules } = components;
+  const modules = require('../src/modules/registry').listModules();
+  const markup = renderToStaticMarkup(React.createElement(SettingsView, {
+    state: { modules, moduleSettings: {}, runtimeDefaults: {}, recents: [] }, sectionId: 'module:ai5' }));
+  const labels = [...markup.matchAll(/class="launcherSidebarItem[^"]*"[^>]*>([^<]*)<\/button>/g)].map(match => match[1]
+    .replace(/&amp;/g, '&').replace(/&#x27;/g, "'"));
+  assert.deepEqual(labels.slice(0, 2), ['Launcher', 'Graphics']);
+  const shown = settingsSectionModules(modules).map(mod => mod.shortLabel || mod.label || mod.id);
+  assert.deepEqual(labels.slice(2), shown, 'the sidebar shows each module section in that order');
+  const sorted = shown.slice().sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
+  assert.deepEqual(shown, sorted);
+  const at = label => shown.indexOf(label);
+  assert.ok(at('AI5WIN') < at('Mac') && at('Flash') < at('FVP') && at('Ikemen GO') < at('Minori') && at('Minori') < at('Nintendo Switch'),
+    'Mac follows AI5WIN, FVP follows Flash, Ikemen GO precedes Minori');
+});
 test('every game type offers its playable runtimes as the default and gives each offered runtime a settings tab', () => {
   const { SettingsView, defaultRuntimeChoices } = components;
   const modules = require('../src/modules/registry').listModules();

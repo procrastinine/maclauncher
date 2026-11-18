@@ -512,19 +512,16 @@ export function settingsSectionModules(modules: ModuleManifest[]) {
     !(mod.runtime?.supported || []).every(id => served.has(id))));
 }
 
+/** The order of every list of modules or engines: by the label shown, ignoring case, with numbers in numeric order. */
+export function compareDisplayLabels(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
+}
+
+/** Settings lists module sections by the label its sidebar shows (the short label), after the launcher's own sections. */
 export function sortModulesForSettings(modules: ModuleManifest[]) {
   const list = Array.isArray(modules) ? modules.slice() : [];
-  list.sort((a, b) => {
-    const priority = (module: ModuleManifest) => Number.isFinite(module?.ui?.settingsOrder) ? module.ui!.settingsOrder! : 0;
-    const byPriority = priority(a) - priority(b);
-    if (byPriority) return byPriority;
-    const la = String(a?.label || a?.shortLabel || a?.id || "");
-    const lb = String(b?.label || b?.shortLabel || b?.id || "");
-    const byLabel = la.localeCompare(lb, undefined, { sensitivity: "base", numeric: true });
-    if (byLabel !== 0) return byLabel;
-    return String(a?.id || "").localeCompare(String(b?.id || ""));
-  });
-  return list;
+  const shown = (module: ModuleManifest) => String(module?.shortLabel || module?.label || module?.id || "");
+  return list.sort((a, b) => compareDisplayLabels(shown(a), shown(b)) || String(a?.id || "").localeCompare(String(b?.id || "")));
 }
 
 export function formatIconFallbackText(entry: RecentGame, moduleInfo: ModuleManifest | null) {

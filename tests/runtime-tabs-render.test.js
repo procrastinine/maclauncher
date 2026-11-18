@@ -1063,7 +1063,9 @@ test('included translator references use host records and shared release facts w
   assert.ok(Wine.includedTranslators(templateHosts[0],'sikarugir',{engine:'dxmt'}).included.every(row=>row.engine==='dxmt'));
   assert.equal(state.references.length,4);assert.deepEqual(state.installed,before.installed);assert.deepEqual(state.catalog,before.catalog);assert.equal(state.defaultVersion,before.defaultVersion);
   assert.equal(new Set(state.references.map(row=>row.version)).size,4);
-  assert.ok(state.references.every(row=>row.included&&row.readOnly&&row.removable===false&&row.supportsDefault===false));
+  assert.ok(state.references.every(row=>row.included&&row.readOnly&&row.removable===false));
+  // A copy of a declared embedded source (Sikarugir's DXMT) can be a default; CrossOver keeps its copies to itself.
+  assert.ok(state.references.every(row=>row.supportsDefault===(row.source.runtime==='sikarugir')));
   assert.ok(state.references.every(row=>row.platformKey==='x86_64'&&row.architectures.includes('x86_64')));
   assert.ok(state.references.every(row=>row.apis.includes('Direct3D 11')));
   assert.ok(state.references.some(row=>row.versionLabel==='DXMT 0.80 · CrossOver 26.3 · Alpha'&&row.detail==='Component 0.80'));
@@ -1105,18 +1107,25 @@ test('included translator references use host records and shared release facts w
   assert.ok(codecState.references.every(row=>row.readOnly&&row.included&&row.versionLabel.includes('GStreamer')&&!/GStreamer (?:1\.0|26\.3)/.test(row.versionLabel)));
   const codecMarkup=render([{...codecState,id:codecs.id,label:codecs.label,ui:codecs.ui}],codecs.id,{onRuntimeRegister(){assert.fail('No registration during render');}});
   assert.match(codecMarkup,/GStreamer macOS runtime/);assert.match(codecMarkup,/GStreamer downloads/);assert.match(codecMarkup,/Register custom/);assert.match(codecMarkup,/Alpha\.app/);
-  assert.doesNotMatch(codecMarkup,/No downloadable|saveRowActions/);
+  assert.doesNotMatch(codecMarkup,/No downloadable/);
+  // Sikarugir's GStreamer copies offer Make default and nothing else; CrossOver's offer nothing.
+  assert.equal(codecState.references.filter(row=>row.supportsDefault).length,2);
+  assert.equal((codecMarkup.match(/>Make default<\/button>/g)||[]).length,2);
+  assert.doesNotMatch(codecMarkup,/btn small iconOnly danger|>Install<|>Repair</);
   assert.equal(dxmt.resolveSelection(null,null,userDataDir,{version:state.references[0].version}).install,null,'references are never managed choices');
   assert.deepEqual(require('../src/modules/shared/runtime/wine-translators').managedTranslators({userDataDir,settings:{}},'crossover',[dxmt,dxvk,metal,molten]),[],'per-game managed choices remain unchanged');
   const snapshot=structuredClone(state);
   const markup=render([{...state,id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id);
   assert.match(markup,/>Included<\/span>/);assert.match(markup,/Alpha\.app/);assert.match(markup,/Template 1\.0\.27/);assert.match(markup,/x86_64/);
   assert.match(markup,/class="dim">Direct3D 11<\/div>/);
-  assert.doesNotMatch(markup,/saveRowActions|Set default|aria-label="(?:Uninstall|Remove|Delete)|>Reinstall<|>Repair<|<option[^>]*value="reference:/);
-  // Even an attached action/default marker cannot turn a reference into a control.
-  const row=section.references[0];row.actions=[{id:'repair',label:'Repair reference'}];section.defaultVersion=row.version;
+  assert.doesNotMatch(markup,/Set default|aria-label="(?:Uninstall|Remove|Delete)|>Reinstall<|>Repair<|<option[^>]*value="reference:|btn small iconOnly danger/);
+  // The two Sikarugir copies offer Make default and nothing else; the CrossOver copies offer nothing.
+  assert.equal((markup.match(/>Make default<\/button>/g)||[]).length,2);
+  // An attached action cannot turn a reference into another control; a default marker shows the Default badge.
+  const row=section.references.find(item=>item.supportsDefault);row.actions=[{id:'repair',label:'Repair reference'}];section.defaultVersion=row.version;
   const protectedMarkup=render([{...state,id:dxmt.id,label:dxmt.label,ui:dxmt.ui}],dxmt.id,{onRuntimeInstalledAction(){assert.fail('No reference action');}});
-  assert.doesNotMatch(protectedMarkup,/Repair reference|saveRowActions|Set default/);
+  assert.doesNotMatch(protectedMarkup,/Repair reference|Set default|btn small iconOnly danger/);
+  assert.equal((protectedMarkup.match(/>Make default<\/button>/g)||[]).length,1);
   assert.deepEqual(fs.readFileSync(CrossOver.__test.registryPath(userDataDir)),registration);
   assert.equal(fs.existsSync(path.join(userDataDir,'runtimes',dxmt.id)),false,'no managed receipt or payload created');
   assert.deepEqual(snapshot.installed,[]);assert.deepEqual(snapshot.catalog,before.catalog);

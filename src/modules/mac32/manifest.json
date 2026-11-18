@@ -3,9 +3,6 @@
   "label": "32-bit Mac",
   "shortLabel": "32-bit Mac",
   "family": "native",
-  "ui": {
-    "settingsOrder": 9999
-  },
   "runtime": {
     "default": "mac32",
     "supported": [

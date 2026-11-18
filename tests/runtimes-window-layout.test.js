@@ -167,6 +167,50 @@ test('rows of a runtime with a default per operation offer Make default for each
   assert.deepEqual(ui.runtimeOperationDefaults({ version: '1.0', reference: true }, selections).map(row => row.makeDefault), [false, false]);
 });
 
+// Lead, 11-17 7:4x PM, after the owner still saw rows without Make default: a copy another Wine includes is a default
+// wherever Play chooses among its source's copies. Its manager marks it supportsDefault: true; copies the runtime keeps to
+// itself (CrossOver) and copies of no declared source stay without one.
+test('an included copy its manager marks selectable offers Make default and can be the default', () => {
+  const installed = [{ version: '2.0', ready: true }];
+  const selectable = { version: 'reference:["sikarugir","/W","dxvk","/W/dxvk"]', versionLabel: 'DXVK 2.3 · Sikarugir', ready: true, included: true,
+    readOnly: true, removable: false, supportsDefault: true, reference: { managerId: 'sikarugir', version: '10.0', path: '/W' } };
+  const own = { ...selectable, version: 'reference:["crossover","/C","dxvk","/C/dxvk"]', versionLabel: 'DXVK 2.5 · CrossOver', supportsDefault: false,
+    reference: { managerId: 'crossover', version: '26', path: '/C' } };
+  const unmarked = { ...selectable, version: 'reference:["winecx","/X","dxvk","/X/dxvk"]', versionLabel: 'DXVK 2.4 · WineCX' };
+  delete unmarked.supportsDefault;
+  const calls = [], overrides = { onRuntimeSetDefault: (...args) => calls.push(args) };
+  const harness = componentHarness(ui.RuntimesView, props([runtime(installed, { defaultVersion: '2.0', defaultSource: 'manager',
+    references: [selectable, own, unmarked] })], 'fixture', overrides));
+  try {
+    const tree = harness.render();
+    const buttons = treeElements(tree).filter(node => node.type === 'button' && node.props.children === 'Make default');
+    assert.equal(buttons.length, 1, 'only the selectable Sikarugir copy: v2.0 is the default, CrossOver keeps its copy, the WineCX copy is unmarked');
+    buttons[0].props.onClick();
+    assert.deepEqual(calls, [['fixture', 'default', selectable.version, undefined, undefined, undefined]]);
+  } finally { harness.close(); }
+  const saved = render([runtime(installed, { defaultVersion: selectable.version, defaultSource: 'saved', references: [selectable, own] })], 'fixture');
+  assert.doesNotMatch(saved, /runtimeDefaultMissing/, 'an included copy that is the default is present');
+  assert.equal((saved.match(/>Default<\/span>/g) || []).length, 1, 'the copy carries the Default badge');
+  assert.equal((saved.match(/>Make default<\/button>/g) || []).length, 1, 'v2.0 now offers Make default');
+  assert.equal(ui.runtimeRowDefaultable(selectable), true);
+  assert.equal(ui.runtimeRowDefaultable(own), false);
+  assert.equal(ui.runtimeRowDefaultable(unmarked), false);
+  const menu = ui.runtimeDefaultMenu({ defaultVersion: selectable.version, defaultSource: 'saved' },
+    [{ install: installed[0], label: 'v2.0', isDefault: false }, { install: selectable, label: 'DXVK 2.3 · Sikarugir', isDefault: true },
+      { install: own, label: 'DXVK 2.5 · CrossOver', isDefault: false }]);
+  assert.deepEqual(menu.choices.map(choice => choice.label), ['Automatic', 'v2.0', 'DXVK 2.3 · Sikarugir']);
+  assert.equal(menu.selected, JSON.stringify([selectable.version, '', '']));
+});
+
+// Lead, 11-17 8:03 PM: every module list uses the Settings sidebar's order, by the label shown, ignoring case, with
+// numbers in numeric order.
+test('the Game engines list sorts by the label shown, ignoring case, with numbers in numeric order', () => {
+  const engine = (id, label) => ({ id, label, ui: { tabLabel: label, category: 'engines', management: 'managed' }, sections: [{ id: 'default', installed: [] }] });
+  const groups = ui.groupRuntimeManagers([engine('b', 'Engine 10'), engine('a', 'engine 9'), engine('c', 'Alpha'), engine('d', 'beta')],
+    [{ id: 'engines', label: 'Game engines', sort: 'label', default: true }]);
+  assert.deepEqual(groups.map(group => group.label), ['Alpha', 'beta', 'engine 9', 'Engine 10']);
+});
+
 test('choosing in the Default menu passes the version, variant and CPU; Automatic clears the saved default', () => {
   const rows = [{ install: { version: '1.0', variant: 'mono', architecture: 'x64', ready: true }, label: 'v1.0 · Intel · Mono', isDefault: true },
     { install: { version: '1.0', variant: 'mono', architecture: 'arm64', ready: true }, label: 'v1.0 · Mono', isDefault: false },

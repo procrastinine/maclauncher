@@ -12,7 +12,7 @@ import {
   sortInstalled
 } from "../ui-helpers";
 import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
-import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs, runtimeChoiceForQuery, runtimeTabChoice, runtimeRequestPending, runtimeDefaultMenu, runtimeMakeDefaultChoice, runtimeOperationDefaults, runtimeDistinctLinks,
+import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs, runtimeChoiceForQuery, runtimeTabChoice, runtimeRequestPending, runtimeDefaultMenu, runtimeMakeDefaultChoice, runtimeOperationDefaults, runtimeRowDefaultable, runtimeDistinctLinks,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
   runtimeRemovalPresentation, runtimeMinimumDetail, runtimeIncludedParts, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
   managedRuntimeSections, runtimePendingAction, runtimeRefreshPayload, runtimeSourceUiKey,
@@ -343,7 +343,7 @@ export function RuntimesView({
     const otherBuild = !translatorBuild && activeRuntimeManager?.ui?.cpuBuildLabels !== false && installBuild && installBuild !== "universal" &&
       automaticArchitecture && installBuild !== automaticArchitecture ? installBuild : "";
     const defaultFor: string[] = defaultSelections?.filter((row: Record<string, any>) => row.version === inst.version).map((row: Record<string, any>) => row.label) || [];
-    const isDefault = activeRuntimeSupportsDefault && !inst.reference && (
+    const isDefault = activeRuntimeSupportsDefault && (!inst.reference || runtimeRowDefaultable(inst)) && (
       defaultSelections ? defaultFor.length > 0 : inst.version === activeRuntimeSection.defaultVersion &&
       // A version installed only for another CPU, such as an Intel-only
       // build on Apple Silicon, is still the default.
@@ -362,10 +362,12 @@ export function RuntimesView({
   const defaultMissing = Boolean(activeRuntimeSection && activeRuntimeSupportsDefault && !defaultSelections && activeRuntimeSection.defaultVersion &&
     !managementPresentation.local &&
     ![activeRuntimeSection, ...(Array.isArray(activeRuntimeManager?.sections) ? activeRuntimeManager!.sections : [])]
-      .some((section: any) => (Array.isArray(section?.installed) ? section.installed : []).some((inst: any) => inst.version === activeRuntimeSection.defaultVersion)));
+      // A default can also be a copy that another runtime includes.
+      .some((section: any) => ["installed", "references"].flatMap(key => Array.isArray(section?.[key]) ? section[key] : [])
+        .some((inst: any) => inst.version === activeRuntimeSection.defaultVersion)));
   // Per-operation defaults keep their table's own choices.
   const defaultMenu = activeRuntimeSection && activeRuntimeSupportsDefault && !defaultSelections &&
-    (installedRows.some(row => row.install.ready !== false && !row.install.reference && row.install.supportsDefault !== false) || activeRuntimeSection.defaultSource === "saved")
+    (installedRows.some(row => runtimeRowDefaultable(row.install)) || activeRuntimeSection.defaultSource === "saved")
     // The menu lists versions newest first, whatever order the list below uses.
     ? runtimeDefaultMenu(activeRuntimeSection, sortInstalled(activeRuntimeInstalledSorted, "newest")
       .map(install => installedRows.find(row => row.install === install)!), activeRuntimeVersionTag) : null;
@@ -730,7 +732,7 @@ export function RuntimesView({
                                   <React.Fragment key={index}>{index ? " · " : ""}<span className="runtimeIncludedPart">{part}</span></React.Fragment>)}</div>}
                               {inst.error && <div className="dim">{formatUserError(inst.error)}</div>}
                             </div>
-                            {!inst.reference && <div className="saveRowActions">
+                            {(!inst.reference || makeDefault) && <div className="saveRowActions">
                               {makeDefault && <button type="button" className="btn small" disabled={runtimeBusy} title={`Make ${makeDefault.label} the default`}
                                 onClick={() => onRuntimeSetDefault(activeRuntimeManager.id, activeRuntimeSection.id, makeDefault.version,
                                   makeDefault.variant, undefined, makeDefault.architecture)}>Make default</button>}
@@ -738,12 +740,13 @@ export function RuntimesView({
                                 title={`Make ${label} the default for ${scope.label}`}
                                 onClick={() => onRuntimeSetDefault(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, inst.variant, scope.id)}>
                                 Make default for {scope.label}</button>)}
-                              {onRuntimeInstalledAction && (inst.actions || []).filter((action: any) => action.available !== false).map((action: any) =>
+                              {/* An included copy offers Make default only; it is never repaired or removed here. */}
+                              {onRuntimeInstalledAction && !inst.reference && (inst.actions || []).filter((action: any) => action.available !== false).map((action: any) =>
                                 <button className="btn small" key={action.id} disabled={runtimeBusy}
                                   onClick={() => onRuntimeInstalledAction(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, action.id, inst.architecture)}>
                                   {action.label}
                                 </button>)}
-                              {inst.removable !== false && <button
+                              {!inst.reference && inst.removable !== false && <button
                                 className="btn small iconOnly danger"
                                 disabled={runtimeBusy}
                                 title={runtimeRemovalPresentation(inst, activeRuntimeSection).label}

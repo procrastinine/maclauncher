@@ -154,6 +154,14 @@ function inventory(install, runtime, context, dependencies = {}) {
     for (const item of choices) if (item.managerId === manager.id && item.runtimeVersion === install.version && item.root === root &&
         (!item.architecture || !Architecture.recordArchitecture(install) || item.architecture === Architecture.recordArchitecture(install))) item.preferred = true;
   }
+  // A manager's default can be a copy that another Wine includes: it leads
+  // the copies of its embedded source, as a managed default leads its own.
+  for (const manager of managers.filter(item => item.referenceManagerIds?.length)) {
+    if (dependencies.entry?.runtimeData?.[manager.id]?.version) continue;
+    const saved = context.settings?.runtimes?.[manager.id]?.referenceDefault;
+    const chosen = typeof saved === 'string' && choices.find(item => item.id === saved && item.embedId);
+    if (chosen) chosen.preferred = true;
+  }
   const current = context.wineEnvironment;
   const environment = current ? { label: sourceFor(runtime).labels.environment, selections: {} } : null;
   if (current) for (const [component, key] of [['d3d-renderer', 'graphicsBackend'], ['vulkan-driver', 'vulkanBackend']]) {

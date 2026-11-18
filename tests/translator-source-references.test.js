@@ -62,7 +62,9 @@ test('source-owned component choices reuse ordinary facade rows across CPUs and 
   assert.equal(legacy.install.ready, false); assert.equal(legacy.install.architecture, 'x64');
   assert.equal(legacy.reference.managerId, 'sikarugir'); assert.equal(legacy.reference.version, f.older.version);
   assert.equal(legacy.description.files[0].format, 'pe'); assert.equal(legacy.install.variant, 'legacy');
-  assert.ok(state.references.every(row => row.readOnly && row.removable === false && row.supportsDefault === false));
+  assert.ok(state.references.every(row => row.readOnly && row.removable === false));
+  assert.ok(state.references.every(row => row.supportsDefault === (row.reference.managerId === 'sikarugir')),
+    'a copy of a declared embedded source can be a default; CrossOver keeps its own');
   const hostState = f.facade.getState;
   let hostQueries = 0;
   t.mock.method(f.facade, 'getState', (...args) => { hostQueries++; return hostState(...args); });
@@ -92,6 +94,34 @@ test('source-owned component choices reuse ordinary facade rows across CPUs and 
       'CrossOver-owned copies retain their existing runtime restriction');
   }
   assert.equal(f.facade.getState(options).installed.find(row => row.version === f.older.version).ready, false);
+});
+
+// Lead, 11-17 7:4x PM: every Compatibility or Graphics row where Play chooses among usable versions offers Make default.
+// Play chooses among the copies of one embedded source (Sikarugir's DXVK across Sikarugir versions) by its default, then
+// the newest, so such a copy can be its manager's default. CrossOver keeps its copies to itself and offers none.
+test('an included copy of a declared embedded source can be its manager\'s default and leads that source at Play', async t => {
+  const f = fixture(t), manager = Managers.createManager('dxvk'), options = { userDataDir: f.userDataDir, logger: { warn() {} } };
+  await manager.prepareLocalState(options);
+  const state = manager.getState(options), copies = state.references.filter(row => row.reference.managerId === 'sikarugir');
+  assert.equal(copies.length, 2);
+  assert.ok(copies.every(row => row.supportsDefault === true), 'Sikarugir copies are selectable defaults');
+  assert.equal(state.references.find(row => row.reference.managerId === 'crossover').supportsDefault, false, 'CrossOver keeps its copy');
+  assert.equal(state.supportsDefault, true);
+  const older = copies.find(row => row.reference.version === f.older.version), newer = copies.find(row => row.reference.version === f.newer.version);
+  const settings = manager.applySettingsUpdate('setDefault', { sectionId: 'default', version: older.version }, { defaultVersion: 'v3.1.1' });
+  assert.equal(settings.referenceDefault, older.version);
+  assert.equal(settings.defaultVersion ?? null, null, 'the section keeps one default');
+  assert.equal(manager.normalizeSettings(settings).referenceDefault, older.version, 'normalized settings keep it');
+  const saved = manager.getState({ ...options, settings });
+  assert.equal(saved.defaultVersion, older.version); assert.equal(saved.defaultSource, 'saved');
+  assert.equal(manager.applySettingsUpdate('setDefault', { sectionId: 'default', version: null }, settings).referenceDefault, undefined,
+    'Automatic clears it');
+  const context = { userDataDir: f.userDataDir, settings: { runtimes: { [manager.id]: settings } }, runtimeSettings: {}, logger: { warn() {} } };
+  const inventory = await Wine.optionsInventory(f.cross, 'crossover', context, { managers: [manager] });
+  assert.equal(inventory.choices.find(row => row.id === older.version)?.preferred, true, 'the saved copy leads its source');
+  assert.notEqual(inventory.choices.find(row => row.id === newer.version)?.preferred, true);
+  const plain = await Wine.optionsInventory(f.cross, 'crossover', { ...context, settings: {} }, { managers: [manager] });
+  assert.ok(plain.choices.every(row => row.preferred !== true), 'no saved copy, no lead');
 });
 
 test('custom component status is cache-only while legacy preparation and default full verification keep actual source inspection', async t => {

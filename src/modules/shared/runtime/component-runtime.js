@@ -170,14 +170,25 @@ function referencedComponents(engine, options = {}) {
   }
   return result;
 }
+// Play chooses among the copies of one embedded source (a Wine's declared
+// component, such as Sikarugir's DXVK, across that Wine's installed versions)
+// by its saved default, then the newest; so such a copy can be a manager's
+// default. A copy that its own runtime keeps to itself (CrossOver) and a copy
+// of no declared embedded source are only ever chosen by name.
+function selectableDefault(value, runtime) {
+  if (!value?.sourceId || !value.embedId) return false;
+  return !require("../../crossover/sources").get(runtime)?.ownComponents;
+}
+const isReference = version => typeof version === "string" && version.startsWith("reference:");
 function includedReferences(engine, options = {}) {
   const rows = new Map(), hostsByReference = new Map();
-  for (const { id: version, description: value, reference, install: host, hostVersionLabel } of referencedComponents(engine, options)) {
+  for (const { id: version, description: value, reference, install: host, hostVersionLabel, runtime } of referencedComponents(engine, options)) {
     const architectures = [...new Set(value.files.flatMap(file => file.cpuSlices || (file.architecture ? [file.architecture] : [])))];
     const templateVersion = host.templateVersion || host.catalogEntry?.template?.version;
     const wineVersion = host.engineVersion || host.wineVersion || host.catalogEntry?.engineVersion;
     const sourceLabel = hostLabel(host, value.source), sortVersion = componentVersion(value);
-    rows.set(version, { version, versionLabel: translatorLabel(value, host), ready: true, included: true, readOnly: true, removable: false, supportsDefault: false,
+    rows.set(version, { version, versionLabel: translatorLabel(value, host), ready: true, included: true, readOnly: true, removable: false,
+      supportsDefault: selectableDefault(value, runtime),
       ...(sortVersion ? { sortVersion } : {}),
       ...(templateVersion || host.upstreamVersion ? { sortHostVersion: templateVersion || host.upstreamVersion } : {}),
       ...(templateVersion ? { templateVersion } : {}), ...(value.templateComponent ? { templateComponent: value.templateComponent } : {}),
@@ -250,9 +261,28 @@ function withIncludedReferences(manager) {
   manager.getState = function(options = {}) {
     const references = includedReferences(manager.translatorEngine, options), state = getState.call(this, { ...options, includedReferences: references });
     if (!references.length) return state;
+    // A saved default that names a current selectable copy is the section's default.
+    const saved = options.settings?.referenceDefault, chosen = isReference(saved) && references.find(row => row.version === saved && row.supportsDefault);
+    const selectable = references.some(row => row.supportsDefault);
     const display = section => ({ ...section, references, versionLabels: { ...section.versionLabels,
-      ...Object.fromEntries(references.map(row => [row.version, row.versionLabel])) } });
+      ...Object.fromEntries(references.map(row => [row.version, row.versionLabel])) },
+      ...(selectable ? { supportsDefault: true } : {}), ...(chosen ? { defaultVersion: chosen.version, defaultSource: "saved" } : {}) });
     return { ...display(state), sections: state.sections?.map(display) };
+  };
+  // A copy made the default is saved beside the manager's own default, which it
+  // clears, so the section keeps one default; any other choice clears it.
+  const normalize = manager.normalizeSettings;
+  manager.normalizeSettings = function(value) {
+    const normalized = normalize ? normalize.call(this, value) : { ...(value || {}) };
+    return isReference(value?.referenceDefault) ? { ...normalized, referenceDefault: value.referenceDefault } : normalized;
+  };
+  const apply = manager.applySettingsUpdate;
+  manager.applySettingsUpdate = function(action, payload, settings, ...context) {
+    const update = (next, current) => apply ? apply.call(this, action, next, current, ...context) ?? current : current;
+    if (action !== "setDefault" || payload?.selectionId !== undefined) return update(payload, settings);
+    const { referenceDefault, ...rest } = settings || {};
+    if (!isReference(payload?.version)) return update(payload, rest);
+    return { ...update({ ...payload, version: null }, rest), referenceDefault: payload.version };
   };
   return manager;
 }
