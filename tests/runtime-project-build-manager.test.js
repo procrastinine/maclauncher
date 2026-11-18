@@ -7,6 +7,21 @@ const { prepareForLaunch } = require("../src/core/runtime-preparation");
 const Bundled = require("../src/modules/shared/runtime/bundled-native");
 const sha = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
+test("catalog refresh requests only published project IDs", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "project-catalog-ids-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const urls = [];
+  const dependencies = { fetchUrlBuffer: async url => {
+    urls.push(new URL(url).pathname.split("/").at(-1));
+    return { status: 200, body: Buffer.from(JSON.stringify({ packages: [] })) };
+  } };
+  const anyps5 = require("../src/modules/anyps5/runtime/manager").createManager(dependencies);
+  const nxnative = require("../src/modules/nxnative/runtime/legacy-manager").createManager(dependencies);
+  await anyps5.refreshCatalog({ userDataDir: root, force: true });
+  await nxnative.refreshCatalog({ userDataDir: root, force: true });
+  assert.deepEqual(urls.sort(), ["anyps5-fex.json", "anyps5.json"]);
+});
+
 test("shared package selection preserves exact versions and the explicit launcher's CPU", () => {
   const { selectPackageRecord } = require("../src/modules/shared/runtime/package-contract.cjs");
   const universal = { id: "sample", version: "2.0", arch: "universal", launcherArchitectures: ["arm64", "x64"] };
