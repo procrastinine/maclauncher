@@ -242,10 +242,12 @@ export function SettingsView({
               const moduleName = mod.shortLabel || formatModuleLabel(mod.label, mod.shortLabel, mod.id);
               // The heading's help lists the shown runtime form's rows.
               const helpKey = `${mod.id}:${selectedRuntime?.id || ""}`;
+              // A lone runtime named as its section (Window capture) is not named twice; the section title labels its form.
+              const runtimeHeading = runtimeTabs.length === 1 && (formatRuntimeLabel(runtimeTabs[0].id, mod) !== moduleName || runtimeTabs[0].modified);
               return (
                 <div className="settingsSection" key={mod.id}>
                   {/* The heading repeats the sidebar entry that opened it. */}
-                  <div className="settingsTitle">
+                  <div className="settingsTitle" id={`settings-title-${mod.id}`}>
                     {moduleName}
                     <SectionHelp label={`About ${moduleName} settings`} items={[...(settingKeys.includes("toolsButtonVisible")
                       ? helpItems([{ label: "Show Tools button", text: TOOLS_BUTTON_HELP }]) : []), ...(formHelp[helpKey] || [])]} />
@@ -329,7 +331,7 @@ export function SettingsView({
                     <ModuleAccountsPanel key={descriptor.stateAction} moduleId={mod.id} descriptor={descriptor} action={api?.moduleSettingsAction} />)}
                   {runtimeTabs.length > 0 && <div className="settingsRuntimeSection">
                       {/* One runtime is named by a heading rather than a lone tab. */}
-                      {runtimeTabs.length === 1 && <div className="settingsRuntimeHeading" role="heading" aria-level={3}
+                      {runtimeHeading && <div className="settingsRuntimeHeading" role="heading" aria-level={3}
                         id={`settings-runtime-heading-${mod.id}-${runtimeTabs[0].id}`}>
                         {formatRuntimeLabel(runtimeTabs[0].id, mod)}
                         {runtimeTabs[0].modified && <StatusBadge>Modified</StatusBadge>}
@@ -358,7 +360,8 @@ export function SettingsView({
                       </ScrollableTabStrip>}
                       {selectedRuntime && <div role={runtimeTabs.length > 1 ? "tabpanel" : undefined}
                         id={`settings-runtime-panel-${mod.id}-${selectedRuntime.id}`}
-                        aria-labelledby={`settings-runtime-${runtimeTabs.length > 1 ? "tab" : "heading"}-${mod.id}-${selectedRuntime.id}`}>
+                        aria-labelledby={runtimeTabs.length > 1 || runtimeHeading
+                          ? `settings-runtime-${runtimeTabs.length > 1 ? "tab" : "heading"}-${mod.id}-${selectedRuntime.id}` : `settings-title-${mod.id}`}>
                         <RuntimeSettingsWindow key={`${mod.id}:${selectedRuntime.id}`}
                           api={api} state={state} error={null} inline
                           onHelpChange={items => setFormHelp(current => sameHelp(current[helpKey], items) ? current : { ...current, [helpKey]: items })}

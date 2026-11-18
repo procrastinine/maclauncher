@@ -84,7 +84,7 @@ test('a game type section shows the shown runtime form\'s explanations behind it
     form.props.onHelpChange([{ label: 'Direct3D 12', text: 'Engine for Direct3D 12.' }]);
     tree = harness.render();
     const markup = renderToStaticMarkup(elements(tree).find(node => node.props?.className === 'settingsTitle'));
-    assert.match(markup, /^<div class="settingsTitle">Windows<span class="helpTip"><button[^>]*aria-label="About Windows settings"[\s\S]*<dt>Direct3D 12<\/dt><dd>Engine for Direct3D 12\.<\/dd>/);
+    assert.match(markup, /^<div class="settingsTitle" id="settings-title-crossover">Windows<span class="helpTip"><button[^>]*aria-label="About Windows settings"[\s\S]*<dt>Direct3D 12<\/dt><dd>Engine for Direct3D 12\.<\/dd>/);
   } finally { harness.close(); }
 });
 

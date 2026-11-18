@@ -55,12 +55,18 @@ test('a module with one runtime names it in a heading without a one-choice menu 
   const saved = renderModule('java', { defaultRuntime: 'retired-runtime' });
   assert.match(saved, /aria-label="Default runtime"/);
   assert.match(saved, /\(saved; choose a compatible runtime\)/);
+  // GUI run-13 (b0d4a3ec): renamed Window capture, the window-capture section read "Window capture" over a runtime
+  // heading "Window capture". A lone runtime named as its section has no second heading; the title labels its form.
+  const capture = renderModule('window');
+  assert.match(capture, /<div class="settingsTitle" id="settings-title-window">Window capture/);
+  assert.doesNotMatch(capture, /settingsRuntimeHeading/);
+  assert.match(capture, /<div id="settings-runtime-panel-window-capture" aria-labelledby="settings-title-window">/);
 });
 
 test('a module section is headed by its sidebar entry, and Settings menus, status and actions keep one compact column (GUI 0877 S1, S4, S6, S9)', () => {
   const markup = renderModule('crossover');
-  assert.match(markup, /<div class="settingsTitle">Windows<\/div>/);
-  assert.doesNotMatch(markup, /<div class="settingsTitle">Windows Game<\/div>/);
+  assert.match(markup, /<div class="settingsTitle" id="settings-title-crossover">Windows<\/div>/);
+  assert.doesNotMatch(markup, /<div class="settingsTitle"[^>]*>Windows Game<\/div>/);
   const css = require('node:fs').readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
   assert.match(css, /\.settingsControl > select\.input:not\(\[multiple\]\) \{ flex: 0 1 auto; width: auto; min-width: 8rem; \}/, 'a menu sizes to its choices');
   assert.match(css, /\.settingsControl > \.input \+ \.btn:not\(\.iconOnly\) \{ min-width: 6\.5rem; \}/, 'Browse… and Add… share one width');
