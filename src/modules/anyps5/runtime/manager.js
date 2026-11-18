@@ -82,7 +82,10 @@ function createManager(dependencies = {}) {
     const explicit = explicitVersion(entry,settings,options);
     const installed = state({userDataDir}).installed || [];
     if (explicit) {
-      const row=installed.find(row=>row.version===explicit&&row.ready!==false);
+      const preferredBuild = Architecture.requestedArchitecture(options) ||
+        Architecture.requestedArchitecture(entry?.runtimeData?.anyps5) ||
+        Architecture.normalizeArchitecture(settings?.runtimes?.anyps5?.defaultArchitecture);
+      const row = preferredBuild ? null : installed.find(row => row.version === explicit && row.ready !== false);
       // Resolve the selected package in its stored converter/host slot. The
       // version row's execution CPU can differ from that package's primary.
       const selected=measured(resolve(entry,settings,userDataDir,{...options,version:explicit,
