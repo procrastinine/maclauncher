@@ -1,4 +1,4 @@
-# Window
+# Window capture
 
 MacLauncher can also apply the graphics chain that games use to the windows of other running apps and to displays, a feature called window graphics. Choosing a window, an app or a display starts a session, and each session has a library entry of its own. These entries are not imported: an entry appears when its session starts and disappears when it ends. Because every entry has its own graphics chain, capture settings, inspector and **Stop**, each window or display can carry different effects, whereas All Displays is one entry whose chain applies to every display. While it runs, an entry works like any other game in the inspector, with the same Graphics tab, live edits, presets and status.
 

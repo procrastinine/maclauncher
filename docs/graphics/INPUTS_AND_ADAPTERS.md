@@ -281,7 +281,7 @@ GPU completion and physical presentation have separate callbacks, so covered out
 
 ## Picked windows and displays
 
-Window graphics apply a graphics chain to the windows of other apps and to displays, each in its own library entry. [Window entries](../game-types/WINDOW.md) describes the Apply Graphics window, the entries and the saved chains, while this section covers the frame path.
+Window graphics apply a graphics chain to the windows of other apps and to displays, each in its own library entry. [Window capture entries](../game-types/WINDOW.md) describes the Apply Graphics window, the entries and the saved chains, while this section covers the frame path.
 
 The work is divided between two kinds of process, both running the `maclauncher-graphics-window` executable of the graphics runtime:
 

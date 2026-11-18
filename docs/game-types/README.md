@@ -54,11 +54,11 @@ The table lists game types by the name the app shows. In it, *Windows runtimes* 
 | [Video](VIDEO.md) | mpv player | |
 | [VNDS](VNDS.md) | VNDS-LOVE | Windows runtimes |
 | [Web](WEB.md) | Electron | NW.js, NW.js (Patched), Game's macOS app, Windows runtimes |
-| [Window](WINDOW.md) | Window capture | |
+| [Window capture](WINDOW.md) | Window capture | |
 | [Windows Game](WINDOWS.md) | Sikarugir | CrossOver, WineCX |
 | [WOLF RPG Editor](WOLFRPG.md) | Browser Woditor | Windows runtimes |
 
-Window entries are not imported. MacLauncher creates one for each window graphics session, which applies graphics to another app's window or to a display, and the entry exists only while that session runs.
+Window capture entries are not imported. MacLauncher creates one for each window graphics session, which applies graphics to another app's window or to a display, and the entry exists only while that session runs.
 
 RPG Maker MV and MZ are two versions of one engine with the same runtimes, so they share a page. Prosper and 32-bit Mac have their own sections in the settings reference, although both are runtimes: Prosper belongs to [PlayStation 5](PS5.md#prosper) and 32-bit Mac to [macOS Game](MACOS.md#32-bit-mac).
 

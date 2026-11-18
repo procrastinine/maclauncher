@@ -39,7 +39,7 @@ A session ends, and its row disappears, when its window closes or its app quits,
 
 ## In place, enlarged or fit screen
 
-Where the processed picture goes is set by **Output**, a setting of **Window capture**, the runtime that window rows use. It can be **In place**, **Fit screen**, or enlarged by **1.5×** up to **10×**. Display sessions are always in place.
+Where the processed picture goes is set by **Output**, in the **Window capture** section of Settings. It can be **In place**, **Fit screen**, or enlarged by **1.5×** up to **10×**. Display sessions are always in place.
 
 **In place**, the default, lays the processed picture exactly over the window, and clicks, keys and controllers pass straight through to the app. The picture follows the window when it moves, resizes or goes full screen, keeping up frame by frame while you drag it. Sheets and other windows attached to the window are part of the processed picture, and so are the app's own floating palettes where they overlap it.
 
@@ -59,7 +59,7 @@ MacLauncher gets the window's picture from [ScreenCaptureKit](https://developer.
 
 Two more settings apply to a captured window:
 
-- **Include pointer in capture**, a setting of the **Window capture** runtime, draws the pointer into the captured image, so effects apply to it as well. The real pointer always stays on top.
+- **Include pointer in capture**, another **Window capture** setting, draws the pointer into the captured image, so effects apply to it as well. The real pointer always stays on top.
 - The output's [frame-rate cap](/maclauncher/graphics/composing-effects/#frame-rate-cap) limits how often MacLauncher captures a frame from the window, which leaves GPU time for heavy effects.
 
 ## Remembered chains

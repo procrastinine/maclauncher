@@ -64,6 +64,6 @@ FSR 3 are not.
 
 `proxy.cpp`, `camera.hpp`, `resources.hpp`, `snapshots.hpp`,
 `snapshot-budget.hpp` and `camera-test.cpp` are the sources of the interposer
-proxy that graphics packages up to 0.3.13 include. No launch route places the
+proxy that graphics packages up to 0.3.14 include. No launch route places the
 proxy. It is built from the official MIT-licensed Streamline 2.9.0 headers at
 commit `b998246a3d499c08765c5681b229c9e6b4513348`.

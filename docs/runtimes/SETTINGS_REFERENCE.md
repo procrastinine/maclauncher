@@ -56,7 +56,7 @@ Under each game type, the line that starts with "Runtimes tabs" names the tabs i
 | [Video](#video) | mpv player | mpv player |
 | [VNDS](#vnds) | VNDS-LOVE | VNDS-LOVE, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [Web](#web) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
-| [Window](#window) | Window capture | Window capture |
+| [Window capture](#window-capture) | Window capture | Window capture |
 | [Windows Game](#windows-game) | Sikarugir | Sikarugir, CrossOver, WineCX |
 | [WOLF RPG Editor](#wolf-rpg-editor) | Browser Woditor | Browser Woditor, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 
@@ -1181,7 +1181,7 @@ Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOve
 | Enable case-insensitive assets | On/Off | Off |  |
 | Enable user scripts | On/Off | Off |  |
 
-## Window
+## Window capture
 
 Module `window`. Its library entries exist only while a [window graphics session](../game-types/WINDOW.md) runs.
 
