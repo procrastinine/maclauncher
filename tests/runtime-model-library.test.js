@@ -99,21 +99,26 @@ test('the model table names a model without a help button, sizes its columns and
  // one-line content: the system font at the table's 12 px, measured with CoreText and matching the 0966 capture to
  // 0.1 px. Lead, 11-17 8:1x PM: the frame generators' label must not wrap either, so it reads "Frames → in-between frames"
  // (166 px) instead of "Two frames → intermediate frames" (197 px). Every input and output label the table can show,
- // for every operation and declared scale, has a measured width here and fits.
- const widths=['first-child','nth-child(2)','nth-child(3)','nth-child(4)','nth-child(5)'].map(n=>Number(new RegExp(`\\.runtimeModelTable th:${n.replace(/[()]/g,'\\$&')} \\{ width: (\\d+)%; \\}`).exec(css)?.[1]));
- assert.equal(widths.reduce((a,b)=>a+b,0),100,`column widths ${widths.join('/')} fill the table`);
+ // for every operation and declared scale, has a measured width here and fits. GUI 0977 N3c: "Depth Anything V2 Small"
+ // with its Default badge wrapped at 24%; every operation's label now fits with its Default badge, and with a Make
+ // default button, in cells 8 px apart. The one exception is Depth Anything V2 Small with Make default: its 248 px
+ // cell and the other columns' 572 px exceed the 813. It appears only beside a second, imported depth model, and its
+ // button then takes the line under the label.
+ const widths=['first-child','nth-child(2)','nth-child(3)','nth-child(4)','nth-child(5)'].map(n=>Number(new RegExp(`\\.runtimeModelTable th:${n.replace(/[()]/g,'\\$&')} \\{ width: ([\\d.]+)%; \\}`).exec(css)?.[1]));
+ assert.equal(Math.round(widths.reduce((a,b)=>a+b,0)*10)/10,100,`column widths ${widths.join('/')} fill the table`);
  assert.equal(require('../src/core/utility-window-model.mjs').utilityWindowDefinition('runtimes').width,1100);
  assert.match(css,/\.filterLibraryTable th, \.filterLibraryTable td \{ padding: 8px 6px;/);
  assert.match(css,/\.filterLibraryTable th:first-child, \.filterLibraryTable td:first-child \{ padding-left: 0; \}/);
  assert.match(css,/\.filterLibraryTable th:last-child, \.filterLibraryTable td:last-child \{ padding-right: 0; \}/);
- const badge=37.81+8,makeDefault=72.97+2*8+2,install=33.49+2*8+2,gap=8;
- const content=[['Model: DLSSMac 0.1.6 · HT71 neural rendering model',257.89,6],['Input → output: Scene → upscaled image · 4×',167.06,12],
-  ['Status: Not installed',71.2,12],['Default for: DLSS neural rendering + Default',126.99+gap+badge,12],['Default for: Real-ESRGAN + Make default',78.25+gap+makeDefault,12],
-  ['Actions: Install',install,6]];
+ const badge=37.81+8,makeDefault=72.97+2*8+2,install=33.49+2*8+2,gap=8,inner=8,edge=4;
+ const content=[['Model: DLSSMac 0.1.6 · HT71 neural rendering model',257.89,edge],['Input → output: Scene → upscaled image · 4×',167.06,inner],
+  ['Status: Not installed',71.2,inner],['Actions: Install',install,edge]];
  const measured={'Image → same-size image':147.88,'Image → upscaled image':140.84,'Image → upscaled image · 1×':164.27,'Image → upscaled image · 2×':165.95,
   'Image → upscaled image · 3×':166.23,'Image → upscaled image · 4×':166.43,'Scene → upscaled image':141.47,'Scene → upscaled image · 1×':164.91,
   'Scene → upscaled image · 2×':166.58,'Scene → upscaled image · 3×':166.86,'Scene → upscaled image · 4×':167.06,'Frames → in-between frames':165.73,
   'Image → relative depth':129.76};
+ const operations={'DLSS neural rendering':126.99,'RTX VSR':50.42,'DLSS SR image':87.26,'DLSS SR scene':86.77,'MLX interpolation':100.09,
+  'Real-ESRGAN':78.25,'Real-CUGAN':73.05,'NAFNet':43.98,'RIFE':25.07,'Depth Anything V2 Small':140.62};
  const {MODEL_OPERATIONS}=require('../src/modules/shared/effects/operation-contracts.mjs'),{modelPresentation}=require('../src/modules/shared/effects/presentation.mjs');
  const declared=require('node:fs').readFileSync(path.join(__dirname,'../src/modules/shared/reshade/neural/model-source.json'),'utf8');
  const scales=new Set([...declared.matchAll(/"intrinsicScale": *(\d+)/g)].map(match=>Number(match[1])));
@@ -121,10 +126,17 @@ test('the model table names a model without a help button, sizes its columns and
  for(const id of Object.keys(MODEL_OPERATIONS))for(const scale of [undefined,...scales]){
   const label=modelPresentation(id,scale).inputOutputLabel;
   assert.ok(Object.hasOwn(measured,label),`"${label}" has a measured width`);
-  content.push([`Input → output: ${label}`,measured[label],12]);
+  content.push([`Input → output: ${label}`,measured[label],inner]);
+ }
+ for(const {label} of Object.values(MODEL_OPERATIONS)){
+  assert.ok(Object.hasOwn(operations,label),`"${label}" has a measured width`);
+  content.push([`Default for: ${label} + Default`,operations[label]+gap+badge,inner]);
+  if(label!=='Depth Anything V2 Small')content.push([`Default for: ${label} + Make default`,operations[label]+gap+makeDefault,inner]);
  }
  for(const [label,width,padding] of content){const column=['Model','Input','Status','Default','Actions'].findIndex(name=>label.startsWith(name)),box=widths[column]/100*813-padding;
   assert.ok(box>=width,`${label} (${width.toFixed(1)} px) fits its ${widths[column]}% column (${box.toFixed(1)} px)`);}
+ // Those cells are 8 px apart, and each row's text, badges and buttons share one centre line (GUI 0977 trash offset).
+ assert.match(css,/\.runtimeModelTable th, \.runtimeModelTable td \{ padding-left: 4px; padding-right: 4px; vertical-align: middle; \}/);
  // The library tables keep their header visible and the Actions heading over its buttons (GUI 0877 R26, S8).
  assert.match(css,/\.filterLibraryTable thead th \{ position: sticky;/);
  assert.match(css,/\.filterLibraryTable th:last-child \{ text-align: right; \}/);

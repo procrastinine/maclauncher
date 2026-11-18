@@ -267,12 +267,15 @@ body {
 .filterLibraryNameControl > .input { flex: 1; min-width: 0; }
 .filterLibrarySource td { padding: 4px 0 10px; }
 .runtimeModelTable td:first-child { overflow-wrap: anywhere; }
-/* Columns sized to their contents: an operation with its Default badge or Make default button fits one line. */
-.runtimeModelTable th:first-child { width: 33%; }
-.runtimeModelTable th:nth-child(2) { width: 23%; }
-.runtimeModelTable th:nth-child(3) { width: 11%; }
-.runtimeModelTable th:nth-child(4) { width: 24%; }
-.runtimeModelTable th:nth-child(5) { width: 9%; }
+/* Cells 8 px apart, each row's text, badges and buttons centred on one line. */
+.runtimeModelTable th, .runtimeModelTable td { padding-left: 4px; padding-right: 4px; vertical-align: middle; }
+/* Columns sized to their contents: each operation with its Default badge, and each but Depth Anything V2 Small
+   with a Make default button, fits one line. */
+.runtimeModelTable th:first-child { width: 32.4%; }
+.runtimeModelTable th:nth-child(2) { width: 21.6%; }
+.runtimeModelTable th:nth-child(3) { width: 9.8%; }
+.runtimeModelTable th:nth-child(4) { width: 29.3%; }
+.runtimeModelTable th:nth-child(5) { width: 6.9%; }
 /* Each operation in Default for reads on the row's baseline, followed by its Default badge or Make default button. */
 .runtimeModelTable .runtimeModelDefault { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .runtimeModelDefault + .runtimeModelDefault { margin-top: 4px; }
@@ -1622,7 +1625,8 @@ input[type="checkbox"], input[type="radio"] {
 .runtimePanel .runtimeImport { padding: 0; }
 .runtimePanel .runtimeSection > .empty { padding: 10px 12px; }
 .runtimeDefaultControl { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-weight: 400; font-size: var(--font-sm); color: var(--muted); }
-.runtimeDefaultSelect { width: auto; max-width: min(36rem, 55vw); color: var(--text); }
+/* The Default menu is as wide as its chosen entry, up to the header width; the open menu lists every entry in full. */
+.runtimeDefaultSelect { field-sizing: content; width: auto; max-width: min(36rem, 55vw); color: var(--text); }
 
 .runtimePanelHeader {
   display: flex;
@@ -2077,10 +2081,11 @@ select.input:not([multiple]) {
   flex-shrink: 0;
 }
 
+/* A one-line row's text is centred on its buttons, as a taller row's details are. */
 .runtimeSection .saveRow {
   padding: 12px 14px;
   gap: 22px;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .runtimeSection .saveRowMain {

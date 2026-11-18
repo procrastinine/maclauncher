@@ -16,7 +16,7 @@ import { groupRuntimeManagers, splitRuntimeGroupsByHost, resolveRuntimeTabSelect
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
   runtimeRemovalPresentation, runtimeMinimumDetail, runtimeIncludedParts, runtimeInstallVersion, isRuntimeIncluded, isRuntimeSetupPending,
   managedRuntimeSections, runtimePendingAction, runtimeRefreshPayload, runtimeSourceUiKey,
-  translatorInstallBuild, translatorInstallRequirement } from "./runtime-tabs-model";
+  translatorInstallBuild, translatorInstallRequirement, runtimeStateLoading } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
 import { SectionHelp, helpItems } from "./HelpList";
@@ -430,7 +430,11 @@ export function RuntimesView({
             state={state} api={settingsApi} ui={activeRuntimeUi} downloads={downloadTasks}
             onInstall={onRuntimeInstall} onUninstall={onRuntimeUninstall} onOpenSource={onOpenSource}
             onRefresh={onRuntimeRefresh} onSetDefault={(managerId, sectionId, version) => onRuntimeSetDefault(managerId, sectionId, version)}
-            onSelect={updateRuntimeUiSection} /> : activeRuntimeManager && activeRuntimeSection ? (
+            onSelect={updateRuntimeUiSection} /> : activeRuntimeManager && activeRuntimeSection && runtimeStateLoading(activeRuntimeSection) ? (
+            <div className="runtimeTabPanel" id={`runtime-panel-${activeRuntimeManager.id}-${activeRuntimeSection.id}`}>
+              <div className="runtimePanel"><div className="empty" role="status">Loading…</div></div>
+            </div>
+          ) : activeRuntimeManager && activeRuntimeSection ? (
             <div
               className="runtimeTabPanel"
               id={`runtime-panel-${activeRuntimeManager.id}-${activeRuntimeSection.id}`}

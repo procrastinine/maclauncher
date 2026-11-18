@@ -433,6 +433,13 @@ export function isRuntimeIncluded(runtime: Record<string, any> | null | undefine
   return runtime?.included === true || runtime?.bundledExecution === "direct";
 }
 
+// A runtime whose state the launcher is still reading arrives as its loading
+// placeholder (main.js LOADING_RUNTIME_STATE): no versions, nothing installed and
+// catalog.loading. Its panel says it is loading, not that nothing is installed.
+export function runtimeStateLoading(section: Record<string, any> | null | undefined): boolean {
+  return section?.catalog?.loading === true;
+}
+
 export function runtimeManagementPresentation(section: Record<string, any> | null | undefined) {
   const catalog = section?.catalog;
   const localFiles = catalog?.delivery === "local-files";

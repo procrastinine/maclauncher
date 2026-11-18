@@ -347,6 +347,32 @@ test('an empty list whose default is not installed says so once, and row details
   assert.match(row, /<div class="dim">Requires macOS 30\.0 or later<\/div>/);
 });
 
+// GUI 0977 N4: the first open of Neural models showed "Load versions" and "No runtime versions installed yet."
+// for a second while the launcher still read its state. That state is main.js's loading placeholder.
+test('a runtime whose state is still loading says so, with no empty list or Load versions', () => {
+  const main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  const literal = /const LOADING_RUNTIME_STATE = (\{[^\n]*\});/.exec(main)?.[1];
+  assert.ok(literal, 'main.js declares the loading placeholder');
+  const placeholder = Function(`return (${literal});`)();
+  const loading = { label: 'Neural models', ...placeholder, id: 'graphics-neural-models', ui: { tabLabel: 'Neural models', management: 'managed' } };
+  const markup = render([loading], 'graphics-neural-models');
+  assert.match(markup, /<div class="empty" role="status">Loading…<\/div>/);
+  assert.doesNotMatch(markup, /No runtime versions installed yet|Load versions|>Installed<|>Versions</);
+  const loaded = render([{ ...loading, catalog: { status: 'idle', versions: [] } }], 'graphics-neural-models');
+  assert.match(loaded, /No runtime versions installed yet/, 'a loaded runtime with nothing installed still says so');
+  assert.doesNotMatch(loaded, /role="status">Loading…/);
+});
+
+// GUI 0977 N5 and N6: the Default menu was as wide as its longest entry (468 px for DXVK beside
+// "Automatic (DXVK 3.1.1 · Universal)"), and a one-line row's text sat about 5 px above its Make default text.
+test('the Default menu is as wide as its chosen entry, and a one-line row centres its text on its buttons', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
+  assert.match(css, /\.runtimeDefaultSelect \{ field-sizing: content; width: auto; max-width: min\(36rem, 55vw\);/);
+  const row = /\n\.runtimeSection \.saveRow \{([^}]*)\}/.exec(css)?.[1] || '';
+  assert.match(row, /align-items: center;/);
+  assert.doesNotMatch(css, /\.runtimePanel \.runtimeSection \.saveRow \{[^}]*align-items/, 'no later rule moves the row back to the top');
+});
+
 test('overflowing tab strips fade before their arrows, and named sources line up with plain Load versions buttons', () => {
   const css = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/styles.css'), 'utf8');
   assert.match(css, /\.scrollableTabStrip\.moreRight \.scrollableTabStripViewport \{ -webkit-mask-image:/);
@@ -354,7 +380,7 @@ test('overflowing tab strips fade before their arrows, and named sources line up
   const strip = fs.readFileSync(path.join(__dirname, '../src/renderer/src/ui/components/ScrollableTabStrip.tsx'), 'utf8');
   assert.match(strip, /scroll\.canScrollRight \? "moreRight"/);
   assert.match(css, /\.runtimeSourceRow\.named > \.runtimeSourceName \{ min-width: 9rem; \}/);
-  assert.match(css, /\.runtimeDefaultSelect \{ width: auto; max-width: min\(36rem, 55vw\);/, 'the Default menu fits "Automatic (Apex Neural Rendering FG-V.B15)"');
+  assert.match(css, /\.runtimeDefaultSelect \{ field-sizing: content; width: auto; max-width: min\(36rem, 55vw\);/, 'the Default menu fits "Automatic (Apex Neural Rendering FG-V.B15)"');
   const section = { id: 'default', label: 'Versions', installed: [], catalog: { status: 'idle', versions: [] },
     catalogs: [{ id: 'builds', label: 'MacLauncher Builds', explicit: true, status: 'idle', versions: [] },
       { id: 'upstream', label: 'Upstream', explicit: true, status: 'idle', versions: [] }] };
