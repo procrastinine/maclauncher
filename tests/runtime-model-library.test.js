@@ -95,7 +95,21 @@ test('the model table names a model without a help button, sizes its columns and
   }finally{rows.close();}
  }finally{h.close();}
  const css=require('node:fs').readFileSync(path.join(__dirname,'../src/renderer/src/ui/styles.css'),'utf8');
- for(const [n,w] of [['first-child','29%'],['nth-child(2)','21%'],['nth-child(3)','10%'],['nth-child(4)','30%'],['nth-child(5)','10%']])assert.ok(css.includes(`.runtimeModelTable th:${n} { width: ${w}; }`),`column ${n}`);
+ // GUI 0966 N3a/N3b: at the Runtimes window's default width (1100 px, 813 px of table) each column holds its widest
+ // one-line content: the system font at the table's 12 px, measured with CoreText and matching the 0966 capture to
+ // 0.1 px. "Two frames → intermediate frames" (197 px) wraps; the other columns need that room at this width.
+ const widths=['first-child','nth-child(2)','nth-child(3)','nth-child(4)','nth-child(5)'].map(n=>Number(new RegExp(`\\.runtimeModelTable th:${n.replace(/[()]/g,'\\$&')} \\{ width: (\\d+)%; \\}`).exec(css)?.[1]));
+ assert.equal(widths.reduce((a,b)=>a+b,0),100,`column widths ${widths.join('/')} fill the table`);
+ assert.equal(require('../src/core/utility-window-model.mjs').utilityWindowDefinition('runtimes').width,1100);
+ assert.match(css,/\.filterLibraryTable th, \.filterLibraryTable td \{ padding: 8px 6px;/);
+ assert.match(css,/\.filterLibraryTable th:first-child, \.filterLibraryTable td:first-child \{ padding-left: 0; \}/);
+ assert.match(css,/\.filterLibraryTable th:last-child, \.filterLibraryTable td:last-child \{ padding-right: 0; \}/);
+ const badge=37.81+8,makeDefault=72.97+2*8+2,install=33.49+2*8+2,gap=8;
+ const content=[['Model: DLSSMac 0.1.6 · HT71 neural rendering model',257.89,6],['Input → output: Scene → upscaled image · 4×',167.06,12],
+  ['Status: Not installed',71.2,12],['Default for: DLSS neural rendering + Default',126.99+gap+badge,12],['Default for: Real-ESRGAN + Make default',78.25+gap+makeDefault,12],
+  ['Actions: Install',install,6]];
+ for(const [label,width,padding] of content){const column=['Model','Input','Status','Default','Actions'].findIndex(name=>label.startsWith(name)),box=widths[column]/100*813-padding;
+  assert.ok(box>=width,`${label} (${width.toFixed(1)} px) fits its ${widths[column]}% column (${box.toFixed(1)} px)`);}
  // The library tables keep their header visible and the Actions heading over its buttons (GUI 0877 R26, S8).
  assert.match(css,/\.filterLibraryTable thead th \{ position: sticky;/);
  assert.match(css,/\.filterLibraryTable th:last-child \{ text-align: right; \}/);
