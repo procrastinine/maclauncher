@@ -91,7 +91,7 @@ export function implementationHelp(row){
 export function modelPresentation(method,scale) {
   const operation=MODEL_OPERATIONS[method||'mlx-dlss'];
   if(operation?.kind==='attachment')return {inputOutputLabel:'Image → relative depth',purpose:'Estimates relative depth from an image for compatible image filters; it does not supply renderer depth.'};
-  if(operation?.kind==='frame-generation')return {inputOutputLabel:'Two frames → intermediate frames',purpose:'Estimates intermediate images between two real frames.'};
+  if(operation?.kind==='frame-generation')return {inputOutputLabel:'Frames → in-between frames',purpose:'Estimates intermediate images between two real frames.'};
   if(operation?.kind==='temporal')return {inputOutputLabel:`Scene → upscaled image${scale?` · ${scale}×`:''}`,purpose:'Reconstructs an image using real scene depth, motion and camera inputs.'};
   if(operation?.kind==='upscale')return {inputOutputLabel:`Image → upscaled image${scale?` · ${scale}×`:''}`,purpose:'Upscales an image with a trained model at its intrinsic output scale.'};
   return {inputOutputLabel:'Image → same-size image',purpose:operation?.history==='optional-image'?'Reconstructs detail at the processing size, with optional history from real images.':'Restores an image at its input dimensions with a trained denoising or deblurring model.'};
