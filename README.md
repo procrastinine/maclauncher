@@ -19,11 +19,18 @@ The easiest way to run it is MacLauncher.app from the [Releases](https://github.
 
 There are two separate apps, `MacLauncher.app.zip` for Apple Silicon and `MacLauncher-Intel.app.zip` for Intel Macs. They share the same library, settings and runtimes, and both need macOS 13 or later. Some runtimes and graphics features need Apple Silicon or a newer macOS (e.g. Android and Switch need Apple Silicon, and PS5 needs macOS 26), and MacLauncher just turns off what your Mac can't run; see [Macs and macOS versions](https://procrastinine.github.io/maclauncher/macs-and-macos/) for what works where.
 
-A heads-up about Rosetta: Apple is winding it down. [Apple says](https://support.apple.com/en-us/102527) Rosetta is available through macOS 27, and starting with macOS 28 it will only be available for certain older, unmaintained games. Most of MacLauncher is already native on Apple Silicon, and we're moving the few pieces that still run Intel code over wherever there's a way; [Rosetta and Apple Silicon](https://procrastinine.github.io/maclauncher/rosetta-and-apple-silicon/) on the website has where each piece stands.
-
 Now, it is perfectly fair to be skeptical about opening something you downloaded that asks you to do this, so I made MacLauncher binaries fully verifiable: you can [check that the .app was built by GitHub Actions from an exact version of the source code on GitHub, with no shady blobs from me](docs/development/VERIFYING.md) (and the same goes for every other downloadable build we provide in [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds)). You can then audit that exact source code to make sure it doesn't do anything you don't want. Asking people to do that would have been facetious before AI agents were a thing, but now it's a reasonable extra step if you want to take it.
 
 You can also run [from source](#development), and everything should be the same.
+
+## Preparing for the end of Rosetta
+
+Apple is winding Rosetta down: [Apple says](https://support.apple.com/en-us/102527) it's available through macOS 27, and starting with macOS 28 it will only be available for certain older, unmaintained games. Most of MacLauncher (the launcher, the graphics layer, the Android, iOS and Switch runtimes and most engines) is already native on Apple Silicon, and for the things that still run Intel code, MacLauncher provides Apple Silicon versions wherever there's a way, next to the Intel ones:
+- **Windows games through [FEX](https://github.com/FEX-Emu/FEX):** FEX translates just the game's Intel code while an Apple Silicon WINE runs natively, so there's no Rosetta involved. [MetalSharp Wine](https://github.com/metalsharp/MetalSharp-Wine) works this way, and so do CrossOver's ARM64 builds in MacLauncher.
+- **PS5 games through FEX:** our build of AnyPS5 runs the PS5 game's Intel code with FEX inside a native Apple Silicon host.
+- **Our own Apple Silicon builds** in [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds), like MacLauncher DXMT for MetalSharp Wine.
+
+[Preparing for the end of Rosetta](https://procrastinine.github.io/maclauncher/rosetta-and-apple-silicon/) on the website has Apple's timeline, how FEX differs from Rosetta, and where each piece stands.
 
 # MacLauncher as a native runtime system
 
