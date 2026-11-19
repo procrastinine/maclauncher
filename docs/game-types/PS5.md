@@ -24,7 +24,7 @@ Once an AnyPS5 conversion exists, **Inspect program** exports the program metada
 
 | Runtime | Delivery | Requirements |
 | --- | --- | --- |
-| **PS5 (AnyPS5)**, default | Managed versions from MacLauncher Builds, including Apple Silicon FEX and Intel converted-game packages | Converted games require macOS 26 or later and Vulkan with Intel support, using Rosetta on Apple Silicon. The MCLv13 FEX host requires macOS 27.0 and an Apple Silicon Vulkan build |
+| **PS5 (AnyPS5)**, default | Managed versions from MacLauncher Builds, including Apple Silicon FEX and Intel converted-game packages | Converted games require macOS 26 or later and Vulkan with Intel support, using Rosetta on Apple Silicon. The MCLv14 FEX host requires macOS 26 or later and an Apple Silicon Vulkan build |
 | **Prosper** | Packages from MacLauncher Builds or a local build registered in Runtimes | macOS 26 or later on Intel or Apple Silicon; Vulkan 1.4 with Intel support |
 
 ### AnyPS5

@@ -34,7 +34,7 @@ The table shows which choices already have a route off Rosetta and which still u
 | Intel Wine helpers for DXMT DLSS forwarding, Streamline camera forwarding and the XeSS GPU host | These particular helper routes use Intel Wine | Rosetta required |
 | Intel DXMT in upstream releases and Sikarugir Templates | **MacLauncher DXMT** has ARM64X Windows libraries and a native Metal renderer for MetalSharp Wine | Available |
 | D3DMetal | DXVK and vkd3d-proton are alternative translators in Apple Silicon Wine | D3DMetal uses Intel Wine |
-| AnyPS5 converted games | AnyPS5 FEX runs the game inside an Apple Silicon host with native PS5 system libraries | MCLv13 is published and requires macOS 27.0 |
+| AnyPS5 converted games | AnyPS5 FEX runs the game inside an Apple Silicon host with native PS5 system libraries | MCLv14 is available on macOS 26 or later |
 | Prosper (PS5 games) | The published Prosper runtime runs as an Intel Mac program | Rosetta required |
 | HashLink (Haxe games) | The shipped HashLink versions have a JIT compiler that emits Intel code | Rosetta required |
 | mac32 (32-bit Mac apps) | Its Intel host runs Mac code that calls macOS frameworks | Rosetta required |
