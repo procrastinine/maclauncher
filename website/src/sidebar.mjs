@@ -3,7 +3,11 @@
 // group can list pages from any directory, so page URLs stay where they are.
 export const sidebar = [
   { label: "Try the launcher", link: "/demo/" },
-  { label: "Start here", items: ["introduction", "getting-started", "macs-and-macos", "rosetta-and-apple-silicon", "launcher"] },
+  { label: "Start here", items: ["introduction", "getting-started", "macs-and-macos", "launcher"] },
+  {
+    label: "Preparing for the end of Rosetta",
+    items: ["rosetta-and-apple-silicon", "rosetta/windows-on-apple-silicon", "rosetta/ps5-through-fex", "rosetta/apple-silicon-builds"]
+  },
   {
     label: "Native runtimes",
     items: [

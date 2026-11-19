@@ -38,7 +38,7 @@ A translator that consists of Windows libraries contains no Mac code. It loads i
 | D3DMetal: Apple's Game Porting Toolkit, Sikarugir Templates and CrossOver | Intel `D3DMetal.framework` and `libd3dshared.dylib`; Windows x64 libraries | Rosetta, inside an Intel Wine | None |
 | WineD3D and Wine vkd3d | Part of the Wine | With the Wine process | Part of the Wine |
 | cnc-ddraw, from Sikarugir Templates | None; Windows x86 | With the Wine process | FEX in an ARM64 Wine |
-| DXVK-NVAPI | None; Windows x64, x86 and ARM64X | With the Wine process | ARM64X `nvapi64.dll` included |
+| DXVK-NVAPI | None; upstream releases include Windows x64, x86 and ARM64X libraries | MacLauncher's Vulkan DLSS forwarding uses the x64 `nvapi64.dll` with the Wine process | The upstream ARM64X library is separate from the x64 library selected by the forwarding path |
 | NGX core for DLSS forwarding | None; Windows x64 | With the Wine process | FEX in an ARM64 Wine |
 | FidelityFX API adapter | None; Windows x64 | With the Wine process | FEX in an ARM64 Wine |
 | Steam client bridge | Separate Apple Silicon and Intel `lsteamclient.so` libraries; Windows x64 and x86 | Intel library under Rosetta, inside an Intel Wine | Apple Silicon `lsteamclient.so` included |
@@ -69,7 +69,7 @@ The shared graphics layer loads into each game's process and contains both slice
 | DXMT integration for DLSS forwarding, MacLauncher's `winemetal.so` | Intel | Rosetta, inside an Intel Wine | None |
 | Streamline camera forwarding, a Wine Unix library | Intel | Rosetta, inside an Intel Wine | None |
 | XeSS GPU compute host, a Wine Unix library | Intel | Rosetta, inside an Intel Wine | None |
-| Wine scene transport, MacLauncher's WineVulkan scene module | Intel | Rosetta, inside an Intel Wine | None |
+| Wine scene transport, MacLauncher's WineVulkan scene module | Separate Apple Silicon and Intel builds | The Intel build uses Rosetta in Intel Wine. The Apple Silicon build runs natively in MetalSharp Wine 11.20 | WineVulkan Scene 11.20-MCLv3 arm64 |
 
 ## Game engines and runtimes
 
@@ -83,11 +83,11 @@ Most engines run natively on Apple Silicon. The runtimes in the first table cont
 | AnyPS5 FEX version: start host and PS5 system libraries | Apple Silicon; FEXCore translates the game's x86-64 code inside the host | Native | Not needed |
 | Prosper | Intel | Rosetta | None |
 | mac32 | Intel host with 32-bit Intel (i386) libraries | Rosetta | None |
-| RLVM 0.14, for RealLive games | Intel | Rosetta | None |
-| Older LÖVE releases built only for Intel, such as 0.10.2 | Intel | Rosetta | LÖVE 11.5, which is Universal, for games that run on it |
+| Older Intel RLVM builds, for RealLive games | Intel | Rosetta | MacLauncher Builds RLVM 0.14-MCLv1 is Universal |
+| Older Intel LÖVE builds, including upstream 0.10.2 | Intel | Rosetta | MacLauncher Builds LÖVE 0.10.2-MCLv1 is Universal |
 | Older Ren'Py SDKs whose Mac Python is Intel-only, such as 7.3.5 and 8.0.3 | Intel | Rosetta | Newer SDKs, such as 8.3.4, which is Universal, for games that run on them |
 | Temurin Java 8 | Intel | Rosetta | Java 21 for Apple Silicon, which MacLauncher recommends for Java 8 bytecode; a game whose native libraries are Intel-only keeps an Intel Java |
-| Steamworks bridge for Java 1.9.0 | Intel | Rosetta, with an Intel Java | None; 1.10.0 is Universal, but a game's own wrapper decides the bridge version |
+| Older Intel Steamworks bridge for Java 1.9.0 | Intel | Rosetta, with an Intel Java | MacLauncher Builds 1.9.0-MCLv8 is Universal; the game's wrapper determines the bridge version |
 
 The engines below have no Intel-only part:
 

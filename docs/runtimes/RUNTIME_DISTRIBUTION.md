@@ -38,7 +38,8 @@ These projects are published as MacLauncher Builds downloads:
 | onsyuri | ONScripter-Yuri Mac builds |
 | opengmk | OpenGMK |
 | reminori | ReMinori |
-| rlvm-adapter | MacLauncher Cocoa integration library for the upstream RLVM app |
+| rlvm | Universal RLVM app for RealLive games |
+| rlvm-adapter | MacLauncher Cocoa integration library for RLVM |
 | rpgmaker-decrypter | RPG Maker archive and asset extraction |
 | siglus | siglus_rs with its native host |
 | sys3-decompiler | System 3 decompiler |
@@ -50,7 +51,7 @@ These projects are published as MacLauncher Builds downloads:
 
 In **Runtimes**, each game type's panel groups its related packages and ABI variants. A package can contain license texts, native libraries and executables, and it can also take shared libraries from dependency packages that it declares at exact releases.
 
-The RLVM Mac app is downloaded from its upstream project, while its MacLauncher adapter is a separate MacLauncher Builds package. ScummVM is installed from the publisher's disk image or another published Mac archive, which is checked against the publisher's SHA-256 file when one is listed. Installation then signs it locally (ad hoc) so that MacLauncher's graphics integration can load into it, and the installation record keeps the installed version and source for offline use.
+RLVM offers a Universal MacLauncher Builds package and its upstream Mac releases. Its MacLauncher adapter is a separate MacLauncher Builds package. ScummVM is installed from the publisher's disk image or another published Mac archive, which is checked against the publisher's SHA-256 file when one is listed. Installation then signs it locally (ad hoc) so that MacLauncher's graphics integration can load into it, and the installation record keeps the installed version and source for offline use.
 
 Other runtimes are downloaded directly from their publishers, among them NW.js, Ren'Py, Godot, LÖVE, Java, Ruffle, ScummVM, RFVP, Xash3D FWGS, UZDoom, Raze, DREAMM, mac32, Mac.apk and compatible official GameMaker tools. Decompilers and asset tools come from the same kinds of source, and the [tool table](../tools/README.md#where-tools-appear-in-runtimes) lists each one. MKXP-Z has both kinds: besides its MacLauncher Builds packages, the upstream GitHub Actions builds are offered as a separate download source.
 
