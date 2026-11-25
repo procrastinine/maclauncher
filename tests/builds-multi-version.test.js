@@ -168,3 +168,28 @@ test("every named catalog record is listed; records this launcher cannot use sho
   assert.deepEqual(later6.nativeAbi, { sdlEventLoop: "dynamic" });
 });
 
+
+test("a project's current and earlier Builds catalogs are one MacLauncher Builds source", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "builds-combined-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const former = "sample-runtime-former", userDataDir = path.join(root, "data"), fetched = [];
+  const earlier = version => {
+    const tag = `${former}/v${version}/${process.arch}`, filename = `${former}-${version}-${process.arch}.tar.gz`, record = hostedRecord(version);
+    return { ...record, id: former, tag, asset: { ...record.asset, filename, url: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${filename}` } };
+  };
+  const fetchUrlBuffer = async url => {
+    fetched.push(url);
+    return url.endsWith(`/${former}.json`)
+      ? { status: 200, body: Buffer.from(JSON.stringify({ schemaVersion: 2, projectId: former, updatePolicy: "manual", packages: [earlier("0.40.0-MCLv1")] })) }
+      : catalogResponse([hostedRecord("0.41.0-MCLv2"), hostedRecord("0.41.0-MCLv1")]);
+  };
+  const manager = createProjectBuildManager({ projectId, runtimeId, formerIds: [former], label: "Sample runtime", repository,
+    manifestRelative: "runtime.json", sourceRelative: "source.tar.gz", executableRelative: "native", validateManifest: () => {}, verifyPayload: () => {},
+    dependencies: { systemVersionSync: () => "26.0", fetchUrlBuffer } });
+  await manager.refreshCatalog({ userDataDir, sourceId: "builds", force: true });
+  assert.equal(fetched.length, 2, "Reloading the one source reads both catalogs");
+  const { sources } = manager.getState({ userDataDir }).catalog;
+  assert.deepEqual(sources.map(source => [source.id, source.label]), [["builds", "MacLauncher Builds"]]);
+  assert.equal(sources[0].variants, undefined, "No menu chooses between the catalogs");
+  assert.deepEqual([...sources[0].installableVersions].sort(), ["0.40.0-MCLv1", "0.41.0-MCLv1", "0.41.0-MCLv2"]);
+});

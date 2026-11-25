@@ -88,10 +88,13 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, formerIds
     ...Catalog.unavailablePins(catalog.projectId, catalog.unavailable || [])];
   };
   const discover = async (id, { signal }) => publishedPins(await Catalog.fetchProjectCatalog({ ...recordOptions, projectId: id, signal }, dependencies));
+  // A project's current and earlier Builds catalogs refresh together and list
+  // their versions as one MacLauncher Builds source.
   const core = createPinnedNativeManager({ id: projectId, runtimeId, formerIds, label, versionCompatibility,
     sourceUrl, sourceLabel, buildsRepository: repository, upstreamUrl, upstreamLabel, nativeLibrary, supportsDefault,
     ...(catalogProjectIds.length > 1 ? { catalogSources: catalogProjectIds.map((id, index) => ({
       id: index ? id : "builds", label: index ? "MacLauncher Builds · earlier releases" : "MacLauncher Builds",
+      group: { id: "builds", label: "MacLauncher Builds", combined: true },
       url: `https://procrastinine.github.io/maclauncher-builds/#${id}`, discover: options => discover(id, options)
     })) } : {}),
     // An included package counts as a build for the CPU it runs on.

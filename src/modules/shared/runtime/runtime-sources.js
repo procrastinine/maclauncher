@@ -42,9 +42,12 @@ function groupSources(catalog, sources) {
     const state = { status: members.some(source => source.status === "loading") ? "loading" : errors.length ? "error"
       : members.every(source => source.status === "success") ? "success" : "idle",
       error: errors.join(" · ") || null, fetchedAt: newestDate("fetchedAt"), failedAt: newestDate("failedAt") };
-    return { ...sourceCatalog(catalog, { ...item.presentation, source: members[0].source, state,
-      versions: catalog.versions.filter(version => versions.has(version)) }),
-      variants: members.map(source => ({ id: source.id, label: source.variantLabel || source.label, catalog: source })) };
+    const combined = sourceCatalog(catalog, { ...item.presentation, source: members[0].source, state,
+      versions: catalog.versions.filter(version => versions.has(version)) });
+    // A combined group, such as a project's current and earlier Builds
+    // catalogs, is one list of every member's versions without a variant menu.
+    return item.presentation.combined ? combined
+      : { ...combined, variants: members.map(source => ({ id: source.id, label: source.variantLabel || source.label, catalog: source })) };
   });
 }
 
