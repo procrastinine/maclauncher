@@ -702,11 +702,17 @@ export function RuntimesView({
                         const installDetail = typeof inst.detail === "string" && inst.detail.trim() ? inst.detail.trim() : "";
                         const apis = (Array.isArray(inst.apis) ? inst.apis : Array.isArray(inst.translator?.apis) ? inst.translator.apis : [])
                           .filter((api: unknown): api is string => typeof api === "string").sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
-                        // Where the row comes from and what it holds is on hover over its name.
+                        // Where the row comes from is on hover over its name.
                         const about = [inst.platformKey, installDetail,
-                          ...Object.entries(inst.libraries || {}).flatMap(([id, library]: [string, any]) => library.ready
-                            ? [`${library.label || id} ${library.version || library.apiProfile || ""}`.trim()] : []),
                           (!isRuntimeIncluded(inst) || inst.reference) && !inst.custom ? inst.installDir : ""].filter(Boolean).join("\n");
+                        // A library installed with this version, such as a Ren'Py SDK's Live2D, reads as its own line:
+                        // its summary, otherwise the version of a working library.
+                        const libraries = Object.entries(inst.libraries || {}).flatMap(([id, library]: [string, any]) => {
+                          const summary = typeof library?.summary === "string" && library.summary ? library.summary
+                            : library?.ready ? String(library.version || library.apiProfile || "") : "";
+                          return summary ? [{ id, text: `${library.label || id}: ${summary}`,
+                            title: library.ready ? "" : String(library.detail || library.reason || "") }] : [];
+                        });
                         return (
                           <div
                             className="saveRow"
@@ -734,6 +740,7 @@ export function RuntimesView({
                               {runtimeIncludedParts(inst.componentSummary).length > 0 &&
                                 <div className="dim" data-runtime-components="true">Includes {runtimeIncludedParts(inst.componentSummary).map((part, index) =>
                                   <React.Fragment key={index}>{index ? " · " : ""}<span className="runtimeIncludedPart">{part}</span></React.Fragment>)}</div>}
+                              {libraries.map(library => <div className="dim" data-runtime-library={library.id} key={library.id} title={library.title || undefined}>{library.text}</div>)}
                               {inst.error && <div className="dim">{formatUserError(inst.error)}</div>}
                             </div>
                             {(!inst.reference || makeDefault) && <div className="saveRowActions">
@@ -745,7 +752,7 @@ export function RuntimesView({
                                 onClick={() => onRuntimeSetDefault(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, inst.variant, scope.id)}>
                                 Make default for {scope.label}</button>)}
                               {/* An included copy offers Make default only; it is never repaired or removed here. */}
-                              {onRuntimeInstalledAction && !inst.reference && (inst.actions || []).filter((action: any) => action.available !== false).map((action: any) =>
+                              {onRuntimeInstalledAction && !inst.reference && (inst.actions || []).filter((action: any) => action.available !== false && action.hidden !== true).map((action: any) =>
                                 <button className="btn small" key={action.id} disabled={runtimeBusy}
                                   onClick={() => onRuntimeInstalledAction(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, action.id, inst.architecture)}>
                                   {action.label}

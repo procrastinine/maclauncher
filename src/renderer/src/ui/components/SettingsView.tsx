@@ -26,6 +26,7 @@ import { StatusBadge } from "./StatusBadge";
 import { GraphicsShortcutSettings, graphicsShortcutHelp, type GraphicsShortcutApi } from "./GraphicsShortcutSettings";
 import { TranslatorEnvironmentSettings } from "./TranslatorEnvironmentEditor";
 import { PluginSettings } from "./PluginLibrary";
+import { runtimeHostGroup, runtimeMenuEntries, runtimeMenuSelection, runtimeMenuValue } from "./runtime-menu-model";
 const GraphicsLibrarySettings = React.lazy(() => import("./GraphicsLibrarySettings").then(module => ({default: module.GraphicsLibrarySettings})));
 import type { ReShadeFilterApi } from "./ReShadeFilterLibrary";
 
@@ -239,11 +240,27 @@ export function SettingsView({
                 || runtimeTabs.find(runtime => runtime.id === defaultRuntime)
                 || runtimeTabs.find(runtime => runtime.id === mod.runtime?.default)
                 || runtimeTabs[0];
+              // The Wine sources share one Default runtime entry and one tab,
+              // Wine; a menu below each picks the source, as in the inspector.
+              const preferredRuntimes = [defaultRuntime, mod.runtime?.default];
+              const defaultMenu = runtimeMenuEntries(runtimeChoices, mod);
+              const defaultMenuValue = runtimeMenuValue(mod, defaultRuntime);
+              const defaultGroup = runtimeHostGroup(mod, defaultRuntime);
+              const defaultGroupMembers = defaultMenu.find(entry => entry.value === defaultMenuValue)?.members || [];
+              const runtimeTabEntries = runtimeMenuEntries(runtimeTabs.map(runtime => runtime.id), mod).map(entry => ({ ...entry,
+                key: entry.group ? `group-${entry.group}` : entry.value,
+                modified: runtimeTabs.some(runtime => runtime.modified && entry.members.includes(runtime.id)) }));
+              const selectedTab = runtimeTabEntries.find(entry => selectedRuntime && entry.members.includes(selectedRuntime.id));
+              const chooseDefaultRuntime = (runtimeId: string) => {
+                setActiveRuntimes(current => ({ ...current, [mod.id]: runtimeId }));
+                onSetModuleSettings(mod.id, { defaultRuntime: runtimeId });
+              };
               const moduleName = mod.shortLabel || formatModuleLabel(mod.label, mod.shortLabel, mod.id);
               // The heading's help lists the shown runtime form's rows.
               const helpKey = `${mod.id}:${selectedRuntime?.id || ""}`;
               // A lone runtime named as its section (Window capture) is not named twice; the section title labels its form.
-              const runtimeHeading = runtimeTabs.length === 1 && (formatRuntimeLabel(runtimeTabs[0].id, mod) !== moduleName || runtimeTabs[0].modified);
+              const runtimeHeading = runtimeTabEntries.length === 1 &&
+                (runtimeTabEntries[0].label !== moduleName || runtimeTabEntries[0].modified || runtimeTabEntries[0].members.length > 1);
               return (
                 <div className="settingsSection" key={mod.id}>
                   {/* The heading repeats the sidebar entry that opened it. */}
@@ -252,28 +269,41 @@ export function SettingsView({
                     <SectionHelp label={`About ${moduleName} settings`} items={[...(settingKeys.includes("toolsButtonVisible")
                       ? helpItems([{ label: "Show Tools button", text: TOOLS_BUTTON_HELP }]) : []), ...(formHelp[helpKey] || [])]} />
                   </div>
-                  {(runtimeChoices.length > 1 || (defaultRuntime && !runtimeChoices.includes(defaultRuntime))) && (
+                  {(defaultMenu.length > 1 || (defaultRuntime && !defaultMenu.some(entry => entry.value === defaultMenuValue))) && (
                     <div className="settingsRow">
                       <div className="settingsLabel">Default runtime</div>
                       <div className="settingsControl">
                         <select
                           className="input"
                           aria-label="Default runtime"
-                          value={defaultRuntime}
+                          value={defaultMenuValue}
                           onChange={e => {
-                            const runtimeId = e.target.value;
-                            setActiveRuntimes(current => ({ ...current, [mod.id]: runtimeId }));
-                            onSetModuleSettings(mod.id, { defaultRuntime: runtimeId });
+                            const entry = defaultMenu.find(entry => entry.value === e.target.value);
+                            if (entry) chooseDefaultRuntime(runtimeMenuSelection(entry, preferredRuntimes));
                           }}
                         >
-                          {!runtimeChoices.includes(defaultRuntime) && <option value={defaultRuntime}>
-                            {formatRuntimeOption(defaultRuntime, mod)} (saved; choose a compatible runtime)
+                          {!defaultMenu.some(entry => entry.value === defaultMenuValue) && <option value={defaultMenuValue}>
+                            {defaultGroup || formatRuntimeOption(defaultRuntime, mod)} (saved; choose a compatible runtime)
                           </option>}
-                          {runtimeChoices.map(rt => (
-                            <option key={rt} value={rt}>
-                              {formatRuntimeOption(rt, mod)}
+                          {defaultMenu.map(entry => (
+                            <option key={entry.value} value={entry.value}>
+                              {entry.label}
                             </option>
                           ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                  {defaultGroup && (defaultGroupMembers.length > 1 || !defaultGroupMembers.includes(defaultRuntime)) && (
+                    <div className="settingsRow">
+                      <div className="settingsLabel">{`Default ${defaultGroup}`}</div>
+                      <div className="settingsControl">
+                        <select className="input" aria-label={`Default ${defaultGroup}`} value={defaultRuntime}
+                          onChange={e => chooseDefaultRuntime(e.target.value)}>
+                          {!defaultGroupMembers.includes(defaultRuntime) && <option value={defaultRuntime}>
+                            {formatRuntimeOption(defaultRuntime, mod)} (saved; choose a compatible runtime)
+                          </option>}
+                          {defaultGroupMembers.map(rt => <option key={rt} value={rt}>{formatRuntimeOption(rt, mod)}</option>)}
                         </select>
                       </div>
                     </div>
@@ -332,36 +362,49 @@ export function SettingsView({
                   {runtimeTabs.length > 0 && <div className="settingsRuntimeSection">
                       {/* One runtime is named by a heading rather than a lone tab. */}
                       {runtimeHeading && <div className="settingsRuntimeHeading" role="heading" aria-level={3}
-                        id={`settings-runtime-heading-${mod.id}-${runtimeTabs[0].id}`}>
-                        {formatRuntimeLabel(runtimeTabs[0].id, mod)}
-                        {runtimeTabs[0].modified && <StatusBadge>Modified</StatusBadge>}
+                        id={`settings-runtime-heading-${mod.id}-${runtimeTabEntries[0].key}`}>
+                        {runtimeTabEntries[0].label}
+                        {runtimeTabEntries[0].modified && <StatusBadge>Modified</StatusBadge>}
                       </div>}
-                      {runtimeTabs.length > 1 && <ScrollableTabStrip label={`${mod.label} runtime settings`} tabsClassName="settingsTabs settingsRuntimeTabs"
-                        selectedTabId={selectedRuntime ? `settings-runtime-tab-${mod.id}-${selectedRuntime.id}` : null}>
-                        {runtimeTabs.map((runtime, index) => <button key={runtime.id} type="button" role="tab"
-                          id={`settings-runtime-tab-${mod.id}-${runtime.id}`}
-                          className={["settingsTab", selectedRuntime?.id === runtime.id ? "active" : ""].filter(Boolean).join(" ")}
-                          aria-selected={selectedRuntime?.id === runtime.id}
-                          aria-controls={`settings-runtime-panel-${mod.id}-${runtime.id}`}
-                          tabIndex={selectedRuntime?.id === runtime.id ? 0 : -1}
-                          onClick={() => setActiveRuntimes(current => ({ ...current, [mod.id]: runtime.id }))}
+                      {runtimeTabEntries.length > 1 && <ScrollableTabStrip label={`${mod.label} runtime settings`} tabsClassName="settingsTabs settingsRuntimeTabs"
+                        selectedTabId={selectedTab ? `settings-runtime-tab-${mod.id}-${selectedTab.key}` : null}>
+                        {runtimeTabEntries.map((tab, index) => <button key={tab.key} type="button" role="tab"
+                          id={`settings-runtime-tab-${mod.id}-${tab.key}`}
+                          className={["settingsTab", selectedTab?.key === tab.key ? "active" : ""].filter(Boolean).join(" ")}
+                          aria-selected={selectedTab?.key === tab.key}
+                          aria-controls={`settings-runtime-panel-${mod.id}-${tab.key}`}
+                          tabIndex={selectedTab?.key === tab.key ? 0 : -1}
+                          onClick={() => selectedTab?.key !== tab.key &&
+                            setActiveRuntimes(current => ({ ...current, [mod.id]: runtimeMenuSelection(tab, preferredRuntimes) }))}
                           onKeyDown={event => {
-                            const next = event.key === "ArrowRight" ? (index + 1) % runtimeTabs.length
-                              : event.key === "ArrowLeft" ? (index - 1 + runtimeTabs.length) % runtimeTabs.length
-                              : event.key === "Home" ? 0 : event.key === "End" ? runtimeTabs.length - 1 : null;
+                            const next = event.key === "ArrowRight" ? (index + 1) % runtimeTabEntries.length
+                              : event.key === "ArrowLeft" ? (index - 1 + runtimeTabEntries.length) % runtimeTabEntries.length
+                              : event.key === "Home" ? 0 : event.key === "End" ? runtimeTabEntries.length - 1 : null;
                             if (next === null) return;
                             event.preventDefault();
-                            setActiveRuntimes(current => ({ ...current, [mod.id]: runtimeTabs[next].id }));
-                            document.getElementById(`settings-runtime-tab-${mod.id}-${runtimeTabs[next].id}`)?.focus({ preventScroll: true });
+                            setActiveRuntimes(current => ({ ...current, [mod.id]: runtimeMenuSelection(runtimeTabEntries[next], preferredRuntimes) }));
+                            document.getElementById(`settings-runtime-tab-${mod.id}-${runtimeTabEntries[next].key}`)?.focus({ preventScroll: true });
                           }}>
-                          {formatRuntimeLabel(runtime.id, mod)}
-                          {runtime.modified && <StatusBadge>Modified</StatusBadge>}
+                          {tab.label}
+                          {tab.modified && <StatusBadge>Modified</StatusBadge>}
                         </button>)}
                       </ScrollableTabStrip>}
-                      {selectedRuntime && <div role={runtimeTabs.length > 1 ? "tabpanel" : undefined}
-                        id={`settings-runtime-panel-${mod.id}-${selectedRuntime.id}`}
-                        aria-labelledby={runtimeTabs.length > 1 || runtimeHeading
-                          ? `settings-runtime-${runtimeTabs.length > 1 ? "tab" : "heading"}-${mod.id}-${selectedRuntime.id}` : `settings-title-${mod.id}`}>
+                      {selectedRuntime && selectedTab && <div role={runtimeTabEntries.length > 1 ? "tabpanel" : undefined}
+                        id={`settings-runtime-panel-${mod.id}-${selectedTab.key}`}
+                        aria-labelledby={runtimeTabEntries.length > 1 || runtimeHeading
+                          ? `settings-runtime-${runtimeTabEntries.length > 1 ? "tab" : "heading"}-${mod.id}-${selectedTab.key}` : `settings-title-${mod.id}`}>
+                        {/* A group's tab shows one source's settings at a time; Modified marks the sources whose settings differ. */}
+                        {selectedTab.group && <div className="settingsRow">
+                          <div className="settingsLabel">{selectedTab.group}</div>
+                          <div className="settingsControl">
+                            <select className="input" aria-label={`${selectedTab.group} settings`} value={selectedRuntime.id}
+                              onChange={e => setActiveRuntimes(current => ({ ...current, [mod.id]: e.target.value }))}>
+                              {selectedTab.members.map(rt => <option key={rt} value={rt}>
+                                {formatRuntimeLabel(rt, mod)}{runtimeTabs.find(runtime => runtime.id === rt)?.modified ? " (Modified)" : ""}
+                              </option>)}
+                            </select>
+                          </div>
+                        </div>}
                         <RuntimeSettingsWindow key={`${mod.id}:${selectedRuntime.id}`}
                           api={api} state={state} error={null} inline
                           onHelpChange={items => setFormHelp(current => sameHelp(current[helpKey], items) ? current : { ...current, [helpKey]: items })}

@@ -24,7 +24,7 @@ MacLauncher also picks the right processor build of each runtime for you. Some e
 
 ## Where the choice lives
 
-Select a game in your library to open its **inspector**. Its runtime selector lists every runtime that can play this game, with the installed versions of each, and a change there is saved for that game alone and can be undone at any time. **Runtimes** in the toolbar is where you install, update and remove runtime versions, and **Settings** sets the default runtime for each game type.
+Select a game in your library to open its **inspector**. Its runtime selector lists every runtime that can play this game, with the installed versions of each, and a change there is saved for that game alone and can be undone at any time. The WINE distributions appear there once, as **Wine**, and a **Wine** menu right below picks CrossOver, Sikarugir, WineCX, Highball Wine or MetalSharp Wine. **Runtimes** in the toolbar is where you install, update and remove runtime versions, and **Settings** sets the default runtime for each game type.
 
 ## Windows games
 
@@ -48,7 +48,7 @@ Try it when:
 
 ### CrossOver
 
-[CrossOver](https://www.codeweavers.com/crossover/) is CodeWeavers' commercial WINE distribution, a paid app. If it's installed, MacLauncher finds it and offers it as another runtime. You can register several copies of CrossOver, such as a preview build, and pick a different one for each game. CodeWeavers keeps CrossOver current with fixes for newer games, so if you own it, it's usually the better WINE to use. Sikarugir stays the default, though, because it's free and always available. To use CrossOver, pick it in a game's inspector, or make it the default runtime for Windows Game in **Settings**.
+[CrossOver](https://www.codeweavers.com/crossover/) is CodeWeavers' commercial WINE distribution, a paid app. If it's installed, MacLauncher finds it and offers it as another runtime. You can register several copies of CrossOver, such as a preview build, and pick a different one for each game. CodeWeavers keeps CrossOver current with fixes for newer games, so if you own it, it's usually the better WINE to use. Sikarugir stays the default, though, because it's free and always available. To use CrossOver, pick it in the **Wine** menu of a game's inspector, or make it the **Default Wine** for Windows Game in **Settings**.
 
 ### WineCX
 

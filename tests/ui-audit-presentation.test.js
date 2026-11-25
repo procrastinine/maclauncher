@@ -574,14 +574,36 @@ test('every game type offers its playable runtimes as the default and gives each
     const markup = renderToStaticMarkup(React.createElement(SettingsView, {
       state: { modules, moduleSettings: {}, runtimeDefaults: {}, recents: [] }, sectionId: `module:${mod.id}`,
       showIcons: true, showNonDefaultTags: false, onSetLauncherSettings() {}, onSetModuleSettings() {} }));
+    // The Wine sources share one entry and one tab, Wine; a Default Wine menu picks the source.
+    const group = id => mod.runtime.entries?.[id]?.hostGroup || '';
+    const entries = [...new Set(choices.map(id => group(id) ? `group:${group(id)}` : id))];
     const select = /<select[^>]*aria-label="Default runtime"[^>]*>([\s\S]*?)<\/select>/.exec(markup);
-    assert.equal(Boolean(select), choices.length > 1, `${mod.id} shows a Default runtime choice exactly when it has more than one`);
+    assert.equal(Boolean(select), entries.length > 1, `${mod.id} shows a Default runtime choice exactly when it has more than one`);
+    if (select) assert.deepEqual([...select[1].matchAll(/<option[^>]*value="([^"]*)"/g)].map(match => match[1]), entries,
+      `${mod.id} Default runtime options`);
+    const defaultRuntime = mod.runtime.default, members = choices.filter(id => group(id) && group(id) === group(defaultRuntime));
+    const wine = /<select[^>]*aria-label="Default Wine"[^>]*>([\s\S]*?)<\/select>/.exec(markup);
+    assert.equal(Boolean(wine), members.length > 1, `${mod.id} shows Default Wine exactly when its default is one of several Wine sources`);
+    if (wine) assert.deepEqual([...wine[1].matchAll(/<option[^>]*value="([^"]*)"/g)].map(match => match[1]), members);
     if (choices.length < 2) continue;
-    const offered = [...select[1].matchAll(/<option[^>]*value="([^"]*)"/g)].map(match => match[1]);
-    assert.deepEqual(offered, choices, `${mod.id} Default runtime options`);
-    for (const id of choices) assert.match(markup, new RegExp(`id="settings-runtime-(?:tab|heading)-${mod.id}-${id}"`),
+    for (const id of choices) assert.match(markup, new RegExp(`id="settings-runtime-(?:tab|heading)-${mod.id}-${group(id) ? `group-${group(id)}` : id}"`),
       `${mod.id} offers ${id} as the default without a settings tab`);
+    assert.doesNotMatch(markup, />(?:Sikarugir|WineCX|Highball Wine|MetalSharp Wine)<\/button>/, `${mod.id} gives no Wine source a tab of its own`);
   }
+});
+test('the Wine tab picks the source whose settings it shows', () => {
+  const { SettingsView } = components;
+  const modules = require('../src/modules/registry').listModules();
+  const markup = renderToStaticMarkup(React.createElement(SettingsView, {
+    state: { modules, moduleSettings: {}, runtimeDefaults: {}, recents: [] }, sectionId: 'module:crossover',
+    showIcons: true, showNonDefaultTags: false, onSetLauncherSettings() {}, onSetModuleSettings() {} }));
+  const windows = modules.find(mod => mod.id === 'crossover');
+  assert.match(markup, /id="settings-runtime-heading-crossover-group-Wine">Wine</);
+  const source = /<select[^>]*aria-label="Wine settings"[^>]*>([\s\S]*?)<\/select>/.exec(markup);
+  assert.ok(source, 'the Wine tab has a source menu');
+  assert.deepEqual([...source[1].matchAll(/<option[^>]*value="([^"]*)"/g)].map(match => match[1]),
+    windows.runtime.supported.filter(id => windows.runtime.entries[id].launch !== false));
+  assert.match(source[1], /<option value="sikarugir" selected="">Sikarugir<\/option>/, 'the default source is shown first');
 });
 test('a version chosen from the combined inspector list names the section that lists it', () => {
   const { resolveRuntimeSectionId } = components;

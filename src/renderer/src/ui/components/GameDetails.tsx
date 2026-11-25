@@ -26,7 +26,8 @@ import { ModuleEntrySelectors, entrySelectorHelp } from "./ModuleEntrySelectors"
 import { moduleToolGroups, presentModuleFields } from "./module-tools-model";
 import { isRuntimeManageable } from "./runtime-tabs-model";
 import { runtimeDescriptionText } from "./RuntimeDescription";
-import { resolveInspectorRuntimeSection, runtimeInspectorInstall, runtimeInspectorRepair, runtimeInspectorSelectedVersion,
+import { runtimeHostGroup, runtimeMenuEntries, runtimeMenuSelection, runtimeMenuValue } from "./runtime-menu-model";
+import { resolveInspectorRuntimeSection, runtimeInspectorInstall, runtimeInspectorLibraries, runtimeInspectorRepair, runtimeInspectorSelectedVersion,
   runtimeInspectorVersions, runtimeInspectorVersionOptions, runtimeInspectorVersionPatch, runtimeVersionTagWithout, inspectorTranslatorRows } from "./runtime-inspector-model";
 import { EffectsControls } from "./EffectsControls";
 import { ErrorText } from "./ErrorText";
@@ -253,6 +254,14 @@ export const GameDetails = memo(function GameDetails({
     if (rt === "native" && !canLaunchNative) return false;
     return true;
   });
+  // The Wine sources share one Runtime entry, Wine, and the row below it picks
+  // the source. Choosing Wine selects the game type's default runtime when it
+  // is a Wine source, otherwise the first one listed.
+  const runtimeMenu = runtimeMenuEntries(runtimeOptions, moduleInfo);
+  const runtimeMenuSelected = runtimeMenuValue(moduleInfo, g.runtimeId);
+  const runtimeGroup = runtimeHostGroup(moduleInfo, g.runtimeId);
+  const runtimeGroupMembers = runtimeMenu.find(entry => entry.value === runtimeMenuSelected)?.members || [];
+  const runtimeDefaultChoices = [state.moduleSettings?.[g.moduleId]?.defaultRuntime, moduleInfo?.runtime?.default];
   const runtimeManagerId = moduleInfo
     ? resolveRuntimeManagerId(moduleInfo, g.runtimeId)
     : null;
@@ -430,6 +439,9 @@ export const GameDetails = memo(function GameDetails({
   const runtimeRepair = runtimeInspectorRepair(runtimeSection,
     runtimeVersionSelected || runtimeRecommendation?.version || runtimeDefaultVersion || runtimeStatusDefaultVersion, runtimeVariantInUse,
     runtimeVersionOption?.architecture || runtimePreferredArchitecture);
+  const runtimeLibraries = runtimeInspectorLibraries(runtimeSection, runtimeVersionSelected || runtimePlayVersion,
+    !runtimeVersionSelected && runtimeAutomaticEntry?.runtimeId !== g.runtimeId, runtimeVariantInUse,
+    runtimeVersionOption?.architecture || runtimePreferredArchitecture);
   const libsDependencies = (moduleState?.libs?.dependencies || []) as Array<{
     id: string;
     label: string;
@@ -598,29 +610,30 @@ export const GameDetails = memo(function GameDetails({
 
           <h3 className="detailSectionHeading">{canLaunch ? "Launch" : "Runtime"}<SectionHelp label={canLaunch ? "About Launch" : "About Runtime"} items={helpItems([
             canLaunch && { label: "Launch arguments", text: LAUNCH_ARGUMENTS_HELP },
-            { label: "Runtime", text: runtimeDescriptionText(moduleInfo, g.runtimeId) },
+            { label: runtimeGroup ? formatRuntimeLabel(g.runtimeId, moduleInfo) : "Runtime", text: runtimeDescriptionText(moduleInfo, g.runtimeId) },
             canLaunch && { label: "Network access", text: networkHelp },
             canLaunch && g.steamClientEligible && { label: "Steam client on Play", text: STEAM_CLIENT_HELP }])} /></h3>
           {canLaunch && <GameArguments key={`arguments:${g.gamePath}`} value={g.launchArguments || ""}
             onSave={value => actions.onSetLaunchArguments(g.gamePath, value)} />}
           <div className="detailRow detailControlRow">
-            <div className="detailLabel" title={runtimeDescriptionText(moduleInfo, g.runtimeId) || undefined}>Runtime</div>
+            <div className="detailLabel" title={!runtimeGroup && runtimeDescriptionText(moduleInfo, g.runtimeId) || undefined}>Runtime</div>
             <div className="detailActions menuWithIcon">
               <Select aria-label="Runtime"
                 className="input"
-                value={g.runtimeId}
-                onChange={e =>
-                  onSetRuntime(g.gamePath, e.target.value as RuntimeId)
-                }
+                value={runtimeMenuSelected}
+                onChange={e => {
+                  const entry = runtimeMenu.find(entry => entry.value === e.target.value);
+                  if (entry) onSetRuntime(g.gamePath, runtimeMenuSelection(entry, runtimeDefaultChoices));
+                }}
               >
-                {!runtimeOptions.includes(g.runtimeId) && (
-                  <option value={g.runtimeId} disabled>
-                    {formatRuntimeOption(g.runtimeId, moduleInfo)} (saved; incompatible input)
+                {!runtimeMenu.some(entry => entry.value === runtimeMenuSelected) && (
+                  <option value={runtimeMenuSelected} disabled>
+                    {runtimeGroup || formatRuntimeOption(g.runtimeId, moduleInfo)} (saved; incompatible input)
                   </option>
                 )}
-                {runtimeOptions.map(rt => (
-                  <option key={rt} value={rt}>
-                    {formatRuntimeOption(rt, moduleInfo)}
+                {runtimeMenu.map(entry => (
+                  <option key={entry.value} value={entry.value}>
+                    {entry.label}
                   </option>
                 ))}
               </Select>
@@ -641,6 +654,18 @@ export const GameDetails = memo(function GameDetails({
               </button>}
             </div>
           </div>
+          {runtimeGroup && <div className="detailRow detailControlRow">
+            <div className="detailLabel" title={runtimeDescriptionText(moduleInfo, g.runtimeId) || undefined}>{runtimeGroup}</div>
+            <div className="detailActions">
+              <Select aria-label={runtimeGroup} className="input" value={g.runtimeId}
+                onChange={e => onSetRuntime(g.gamePath, e.target.value as RuntimeId)}>
+                {!runtimeGroupMembers.includes(g.runtimeId) && <option value={g.runtimeId} disabled>
+                  {formatRuntimeOption(g.runtimeId, moduleInfo)} (saved; incompatible input)
+                </option>}
+                {runtimeGroupMembers.map(rt => <option key={rt} value={rt}>{formatRuntimeOption(rt, moduleInfo)}</option>)}
+              </Select>
+            </div>
+          </div>}
 
           {canLaunch && <>
           <div className="detailRow detailControlRow">
@@ -772,6 +797,11 @@ export const GameDetails = memo(function GameDetails({
                     <div className="detailMeta">{runtimeRecommended.requiredVariantReason}</div>}
                 </div>
               )}
+              {/* Libraries that belong to the runtime version, such as Ren'Py SDK's Live2D, are managed in Runtimes. */}
+              {runtimeLibraries.map(library => <div className="detailRow textRow" key={`runtime-library:${library.id}`} aria-busy={library.pending || undefined}>
+                <div className="detailLabel"><span>{library.label}</span>{library.note && <HelpTip label={`About ${library.label}`}>{library.note}</HelpTip>}</div>
+                <div className={library.pending ? "detailValue dim" : "detailValue"} title={library.detail || undefined}>{library.value}</div>
+              </div>)}
             </>
           )}
 

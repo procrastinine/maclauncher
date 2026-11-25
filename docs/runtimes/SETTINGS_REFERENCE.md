@@ -814,7 +814,7 @@ Inspector details: Runtime version.
 | Ren'Py patch | Refresh Ren'Py patch status; Patch; Remove Ren'Py patch |
 | Builds | Reload; Reveal; Build app bundle; Remove app bundle |
 | Extract | Reload; Reveal; Extract; Remove extracted files |
-| Libraries | Live2D status; Install Live2D library; Remove Live2D library |
+| Live2D | Live2D status; Install Live2D library; Remove Live2D library |
 | Other | Enable Ren'Py console (Shift+O); Remove Ren'Py console patch; Refresh Ren'Py cheats; Patch Universal Ren'Py Walkthrough System; Remove Universal Ren'Py Walkthrough System; Add Universal Ren'Py Mod; Remove Universal Ren'Py Mod |
 
 ## RPG Maker 2000/2003

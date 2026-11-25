@@ -104,6 +104,28 @@ export function runtimeInspectorInstall(section: Record<string, any> | null, ver
   return { availability: null, install: null };
 }
 
+/** The libraries that installed versions of a runtime carry, such as the
+ * Live2D library of a Ren'Py SDK, as they stand for the version Play uses.
+ * Each reads its own summary, or Installed or Not installed; while that
+ * version is still being looked up, it reads Checking…. A runtime whose
+ * installed versions carry no libraries has no rows. */
+export function runtimeInspectorLibraries(section: Record<string, any> | null, version: string, pending: boolean,
+  variant = "", architecture = "") {
+  const declared = new Map<string, Record<string, any>>();
+  for (const row of Array.isArray(section?.installed) ? section.installed : []) {
+    for (const [id, library] of Object.entries(row?.libraries || {})) {
+      if (!declared.has(id) && library && typeof library === "object") declared.set(id, library as Record<string, any>);
+    }
+  }
+  const install = !pending && version ? runtimeInspectorInstall(section, version, variant, architecture).install : null;
+  return [...declared].map(([id, sample]) => {
+    const library = install?.libraries?.[id] as Record<string, any> | undefined;
+    const value = pending ? "Checking…" : library?.summary || (library?.ready ? "Installed" : "Not installed");
+    return { id, label: String(library?.label || sample.label || id), note: String(library?.note || sample.note || ""),
+      value: String(value), detail: library && !library.ready ? String(library.detail || library.reason || "") : "", pending };
+  });
+}
+
 /** What Repair installs again for a damaged or incomplete installation: the
  * same version, section, variant and build. A build named by an architecture
  * variant carries its architecture in that variant. */

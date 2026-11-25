@@ -98,7 +98,7 @@ A runtime can depend on other runtimes being present on the host. Modules declar
 | `catalog.importVersionRequired` | The imported artifacts do not identify their own version, so the Runtimes selector supplies `version` with the import. |
 | `createPinnedNativeManager({ importLocal: true })` | Enables explicit registration of a local executable or app, with native architecture validation and checksum tracking. Removing the registration keeps the external files. |
 
-Fixed built-in managers do not offer these actions to the user. Installed-version actions target one exact section and version, such as importing Live2D into a Ren'Py SDK, and keep the SDK defaults.
+Fixed built-in managers do not offer these actions to the user. Installed-version actions target one exact section and version, such as importing Live2D into a Ren'Py SDK, and keep the SDK defaults. A descriptor's `available: false` refuses the action, while `hidden: true` only leaves its button out of Runtimes. An installed row's `libraries` map describes libraries installed with that version; an entry's optional `label`, `summary` and `note` are what Runtimes and the game inspector show for it.
 
 ## Shared runtime coordination
 

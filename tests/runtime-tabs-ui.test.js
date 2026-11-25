@@ -48,8 +48,9 @@ test('shared settings and runtimes keep static detail in help while preserving c
   // The components heading's help holds the section's explanation and lists each component's (GUI 0877 R25).
   assert.match(runtimes, /popover="auto" class="helpPopover"><p>Component explanation\.<\/p><dl class="helpList"><dt>Runtime part<\/dt><dd>Part explanation\.<\/dd><\/dl>/);
   assert.match(runtimes, /class="runtimeCatalogDetails"><p>Catalog explanation\.<\/p>/);
-  // A row's static detail is its name's tooltip; its macOS requirement stays visible.
-  assert.match(runtimes, /<span title="mac-arm64\nInstallation detail\.\nGraphics library 1\.0\n\/Runtimes\/2\.0">v2\.0<\/span>/);
+  // A row's static detail is its name's tooltip; its macOS requirement and the libraries installed with it stay visible.
+  assert.match(runtimes, /<span title="mac-arm64\nInstallation detail\.\n\/Runtimes\/2\.0">v2\.0<\/span>/);
+  assert.match(runtimes, /<div class="dim" data-runtime-library="graphics">Graphics library: 1\.0<\/div>/);
   assert.match(runtimes, /<div class="dim">Requires macOS 14\.0 or later<\/div>/);
   assert.doesNotMatch(runtimes, /class="runtimePanelSubtitle"|class="dim mono ellipsis runtimePath"|<div class="dim">Installation detail\./);
   assert.doesNotMatch(runtimes, /class="runtimeSectionHint"/);

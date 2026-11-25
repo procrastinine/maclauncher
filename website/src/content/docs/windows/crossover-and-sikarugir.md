@@ -44,7 +44,7 @@ On Apple Silicon, a WINE build that comes with WineMetalGL, which runs OpenGL on
 
 ## Which one to use
 
-CodeWeavers keeps CrossOver current with fixes for newer games, so if you own it, it's usually the better choice. You can make it the default runtime for Windows Game in **Settings**, or pick it for a single game in its inspector. Sikarugir stays the default because it's free and always available. On macOS 26, WineCX is the free way to get a CrossOver-style WINE on a current WINE release, with D3DMetal added from Runtimes.
+CodeWeavers keeps CrossOver current with fixes for newer games, so if you own it, it's usually the better choice. You can make it the **Default Wine** for Windows Game in **Settings**, or pick it for a single game in the **Wine** menu of its inspector. Sikarugir stays the default because it's free and always available. On macOS 26, WineCX is the free way to get a CrossOver-style WINE on a current WINE release, with D3DMetal added from Runtimes.
 
 The three share more than you might expect. They offer the same [graphics translators](/maclauncher/windows/graphics-translators/) from MacLauncher, the same [runtime settings](/maclauncher/windows/settings/) and the same [effects and upscaling](/maclauncher/windows/effects-and-upscaling/). What differs is what each distribution includes: its own WINE build, its own set of included translators and, for CrossOver and WineCX, CodeWeavers' changes. A few settings belong to one of them only. Sikarugir has an optional DirectDraw compatibility wrapper for old 32-bit games, for example, and CrossOver can report a different Windows version for a single launch.
 

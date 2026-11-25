@@ -410,6 +410,12 @@
         "label": "Live2D status",
         "kind": "secondary",
         "autoRun": true,
+        "hiddenWhen": [
+          {
+            "key": "runtimeId",
+            "notEquals": "patched"
+          }
+        ],
         "resultFields": [
           {
             "key": "version",
@@ -430,12 +436,28 @@
         "id": "patchLive2D",
         "label": "Install Live2D library",
         "kind": "primary",
+        "hiddenWhen": [
+          {
+            "key": "runtimeId",
+            "notEquals": "patched"
+          },
+          {
+            "key": "moduleData.live2dInstalled",
+            "truthy": true
+          }
+        ],
         "confirm": "Install the compatible Live2D Core library in this game's macOS runtime? An existing library is backed up."
       },
       {
         "id": "removeLive2D",
         "label": "Remove Live2D library",
         "kind": "danger",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.live2dInstalled",
+            "falsy": true
+          }
+        ],
         "confirm": "Remove the launcher-installed Live2D library and restore the original library, if one was backed up?"
       }
     ],
@@ -494,13 +516,13 @@
       },
       {
         "id": "libraries",
-        "label": "Libraries",
+        "label": "Live2D",
         "actions": [
           "live2DStatus",
           "patchLive2D",
           "removeLive2D"
         ],
-        "note": "SDK libraries are managed per version in Runtimes. These actions change this game's patched macOS runtime.",
+        "note": "Installs the Live2D Cubism Core library for this game alone, in MacLauncher's data, for its patched macOS runtime. With the Ren'Py SDK runtime, Live2D comes from the SDK version and is managed in Runtimes, unless this game has its own library.",
         "hiddenWhen": [
           {
             "key": "gamePath",

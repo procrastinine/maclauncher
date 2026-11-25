@@ -2,7 +2,9 @@
 // definition in manifest.json. Every source has the same fields; a source with
 // no external environment kind has no environment picker, DirectDraw
 // compatibility is listed where the source includes CNC-DDraw, and CrossOver
-// keeps its bottle type, which names the bottle its saves live in.
+// keeps its bottle type, which names the bottle its saves live in. Every
+// source belongs to the Wine host group, so runtime menus offer one Wine entry
+// and a second menu for the source.
 const Sources = require(".");
 function withSources(manifest) {
   const result = structuredClone(manifest), shared = result.runtime.windows;
@@ -17,7 +19,7 @@ function withSources(manifest) {
       fields = fields.map(field => field.key === "windowsVersion" ? structuredClone(shared.bottleTemplateField) : field);
       delete defaults.windowsVersion; defaults.bottleTemplate = "win10_64";
     }
-    result.runtime.entries[source.id] = { input: structuredClone(shared.input), label: source.runtimeLabel,
+    result.runtime.entries[source.id] = { input: structuredClone(shared.input), label: source.runtimeLabel, hostGroup: "Wine",
       statusAction: shared.statusAction, statusFromRecord: shared.statusFromRecord, statusTranslators: shared.statusTranslators,
       graphicsHost: shared.graphicsHost,
       ...(source.graphicsArchitecture ? { graphicsArchitecture: source.graphicsArchitecture } : {}),

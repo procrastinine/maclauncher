@@ -287,6 +287,7 @@ The `runtime` object declares the module's backends and how they are offered, de
 - `runtime.supported`: the runtime IDs shown in the runtime menu. Adding `nwjs-patched` opts the module into the shared patched NW.js wrapper; engine-specific patches stay under the module's control.
 - `runtime.entries`: an optional map from runtime ID to runtime metadata:
   - `label`: the display label.
+  - `hostGroup`: an optional group name. Runtime menus in the inspector and in Settings list the runtimes of one group as a single entry named after it, with a second menu for the runtime itself, and Settings gives them one tab. The Wine sources use `Wine`.
   - `description`, `requirements`, `preparation` and `dataNotice`: optional text shown with the runtime's settings, covering what it is, its platform requirements, its automatic setup and how its data is kept separate.
   - `networkAccess`: an optional capability flag; `false` turns off network access controls for that runtime.
   - `settings`: an optional runtime settings schema; see [runtime settings schema](#runtime-settings-schema).

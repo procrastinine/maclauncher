@@ -93,3 +93,57 @@ test('Play preparation shows converted modules of the total and the installation
   assert.match(extracting, />Installing AnyPS5… · Extracting files…</);
   assert.doesNotMatch(extracting, /100%/);
 });
+
+function inspect(moduleId, game = {}) {
+  const state = require('./library-layout-fixture').createLibraryFixture();
+  const moduleInfo = require('../src/modules/registry').getModuleInfo(moduleId);
+  const g = { ...state.recents[0], moduleId, moduleData: {}, runtimeData: {}, moduleRuntimeSupport: moduleInfo.runtime.supported,
+    moduleSupports: { ...state.recents[0].moduleSupports, launch: true }, ...game };
+  return renderToStaticMarkup(React.createElement(GameDetails, {
+    g, state: { ...state, modules: [moduleInfo] }, moduleInfo, actions: {}, moduleActionResults: {}, moduleActionBusy: {}
+  }));
+}
+const menu = (markup, label) => {
+  const select = new RegExp(`<select[^>]*aria-label="${label}"[^>]*>([\\s\\S]*?)</select>`).exec(markup);
+  return select && [...select[1].matchAll(/<option[^>]*value="([^"]*)"[^>]*>([^<]*)</g)].map(match => [match[1], match[2]]);
+};
+test('the Wine sources share one Wine runtime entry, and a Wine row picks the source', () => {
+  const markup = inspect('unity', { runtimeId: 'sikarugir', nativeAppPath: null });
+  assert.deepEqual(menu(markup, 'Runtime').map(([, label]) => label), ['Unity Mono player', 'Wine'], 'Game\'s macOS app needs an app bundle');
+  assert.match(markup, /<option value="group:Wine" selected="">Wine<\/option>/);
+  assert.deepEqual(menu(markup, 'Wine'), [['crossover', 'CrossOver'], ['sikarugir', 'Sikarugir'], ['winecx', 'WineCX'],
+    ['highball-wine', 'Highball Wine'], ['metalsharp-wine', 'MetalSharp Wine']]);
+  assert.match(markup, /<option value="sikarugir" selected="">Sikarugir<\/option>/);
+  const own = inspect('unity', { runtimeId: 'unity' });
+  assert.equal(menu(own, 'Wine'), null, 'a runtime outside the group has no Wine row');
+  assert.match(own, /<option value="unity" selected="">Unity Mono player<\/option>/);
+  const saved = inspect('unity', { runtimeId: 'crossover', moduleRuntimeSupport: ['unity', 'sikarugir'] });
+  assert.deepEqual(menu(saved, 'Wine'), [['crossover', 'CrossOver (saved; incompatible input)'], ['sikarugir', 'Sikarugir']]);
+});
+test('Ren\'Py offers game Live2D tools with Ren\'Py Patch and shows the SDK version\'s Live2D with the SDK', () => {
+  const live2d = { ready: true, owned: true, version: '5-r.5', label: 'Live2D', summary: 'Cubism 5-r.5', note: 'Managed in Runtimes.' };
+  const runtimeManagers = { sdk: { id: 'sdk', label: "Ren'Py", sections: [{ id: 'v8', label: "Ren'Py 8", defaultVersion: '8.5.3',
+    installed: [{ version: '8.5.3', ready: true, libraries: { live2d } }, { version: '8.5.2', ready: true, libraries: { live2d: { ready: false, label: 'Live2D' } } }],
+    catalog: { versions: ['8.5.3', '8.5.2'] } }] } };
+  const state = require('./library-layout-fixture').createLibraryFixture();
+  const moduleInfo = require('../src/modules/registry').getModuleInfo('renpy');
+  const render = (runtimeId, extra = {}) => renderToStaticMarkup(React.createElement(GameDetails, {
+    g: { ...state.recents[0], moduleId: 'renpy', runtimeId, moduleRuntimeSupport: moduleInfo.runtime.supported,
+      moduleData: { major: 8 }, runtimeData: {}, moduleSupports: { ...state.recents[0].moduleSupports, launch: true }, ...extra },
+    state: { ...state, runtimeManagers }, moduleInfo, actions: {}, moduleActionResults: {}, moduleActionBusy: {},
+    runtimeAutomaticEntry: { runtimeId, value: { managerId: 'sdk', version: '8.5.3' } } }));
+  const patched = render('patched');
+  assert.match(patched, /<span>Live2D<\/span>/);
+  assert.match(patched, /aria-label="Install Live2D library"/);
+  assert.doesNotMatch(patched, /aria-label="Remove Live2D library"/);
+  const installed = render('patched', { moduleData: { major: 8, live2dInstalled: true } });
+  assert.match(installed, /aria-label="Remove Live2D library"/);
+  assert.doesNotMatch(installed, /aria-label="Install Live2D library"/);
+  const sdk = render('sdk', { runtimeData: { sdk: { version: '8.5.3' } } });
+  assert.doesNotMatch(sdk, /Install Live2D library|Remove Live2D library|Live2D status/);
+  assert.match(sdk, /<div class="detailValue">Cubism 5-r\.5<\/div>/);
+  assert.match(sdk, /About Live2D/);
+  assert.match(render('sdk', { runtimeData: { sdk: { version: '8.5.2' } } }), /<div class="detailValue">Not installed<\/div>/);
+  assert.match(render('sdk', { runtimeData: { sdk: { version: '8.5.3' } }, moduleData: { major: 8, live2dInstalled: true } }),
+    /aria-label="Remove Live2D library"/, 'a game library stays removable with the SDK');
+});

@@ -183,8 +183,16 @@ test("SDK row metadata and pure manager actions route imports to the selected ma
   const root = fixture(t), first = sdk(root, "7.8.7"), second = sdk(root, "8.5.3"), file = archive(root);
   const state = Manager.getState({ userDataDir: root, settings: {} });
   assert.equal(state.v7.installed[0].actions.find(action => action.id === "importLive2D").inputKind, "file");
+  assert.deepEqual(state.v7.installed[0].actions.map(action => [action.id, Boolean(action.hidden)]),
+    [["installLive2D", false], ["importLive2D", false], ["removeLive2D", false]]);
+  assert.equal(state.v7.installed[0].libraries.live2d.summary, undefined, "a missing library has no summary");
   await Manager.performInstalledAction({ userDataDir: root, sectionId: "v7", version: "7.8.7", installedActionId: "importLive2D", archivePath: file });
   assert.equal(Live2D.status(Live2D.sdkTarget(first)).ready, true);
+  // Once the SDK has a working library, Runtimes names it and offers only Remove.
+  const ready = Manager.getState({ userDataDir: root, settings: {} }).v7.installed[0];
+  assert.equal(ready.libraries.live2d.label, "Live2D");
+  assert.match(ready.libraries.live2d.summary, /^Cubism \d/);
+  assert.deepEqual(ready.actions.filter(action => !action.hidden && action.available !== false).map(action => action.id), ["removeLive2D"]);
   assert.equal(fs.existsSync(Live2D.sdkTarget(second).libraryPath), false);
   await assert.rejects(Manager.performInstalledAction({ userDataDir: root, sectionId: "v8", version: "7.8.7", installedActionId: "importLive2D", archivePath: file }), /not installed/);
   await Manager.performInstalledAction({ userDataDir: root, sectionId: "v7", version: "7.8.7", installedActionId: "removeLive2D" });

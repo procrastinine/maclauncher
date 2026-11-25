@@ -146,6 +146,8 @@ export type RuntimeSettingsSchema = {
 
 export type RuntimeEntry = {
   label?: string;
+  /** Runtimes of one host group, such as the Wine sources, share one runtime menu entry named after it. */
+  hostGroup?: string;
   statusAction?: string;
   // The status lists translator rows, so the inspector holds their place until it arrives.
   statusTranslators?: boolean;

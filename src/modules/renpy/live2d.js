@@ -255,15 +255,24 @@ async function downloadLibrary(t, { userDataDir, downloads, signal, logger, conf
   });
 }
 function sdkTarget(install) { return target({ rootDir: install.installDir, renpyVersion: install.runtimeVersion || install.version }); }
+// Presentation of an SDK's Live2D library in Runtimes and in the game
+// inspector: a working library reads as its Cubism version, a library that is
+// present but unusable reads as its reason, and a missing one has no summary.
+// Install and Import are shown while the SDK has no working library.
+const SDK_NOTE = "Live2D is installed per Ren'Py SDK version in Runtimes. When a game has Live2D models, Play installs it into the SDK after asking.";
 function describeSdk(install) {
   try {
     const t = sdkTarget(install), info = status(t);
-    return { libraries: { live2d: info }, actions: [
-      { id: "installLive2D", label: `Install Live2D ${t.policy.apiProfile.replace("Cubism ", "")}`, available: true, sourceUrl: SOURCE_URL },
-      { id: "importLive2D", label: "Import Live2D ZIP", available: true, inputKind: "file", extensions: ["zip"], sourceUrl: SOURCE_URL },
+    const summary = info.ready ? (info.version && info.version !== "unmanaged" ? `Cubism ${info.version}` : info.apiProfile)
+      : fs.existsSync(t.libraryPath) ? info.reason : undefined;
+    return { libraries: { live2d: { ...info, label: "Live2D", note: SDK_NOTE, ...(summary ? { summary } : {}) } }, actions: [
+      { id: "installLive2D", label: `Install Live2D ${t.policy.apiProfile.replace("Cubism ", "")}`, available: true, hidden: info.ready, sourceUrl: SOURCE_URL },
+      { id: "importLive2D", label: "Import Live2D ZIP…", available: true, hidden: info.ready, inputKind: "file", extensions: ["zip"], sourceUrl: SOURCE_URL },
       { id: "removeLive2D", label: "Remove Live2D", available: info.owned, sourceUrl: SOURCE_URL }
     ] };
-  } catch (error) { return { libraries: { live2d: { ready: false, reason: error.message } }, actions: [] }; }
+  } catch (error) {
+    return { libraries: { live2d: { ready: false, reason: error.message, label: "Live2D", note: SDK_NOTE, summary: "Unavailable" } }, actions: [] };
+  }
 }
 async function performSdkAction(install, payload = {}) {
   const t = sdkTarget(install);
