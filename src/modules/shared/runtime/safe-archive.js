@@ -279,6 +279,18 @@ with (PackageArchive(archive) if archive.lower().endswith(".pkg") else zipfile.Z
             else: os.link(os.path.join(root, target), output)
 `;
 
+// macOS tar reads zstd only through a separate zstd program that macOS does
+// not include, so Node's own decoder expands a .tar.zst into a plain tar in
+// directory first. The caller removes the returned file.
+async function expandZstd(archivePath, directory, signal) {
+  const expanded = path.join(directory, ".archive-" + require("node:crypto").randomUUID() + ".tar");
+  try {
+    await require("node:stream/promises").pipeline(fs.createReadStream(archivePath), require("node:zlib").createZstdDecompress(),
+      fs.createWriteStream(expanded, { flags: "wx" }), ...(signal ? [{ signal }] : []));
+  } catch (error) { fs.rmSync(expanded, { force: true }); throw error; }
+  return expanded;
+}
+
 async function extractArchive(archivePath, destination, signal, { spawn: start = spawn,
   resolvePython = () => Python.resolveEmbeddedPythonBinary(Python.resolveEmbeddedPythonRoot()) } = {}) {
   throwIfAborted(signal);
@@ -287,11 +299,9 @@ async function extractArchive(archivePath, destination, signal, { spawn: start =
     fs.lstatSync(destination).isSymbolicLink() || fs.readdirSync(destination).length)
     throw new Error("Runtime extraction requires a runtime archive and an empty installation folder.");
   if (/\.tar\.zst$/i.test(archivePath)) {
-    const expanded = path.join(path.dirname(destination), ".archive-" + require("node:crypto").randomUUID() + ".tar");
-    try {
-      await require("node:util").promisify(require("node:child_process").execFile)("/usr/bin/tar", ["-cf", expanded, "@" + archivePath], { signal });
-      return await extractArchive(expanded, destination, signal, { spawn: start, resolvePython });
-    } finally { fs.rmSync(expanded, { force: true }); }
+    const expanded = await expandZstd(archivePath, path.dirname(destination), signal);
+    try { return await extractArchive(expanded, destination, signal, { spawn: start, resolvePython }); }
+    finally { fs.rmSync(expanded, { force: true }); }
   }
   const python = resolvePython();
   if (!python || !path.isAbsolute(python)) throw new Error("The included archive helper is missing. Reinstall MacLauncher.");
@@ -310,4 +320,4 @@ async function extractArchive(archivePath, destination, signal, { spawn: start =
   throwIfAborted(signal);
 }
 
-module.exports = { ARCHIVE, extractArchive, EXTRACT_SCRIPT };
+module.exports = { ARCHIVE, expandZstd, extractArchive, EXTRACT_SCRIPT };

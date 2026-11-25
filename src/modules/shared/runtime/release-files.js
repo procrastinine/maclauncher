@@ -72,6 +72,11 @@ async function extractArchive(archivePath, destination, signal) {
   fs.mkdirSync(destination, { recursive: true });
   if (format === ".dmg") return require("./dmg").extractDmg(archivePath, destination, signal);
   if (format === ".pkg") return require("./safe-archive").extractArchive(archivePath, destination, signal);
+  if (format === ".tar.zst") {
+    const expanded = await require("./safe-archive").expandZstd(archivePath, path.dirname(destination), signal);
+    try { return await extractArchive(expanded, destination, signal); }
+    finally { fs.rmSync(expanded, { force: true }); }
+  }
   const isZip = format === ".zip";
   return new Promise((resolve, reject) => {
     const child = spawn(isZip ? "/usr/bin/ditto" : "/usr/bin/tar",
