@@ -25,7 +25,7 @@ Several facts bear on a Studio game's version, and detection records them separa
 
 Audio groups and embedded sprite sequences add further, independent bounds:
 
-- GameMaker 2024.14 introduced `AGRP.Path`, so missing or null paths rule out 2024.14 and later runners. Combined with `UILR`, this can narrow a game to `2024.13+ (before 2024.14)`.
+- GameMaker 2024.14 introduced `AGRP.Path`, so missing or null paths rule out 2024.14 and later runners. Combined with `UILR`, this can narrow a game to `2024.13+ (before 2024.14)`. A null audio-group entry, a zero pointer in the table, has neither a name nor a path field and adds no bound; a table of only null entries leaves the version unresolved by audio groups.
 - Embedded sequence headers grew from 32 to 40 bytes in 2024.13. To tell the two apart, a probe of at most 64 sprites and 64 KiB validates track names and offsets. A unique 32-byte layout then rules out 2024.13 and later, and a 40-byte layout requires it, while absent or ambiguous layouts stay unresolved.
 
 The structure definitions behind these bounds come from [UndertaleAudioGroup](https://github.com/UnderminersTeam/UndertaleModTool/blob/03c7048438347799e0717b6e57a9358d000472e0/UndertaleModLib/Models/UndertaleAudioGroup.cs), [UndertaleSprite](https://github.com/UnderminersTeam/UndertaleModTool/blob/03c7048438347799e0717b6e57a9358d000472e0/UndertaleModLib/Models/UndertaleSprite.cs) and [UndertaleSequence](https://github.com/UnderminersTeam/UndertaleModTool/blob/03c7048438347799e0717b6e57a9358d000472e0/UndertaleModLib/Models/UndertaleSequence.cs).

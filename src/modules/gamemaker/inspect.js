@@ -109,14 +109,25 @@ function inspectStudio(filePath, { includeNames = false, limits = LIMITS } = {})
       if (count === undefined || count > 4096) throw new Error("Invalid or oversized GameMaker audio-group table.");
       audioGroupLayout = count ? "name-and-path" : "empty";
       const pointers = reader.read(audio.dataOffset + 4, count * 4);
+      let entriesWithFields = 0;
       for (let index = 0; index < count; index++) {
-        const pointer = pointers.readUInt32LE(index * 4), end = index + 1 < count ? pointers.readUInt32LE((index + 1) * 4) : audio.dataOffset + audio.size;
+        const pointer = pointers.readUInt32LE(index * 4);
+        // A zero entry pointer marks a null audio group, as UMT tolerates in
+        // pointer lists. Its name and path fields are absent, so it carries no
+        // layout or version evidence either way.
+        if (pointer === 0) continue;
+        const end = (() => {
+          for (let next = index + 1; next < count; next += 1) if (pointers.readUInt32LE(next * 4)) return pointers.readUInt32LE(next * 4);
+          return audio.dataOffset + audio.size;
+        })();
         if (pointer < audio.dataOffset + 4 + count * 4 || end < pointer + 4 || end > audio.dataOffset + audio.size) throw new Error("GameMaker audio-group entry is outside AGRP.");
+        entriesWithFields += 1;
         readString(reader.read(pointer, 4).readUInt32LE(0));
         const pathPointer = end >= pointer + 8 ? reader.read(pointer + 4, 4).readUInt32LE(0) : 0;
         if (!pathPointer) audioGroupLayout = "legacy-name-only-or-null-path";
         else readString(pathPointer);
       }
+      if (count && !entriesWithFields) audioGroupLayout = "null-entries";
     }
     const code = byId.get("CODE");
     const codeEntries = [];

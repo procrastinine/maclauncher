@@ -541,6 +541,49 @@ test("audio-group path evidence bounds official runner selection across the 2024
   assert.throws(() => OfficialLaunch.preflight(modern, "2024.13.1.242"), /predates/);
 });
 
+function nullEntryAudioArchive(root, name, { allNull = false } = {}) {
+  const bytes = form({ wad: 17, extraChunks: [{ id: "UILR", data: Buffer.alloc(0) }, { id: "AGRP", data: Buffer.alloc(allNull ? 8 : 40) }] });
+  let strg, audio;
+  for (let offset = 8; offset < bytes.length; offset += 8 + bytes.readUInt32LE(offset + 4)) {
+    const id = bytes.toString("ascii", offset, offset + 4);
+    if (id === "STRG") strg = offset + 8;
+    if (id === "AGRP") audio = offset + 8;
+  }
+  const namePointer = bytes.readUInt32LE(strg + 4) + 4;
+  if (allNull) {
+    bytes.writeUInt32LE(1, audio);
+    bytes.writeUInt32LE(0, audio + 4);
+  } else {
+    bytes.writeUInt32LE(3, audio);
+    bytes.writeUInt32LE(0, audio + 4);
+    bytes.writeUInt32LE(audio + 16, audio + 8);
+    bytes.writeUInt32LE(audio + 24, audio + 12);
+    bytes.writeUInt32LE(namePointer, audio + 16);
+    bytes.writeUInt32LE(namePointer, audio + 20);
+    bytes.writeUInt32LE(namePointer, audio + 24);
+    bytes.writeUInt32LE(namePointer, audio + 28);
+  }
+  const file = path.join(root, name); fs.writeFileSync(file, bytes); return file;
+}
+
+test("null audio-group entries stay inspectable and unqualified tables add no AGRP bound", t => {
+  const root = temporary(t);
+  const file = nullEntryAudioArchive(root, "nullgroups.win"), info = Inspect.inspectStudio(file);
+  assert.equal(info.audioGroupLayout, "name-and-path");
+  assert.equal(info.minimumEngineVersion, "2024.14");
+  assert.throws(() => OfficialLaunch.preflight(file, "2024.13.1.242"), /predates/);
+  assert.equal(detect(file).moduleData.audioGroupLayout, "name-and-path");
+  const folder = path.join(root, "game"); fs.mkdirSync(folder);
+  fs.writeFileSync(path.join(folder, "data.win"), fs.readFileSync(file));
+  const detected = detect(folder);
+  assert.equal(detected.moduleData.executionKind, "studio-vm");
+  assert.equal(detected.moduleData.minimumEngineVersion, "2024.14");
+  const allNull = nullEntryAudioArchive(root, "allnull.win", { allNull: true }), quiet = Inspect.inspectStudio(allNull);
+  assert.equal(quiet.audioGroupLayout, "null-entries");
+  assert.ok(!quiet.versionEvidence.some(item => item.source === "AGRP audio-group path field"));
+  assert.equal(detect(allNull).moduleData.audioGroupLayout, "null-entries");
+});
+
 test("Steam is detected from format fields and missing native support fails before runner staging", async t => {
   const root = temporary(t, { catalog: false }), file = writeForm(root), before = fs.readFileSync(file);
   const bytes = Buffer.from(before), gen8 = 16;
