@@ -49,9 +49,7 @@ int main(int argc,char **argv) {
   return 0;
 }`;
 
-test("real Intel and universal launches retain injected libraries under Rosetta and in child processes", { skip: denied('sysctl') }, {
-  skip: process.platform !== "darwin" || process.arch !== "arm64", timeout: 30000
-}, async t => {
+test("real Intel and universal launches retain injected libraries under Rosetta and in child processes", { skip: denied('sysctl') || (process.platform !== "darwin" || process.arch !== "arm64"), timeout: 30000 }, async t => {
   if (spawnSync("/usr/bin/arch", ["-x86_64", "/usr/bin/true"]).status !== 0) return t.skip("Rosetta is not installed");
   if (spawnSync("/usr/bin/xcrun", ["--find", "clang"]).status !== 0) return t.skip("Apple command-line tools are not installed");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-rosetta-injection-"));

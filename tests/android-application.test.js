@@ -12,7 +12,7 @@ test("Android application bundle names preserve titles without filesystem separa
   assert.ok(Buffer.byteLength(Application.bundleName("遊".repeat(500))) <= 184);
 });
 
-test("Android bundle icons share the rounded Dock image through native IconServices", { skip: denied('atomicWrite') }, { skip: process.platform !== "darwin" }, async () => {
+test("Android bundle icons share the rounded Dock image through native IconServices", { skip: denied('atomicWrite') || (process.platform !== "darwin") }, async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-icon-"));
   try {
     const helper = path.join(root, "application-icon"), probe = path.join(root, "icon-probe"), icon = path.join(root, "icon.png");

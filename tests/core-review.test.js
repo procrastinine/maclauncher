@@ -157,7 +157,7 @@ test("review: launcher-style cheat watchers continue observing runtime writes af
   assert.ok(events.length > beforeRuntimeWrite, "the saved watcher is still attached to the replaced inode");
 });
 
-test("review: terminating a waited native CLI game also terminates its descendants", { skip: denied('seatbelt') }, { timeout: 10000 }, async t => {
+test("review: terminating a waited native CLI game also terminates its descendants", { skip: denied('seatbelt'), timeout: 10000 }, async t => {
   if (process.platform !== "darwin") return t.skip("native macOS app fixture");
   const root = fixture(t);
   const appPath = path.join(root, "Review.app");

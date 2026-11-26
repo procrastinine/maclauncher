@@ -4,9 +4,7 @@ const fs = require("node:fs"), os = require("node:os"), path = require("node:pat
 const { execFileSync, spawn } = require("node:child_process");
 const { profile, environment } = require("../src/modules/shared/runtime/macos-sandbox");
 
-test("confined Android/iOS policy actually denies network by default and permits explicit access", { skip: denied('loopback') }, {
-  skip: process.platform !== "darwin", timeout: 15000,
-}, async t => {
+test("confined Android/iOS policy actually denies network by default and permits explicit access", { skip: denied('loopback') || (process.platform !== "darwin"), timeout: 15000 }, async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "confined-network-")));
   const servers = [], children = [];
   t.after(async () => {

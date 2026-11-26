@@ -69,9 +69,7 @@ test('installed ARM ELF execute capabilities exclude writable paths and file ali
   assert.deepEqual(await installedExecutables([native, arm32, nested, linkedRoot, path.join(ancestorAlias, 'nested')], [writableAlias]), [valid, valid32]);
 });
 
-test('Android sandbox preserves installed native ELF execute checks without host execution grants', { skip: denied('seatbelt') }, {
-  skip: process.platform !== 'darwin',
-}, async t => {
+test('Android sandbox preserves installed native ELF execute checks without host execution grants', { skip: denied('seatbelt') || (process.platform !== 'darwin') }, async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'android-native-xok-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const runtime = path.join(root, 'runtime'), native = path.join(root, 'prepared/input/lib/arm64-v8a');
@@ -104,9 +102,7 @@ test('Android sandbox environment excludes launcher secrets and JVM injection se
   {PATH: '/usr/bin:/bin', LANG: 'en_US.UTF-8', LC_CTYPE: 'UTF-8'});
 });
 
-test('Android installed-code attribute access preserves adjacent file and peer denial', { skip: denied('seatbelt') }, {
-  skip: process.platform !== 'darwin',
-}, async t => {
+test('Android installed-code attribute access preserves adjacent file and peer denial', { skip: denied('seatbelt') || (process.platform !== 'darwin') }, async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'android-code-attributes-')));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const runtime = path.join(root, 'runtime'), java = path.join(runtime, 'bin/java');

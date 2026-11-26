@@ -26,9 +26,7 @@ test("confined Cocoa applications can register their ordinary Dock menu endpoint
   }
 });
 
-test("confined Cocoa text UI can reach native completion and locale-specific spelling services", { skip: denied('seatbelt') }, {
-  skip: process.platform !== "darwin", timeout: 15000,
-}, t => {
+test("confined Cocoa text UI can reach native completion and locale-specific spelling services", { skip: denied('seatbelt') || (process.platform !== "darwin"), timeout: 15000 }, t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "confined-text-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const executable = path.join(root, "probe");
@@ -46,9 +44,7 @@ test("confined Cocoa text UI can reach native completion and locale-specific spe
   }
 });
 
-test("confined Cocoa accessibility validation preserves peer-process isolation", { skip: denied('seatbelt') }, {
-  skip: process.platform !== "darwin", timeout: 15000,
-}, t => {
+test("confined Cocoa accessibility validation preserves peer-process isolation", { skip: denied('seatbelt') || (process.platform !== "darwin"), timeout: 15000 }, t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "confined-accessibility-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const executable = path.join(root, "probe");

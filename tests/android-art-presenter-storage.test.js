@@ -17,9 +17,7 @@ test('ART presenter retains selected graphics with or without its storage adapte
   assert.equal(entry.args[0],'DYLD_INSERT_LIBRARIES='+storage+':'+selected);
 });
 
-test('ART presenter compiles original WebKit isolation rules within private scratch storage',{ skip: denied('seatbelt') }, {
-  skip:process.platform!=='darwin',
-},async t=>{
+test('ART presenter compiles original WebKit isolation rules within private scratch storage',{ skip: denied('seatbelt') || (process.platform!=='darwin') },async t=>{
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android-presenter-storage-')));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const native=path.join(root,'native'),temporary=path.join(root,'tmp'),store=path.join(root,'rules'),home=path.join(root,'home');

@@ -186,7 +186,7 @@ test("Provider enrollment failure retains its structural cause before authority 
   assert.equal(warnings[0].includes('private-provider-value'),false,'Provider values cannot enter structural diagnostics');
 });
 
-test("A game process starts while profile owners initialize and receives authority only after enrollment", { skip: denied('privateTmp') }, { timeout: 10000 }, async t => {
+test("A game process starts while profile owners initialize and receives authority only after enrollment", { skip: denied('privateTmp'), timeout: 10000 }, async t => {
   const { spawn } = require("node:child_process"), { once } = require("node:events");
   const client = require("../src/modules/android/platform-services/client"), profile = require("../src/modules/android/platform-services/paths");
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "android-service-overlap-")), owners = new Map(), enrolled = [];

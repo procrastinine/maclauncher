@@ -60,7 +60,7 @@ test("account token requests use the verified canonical package identity", async
   assert.equal(calls[2].packageName, "example.original"); assert.deepEqual(calls[2].signers, signers);
   await owner.release();
 });
-test("Google broker authenticates the kernel peer and filters account/network grants", { skip: denied('loopback') }, { skip: process.platform !== "darwin" }, async t => {
+test("Google broker authenticates the kernel peer and filters account/network grants", { skip: denied('loopback') || (process.platform !== "darwin") }, async t => {
   const account = { name: "fixture@example.invalid", type: "com.google" }; let tokenCalls = 0;
   const broker = await Broker.create({ networkAllowed: false, account, owner: { caller: { packageName: "example.original" },
     accounts: async () => ({ accounts: [account] }), token: async () => { tokenCalls++; return { token: "must-not-return" }; } } });

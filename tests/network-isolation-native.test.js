@@ -5,9 +5,7 @@ const test = require("node:test");
 const { denied } = require('./helpers/environment.cjs');
 const { spawnDetachedChecked } = require("../src/core/processes");
 
-test("macOS policy blocks native IP sockets and children, preserves Unix IPC and injected libraries", { skip: denied('privateTmp') }, {
-  skip: process.platform !== "darwin", timeout: 20000
-}, async t => {
+test("macOS policy blocks native IP sockets and children, preserves Unix IPC and injected libraries", { skip: denied('privateTmp') || (process.platform !== "darwin"), timeout: 20000 }, async t => {
   const root = fs.mkdtempSync("/tmp/maclauncher-net-");
   const servers = [], children = [];
   t.after(async () => {

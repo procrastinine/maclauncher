@@ -407,7 +407,7 @@ test("static server rejects inaccessible or non-directory roots before listening
   await assert.rejects(createStaticServer(path.join(host.root, "media.dat")), /root must be a directory/);
 });
 
-test("static server rejects actual asynchronous listen errors", { skip: denied('loopback') }, { timeout: 5000 }, async t => {
+test("static server rejects actual asynchronous listen errors", { skip: denied('loopback'), timeout: 5000 }, async t => {
   const host = await fixture(t);
   const originalListen = http.Server.prototype.listen;
   t.mock.method(http.Server.prototype, "listen", function (port, address) {
