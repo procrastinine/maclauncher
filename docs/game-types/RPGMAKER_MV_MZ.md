@@ -12,7 +12,7 @@ The library title comes from `gameTitle` in the game's `data/System.json` when t
 
 | Runtime | Delivery |
 | --- | --- |
-| Electron (default) | Included with MacLauncher |
+| Electron (default) | Included with MacLauncher; other versions from **Runtimes → Electron** run the [game's own Electron app](../runtimes/WEB_RUNTIMES.md#the-games-electron-app) |
 | NW.js | Downloaded from **Runtimes → NW.js** |
 | NW.js (Patched) | The same NW.js installation with compatibility patches |
 | Game's macOS app | A compatible Mac app supplied with the game |

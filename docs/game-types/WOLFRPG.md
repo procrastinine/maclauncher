@@ -15,6 +15,7 @@ Browser Woditor also needs a small runtime marker and a list of the game's files
 | Runtime | Delivery |
 | --- | --- |
 | Browser Woditor (default) | Downloaded from its publisher, **Runtimes → WOLF RPG** |
+| Electron | For a release that holds its own Electron app: runs [that app](../runtimes/WEB_RUNTIMES.md#the-games-electron-app) on MacLauncher's Electron or a version from **Runtimes → Electron** |
 | CrossOver, Sikarugir, WineCX | Windows runtimes for the original `Game.exe` |
 
 Which WOLF RPG formats and APIs work depends on the selected Browser Woditor version. Games that use Windows-specific system functions, native DLLs, WOLF RPG Pro APIs or MP4 video can run in [Sikarugir](../runtimes/SIKARUGIR.md) or [CrossOver](../runtimes/CROSSOVER.md) instead.

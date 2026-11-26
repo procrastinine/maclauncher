@@ -810,6 +810,32 @@ test("same backend dispatches a hosted game through its supplied adapter", async
   assert.equal(calls, 1);
 });
 
+test("a hosted runtime's version owned by a provider starts through that provider", async t => {
+  const { EventEmitter } = require("node:events");
+  const hosted = [], provided = [], child = new EventEmitter();
+  child.pid = process.pid;
+  const { launcher, gamePath, manifest } = fixture(t, { launcher: {
+    launchHosted: async (_entry, runtimeId) => { hosted.push(runtimeId); return { win: new EventEmitter() }; }
+  }, mod: {
+    runtimeVersionOwner: (runtimeId, entry, context) => runtimeId === "host" && context.runtimeId === "host" &&
+      entry.runtimeData?.host?.version === "separate" ? "own-app" : null,
+    launchRuntime: (runtimeId, _entry, context) => { provided.push([runtimeId, context.runtimeId]); return child; }
+  } });
+  manifest.gameType = "web";
+  manifest.runtime = { supported: ["host"], default: "host", hosted: { id: "host" } };
+  manifest.settingsDefaults.defaultRuntime = "host";
+  const entry = await launcher.resolveEntry(gamePath);
+  entry.indexHtml = path.join(gamePath, "index.html");
+  assert.equal((await launcher.launchEntry(entry)).kind, "window");
+  entry.runtimeData = { host: { version: "separate" } };
+  const result = await launcher.launchEntry(entry);
+  assert.equal(result.kind, "process");
+  assert.equal(result.runtimeId, "host");
+  assert.deepEqual(hosted, ["host"]);
+  assert.deepEqual(provided, [["own-app", "host"]]);
+  child.emit("exit", 0);
+});
+
 test("running games protect a shared save folder across different library records", async t => {
   const { EventEmitter } = require("node:events");
   const child = new EventEmitter();

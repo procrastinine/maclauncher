@@ -101,6 +101,7 @@ test('every registered runtime manager has a linked upstream project in Credits'
     'near-infinity': 'https://github.com/Argent77/NearInfinity',
     reminori: 'https://github.com/luoyily/ReMinori',
     nwjs: 'https://github.com/nwjs/nw.js/',
+    electron: 'https://github.com/electron/electron',
     'vnds-love': 'https://github.com/ajusa/VNDS-LOVE',
     opengmk: 'https://github.com/OpenGMK/OpenGMK',
     'onscripter-en': 'https://github.com/Galladite27/ONScripter-EN',

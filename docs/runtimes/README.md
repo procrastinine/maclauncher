@@ -43,7 +43,7 @@ Runtimes and tools that MacLauncher adapts for macOS are published as packages i
 
 Every runtime has an id, and each module lists the ids it supports in `manifest.runtime.supported`. Four ids are shared by several game types:
 
-- `electron`: the game runs in the standalone Electron game host.
+- `electron`: the game runs in the standalone Electron game host on MacLauncher's Electron, or its own Electron app runs on another Electron version from **Runtimes → Electron**.
 - `nwjs`: the game runs in an installed NW.js version through a small wrapper.
 - `nwjs-patched`: NW.js with MacLauncher's compatibility patches (case-insensitive assets, user scripts and engine patches that a game type enables).
 - `native`: a native app bundle or executable supplied with the game is launched directly.
@@ -385,6 +385,7 @@ Modules can define readiness checks for each runtime in `manifest.runtime.preLau
 ### Launch integration
 
 - The hosted Electron runtime and the NW.js runtimes are described under [web runtimes](WEB_RUNTIMES.md#implementation).
+- A runtime provider can supply further versions of a runtime that a game type already has by naming it in `runtime.versionsOf` and answering `ownsVersion(entry, context)`. It then adds no runtime of its own: its manager becomes that runtime's version manager, and Play starts the versions the provider owns through the provider, including for a hosted runtime.
 - The native runtime uses `nativeAppPath` or module-specific resolution.
 - Module `launchRuntime` handlers launch custom runtimes, such as Java (`java`), Ren'Py (`sdk` and `patched`) and NScripter (`onsyuri_*`).
 

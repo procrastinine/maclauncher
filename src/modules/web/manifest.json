@@ -29,6 +29,13 @@
   "shortLabel": "Web",
   "gameType": "web",
   "runtime": {
+    "managerUi": {
+      "electron": {
+        "tabLabel": "Electron",
+        "order": 11,
+        "management": "managed"
+      }
+    },
     "default": "electron",
     "supported": ["electron", "nwjs", "nwjs-patched", "native"],
     "entries": {

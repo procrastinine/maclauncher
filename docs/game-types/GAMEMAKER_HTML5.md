@@ -14,7 +14,7 @@ Library titles and icons come from the local NW.js `window.title`, `productName`
 
 | Runtime | Delivery |
 | --- | --- |
-| Electron (default) | Included with MacLauncher |
+| Electron (default) | Included with MacLauncher; other versions from **Runtimes → Electron** run the [game's own Electron app](../runtimes/WEB_RUNTIMES.md#the-games-electron-app) |
 | NW.js | Downloaded from **Runtimes → NW.js** |
 | Game's macOS app | A compatible Mac app supplied with the game |
 

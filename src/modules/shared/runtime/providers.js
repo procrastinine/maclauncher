@@ -43,20 +43,35 @@ function hostSettings(runtime = {}, capabilities = []) {
     fields: fields.filter(field => typeof field?.capability !== "string" || capabilities.includes(field.capability)) } };
 }
 
+// A provider that supplies further versions of a runtime the game type already
+// has (`runtime.versionsOf`) joins that runtime instead of adding its own: the
+// provider's manager lists the runtime's versions, and the provider runs the
+// versions it owns. In a game type without that runtime it is a runtime of its own.
+function joinedRuntime(provider, runtime) {
+  const target = provider.runtime?.versionsOf;
+  return typeof target === "string" && target && target !== provider.runtimeId && runtime.supported?.includes(target) &&
+    typeof provider.ownsVersion === "function" && provider.managerId ? target : null;
+}
+
 function composeRuntimeProviders(mod, providers) {
   const allowed = mod.manifest?.runtime?.providers;
   if (Array.isArray(allowed)) providers = providers.filter(provider => allowed.includes(provider.runtimeId));
   if (!providers.length) return mod;
   const original = mod.manifest || {};
   const runtime = original.runtime || {};
+  const joined = new Map(providers.map(provider => [provider, joinedRuntime(provider, runtime)]).filter(([, target]) => target));
   const providerIds = new Set(providers.map(provider => provider.runtimeId));
   const baseSupported = (runtime.supported || []).filter(id => !providerIds.has(id));
   const byId = new Map(providers.map(provider => [provider.runtimeId, provider]));
   const manifest = { ...original, runtime: { ...runtime,
-    supported: [...baseSupported, ...providers.filter(provider => providerAppliesToModule(provider, original)).map(provider => provider.runtimeId)],
+    supported: [...baseSupported, ...providers.filter(provider => !joined.has(provider) && providerAppliesToModule(provider, original)).map(provider => provider.runtimeId)],
     entries: { ...runtime.entries }, labels: { ...runtime.labels }, manager: { ...runtime.manager }
   } };
   for (const provider of providers) {
+    if (joined.has(provider)) {
+      manifest.runtime.manager[joined.get(provider)] = provider.managerId;
+      continue;
+    }
     manifest.runtime.entries[provider.runtimeId] = { ...hostSettings(provider.runtime, Array.isArray(runtime.capabilities) ? runtime.capabilities : []),
       ...(provider.supports ? { supports: provider.supports } : {}), runtimeProvider: true };
     manifest.runtime.labels[provider.runtimeId] = provider.runtime?.label || provider.runtimeId;
@@ -64,6 +79,14 @@ function composeRuntimeProviders(mod, providers) {
   }
   const composed = { ...mod, manifest };
   composed.getRuntimeProvider = runtimeId => byId.get(runtimeId) || mod.getRuntimeProvider?.(runtimeId) || null;
+  // The provider that runs the game's selected version of a joined runtime, or
+  // null when the game type's own runtime runs it.
+  composed.runtimeVersionOwner = (runtimeId, entry, context = {}) => {
+    for (const [provider, target] of joined) {
+      if (target === runtimeId && provider.ownsVersion(entry, { ...context, runtimeId })) return provider.runtimeId;
+    }
+    return mod.runtimeVersionOwner?.(runtimeId, entry, context) || null;
+  };
   for (const kind of ["actions", "settingsActions"]) {
     const names = new Set(providers.flatMap(provider => Object.keys(provider[kind] || {})));
     if (!names.size) continue;
@@ -80,7 +103,7 @@ function composeRuntimeProviders(mod, providers) {
       ? mod.filterRuntimeSupport(entry, [...baseSupported], moduleSettings, context) : baseSupported;
     const supported = Array.isArray(base) ? base.filter(id => !providerIds.has(id)) : [];
     for (const provider of providers) {
-      if (provider.supportsEntry(entry, moduleSettings, context)) supported.push(provider.runtimeId);
+      if (!joined.has(provider) && provider.supportsEntry(entry, moduleSettings, context)) supported.push(provider.runtimeId);
     }
     return [...new Set(supported)];
   };

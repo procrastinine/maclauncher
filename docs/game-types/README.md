@@ -66,7 +66,7 @@ RPG Maker MV and MZ are two versions of one engine with the same runtimes, so th
 
 ### Web runtimes
 
-Construct, GameMaker HTML5, RPG Maker MV and MZ, Tyrano and Web games run in [Electron or NW.js](../runtimes/WEB_RUNTIMES.md). Electron is included with MacLauncher, whereas NW.js versions are downloaded separately. Every one of these game types except GameMaker HTML5 also offers a third choice, **NW.js (Patched)**, which adds the game type's optional compatibility settings.
+Construct, GameMaker HTML5, RPG Maker MV and MZ, Tyrano and Web games run in [Electron or NW.js](../runtimes/WEB_RUNTIMES.md). Electron is included with MacLauncher, whereas NW.js versions are downloaded separately. Other Electron versions, also downloaded separately, run a game's own Electron app when its release holds one; WOLF RPG Editor offers Electron for such a release too. Every one of these game types except GameMaker HTML5 also offers a third choice, **NW.js (Patched)**, which adds the game type's optional compatibility settings.
 
 ### The game's own Mac build
 

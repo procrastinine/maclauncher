@@ -845,7 +845,10 @@ function createLauncher({
           return track({ kind: result?.win ? "window" : "process", runtimeId: id,
             ...(result?.win ? result : { child: result?.child || result }) }, hostedContext);
         }
-        if (hosted && runtimeId === hosted) return runHosted(runtimeId);
+        // A version of the runtime that another provider runs, such as a
+        // separately installed Electron, starts through that provider.
+        const versionOwner = mod?.runtimeVersionOwner?.(runtimeId, entry, context) || null;
+        if (hosted && runtimeId === hosted && !versionOwner) return runHosted(runtimeId);
         if (runtimeId === "native") {
           if (process.platform !== "darwin") throw new Error("Native macOS games require macOS.");
           if (typeof mod?.launchNativeRuntime === "function") {
@@ -869,9 +872,10 @@ function createLauncher({
         if (typeof mod?.launchRuntime === "function") {
           await runtimeUseScope.flushSelections();
           const input = prepareModuleInput(entry, registry, context);
-          const child = await mod.launchRuntime(runtimeId, input, context);
+          const child = await mod.launchRuntime(versionOwner || runtimeId, input, context);
           applyInputChanges(entry, input);
           if (child) return track({ kind: "process", runtimeId, child });
+          if (versionOwner) throw new Error(`Runtime ${runtimeId} did not start.`);
         }
         if (hosted && options.strict !== true) return runHosted(hosted);
         throw new Error(`Runtime ${runtimeId} is not supported for ${info.label || moduleId}.`);

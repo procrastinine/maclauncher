@@ -9,14 +9,19 @@ MacLauncher runs HTML5 games in one of two browser-based runtimes, [Electron](ht
 | [Tyrano](../game-types/TYRANO.md) | Electron (default), NW.js, NW.js (Patched), Game's macOS app |
 | [GameMaker HTML5](../game-types/GAMEMAKER_HTML5.md) | Electron (default), NW.js, Game's macOS app |
 | [Web](../game-types/WEB.md) | Electron (default), NW.js, NW.js (Patched), Game's macOS app |
+| [WOLF RPG Editor](../game-types/WOLFRPG.md) | Browser Woditor (default), Electron |
 
 The ONScripter-Yuri Web runtime for [NScripter](../game-types/NSCRIPTER.md#onscripter-yuri-web) also runs in an NW.js window.
 
-Electron is included with MacLauncher, while NW.js versions are downloaded separately. **NW.js (Patched)** runs the same NW.js installation with MacLauncher's compatibility patches and the game type's optional patch settings. **Game's macOS app** launches a compatible macOS app supplied with the game. Each game type has its own default, and RPG Maker MV and MZ [prefer NW.js (Patched)](../game-types/RPGMAKER_MV_MZ.md#runtimes) when a usable NW.js SDK is installed.
+Electron is included with MacLauncher, and other [Electron versions](#electron-versions) and every NW.js version are downloaded separately. **NW.js (Patched)** runs the same NW.js installation with MacLauncher's compatibility patches and the game type's optional patch settings. **Game's macOS app** launches a compatible macOS app supplied with the game. Each game type has its own default, and RPG Maker MV and MZ [prefer NW.js (Patched)](../game-types/RPGMAKER_MV_MZ.md#runtimes) when a usable NW.js SDK is installed.
 
 ## Electron
 
-The `electron` runtime runs the game in a standalone Electron game host, separate from the launcher window. On macOS, the Dock label and icon come from the game's cached icon.
+The `electron` runtime runs on MacLauncher's own Electron by default. A game whose release holds its own Electron app can instead [run that app](#the-games-electron-app) under a separately installed Electron version, which is chosen as the runtime's **Version**.
+
+### MacLauncher's Electron
+
+MacLauncher's Electron runs the game in a standalone Electron game host, separate from the launcher window. On macOS, the Dock label and icon come from the game's cached icon.
 
 The host keeps the game's original window behavior:
 
@@ -27,6 +32,39 @@ The host keeps the game's original window behavior:
 The host serves game files from a local loopback server, which handles media byte ranges, HEAD requests, stream failures and safe asset paths. If the window cannot be set up, the host closes the server and removes the session's permissions. A host that keeps running after the launcher stops capturing its startup output still writes its runtime diagnostics to the profile log.
 
 A game type can declare a fallback runtime, which the launcher offers when the Electron host fails.
+
+### The game's Electron app
+
+A separately installed Electron version runs the Electron app that a game's release contains: its `package.json`, its main-process script, the preload scripts its windows name and its own handling of saves and settings. A game whose page depends on an API from its own preload script, such as an `electronAPI` object, or on handlers in its main process runs this way.
+
+#### Detection
+
+Detection records the app where Electron itself starts one: `resources/app`, then `resources/app.asar`, beside a Windows or Linux launcher, and `Contents/Resources/app` or `Contents/Resources/app.asar` in a macOS app. The app's `package.json` must name a JavaScript main script inside the app, or the app must hold `index.js`, as Node resolves it; an app whose `main` is an HTML page belongs to NW.js. A folder, archive or main script reached through a link outside the game's release is not recorded. Every web game type records the app, including RPG Maker MV and MZ, Tyrano, Construct, GameMaker HTML5 and WOLF RPG Editor, and the record is renewed at each library refresh. WOLF RPG Editor has no hosted Electron, so it lists **Electron** as a runtime of its own for a game with a recorded app, and there every version, MacLauncher's included, runs the game's app.
+
+#### Electron versions
+
+**Runtimes → Electron** lists the Electron versions, and a game's **Version** menu lists the installed ones:
+
+- MacLauncher's own Electron, labeled with its version and "MacLauncher". It is always installed, cannot be removed and is the default until another version is made the default.
+- Every stable Electron release in Electron's [release index](https://releases.electronjs.org/releases.json). Downloads come from the [Electron releases](https://github.com/electron/electron/releases) on GitHub, and each archive must match the SHA-256 that the release's `SHASUMS256.txt` lists. Apple Silicon builds exist from Electron 11 on. The Intel list covers every release, and Intel builds run through Rosetta on Apple Silicon.
+
+Play uses the version chosen for the game, then the default set in **Runtimes**. MacLauncher's Electron hosts the game as described above; another version runs the game's own app. A chosen version that is not installed is downloaded after consent. Installing a version leaves the default unchanged, and removing the default version makes MacLauncher's Electron the default again. A game without an Electron app of its own always uses MacLauncher's Electron, whatever the default; when another version is chosen for such a game, Play names the reason and downloads nothing.
+
+#### Launch
+
+The selected Electron starts MacLauncher's small loader, which prepares what Electron prepares for a packaged app before its main script runs:
+
+- The app's `productName` (or `name`) and `version` replace Electron's own, and the user data folder follows that name.
+- `app.getAppPath()` returns the app folder or archive, and `process.resourcesPath` the resources folder that holds it.
+- The game receives only its own launch arguments.
+- `app.isPackaged` is true. Electron reports a packaged app only when its executable has a name other than Electron, so each downloaded Electron also holds its executable under the name `Electron App`, and games start through that name. `ELECTRON_FORCE_IS_PACKAGED` covers registered copies on the releases that read it.
+- An ES module app, with `"type": "module"` or an `.mjs` main script, is imported on the Electron releases that support ES module apps.
+
+The game starts in the folder that holds its resources folder. On macOS, the download quarantine attribute is dropped from the app's folders before the app starts, so a release imported straight from a download does not wait for system approval while it loads native libraries. When the app carries Steam's macOS library among its Node modules, as the steamworks.js and Greenworks bindings do, Play prepares the Steam client as for other games with their own Steam API, and [network isolation](NETWORK_ISOLATION.md) opens only the Steam client's local endpoints for it. The app runs with the user's own home, so its user data (`Library/Application Support/<app name>`), caches, preferences and `Documents` land where the game's own releases put them. Chromium keeps its stored-data key out of the login keychain. The launcher's development and Node variables (`NODE_OPTIONS`, `NODE_ENV`, `ELECTRON_RUN_AS_NODE`, `ELECTRON_START_URL`, `ELECTRON_IS_DEV` and `ELECTRON_NO_ASAR`) do not reach the game. The Dock shows the game's icon, and the menu bar shows the name of the Electron app that runs the game. Stop sends the app a normal Quit and ends it after a grace period.
+
+#### Limits
+
+The game's main process owns its windows, so the Electron host's window fitting, fullscreen handling, local file server, graphics effects, **Block child processes** setting and DevTools shortcut do not apply; the game's **Network access** choice does. Native Node add-ons in a Windows release are Windows builds and do not load on macOS. A game that keeps data beside its own executable, which it finds through `process.execPath` or `app.getPath("exe")`, finds Electron's executable there instead.
 
 ## NW.js
 
@@ -96,7 +134,7 @@ The import verifies exact file hashes, CPU slices, exports and signatures, then 
 
 ## Settings
 
-Electron and NW.js both offer **Block child processes**. With it on, game code can still `require("child_process")` to check for the capability, but its actual `spawn`, `exec` and `fork` calls are blocked. NW.js (Patched) adds the settings described above, and some game types add their own. The [settings reference](SETTINGS_REFERENCE.md) lists the settings for each game type.
+Electron and NW.js both offer **Block child processes**; it applies to MacLauncher's Electron and not to a game's own Electron app. With it on, game code can still `require("child_process")` to check for the capability, but its actual `spawn`, `exec` and `fork` calls are blocked. NW.js (Patched) adds the settings described above, and some game types add their own. The [settings reference](SETTINGS_REFERENCE.md) lists the settings for each game type.
 
 The game's **Network access** choice applies to both browser and Node networking in Electron and NW.js, independently of child-process blocking: allowing network access does not allow child processes that the game starts. [Network isolation](NETWORK_ISOLATION.md) describes the policy.
 
@@ -112,5 +150,6 @@ The web runtimes have a DevTools keyboard shortcut: Cmd+Option+I on macOS (Cmd+S
 - The Electron UI and the command-line runner both pass launches to `src/core/launcher.js`. Native module hooks receive an injected process launcher, so they also work under ordinary Node.
 - Web games use `src/modules/shared/web/runtime/electron-host.js` with injected Electron APIs, and `src/runtime/electron-game.js` initializes only that host. The hosted runtime loads the module's `electron.js` and `src/modules/shared/web/preload/game.js`.
 - `manifest.runtime.hosted` declares the hosted runtime id, its optional `fallback` runtime and user-agent hints. A module turns on save-directory injection with `runtime.hosted.saveDirectory: true`, which keeps engine names out of launcher code.
+- The Web module declares the `electron-app` runtime provider in `electron-app-provider.js`, which every web game type composes, together with the `electron` version manager in `electron-manager.js`. The provider names `electron` in `runtime.versionsOf`, so in a game type with the hosted `electron` runtime it lists no runtime of its own: the manager supplies that runtime's versions, and the launcher asks the module's `runtimeVersionOwner` whether the provider runs the selected version before it starts the hosted game. `src/runtime/electron-app.js` is the loader; it is unpacked beside `app.asar` so every Electron release can read it, and `src/main/bootstrap.js` hands MacLauncher's own Electron to it on `--maclauncher-electron-app`.
 - The NW.js runtimes use the module's launcher helper and the runtime manager's settings. A module enables the patched wrapper by listing `nwjs-patched`, and the module itself decides when its engine-specific patches apply.
 - `greenworks-preparation.js`, `greenworks-sdk.js` and `nwjs-manager.js` in [the shared web runtime module](../../src/modules/shared/web/runtime) provide SDK import, compatibility checks and preparation without Electron. Steam API setup calls `context.prepareSteamApi` with the bridge's exact interface requirements. Detection and native validation cache their results until the source files change.

@@ -58,7 +58,7 @@ Under each game type, the line that starts with "Runtimes tabs" names the tabs i
 | [Web](#web) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 | [Window capture](#window-capture) | Window capture | Window capture |
 | [Windows Game](#windows-game) | Sikarugir | Sikarugir, CrossOver, WineCX |
-| [WOLF RPG Editor](#wolf-rpg-editor) | Browser Woditor | Browser Woditor, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
+| [WOLF RPG Editor](#wolf-rpg-editor) | Browser Woditor | Browser Woditor, Electron *(provider)*, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)* |
 
 ## 32-bit Mac
 
@@ -240,6 +240,8 @@ Module `construct`.
 
 Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
+Runtimes tabs: NW.js; Electron.
+
 ### Electron settings
 
 | Setting | Values | Default | Description |
@@ -387,6 +389,8 @@ Inspector details: GameMaker family, Execution format, Header version (GMS2 may 
 Module `gamemaker-html5`.
 
 Backends: Electron (default), NW.js, Game's macOS app.
+
+Runtimes tabs: NW.js; Electron.
 
 ### Electron settings
 
@@ -853,7 +857,7 @@ Module `mv`.
 
 Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: NW.js.
+Runtimes tabs: NW.js; Electron.
 
 ### Electron settings
 
@@ -888,6 +892,8 @@ Runtimes tabs: NW.js.
 Module `mz`.
 
 Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
+
+Runtimes tabs: NW.js; Electron.
 
 ### Electron settings
 
@@ -1062,6 +1068,8 @@ Module `tyrano`.
 
 Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
+Runtimes tabs: NW.js; Electron.
+
 ### Electron settings
 
 | Setting | Values | Default | Description |
@@ -1160,6 +1168,8 @@ Runtimes tabs: VNDS → VNDS-LOVE.
 Module `web`.
 
 Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
+
+Runtimes tabs: NW.js; Electron.
 
 ### Electron settings
 
@@ -1272,9 +1282,9 @@ Inspector details: Windows CPU, Executable, CrossOver application.
 
 Module `wolfrpg`.
 
-Backends: Browser Woditor (default), CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
+Backends: Browser Woditor (default), Electron *(provider)*, CrossOver *(provider)*, Sikarugir *(provider)*, WineCX *(provider)*.
 
-Runtimes tabs: WOLF RPG → WolfTL; WOLF RPG → UberWolf; WOLF RPG → Browser Woditor.
+Runtimes tabs: WOLF RPG → WolfTL; WOLF RPG → UberWolf; WOLF RPG → Browser Woditor; Electron.
 
 ### Browser Woditor settings
 

@@ -3,6 +3,11 @@ const { detectGame } = require("./detect");
 const NwjsLauncher = require("../shared/web/runtime/nwjs-launcher");
 const NwjsPatchedLauncher = require("../shared/web/runtime/nwjs-patched-launcher");
 const NwjsRuntimeManager = require("../shared/web/runtime/nwjs-manager");
+const ElectronRuntimeManager = require("../shared/web/runtime/electron-manager");
+// A web game whose release holds an Electron app can also run that app, in
+// every module of web games (RPG Maker MV and MZ, Wolf RPG, TyranoScript and
+// the others).
+const ElectronApp = require("../shared/web/runtime/electron-app-provider");
 
 async function launchRuntime(runtimeId, entry, context) {
   if (runtimeId === "nwjs") {
@@ -56,5 +61,6 @@ module.exports = {
   detectGame,
   getRuntimeRequirements: NwjsPatchedLauncher.getRuntimeRequirements,
   launchRuntime,
-  runtimeManagers: [NwjsRuntimeManager]
+  runtimeManagers: [NwjsRuntimeManager, ElectronRuntimeManager],
+  runtimeProviders: [ElectronApp.provider]
 };

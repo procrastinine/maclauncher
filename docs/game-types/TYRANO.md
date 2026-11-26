@@ -12,7 +12,7 @@ For library titles and icons, MacLauncher reads the local NW.js `window.title`, 
 
 | Runtime | Delivery |
 | --- | --- |
-| Electron (default) | Included with MacLauncher |
+| Electron (default) | Included with MacLauncher; other versions from **Runtimes → Electron** run the [game's own Electron app](../runtimes/WEB_RUNTIMES.md#the-games-electron-app) |
 | NW.js | Downloaded from **Runtimes → NW.js** |
 | NW.js (Patched) | The same NW.js installation with compatibility patches |
 | Game's macOS app | A compatible Mac app supplied with the game |

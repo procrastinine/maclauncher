@@ -284,6 +284,7 @@
     "asarUnpack": [
       "src/modules/android/tools/apksig/apksig.jar",
       "src/modules/rgss/evb-files.py",
+      "src/runtime/electron-app.js",
       "src/modules/fvp/host.py",
       "src/modules/shared/reshade/shader-collection/**"
     ],

@@ -117,6 +117,7 @@ Runtime managers install shared runtimes under `runtimes/<managerId>/`, for exam
 | `runtimes/mkxpz/<architecture>/<version>/` | MKXP-Z packages from MacLauncher Builds; the package architecture is `arm64`, `x64` or `universal` |
 | `runtimes/mkxpz/<version>/` | Publisher Actions builds and compatible older shared MKXP-Z installations |
 | `runtimes/nwjs/<version>/<platformKey>/<variant>/` | NW.js |
+| `runtimes/electron/<architecture>/<version>/` | Electron releases installed beside MacLauncher's own Electron, which run a game's own Electron app; the architecture is `arm64` or `x64` |
 | `runtimes/greenworks/<nwjsVersion>/` | Greenworks for one NW.js version |
 | `runtimes/greenworks-sdk/<sdkVersion-and-library-hashes>/` | One explicit native SDK input, shared by Greenworks games |
 | `runtimes/graphics-shader-library/<pack>/<version>/` | Downloaded shader collection files, dependencies, notices and metadata |
