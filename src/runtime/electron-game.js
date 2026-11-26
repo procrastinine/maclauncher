@@ -83,6 +83,8 @@ async function startElectronGame({ argv = process.argv, electron, createLauncher
     getLaunchContext: (entry, settings, options) => launcher.getLaunchContext(entry, settings, options),
     applyDockIdentity: async entry => {
       if (process.platform !== "darwin") return;
+      // The game's name labels the app menu's About, Hide and Quit items. macOS
+      // takes the menu bar, Dock and app switcher name from the running bundle.
       try { if (entry.name) app.setName(entry.name); } catch {}
       try {
         if (entry.iconPath) {

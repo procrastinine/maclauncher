@@ -322,7 +322,13 @@ function createElectronGameHost({ electron, userDataDir, logger = console, regis
       const netSession = session.fromPartition(partitionId, { cache: false });
       if (!networkAllowed) cleanupRestriction = await applyRestrictions(netSession, origin);
       const config = windowConfig(rootDir);
-      if (hooks.applyDockIdentity) await hooks.applyDockIdentity(entry);
+      if (hooks.applyDockIdentity) {
+        await hooks.applyDockIdentity(entry);
+        // The app menu's About, Hide and Quit items take the application name
+        // when the menu is built, so a menu built before the game's name applied
+        // is built again.
+        if (uninstallMenu) { uninstallMenu(); installMenu(); }
+      }
       win = new BrowserWindow({
         width: config.width, height: config.height, useContentSize: true,
         title: config.title || entry.name, backgroundColor: "#000000",

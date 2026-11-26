@@ -607,6 +607,22 @@ test("Mac devtools shortcut and Tools menu target hosted windows", { skip: denie
   assert.equal(electron.Menu.getApplicationMenu(), previous);
 });
 
+test("the game's menu is built again once its name applies, so About, Hide and Quit carry it", { skip: denied('loopback') }, async t => {
+  const order = [];
+  const { host, entry, electron } = fixture(t, { hooks: { platform: "darwin",
+    applyDockIdentity: async value => { order.push(`identity ${value.name}`); } } });
+  const original = electron.Menu.getApplicationMenu(), build = electron.Menu.buildFromTemplate;
+  electron.Menu.buildFromTemplate = template => { order.push("menu"); return build(template); };
+  host.installMenu();
+  const first = electron.Menu.getApplicationMenu();
+  await host.createGameWindow(entry);
+  assert.deepEqual(order, ["menu", "identity Sample Game", "menu"]);
+  assert.notEqual(electron.Menu.getApplicationMenu(), first);
+  assert.ok(electron.Menu.getApplicationMenu().template.some(item => item.role === "appMenu"));
+  await host.dispose();
+  assert.equal(electron.Menu.getApplicationMenu(), original, "Dispose restores the menu from before the host's first menu");
+});
+
 test("standalone bootstrap requires a game and launches through core without persisting the entry", async () => {
   assert.throws(() => parseArguments(["--runtime=electron"]), /game is required/);
   assert.deepEqual(parseArguments(["--game=/tmp/Game #?", "--runtime=electron", "--user-data=/tmp/data"]),
