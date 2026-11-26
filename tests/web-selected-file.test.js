@@ -90,3 +90,51 @@ test("direct HTML and folder imports retain the selected HTML entry", async t =>
   assert.equal((await Registry.detectGameAsync(chosen)).indexHtml, chosen);
   assert.equal((await Registry.detectGameAsync(root)).indexHtml, path.join(root, "index.html"));
 });
+
+test("a renamed launcher is recognized by its Chromium app distribution", async t => {
+  // A renamed Electron or NW.js launcher keeps none of the standard PE identities.
+  const renamed = () => peFixture({ version: versionResource({ strings: {
+    ProductName: "authored-game", FileDescription: "authored-game", CompanyName: "Author"
+  } }) }).bytes;
+  // The payload files every Electron and NW.js Windows distribution ships beside
+  // its launcher: ICU data and a V8 snapshot, whose file name depends on the
+  // Chromium version. A native game executable folder does not contain them.
+  const chromiumPayload = (root, snapshot = "snapshot_blob.bin") => {
+    write(path.join(root, "icudtl.dat"), "icu data");
+    write(path.join(root, snapshot), "snapshot");
+  };
+
+  for (const snapshot of ["snapshot_blob.bin", "v8_context_snapshot.bin"]) {
+    const detectedRoot = fixture(t), detectedInput = path.join(detectedRoot, "Creator Game.exe");
+    write(detectedInput, renamed()); chromiumPayload(detectedRoot, snapshot);
+    appExport(path.join(detectedRoot, "resources", "app"));
+    for (const report of [Registry.explainDetection(detectedInput), await Registry.explainDetectionAsync(detectedInput)]) {
+      assert.equal(report.error, undefined, report.error?.message);
+      assert.equal(report.selectedModuleId, "web", snapshot);
+      assert.equal(report.detected.contentRootDir, path.join(detectedRoot, "resources", "app"));
+      assert.equal(report.detected.indexHtml, path.join(detectedRoot, "resources", "app", "index.html"));
+      assert.ok(report.detected.detectionEvidence.some(item => item.path === detectedInput && item.format === "Web app distribution"));
+    }
+  }
+
+  // Without the Chromium payload files beside it, a renamed executable is not
+  // an app distribution launcher, and it stays unrecognized.
+  const plainRoot = fixture(t), plainInput = path.join(plainRoot, "Creator Game.exe");
+  write(plainInput, renamed());
+  appExport(path.join(plainRoot, "resources", "app"));
+  for (const report of [Registry.explainDetection(plainInput), await Registry.explainDetectionAsync(plainInput)]) {
+    assert.equal(report.detected, null);
+    assert.equal(report.error.code, "DETECTION_UNSUPPORTED");
+  }
+
+  // A file that is not a PE executable is never a launcher, even beside a
+  // complete app distribution.
+  const textRoot = fixture(t), textInput = path.join(textRoot, "Creator Game.exe");
+  write(textInput, Buffer.from("not an executable"));
+  chromiumPayload(textRoot);
+  appExport(path.join(textRoot, "resources", "app"));
+  for (const report of [Registry.explainDetection(textInput), await Registry.explainDetectionAsync(textInput)]) {
+    assert.equal(report.detected, null);
+    assert.equal(report.error.code, "DETECTION_UNSUPPORTED");
+  }
+});

@@ -18,6 +18,29 @@ function existsFile(p) {
   }
 }
 
+function isPeExecutable(p) {
+  try {
+    const fd = fs.openSync(p, "r");
+    try {
+      const header = Buffer.alloc(2);
+      return fs.readSync(fd, header, 0, 2, 0) === 2 && header.toString("ascii") === "MZ";
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
+
+// Every Electron and NW.js Windows app ships Chromium's ICU data and a V8 startup
+// snapshot beside its launcher; a native Windows game executable does not. Which
+// snapshot file ships depends on the Chromium version: older builds carry
+// snapshot_blob.bin, newer ones v8_context_snapshot.bin, and some carry both.
+function isChromiumAppDistribution(rootDir) {
+  return existsFile(path.join(rootDir, "icudtl.dat")) &&
+    ["v8_context_snapshot.bin", "snapshot_blob.bin"].some(name => existsFile(path.join(rootDir, name)));
+}
+
 function findWebIndexHtml(contentRootDir, findIndexHtml) {
   const indexHtml = findIndexHtml(contentRootDir);
   if (indexHtml) return indexHtml;
@@ -94,12 +117,28 @@ function detectGame(context, helpers) {
       const options = { detection: context.detection };
       const nw = Packaging.readNwjsCarrier(context.inputPath, options);
       const electron = nw ? null : Packaging.readElectronCarrier(context.inputPath, options);
-      if (!nw && !electron) return null;
-      const roots = nw
+      let carrier = nw || electron;
+      let format = nw ? "NW.js PE carrier" : "Electron PE carrier";
+      let roots = nw
         ? [rootDir, path.join(rootDir, "package.nw"), path.join(rootDir, "app.nw")]
         : [path.join(rootDir, "resources", "app"), path.join(rootDir, "Resources", "app")];
+      if (!carrier) {
+        // A renamed launcher keeps none of the standard PE identities, so it is
+        // recognized by its app distribution instead: an unpacked app package in
+        // one of the module's app roots, validated below, beside the Chromium
+        // payload files the runtime itself ships.
+        if (!isPeExecutable(context.inputPath) || !isChromiumAppDistribution(rootDir)) return null;
+        carrier = { source: "app-distribution" };
+        format = "Web app distribution";
+        roots = [
+          path.join(rootDir, "resources", "app"),
+          path.join(rootDir, "Resources", "app"),
+          path.join(rootDir, "package.nw"),
+          path.join(rootDir, "app.nw")
+        ];
+      }
       for (const contentRoot of roots) {
-        const detected = detectCarrierExport(context, helpers, contentRoot, nw || electron, nw ? "NW.js PE carrier" : "Electron PE carrier");
+        const detected = detectCarrierExport(context, helpers, contentRoot, carrier, format);
         if (detected) return detected;
       }
       return null;

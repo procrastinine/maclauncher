@@ -14,7 +14,7 @@ Import accepts:
 - an Electron-style layout with the game in `Contents/Resources/app` (using `dist/index.html`), `resources/app` or `Resources/app`
 - a Windows NW.js or Electron executable that carries the game
 
-A Windows executable counts as a web game only when its PE metadata identifies NW.js or Electron and it contains an unpacked app package with a real entry page and HTML export, so an HTML file next to an arbitrary executable does not make that executable a web game. A `main` entry in `package.json` must also be a local HTML file inside the game folder.
+A Windows executable counts as a web game only when it is the launcher of an unpacked app package with a real entry page and HTML export: either its PE metadata identifies NW.js or Electron, or it is a PE executable whose folder is a Chromium app distribution, carrying the Chromium payload files that the Electron and NW.js runtimes ship beside a launcher: `icudtl.dat` and a V8 snapshot, `v8_context_snapshot.bin` or `snapshot_blob.bin`. An HTML file next to an arbitrary executable does not make that executable a web game. A `main` entry in `package.json` must also be a local HTML file inside the game folder.
 
 For library titles and icons, MacLauncher reads the local NW.js `window.title`, `productName` and `window.icon` values and the document's title and icon links. PNG and WebP artwork is read locally, while ICO artwork is converted to a cached PNG. Remote URLs, resources outside the game folder and dynamic scripts are ignored.
 
